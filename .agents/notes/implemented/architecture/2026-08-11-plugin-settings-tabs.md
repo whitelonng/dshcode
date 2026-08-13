@@ -14,6 +14,8 @@ Plugin configuration and the read-only Loader inventory each registered a top-le
 
 The section owner contributes a `configurable` tab that declares the existing nested `settings.plugin.item` list. Configuration cards keep their namespace bindings, draft state, validation, and writes unchanged. `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` contributes an `all` tab to `settings.plugins.tab`; its Host Loader observer, generated Remote namespace, DTO, and search semantics remain unchanged. Disabled inventory entries omit the redundant unmounted runtime state from summaries and details, while enabled entries continue to expose their Cordis phase.
 
+`@deepseek-ai/dsh-client-ui-settings-plugin-control` later joined the same slot with the `controls` tab described by the [built-in community plugins and profile controls decision](2026-08-14-built-in-community-plugins-and-controls.md). Its loopback-only mutation path remains separate from the read-only inventory Remote: the control catalog is deployment-owned, persists profile patches, and does not turn arbitrary inventory rows into mutable entries.
+
 The first ordered tab is selected by default. A tab mounts only when first selected and then remains mounted but hidden while the Plugins section stays mounted. This delays the inventory RPC until the user opens **Plugin list** and preserves drafts, search text, disclosure state, and the fetched snapshot while switching tabs. Closing Settings unmounts the section, so reopening it obtains a fresh inventory snapshot when that tab is selected again.
 
 Both registrations use `ctx.slots.inject()`. If the section declarer unloads, the tab declaration and every contribution collapse with it; redeclaration lets each feature re-register without a static import or activation-order dependency.
@@ -30,8 +32,8 @@ Both registrations use `ctx.slots.inject()`. If the section declarer unloads, th
 
 ## Consequences
 
-Settings has one Plugins navigation row, ordered before Agent Presets, with **Plugin configuration** and **Plugin list** tabs. Agent Presets remains an independent section because it edits per-session agent compositions rather than the live Host Loader tree.
+Settings has one Plugins navigation row, ordered before Agent Presets, with **Plugin configuration**, **Plugin list**, and **Plugin switches** tabs. Agent Presets remains an independent section because it edits per-session agent compositions rather than the live Host Loader tree.
 
-Feature ownership remains explicit: `ui-settings-plugins` owns the Plugins page and editable cards, `ui-settings-plugin-inventory` owns the read-only inventory view, and the Host/RPC path does not change. A new Plugins view can join by registering one `settings.plugins.tab` contribution.
+Feature ownership remains explicit: `ui-settings-plugins` owns the Plugins page and editable cards, `ui-settings-plugin-inventory` owns the read-only inventory view, and `ui-settings-plugin-control` owns the deployment-scoped switches. A new Plugins view can join by registering one `settings.plugins.tab` contribution.
 
 The aggregation depends on the section owner being composed: without `ui-settings-plugins`, `ui-settings-plugin-inventory` waits for a tab declaration and renders nothing. That is an intentional composition dependency carried by the slot registry rather than a static package import.

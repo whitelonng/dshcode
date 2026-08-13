@@ -63,6 +63,13 @@ DSHCode is an independent community project. Unless DeepSeek grants explicit aut
 
 Start with the [development guide](docs/development.md), [architecture documentation](docs/architecture.md), and [desktop application guide](apps/desktop/README.md). For agents, follow [AGENTS.md](AGENTS.md).
 
+## Acknowledgements
+
+- [LINUX DO](https://linux.do) — This project is continuously shared and discussed in the LINUX DO community.
+- [dsh-genui](https://github.com/omdsh-dev/dsh-genui) — Provides the built-in generative UI plugin.
+- [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation) — Provides the built-in selection-annotation workflow.
+- [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) — Provides the built-in Web UI feature and skin collection.
+
 ## License and branding
 
 The source remains available under the upstream [MIT License](LICENSE). Redistribution must retain DeepSeek's copyright and permission notice; bundled third-party software and licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the desktop package includes both files.

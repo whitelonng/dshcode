@@ -17,6 +17,12 @@ files:
 extraResources:
   - from: licenses
     to: licenses
+  # The deployment-owned skins tree the skin center reads at runtime. The
+  # node-module collector would drop an orphan directory inside node_modules,
+  # so the staged skins-extras assembly ships through extraResources into the
+  # exact ancestor the patched skin center resolves.
+  - from: skins-extras
+    to: app/node_modules/skins
 mac:
   category: public.app-category.developer-tools
   identity: null
