@@ -11,7 +11,7 @@ import type {
 import LlmRuntime, { createUserMessage, CallId } from '@deepseek-ai/dsh-llm'
 import type { Message, ToolSchema } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
-import type { PiAiReplayResponse } from '../src/replay.ts'
+import type { PiAiReplayState } from '../src/replay.ts'
 import { assemble, type AssembledResult } from './assemble.ts'
 
 interface ProviderCase {
@@ -118,20 +118,18 @@ function expectFinish(result: AssembledResult, expected: 'stop' | 'tool-calls'):
   expect(result.finish.kind).toBe(expected)
 }
 
-function expectNativeReplay(result: AssembledResult, profile: ProviderCase): PiAiReplayResponse {
+function expectNativeReplay(result: AssembledResult, profile: ProviderCase): PiAiReplayState {
   const replayState = result.message.source.kind === 'model'
     ? result.message.source.replayState
     : undefined
   expect(replayState).toMatchObject({
-    response: {
-      kind: 'pi-ai',
-      version: 2,
-      api: profile.api,
-      provider: profile.provider,
-      model: profile.model,
-    },
+    kind: 'pi-ai',
+    version: 1,
+    api: profile.api,
+    provider: profile.provider,
+    model: profile.model,
   })
-  return (replayState as { response: PiAiReplayResponse }).response
+  return replayState as PiAiReplayState
 }
 
 const lookupTool: ToolSchema = {

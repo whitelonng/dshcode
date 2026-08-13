@@ -19,16 +19,6 @@ const REPOSITORY_URL = 'https://github.com/deepseek-ai/deepseek-harness'
 const root = resolve(import.meta.dirname, '..')
 const generatedRoot = resolve(root, 'website/.generated')
 
-/**
- * Resolve the public repository ref used by projected source links.
- *
- * @param environment Build environment containing an optional explicit public ref.
- * @returns The configured public ref, or `master`.
- */
-export function resolveRepositoryRef(environment: NodeJS.ProcessEnv): string {
-  return environment.DOCS_REPOSITORY_REF ?? 'master'
-}
-
 interface Replacement {
   start: number
   end: number
@@ -410,7 +400,7 @@ export function projectDocs(): void {
   const routes = new Set<string>()
   /** Projected path to the repository file that claimed it, pages and images alike. */
   const claimed = new Map<string, string>()
-  const repositoryRef = resolveRepositoryRef(process.env)
+  const repositoryRef = process.env.GITHUB_SHA ?? 'master'
   rmSync(generatedRoot, { recursive: true, force: true })
 
   /** Reserve one projected path, refusing a second source for it. */

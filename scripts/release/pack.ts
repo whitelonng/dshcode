@@ -45,7 +45,7 @@ function main(): void {
   const family = releaseFamily(values.family)
   const root = process.cwd()
   const destination = resolve(root, values.out ?? DEFAULT_OUTPUT)
-  const members = family.publishOrder(family.members(root)).order
+  const members = family.publishOrder(family.members(root))
   family.verifyVersions(members)
 
   rmSync(destination, { recursive: true, force: true })

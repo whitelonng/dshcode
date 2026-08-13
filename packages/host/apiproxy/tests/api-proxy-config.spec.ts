@@ -321,11 +321,12 @@ describe('settings domain', () => {
     expect(opened).toEqual([])
   })
 
-  it('serves every registered namespace, including one this repository never named', async () => {
-    // Registering IS the exposure: a plugin distributed outside this
-    // repository configures itself from the browser without a change here.
-    // The plane stays loopback-only and secret-redacted, and which surface
-    // renders a namespace is the browser's decision, not this proxy's.
+  it('serves model-provider and explicitly allowlisted Web namespaces only', async () => {
+    // The settings seam is general: any plugin may register a namespace for
+    // its own configuration. The Web configuration plane remains opt-in, so a
+    // future internal plugin cannot become remotely configurable just by
+    // registering; locale, permission, conversation, theme, and the product
+    // onboarding namespace are intentionally admitted by this surface.
     const ctx = await harness()
     ctx.settings.register(NS, AdapterConfig)
     ctx.settings.register(settingsNamespace('some-other-plugin'), z.object({ secretPath: z.string() }))
@@ -356,8 +357,8 @@ describe('settings domain', () => {
 
     const value = expectOk(await api.settings.describe(request({})))
     expect(value.namespaces.map(view => view.ns)).toEqual([
-      'llm-deepseek', 'some-other-plugin', 'permission', 'ui-theme', 'locale',
-      'ui-conversation', 'shell', 'agent-loop', 'web-search-deepseek',
+      'llm-deepseek', 'permission', 'ui-theme', 'locale', 'ui-conversation',
+      'shell', 'agent-loop', 'web-search-deepseek',
     ])
     const permission = expectOk(await api.settings.mutate(request({
       ns: 'permission',
@@ -395,13 +396,16 @@ describe('settings domain', () => {
     })))
     expect(webSearch.value).toEqual({ baseURL: 'https://search.test/v1' })
 
-    const other = expectOk(await api.settings.update(request({
-      ns: 'some-other-plugin',
-      patch: { secretPath: '/etc/shadow' },
-    })))
-    expect(other.value).toEqual({ secretPath: '/etc/shadow' })
-    expect(ctx.settings.describe().find(d => String(d.ns) === 'some-other-plugin')?.value)
-      .toEqual({ secretPath: '/etc/shadow' })
+    for (const response of [
+      await api.settings.update(request({ ns: 'some-other-plugin', patch: { secretPath: '/etc/shadow' } })),
+      await api.settings.replace(request({ ns: 'some-other-plugin', section: {} })),
+    ]) {
+      const error = expectErr(response)
+      expect(error.code).toBe('settings-not-exposed')
+      expect(error.details).toEqual({ ns: 'some-other-plugin' })
+    }
+    // The write never reached the seam.
+    expect(ctx.settings.describe().find(d => String(d.ns) === 'some-other-plugin')?.value).toEqual({})
   })
 
   it('serves product preference namespaces without invalidating the model catalog', async () => {
@@ -441,17 +445,13 @@ describe('settings domain', () => {
       .toEqual({ default: 'minimal' })
   })
 
-  it('keeps serving a provider namespace whose directory entry is gone', async () => {
-    // The configurable-provider directory says what the Models page can offer,
-    // not what a user may configure: a dormant route's stored section is still
-    // theirs to edit, and losing the entry must not strand it.
+  it('refuses even a model-provider namespace once its directory entry is gone', async () => {
     const ctx = await harness({ configurableProviders: false })
     ctx.settings.register(NS, AdapterConfig)
     const api = createApiProxy(ctx, DEFAULTS)
-    expect(expectOk(await api.settings.describe(request({}))).namespaces.map(view => view.ns))
-      .toEqual(['llm-deepseek'])
-    expect(expectOk(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://x' } }))).value)
-      .toMatchObject({ baseURL: 'https://x' })
+    expect(expectOk(await api.settings.describe(request({}))).namespaces).toEqual([])
+    expect(expectErr(await api.settings.update(request({ ns: 'llm-deepseek', patch: { baseURL: 'https://x' } }))).code)
+      .toBe('settings-not-exposed')
   })
 
   it('forwards a provider settings change for model-catalog consumers', async () => {
@@ -551,18 +551,19 @@ describe('settings domain', () => {
     expect(error.details).toEqual({ ns })
   })
 
-  it('answers an unregistered namespace as the seam does, and a malformed one alike', async () => {
-    // A name no registration answers and a name no registration could answer
-    // fold into the same rejection: the proxy adds no boundary of its own, so
-    // the seam's own refusal is the whole answer.
+  it('answers an unregistered namespace exactly like an unexposed one', async () => {
+    // Deliberately indistinguishable: separating "does not exist" from
+    // "exists but is not yours to configure" would let a caller enumerate the
+    // registered namespaces one probe at a time.
     const ctx = await harness()
     ctx.settings.register(NS, AdapterConfig)
+    ctx.settings.register(settingsNamespace('some-other-plugin'), z.object({ secretPath: z.string() }))
     const api = createApiProxy(ctx, DEFAULTS)
     const unknown = expectErr(await api.settings.update(request({ ns: 'unknown-ns', patch: {} })))
-    const malformed = expectErr(await api.settings.update(request({ ns: 'Not A Namespace', patch: {} })))
-    expect(unknown.code).toBe('settings-rejected')
-    expect(unknown.message).toContain('is not registered')
-    expect(malformed.code).toBe(unknown.code)
+    const unexposed = expectErr(await api.settings.update(request({ ns: 'some-other-plugin', patch: {} })))
+    expect(unknown.code).toBe('settings-not-exposed')
+    expect(unexposed.code).toBe(unknown.code)
+    expect(unexposed.message.replace('some-other-plugin', 'unknown-ns')).toBe(unknown.message)
   })
 
   it('maps a read-only provider refusal onto the same rejection', async () => {

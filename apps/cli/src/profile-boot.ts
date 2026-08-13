@@ -2,8 +2,8 @@
  * Shared profile boot for every `dsh` surface: resolve the profile, stack its
  * patch layers (bundle layers in `dsh.profile.bundles` order, the profile's
  * own `cordis.patch.yml`, `--patch` overlays, the telemetry switch), mount the
- * tree over the profile's empty root config, keep the profile patch layer
- * live, and wire fail-loud plus bounded shutdown.
+ * tree over the profile's empty root config, optionally keep the profile
+ * patch layer live, and wire fail-loud plus bounded shutdown.
  *
  * App flags are not the launcher's business: the invocation's inner arguments
  * are provided to the tree through `ctx.cmdlineArgs`, where any injected app
@@ -180,6 +180,8 @@ export interface RunProfileOptions {
   patchFiles: readonly string[]
   /** The invocation's inner arguments, handed to the tree through `ctx.cmdlineArgs`. */
   args: readonly string[]
+  /** Whether profile and home patch-layer files remain watched after boot. */
+  watchUserPatches: boolean
 }
 
 /**
@@ -201,7 +203,7 @@ function suppressShutdownError(ctx: Context, signal: AbortSignal, error: unknown
 /**
  * Boot one profile invocation end to end and leave process lifetime to the
  * mounted plugins (or to a one-shot runner the composition mounts).
- * @param options - environment snapshot, profile name, overlays, and the booted app's own arguments.
+ * @param options - environment snapshot, profile name, overlays, arguments, and patch-watching policy.
  * @returns the settled root context and the shutdown controller.
  */
 export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Context; shutdown: ProcessShutdown }> {
@@ -262,10 +264,12 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // setup is still in flight — a signal, or a fast one-shot's appExit. Loader
   // presence and fiber state own liveness; the initial check skips a tree
   // that already exited, and the catch below re-checks for an exit that
-  // landed mid-setup. Watching is unconditional: a one-shot surface exits
-  // through its bounded shutdown, which disposes the watchers before the
-  // loop drains.
-  if (!signalShutdown.signal.aborted
+  // landed mid-setup. CLI launches enable watching, including one-shot
+  // surfaces whose bounded shutdown disposes the watchers before the loop
+  // drains. Embedded launchers can disable it when their Node runtime cannot
+  // provide the HMR loader hooks.
+  if (options.watchUserPatches
+    && !signalShutdown.signal.aborted
     && ctx.fiber.state === FiberState.ACTIVE
     && ctx.get('loader') !== undefined) {
     try {

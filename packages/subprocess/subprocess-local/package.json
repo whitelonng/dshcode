@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-subprocess-local",
   "description": "Local-subprocess implementation of the DeepSeek Harness subprocess seam",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0-rc.5",
   "publishConfig": {
     "access": "public"
   },
@@ -42,7 +42,7 @@
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "node-pty": "1.2.0-beta.15"
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",

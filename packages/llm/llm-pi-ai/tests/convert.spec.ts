@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
-import { createUserMessage, CallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, createMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, CallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, LlmError, createMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { AssistantMessage, AssistantMessageEvent, Usage } from '@earendil-works/pi-ai'
 import { toPiContext } from '../src/context.ts'
@@ -415,68 +415,35 @@ describe('toPiContext', () => {
     expect(context.messages[0]).not.toHaveProperty('responseId')
   })
 
-  it('degrades unsupported replay-state versions to provider-neutral history', () => {
-    const onDegrade = vi.fn()
-    const context = toPiContext({
-      provider: 'deepseek',
-      model: 'm',
-      messages: [createMessage({
-        role: 'assistant',
-        content: [{ type: 'text', text: 'done' }],
-        source: {
-          kind: 'model',
-          ...{
-            provider: 'deepseek',
-            model: 'old',
-            replayState: { response: { kind: 'pi-ai', version: 3 }, blocks: [] },
-          },
-        },
-      })],
-    }, undefined, onDegrade)
-    expect(context.messages[0]).toMatchObject({
-      role: 'assistant',
-      api: 'dsh-foreign',
-      provider: 'deepseek',
-      model: 'old',
-      content: [{ type: 'text', text: 'done' }],
-    })
-    expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining('unsupported version 3'))
-  })
-
-  it('degrades the flat pre-envelope replay state a legacy session log carries', () => {
-    const onDegrade = vi.fn()
-    const context = toPiContext({
-      provider: 'deepseek',
-      model: 'm',
-      messages: [createMessage({
-        role: 'assistant',
-        content: [{ type: 'text', text: 'done' }],
-        source: {
-          kind: 'model',
-          ...{
-            provider: 'deepseek',
-            model: 'deepseek-v4-flash',
-            replayState: {
-              kind: 'pi-ai',
-              version: 1,
-              api: 'openai-completions',
+  it('rejects unsupported replay-state versions with a stable error code', () => {
+    try {
+      toPiContext({
+        provider: 'deepseek',
+        model: 'm',
+        messages: [createMessage({
+          role: 'assistant',
+          content: [{ type: 'text', text: 'done' }],
+          source: {
+            kind: 'model',
+            ...{
               provider: 'deepseek',
-              model: 'deepseek-v4-flash',
-              stopReason: 'stop',
-              blocks: [{ type: 'text' }],
+              model: 'old',
+              replayState: { kind: 'pi-ai', version: 2 },
             },
           },
-        },
-      })],
-    }, undefined, onDegrade)
-    expect(context.messages[0]).toMatchObject({ role: 'assistant', api: 'dsh-foreign' })
-    expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining('expected a response object'))
+        })],
+      })
+      expect.fail('expected invalid replay state')
+    } catch (error: unknown) {
+      expect(error).toBeInstanceOf(LlmError)
+      expect((error as LlmError).code).toBe('INVALID_REPLAY_STATE')
+      expect((error as Error).message).toContain('unsupported version 2')
+    }
   })
 
-  it('degrades replay metadata whose blocks do not match the durable content', () => {
-    const onDegrade = vi.fn()
+  it('rejects replay metadata whose blocks do not match the durable content', () => {
     const state = toPiReplayState(assistant({ content: [{ type: 'text', text: 'done' }] }))
-    const context = toPiContext({
+    expect(() => toPiContext({
       provider: 'deepseek',
       model: 'm',
       messages: [createMessage({
@@ -487,19 +454,12 @@ describe('toPiContext', () => {
           ...{ provider: 'deepseek', model: 'deepseek-v4-flash', replayState: state },
         },
       })],
-    }, undefined, onDegrade)
-    expect(context.messages[0]).toMatchObject({
-      role: 'assistant',
-      api: 'dsh-foreign',
-      content: [{ type: 'thinking', thinking: 'done' }],
-    })
-    expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining('block 0 does not match assistant content'))
+    })).toThrow(/block 0 does not match assistant content/)
   })
 
-  it('degrades replay metadata whose block count differs from durable content', () => {
-    const onDegrade = vi.fn()
+  it('rejects replay metadata whose block count differs from durable content', () => {
     const state = toPiReplayState(assistant())
-    const context = toPiContext({
+    expect(() => toPiContext({
       provider: 'deepseek',
       model: 'm',
       messages: [createMessage({
@@ -510,34 +470,66 @@ describe('toPiContext', () => {
           ...{ provider: 'deepseek', model: 'deepseek-v4-flash', replayState: state },
         },
       })],
-    }, undefined, onDegrade)
-    expect(context.messages[0]).toMatchObject({
-      role: 'assistant',
-      api: 'dsh-foreign',
-      provider: 'deepseek',
-      model: 'deepseek-v4-flash',
-      content: [{ type: 'text', text: 'done' }],
-      stopReason: 'stop',
-    })
-    expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining('block count does not match assistant content'))
+    })).toThrow(/block count does not match assistant content/)
   })
 
-  const validResponse = {
+  const validReplay = {
     kind: 'pi-ai',
-    version: 2,
+    version: 1,
     api: 'openai-completions',
     provider: 'deepseek',
     model: 'deepseek-v4-flash',
     stopReason: 'stop',
+    blocks: [{ type: 'text' }],
   }
-  const validReplay = { response: validResponse, blocks: [{ type: 'text' }] }
 
-  /** Convert with the given state and assert the message degraded to foreign with the given reason. */
-  function expectDegraded(replayState: unknown, message: string): void {
-    const onDegrade = vi.fn()
-    const context = toPiContext({
+  it.each([
+    ['provider', { ...validReplay, provider: 'openai' }],
+    ['model', { ...validReplay, model: 'deepseek-v4-pro' }],
+  ])('rejects replay metadata whose %s differs from assistant source', (field, replayState) => {
+    try {
+      toPiContext({
+        provider: 'deepseek',
+        model: 'next-model',
+        messages: [createMessage({
+          role: 'assistant',
+          content: [{ type: 'text', text: 'done' }],
+          source: {
+            kind: 'model',
+            ...{ provider: 'deepseek', model: 'deepseek-v4-flash', replayState },
+          },
+        })],
+      })
+      expect.fail('expected invalid replay state')
+    } catch (error: unknown) {
+      expect(error).toBeInstanceOf(LlmError)
+      expect((error as LlmError).code).toBe('INVALID_REPLAY_STATE')
+      expect((error as Error).message).toContain(`${field} does not match assistant source`)
+    }
+  })
+
+  it.each([
+    ['number state', 1, 'expected an object'],
+    ['null state', null, 'expected an object'],
+    ['array state', [], 'expected an object'],
+    ['unknown kind', { ...validReplay, kind: 'other' }, 'unknown state kind'],
+    ['non-string api', { ...validReplay, api: 1 }, 'api must be a non-empty string'],
+    ['empty provider', { ...validReplay, provider: '' }, 'provider must be a non-empty string'],
+    ['missing model', { ...validReplay, model: undefined }, 'model must be a non-empty string'],
+    ['unknown stop reason', { ...validReplay, stopReason: 'pause' }, 'unknown stopReason'],
+    ['non-string response model', { ...validReplay, responseModel: 1 }, 'responseModel must be a string'],
+    ['non-string response id', { ...validReplay, responseId: 1 }, 'responseId must be a string'],
+    ['non-array blocks', { ...validReplay, blocks: 'text' }, 'blocks must be an array'],
+    ['number block', { ...validReplay, blocks: [1] }, 'block 0 must be an object'],
+    ['null block', { ...validReplay, blocks: [null] }, 'block 0 must be an object'],
+    ['array block', { ...validReplay, blocks: [[]] }, 'block 0 must be an object'],
+    ['unknown block type', { ...validReplay, blocks: [{ type: 'audio' }] }, 'block 0 has an unknown type'],
+    ['non-string signature', { ...validReplay, blocks: [{ type: 'text', textSignature: 1 }] }, 'textSignature must be a string'],
+    ['non-boolean redaction', { ...validReplay, blocks: [{ type: 'reasoning', redacted: 'yes' }] }, 'redacted must be boolean'],
+  ])('rejects malformed replay state: %s', (_name, replayState, message) => {
+    expect(() => toPiContext({
       provider: 'deepseek',
-      model: 'next-model',
+      model: 'm',
       messages: [createMessage({
         role: 'assistant',
         content: [{ type: 'text', text: 'done' }],
@@ -546,45 +538,7 @@ describe('toPiContext', () => {
           ...{ provider: 'deepseek', model: 'deepseek-v4-flash', replayState },
         },
       })],
-    }, undefined, onDegrade)
-    expect(context.messages[0]).toMatchObject({
-      role: 'assistant',
-      api: 'dsh-foreign',
-      content: [{ type: 'text', text: 'done' }],
-    })
-    expect(onDegrade).toHaveBeenCalledWith(expect.stringContaining(message))
-  }
-
-  it.each([
-    ['provider', { ...validReplay, response: { ...validResponse, provider: 'openai' } }],
-    ['model', { ...validReplay, response: { ...validResponse, model: 'deepseek-v4-pro' } }],
-  ])('degrades replay metadata whose %s differs from assistant source', (field, replayState) => {
-    expectDegraded(replayState, `${field} does not match assistant source`)
-  })
-
-  it.each([
-    ['number state', 1, 'expected a replay envelope'],
-    ['null state', null, 'expected a replay envelope'],
-    ['array state', [], 'expected a replay envelope'],
-    ['missing response', { blocks: [] }, 'expected a response object'],
-    ['array response', { ...validReplay, response: [] }, 'expected a response object'],
-    ['unknown kind', { ...validReplay, response: { ...validResponse, kind: 'other' } }, 'unknown state kind'],
-    ['non-string api', { ...validReplay, response: { ...validResponse, api: 1 } }, 'api must be a non-empty string'],
-    ['empty provider', { ...validReplay, response: { ...validResponse, provider: '' } }, 'provider must be a non-empty string'],
-    ['missing model', { ...validReplay, response: { ...validResponse, model: undefined } }, 'model must be a non-empty string'],
-    ['unknown stop reason', { ...validReplay, response: { ...validResponse, stopReason: 'pause' } }, 'unknown stopReason'],
-    ['non-string response model', { ...validReplay, response: { ...validResponse, responseModel: 1 } }, 'responseModel must be a string'],
-    ['non-string response id', { ...validReplay, response: { ...validResponse, responseId: 1 } }, 'responseId must be a string'],
-    ['missing blocks', { response: validResponse }, 'blocks must be an array'],
-    ['non-array blocks', { ...validReplay, blocks: 'text' }, 'blocks must be an array'],
-    ['number block', { ...validReplay, blocks: [1] }, 'block 0 must be an object'],
-    ['null block', { ...validReplay, blocks: [null] }, 'block 0 must be an object'],
-    ['array block', { ...validReplay, blocks: [[]] }, 'block 0 must be an object'],
-    ['unknown block type', { ...validReplay, blocks: [{ type: 'audio' }] }, 'block 0 has an unknown type'],
-    ['non-string signature', { ...validReplay, blocks: [{ type: 'text', textSignature: 1 }] }, 'textSignature must be a string'],
-    ['non-boolean redaction', { ...validReplay, blocks: [{ type: 'reasoning', redacted: 'yes' }] }, 'redacted must be boolean'],
-  ])('degrades malformed replay state: %s', (_name, replayState, message) => {
-    expectDegraded(replayState, message)
+    })).toThrow(message)
   })
 })
 
@@ -611,14 +565,12 @@ describe('toStreamChunks', () => {
         type: 'finish',
         reason: { kind: 'stop' },
         replayState: {
-          response: {
-            kind: 'pi-ai',
-            version: 2,
-            api: 'openai-completions',
-            provider: 'deepseek',
-            model: 'deepseek-v4-flash',
-            stopReason: 'stop',
-          },
+          kind: 'pi-ai',
+          version: 1,
+          api: 'openai-completions',
+          provider: 'deepseek',
+          model: 'deepseek-v4-flash',
+          stopReason: 'stop',
           blocks: [{ type: 'text' }],
         },
       },
@@ -662,14 +614,12 @@ describe('toStreamChunks', () => {
         type: 'finish',
         reason: { kind: 'tool-calls' },
         replayState: {
-          response: {
-            kind: 'pi-ai',
-            version: 2,
-            api: 'openai-completions',
-            provider: 'deepseek',
-            model: 'deepseek-v4-flash',
-            stopReason: 'toolUse',
-          },
+          kind: 'pi-ai',
+          version: 1,
+          api: 'openai-completions',
+          provider: 'deepseek',
+          model: 'deepseek-v4-flash',
+          stopReason: 'toolUse',
           blocks: [{ type: 'tool-call' }],
         },
       },

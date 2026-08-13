@@ -1,0 +1,38 @@
+appId: com.whitelonng.dshcode
+productName: DSHCode
+electronVersion: 43.4.0
+artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
+# Profile plugins resolve as ordinary packages and the Harness-home fallback
+# links to them. Keep those paths real on disk on both macOS and Windows.
+asar: false
+# The deployed runtime uses platform prebuilds/N-API. Re-running pnpm here
+# would treat the staging directory as the source workspace and replace it.
+npmRebuild: false
+directories:
+  output: release
+  buildResources: build
+files:
+  - lib/**/*
+  - package.json
+extraResources:
+  - from: licenses
+    to: licenses
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.svg
+  hardenedRuntime: true
+  target:
+    - dmg
+    - zip
+win:
+  icon: build/icon.svg
+  requestedExecutionLevel: asInvoker
+  target:
+    - nsis
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: DSHCode
+  runAfterFinish: true

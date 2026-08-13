@@ -24,6 +24,8 @@
 
 [`dsh-base`](../packages/bundle/base/README.md) 是每个 profile 的第一层：模型适配器、工具、持久化、沙箱与审批策略、设置、凭据、遥测。[`dsh-web-app`](../packages/bundle/web-app/README.md) 增加浏览器应用；[`dsh-headless`](../packages/bundle/headless/README.md) 增加一次性运行器，且完全不带服务器。
 
+CLI 与 [DSHCode 桌面应用](../apps/desktop/README.md)都会启动同一个 `web` profile。桌面应用将它嵌入 Electron，把现有 HTTP／WebSocket 载体绑定到回环地址和操作系统分配的端口，并拥有该 profile 的关闭过程；它不会 fork 浏览器组合，也不会 spawn CLI 进程。
+
 各层按此顺序应用在空条目列表之上：先按 profile 列出的顺序应用每个组合包，然后是 profile 的 `cordis.patch.yml`，然后是 home 级的那份，最后是任意 `--patch` overlay。一条 patch 按 id 定位某个条目并替换其整个 config，或插入新条目。
 
 要查看你的机器实际启动的配置树：
@@ -130,4 +132,4 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 | fork 活跃会话 | `ctx.sessions.fork(source, boundary?, childSessionId?)` |
 | 将注册项限定到单个 agent | 使用该 agent 的 `agent.ctx` |
 
-[扩展实操手册](cookbook/extension-cookbook.md)将功能映射到能力，并索引[包](cookbook/adding-a-package.md)、[工具](cookbook/adding-a-tool.md)、[LLM（大语言模型）适配器](cookbook/adding-an-llm-adapter.md)、[Chat 节点](cookbook/adding-a-conversation-node.md)和[设置卡片](cookbook/adding-a-settings-card.md)的分步指南。
+[扩展实操手册](cookbook/extension-cookbook.md)将功能映射到能力，并索引[包](cookbook/adding-a-package.md)、[工具](cookbook/adding-a-tool.md)、[LLM（大语言模型）适配器](cookbook/adding-an-llm-adapter.md)和 [Chat 节点](cookbook/adding-a-conversation-node.md)的分步指南。

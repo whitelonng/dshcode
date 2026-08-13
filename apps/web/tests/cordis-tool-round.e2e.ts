@@ -47,7 +47,8 @@ function assertCompleteCordisLifecycle(events: readonly SessionEvent[]): void {
     (event): event is Extract<SessionEvent, { type: 'turn/end' }> => event.type === 'turn/end',
   )
   const reason = turnEnd?.data.reason
-  expect(reason).toEqual({ kind: 'completed' })
+  const reasonSummary = { kind: reason?.kind }
+  expect(reasonSummary).toEqual({ kind: 'completed' })
 
   const calls = events.filter(
     (event): event is Extract<SessionEvent, { type: 'tool/call' }> => event.type === 'tool/call',

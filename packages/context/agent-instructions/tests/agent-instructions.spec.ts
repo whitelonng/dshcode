@@ -259,7 +259,7 @@ async function appendAdditionalContexts(ctx: Context, agent: Agent): Promise<num
 const composedPrefixes = new WeakMap<object, Message[]>()
 
 async function composeBaselinePrefix(ctx: Context, agent: Agent): Promise<Message[]> {
-  const signal = new AbortController().signal
+  const signal = AbortSignal.timeout(1000)
   await agentEvents(ctx, agent).waterfall(
     'agent/pre-step',
     { messages: [], turn: 1, step: 1, signal },

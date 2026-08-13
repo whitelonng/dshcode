@@ -38,6 +38,11 @@ peerDependencyRules:
 # default and only allow scripts we need. esbuild (native binary) and lefthook
 # (git hooks) genuinely need theirs.
 allowBuilds:
+  # Electron's install step downloads the reviewed desktop runtime binary.
+  electron: true
+  # Optional Squirrel.Windows support selects a bundled 7-Zip binary at install;
+  # DSHCode ships the electron-builder NSIS target and never invokes this path.
+  electron-winstaller: false
   esbuild: true
   lefthook: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
@@ -69,4 +74,4 @@ minimumReleaseAgeExclude:
   - node-addon-require-builtin@0.1.4
 
 patchedDependencies:
-  node-pty@1.2.0-beta.15: patches/node-pty@1.2.0-beta.15.patch
+  node-pty@1.1.0: patches/node-pty@1.1.0.patch

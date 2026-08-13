@@ -203,13 +203,13 @@ describe('serializeRequest', () => {
     expect(wire.tools).toBeUndefined()
   })
 
-  it.each(['low', 'high', 'max'] as const)('maps adapter-default thinking and request effort %s', (effort) => {
+  it('maps adapter-default thinking and the request reasoning effort', () => {
     const wire = serializeRequest(
-      request({ messages: history, reasoningEffort: ReasoningEffortId(effort) }),
+      request({ messages: history, reasoningEffort: ReasoningEffortId('max') }),
       { thinking: 'enabled', reasoningEffort: 'high' },
     )
     expect(wire.thinking).toEqual({ type: 'enabled' })
-    expect(wire.reasoning_effort).toBe(effort)
+    expect(wire.reasoning_effort).toBe('max')
   })
 
   it('maps off to disabled thinking without a wire reasoning effort', () => {

@@ -76,11 +76,6 @@ export interface PiAiAdapterOptions {
   resolveApiKey: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<string | undefined>
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
-  /**
-   * Observe one assistant history message degrading to provider-neutral
-   * conversion because its stored replay state is unusable by this build.
-   */
-  onReplayDegrade?: (detail: { provider: string; model: string; reason: string }) => void
 }
 
 /** Copy profile stream knobs into pi-ai's common option vocabulary. */
@@ -312,12 +307,9 @@ export class PiAiAdapter extends LlmAdapter {
       if (containsImage && attachments === undefined) {
         throw new LlmError('pi-ai image input requires the durable attachment service', 'UNSUPPORTED_CONTENT')
       }
-      const onReplayDegrade = (reason: string): void => {
-        this.config.onReplayDegrade?.({ provider: options.provider, model: options.model, reason })
-      }
       const context = attachments === undefined
-        ? toPiContext(options, undefined, onReplayDegrade)
-        : await toPiContext(options, attachments, onReplayDegrade)
+        ? toPiContext(options)
+        : await toPiContext(options, attachments)
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },

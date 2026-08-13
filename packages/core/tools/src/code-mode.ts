@@ -6,7 +6,7 @@
  * @module @deepseek-ai/dsh-tools/src/code-mode
  */
 
-import { CallId, createUserMessage, HarnessError } from '@deepseek-ai/dsh-llm'
+import { CallId, HarnessError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { CodeBindingFunction, CodeRunResult, CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
@@ -49,8 +49,7 @@ const TYPESCRIPT_FLAVOR: RunCodeFlavor = {
     + 'arguments: `code`, the BODY of an async function (erasable syntax only; top-level '
     + '`await` and `return` work), and `description`, a short summary of what the program '
     + 'does. Call tools as `await tools.name(args)` per the declarations in the system '
-    + 'prompt. Only what you print or return is program output — curate it. Image-bearing '
-    + 'subtool results are attached after the run.',
+    + 'prompt. Only what you print or return comes back — curate it.',
   codeDescription: 'The program: the body of an async TypeScript function.',
 }
 
@@ -64,9 +63,8 @@ const PYTHON_FLAVOR: RunCodeFlavor = {
     'Execute a Python program against the available tools. Takes two required '
     + 'arguments: `code`, the BODY of an async function (top-level `await` and `return` '
     + 'work), and `description`, a short summary of what the program does. Call tools as '
-    + '`await tools.name(args)` per the declarations in the system prompt. Use '
-    + '`print(...)` and/or `return <value>` for program output — curate it. Image-bearing '
-    + 'subtool results are attached after the run.',
+    + '`await tools.name(args)` per the declarations in the system prompt. Answer '
+    + 'with `print(...)` and/or `return <value>` — only that comes back, so curate it.',
   codeDescription: 'The program: the body of an async Python function.',
 }
 
@@ -561,12 +559,6 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
               const result = parked.kind === 'post-result'
                 ? await scheduler.finalize(parked.exec, parked.result)
                 : scheduler.finish(parked.exec, parked.result)
-              if (!result.isError && result.content.some(block => block.type === 'image')) {
-                exec.deferContext(createUserMessage({
-                  content: result.content,
-                  source: { kind: 'plugin', plugin: 'tools-code-mode' },
-                }))
-              }
               for (const context of result.additionalContexts ?? []) {
                 exec.deferContext(context)
               }
