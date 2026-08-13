@@ -32,7 +32,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@agentclientprotocol/sdk": "0.25.1",
+    "@agentclientprotocol/sdk": "1.2.1",
     "@deepseek-ai/dsh-loader-smoke": "workspace:*",
     "vitest": "^4.1.8"
   },

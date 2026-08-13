@@ -146,7 +146,7 @@
     "postinstall": "node scripts/install-lefthook.mjs"
   },
   "devDependencies": {
-    "@agentclientprotocol/sdk": "0.25.1",
+    "@agentclientprotocol/sdk": "1.2.1",
     "@deepseek-ai/dsh-tool-session-query": "workspace:^",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@testing-library/dom": "^10.4.1",
