@@ -34,6 +34,9 @@
       "path": "../../feedback/message-feedback"
     },
     {
+      "path": "../../host/plugin-control"
+    },
+    {
       "path": "../../host/plugin-inventory"
     },
     {

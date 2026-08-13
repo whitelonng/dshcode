@@ -14,6 +14,8 @@ Status: implemented
 
 分区拥有方贡献 `configurable` 标签页，由它声明既有的嵌套 `settings.plugin.item` 列表。配置卡片原有的命名空间绑定、草稿状态、校验与写入均保持不变。`@deepseek-ai/dsh-client-ui-settings-plugin-inventory` 向 `settings.plugins.tab` 贡献 `all` 标签页；它的 Host Loader 观察器、生成的 Remote 命名空间、DTO 与搜索语义保持不变。已停用的清单条目会在摘要和详情中省略重复的“未挂载”运行状态，已启用条目仍显示其 Cordis 阶段。
 
+随后，`@deepseek-ai/dsh-client-ui-settings-plugin-control` 依据[内置社区插件与 profile 开关决策](2026-08-14-built-in-community-plugins-and-controls.md)以 `controls` 标签页加入同一 slot。它的仅限回环修改路径与只读清单 Remote 保持分离：控制清单由部署方拥有，负责持久化 profile patch，并不会让任意清单行变成可修改条目。
+
 默认选择顺序中的第一个标签页。某个标签页只有首次被选择时才挂载，之后在“插件”分区保持挂载期间只隐藏而不卸载。这样会把清单 RPC 延迟到用户打开**插件列表**时，并在切换标签页时保留草稿、搜索文本、折叠状态和已读取的快照。关闭 Settings 会卸载该分区，因此再次打开后，重新选择该标签页时会取得新的清单快照。
 
 两项注册都使用 `ctx.slots.inject()`。分区声明方卸载时，标签 slot 及其全部贡献随之折叠；重新声明后，每项功能都能重新注册，无需静态 import，也不依赖激活顺序。
@@ -30,8 +32,8 @@ Status: implemented
 
 ## 影响
 
-Settings 只有一行“插件”导航，排在“Agent 预设”之前，包含**插件配置**与**插件列表**两个标签页。“Agent 预设”仍是独立分区，因为它编辑每个会话的 agent 组装，而非实时 Host Loader 树。
+Settings 只有一行“插件”导航，排在“Agent 预设”之前，包含**插件配置**、**插件列表**与**插件开关**三个标签页。“Agent 预设”仍是独立分区，因为它编辑每个会话的 agent 组装，而非实时 Host Loader 树。
 
-功能所有权保持明确：`ui-settings-plugins` 拥有“插件”页面与可编辑卡片，`ui-settings-plugin-inventory` 拥有只读清单视图，Host／RPC 路径不变。新的“插件”视图只需注册一个 `settings.plugins.tab` 贡献即可加入。
+功能所有权保持明确：`ui-settings-plugins` 拥有“插件”页面与可编辑卡片，`ui-settings-plugin-inventory` 拥有只读清单视图，`ui-settings-plugin-control` 拥有部署范围的开关。新的“插件”视图只需注册一个 `settings.plugins.tab` 贡献即可加入。
 
 该聚合依赖分区拥有方被组装：没有 `ui-settings-plugins` 时，`ui-settings-plugin-inventory` 会等待标签 slot 的声明且不渲染任何内容。这是通过 slot 注册表承载的有意组合依赖，而不是静态包 import。

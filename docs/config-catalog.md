@@ -785,6 +785,36 @@ export interface Config {
 
 Source: [`packages/host/frontend-static/src/index.ts:28`](../packages/host/frontend-static/src/index.ts)
 
+<a id="deepseek-aidsh-host-plugin-control"></a>
+
+## `@deepseek-ai/dsh-host-plugin-control`
+
+Requires: `loader` · `connection`
+
+```ts config-catalog
+/** Plugin-control gateway configuration owned by the composing profile. */
+export interface Config {
+  /** Absolute user patch layer of the running profile. */
+  profilePatchPath: string
+  /** Logical products that this deployment permits the browser to control. */
+  controls: PluginControlSpec[]
+}
+
+/** One deployment-configured logical control and its Loader rows. */
+export interface PluginControlSpec {
+  /** Stable id used in the profile patch marker and mutation request. */
+  id: string
+  /** Human-readable product name shown in Settings. */
+  name: string
+  /** HTTP(S) source repository shown in Settings. */
+  repository: string
+  /** Complete Loader entry-id set controlled as one product. */
+  entryIds: string[]
+}
+```
+
+Source: [`packages/host/plugin-control/src/index.ts:44`](../packages/host/plugin-control/src/index.ts)
+
 <a id="deepseek-aidsh-host-webserver"></a>
 
 ## `@deepseek-ai/dsh-host-webserver`
@@ -3049,6 +3079,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-client-ui-settings` ([`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-general` ([`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-models` ([`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts))
+- `@deepseek-ai/dsh-client-ui-settings-plugin-control` ([`packages/client/ui-settings-plugin-control/src/index.ts`](../packages/client/ui-settings-plugin-control/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` ([`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-settings-plugins` ([`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts))
 - `@deepseek-ai/dsh-client-ui-sidebar` ([`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts))

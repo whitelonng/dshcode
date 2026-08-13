@@ -94,6 +94,36 @@
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
 
+    # Loopback-only profile controls. The catalog groups the requested
+    # community bundles as three products; dsh-web-ui's rows move together.
+    - id: plugin-control
+      name: '@deepseek-ai/dsh-host-plugin-control'
+      inject: [profileUserPatchPath]
+      config:
+        profilePatchPath: !!js ctx.profileUserPatchPath
+        controls:
+          - id: genui
+            name: dsh-genui
+            repository: https://github.com/omdsh-dev/dsh-genui
+            entryIds: [genui]
+          - id: annotation
+            name: dsh-annotation
+            repository: https://github.com/omdsh-dev/dsh-annotation
+            entryIds: [dsh-annotation]
+          - id: web-ui
+            name: dsh-web-ui
+            repository: https://github.com/zhu1090093659/dsh-web-ui
+            entryIds:
+              - ui-dsh-aionui-panel
+              - ui-task-board
+              - ui-git-graph
+              - pet
+              - remote-web-ui
+              - live-stats
+              - ssh
+              - ui-web-ui-settings
+              - ui-skin-center
+
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.
     - id: api-gateway
@@ -194,6 +224,9 @@
 
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+
+    - id: ui-settings-plugin-control
+      name: '@deepseek-ai/dsh-client-ui-settings-plugin-control'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'

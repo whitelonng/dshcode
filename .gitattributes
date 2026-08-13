@@ -8,6 +8,11 @@
 
 *.pdf binary
 
+# pnpm patch files mirror the patched file verbatim; their inner added lines
+# legitimately begin with the diff marker plus a tab, which git's
+# space-before-tab check would otherwise flag as a whitespace error.
+*.patch whitespace=-space-before-tab
+
 # Pairing records are generated from the three confirmed owner-blob pairs.
 # The worktree-local installer registers the fail-closed driver command.
 *.i18n.yaml merge=dsh-translation-pairing

@@ -40,7 +40,7 @@ export function PluginsSettingsSection({ t, renderSlot, useTabs }: PluginsSettin
 
   // A tab mounts only when first selected, then stays mounted while hidden so
   // local drafts, disclosure state, search, and the inventory snapshot survive
-  // switching between the two views.
+  // switching between views.
   useEffect(() => {
     if (active === undefined) return
     setVisitedIds((previous) => {
