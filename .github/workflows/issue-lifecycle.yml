@@ -36,7 +36,9 @@ concurrency:
 jobs:
   lifecycle:
     name: Issue lifecycle
-    if: ${{ github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested') }}
+    # The project-token App credentials exist only in the upstream repository;
+    # forks without them skip cleanly instead of failing on every event.
+    if: ${{ vars.DSH_ISSUE_APP_CLIENT_ID != '' && secrets.DSH_ISSUE_APP_PRIVATE_KEY != '' && (github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy
