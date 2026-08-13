@@ -51,8 +51,16 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Test Windows dialog worker launch
+        if: runner.os == 'Windows'
+        run: pnpm exec vitest run packages/host/directory-picker-native/tests/win32-dialog-host.spec.ts
+
       - name: Package
         run: pnpm --filter @dshcode/desktop run ${{ matrix.command }}
+
+      - name: Smoke Windows packaged directory picker
+        if: runner.os == 'Windows'
+        run: node apps/desktop/scripts/smoke-packaged-win32-picker.mjs
 
       - uses: actions/upload-artifact@v4
         with:

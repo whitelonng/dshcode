@@ -34,9 +34,11 @@ electron-builder 使用在源码工作区之外暂存的仅生产依赖 `pnpm de
 
 应用使用非 ASAR 资源，因为 profile 模块回退机制需要创建指向已安装插件包的真实文件系统符号链接。暂存目录包含根 MIT 许可证与生成的第三方声明；虽然 Electron 是 electron-builder 使用的开发依赖，声明生成器仍把它归类为实际分发的运行时内容。打包过程通过 pnpm 的 JavaScript 入口调用它，避免 Windows spawn 命令 shim，并传入 `--publish never`，防止 electron-builder 从单个矩阵任务发布。原生 GitHub Actions 矩阵会生成 macOS arm64、macOS x64 和 Windows x64 安装包；`desktop-v*` tag 会把完整且成功的矩阵与 SHA-256 校验和发布为一个 GitHub Release。
 
+Windows 原生目录选择器 worker 会在受控子进程的环境中设置 `ELECTRON_RUN_AS_NODE=1`，并 spawn 打包后的可执行文件。因此 Electron 会以 Node 执行 worker 入口，而不是重新启动 DSHCode 并失去单实例锁；父应用仍以普通 Electron 模式运行，用户不需要配置该变量。
+
 ## Verification
 
-桌面生命周期测试固定回环地址／端口零参数、已激活地址校验、导航策略、打包版 Electron 缺少主模块参数时的补全，以及合并关闭请求后的执行顺序。运行时闭包门禁覆盖已安装的工作区对等依赖图。生产暂存冒烟测试启动真实 Web profile，在操作系统分配的回环端口收到 HTTP 200，释放它，并确认该端口不再接受连接；原生 Electron 启动会运行同一暂存目录与窗口。平台 CI 会在每个目标操作系统上构建安装包，tag 工作流则证明只有在全部矩阵任务成功后才会发布 Release。渲染器、模型可见输入和 transcript（文本记录）输出均未改变，因此现有 Web 快照继续作为组装应用覆盖，无需增加重复的桌面 transcript。
+桌面生命周期测试固定回环地址／端口零参数、已激活地址校验、导航策略、打包版 Electron 缺少主模块参数时的补全，以及合并关闭请求后的执行顺序。运行时闭包门禁覆盖已安装的工作区对等依赖图。生产暂存冒烟测试启动真实 Web profile，在操作系统分配的回环端口收到 HTTP 200，释放它，并确认该端口不再接受连接；原生 Electron 启动会运行同一暂存目录与窗口。Windows 打包任务还会启动带 DSHCode 品牌的未封装可执行文件，并要求真实目录选择器 worker 到达原生对话框后成功中止，从而固定仅对子进程启用的 Node 模式。平台 CI 会在每个目标操作系统上构建安装包，tag 工作流则证明只有在全部矩阵任务成功后才会发布 Release。渲染器、模型可见输入和 transcript（文本记录）输出均未改变，因此现有 Web 快照继续作为组装应用覆盖，无需增加重复的桌面 transcript。
 
 ## Alternatives considered
 
