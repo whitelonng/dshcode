@@ -38,14 +38,16 @@ pnpm --filter @dshcode/desktop run dist:win:x64
 
 名为 `Desktop` 的 GitHub Actions 工作流会在原生 macOS 和 Windows runner 上执行相同目标。不支持把在 macOS 上交叉编译 Windows 安装包作为验证路径。
 
+`desktop-v*` tag 会把完整且成功的构建矩阵与 `SHA256SUMS.txt` 发布到 [GitHub Releases](https://github.com/whitelonng/dshcode/releases)。手动运行工作流时，安装包只作为普通 Actions 产物保留，不会创建 Release。
+
 ## 打包
 
 暂存脚本会在源码工作区之外创建仅含生产依赖的 `pnpm deploy` 目录。部署前会验证每一个必需的工作区对等依赖（peer dependency）都是直接运行时依赖，从而避免安装后才出现包解析失败。由于 `pnpm deploy` 会把生产过滤条件写入共享工作区状态，暂存结束后还会恢复完整的源码工作区安装状态。
 
-应用使用非 ASAR 资源，因为 Harness profile 回退机制需要创建真实的包符号链接。分发包包含上游 MIT 许可证和生成的第三方声明。虽然 electron-builder 要求 Electron 在源码 manifest（元数据清单）中保持为开发依赖，但许可证生成器会把它视为实际分发的运行时依赖。
+应用使用非 ASAR 资源，因为 Harness profile 回退机制需要创建真实的包符号链接。分发包包含上游 MIT 许可证、生成的第三方声明和独立 DSHCode 应用图标；内嵌 Web UI 保留上游署名。虽然 electron-builder 要求 Electron 在源码 manifest（元数据清单）中保持为开发依赖，但许可证生成器会把它视为实际分发的运行时依赖。
 
 ## 当前限制
 
-- 除非构建环境提供平台签名凭据，否则安装包没有签名。macOS Gatekeeper 和 Windows SmartScreen 可能会对未签名的本地构建发出警告。
+- 预览版安装包目前明确保持未签名状态。在后续版本配置平台签名及 macOS 公证前，macOS Gatekeeper 与 Windows SmartScreen 可能会对本地构建发出警告。
 - 尚未配置自动更新。
-- 使用上游 DeepSeek 图标或其他品牌素材公开分发需要另行获得许可；详见仓库的[许可证与品牌声明](../../README.md#license-and-branding)。
+- 内嵌 Web UI 保留上游身份标识，但桌面应用与安装器使用独立 DSHCode 图标；详见仓库的[许可证与品牌声明](../../README.md#license-and-branding)。

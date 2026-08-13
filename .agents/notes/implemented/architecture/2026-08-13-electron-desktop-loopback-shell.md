@@ -16,7 +16,7 @@ The [GUI layering decision](2026-07-19-gui-layering-and-rpc-protocol.md) leaves 
 
 ### Application assembly
 
-`apps/desktop` is the private `@dshcode/desktop` Electron application, with product name `DSHCode` and application id `com.whitelonng.dshcode`. Its main process calls the shared `@deepseek-ai/dsh/profile-boot` export and boots the existing `web` profile in-process; it does not spawn the CLI or a separately supervised server process. The upstream renderer bundles, interface, and application icon remain the inputs to this private preview.
+`apps/desktop` is the private `@dshcode/desktop` Electron application, with product name `DSHCode` and application id `com.whitelonng.dshcode`. Its main process calls the shared `@deepseek-ai/dsh/profile-boot` export and boots the existing `web` profile in-process; it does not spawn the CLI or a separately supervised server process. The upstream renderer bundles and interface remain intact, while desktop application and installer branding use an independent DSHCode icon.
 
 `runProfile()` makes user patch-layer watching an explicit launcher choice. The CLI passes `true` and preserves its live `cordis.patch.yml` behavior. The desktop passes `false` because packaged Electron does not expose the Node loader internals required by Cordis HMR; both patch files are still composed at startup, and settings providers mounted by the Web profile retain their own live behavior.
 
@@ -32,11 +32,11 @@ The Electron quit path coalesces repeated requests, awaits the shared Harness sh
 
 electron-builder consumes a production `pnpm deploy` staged outside the source workspace. `apps/desktop/package.json` directly declares every required workspace peer reachable from its runtime graph, and the generalized `verify-runtime-closure` gate checks that closure before each stage. This explicit list is distribution metadata: relying on development-workspace links or adding peers only after a runtime error is not an accepted packaging model.
 
-The application uses unpacked resources rather than ASAR because the profile module fallback creates real filesystem symlinks to installed plugin packages. The stage carries the root MIT license and generated third-party notices; the notice generator classifies Electron as shipped runtime content even though it is a development dependency used by electron-builder. A native GitHub Actions matrix creates macOS arm64, macOS x64, and Windows x64 artifacts.
+The application uses unpacked resources rather than ASAR because the profile module fallback creates real filesystem symlinks to installed plugin packages. The stage carries the root MIT license and generated third-party notices; the notice generator classifies Electron as shipped runtime content even though it is a development dependency used by electron-builder. Packaging invokes pnpm through its JavaScript entrypoint so Windows never spawns a command shim, and passes `--publish never` so electron-builder cannot publish from an individual matrix job. A native GitHub Actions matrix creates macOS arm64, macOS x64, and Windows x64 installers; a `desktop-v*` tag publishes the complete successful matrix and SHA-256 checksums as one GitHub Release.
 
 ## Verification
 
-The desktop lifecycle suite pins loopback/port-zero arguments, activated-address validation, navigation policy, packaged Electron's missing main-module argument, and coalesced shutdown ordering. The runtime-closure gate covers the installed workspace peer graph. A production stage smoke boots the real Web profile, receives HTTP 200 on the OS-assigned loopback port, disposes it, and observes that the port no longer accepts connections; a native Electron launch exercises the same stage and window. Platform CI builds each installer on its target operating system. The renderer, model-visible inputs, and transcript output do not change, so existing Web snapshots remain the assembled-application coverage rather than gaining a duplicate desktop transcript.
+The desktop lifecycle suite pins loopback/port-zero arguments, activated-address validation, navigation policy, packaged Electron's missing main-module argument, and coalesced shutdown ordering. The runtime-closure gate covers the installed workspace peer graph. A production stage smoke boots the real Web profile, receives HTTP 200 on the OS-assigned loopback port, disposes it, and observes that the port no longer accepts connections; a native Electron launch exercises the same stage and window. Platform CI builds each installer on its target operating system, and the tag workflow proves release publication only after every matrix job succeeds. The renderer, model-visible inputs, and transcript output do not change, so existing Web snapshots remain the assembled-application coverage rather than gaining a duplicate desktop transcript.
 
 ## Alternatives considered
 
@@ -52,6 +52,10 @@ The desktop lifecycle suite pins loopback/port-zero arguments, activated-address
 
 **Depend only on `@deepseek-ai/dsh` and let pnpm infer peers.** Rejected: required workspace peers are shared runtime services, and auto peer installation is disabled by repository policy. The staged failure that motivated the closure gate proved that a small root manifest is not a closed executable deployment.
 
+**Let electron-builder publish from each CI job.** Rejected: implicit publishing couples an individual platform build to repository credentials and can expose an incomplete release before the other targets settle. Matrix jobs only build and upload artifacts; one dependent job owns the Release.
+
+**Put desktop installers in GitHub Packages.** Rejected: GitHub Packages exposes package-manager registries rather than direct generic installer downloads. GitHub Releases gives macOS and Windows users ordinary files and keeps their checksums beside them.
+
 ## Consequences
 
 - Installed users launch one application without Node.js or CLI interaction, while maintainers keep one renderer implementation.
@@ -59,4 +63,5 @@ The desktop lifecycle suite pins loopback/port-zero arguments, activated-address
 - Manual edits to the profile or home `cordis.patch.yml` require an application restart; ordinary Web UI settings do not inherit that limitation.
 - The desktop manifest has a long explicit peer list, and packaging fails early whenever a new required workspace peer is not added to it.
 - Unpacked application resources are larger and more inspectable than ASAR, in exchange for correct plugin resolution on macOS and Windows.
-- Source redistribution follows the upstream MIT notice, while public use of DeepSeek logos or other brand assets remains a separate permission requirement documented at the repository root.
+- Source redistribution follows the upstream MIT notice. DSHCode's independent desktop icon separates application branding from the upstream identity retained in the embedded interface and official attribution badge.
+- Tagged builds gain durable direct-download Release assets and checksums, while deliberately unsigned previews still trigger platform trust warnings until signing and macOS notarization are configured.
