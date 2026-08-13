@@ -1,0 +1,22 @@
+- banner:
+  - heading "内置插件" [level=3]
+  - paragraph: 开关会保存到当前配置；重启 DSH 后装载或卸载对应插件。
+- list:
+  - listitem:
+    - strong: dsh-genui
+    - link "查看源码":
+      - /url: https://github.com/omdsh-dev/dsh-genui
+    - text: 已开启
+    - switch "关闭 dsh-genui" [checked]
+  - listitem:
+    - strong: dsh-annotation
+    - link "查看源码":
+      - /url: https://github.com/omdsh-dev/dsh-annotation
+    - text: 已开启
+    - switch "关闭 dsh-annotation" [checked]
+  - listitem:
+    - strong: dsh-web-ui
+    - link "查看源码":
+      - /url: https://github.com/zhu1090093659/dsh-web-ui
+    - text: 已开启
+    - switch "关闭 dsh-web-ui" [checked]

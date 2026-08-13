@@ -1,9 +1,9 @@
 /** Stage a production-only workspace deployment for electron-builder. */
 
-import { copyFileSync, mkdirSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync, lstatSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const appRoot = resolve(import.meta.dirname, '..')
@@ -20,6 +20,50 @@ function runPnpm(args) {
     cwd: workspaceRoot,
     stdio: 'inherit',
   })
+}
+
+/**
+ * Assemble the deployment-owned skins tree the skin center reads:
+ * `<stage>/skins-extras/<id>` links to the staged skin packages. The
+ * patched `@linxin666/dsh-client-ui-skin-center` resolves `skins/` beside
+ * an ancestor `node_modules`, and electron-builder ships this tree at
+ * `app/node_modules/skins` through `extraResources` (the node-module
+ * collector would drop an orphan directory inside `node_modules`).
+ * pnpm's staged layout keeps the skin packages inside the virtual store,
+ * so the scan walks `node_modules/.pnpm` store entries and keeps only the
+ * packages carrying a `skin.json` (the skin-center plugin itself shares
+ * the package-name prefix but is not a skin).
+ * @returns the number of staged skins.
+ */
+function assembleSkinsExtras() {
+  const prefix = '@linxin666+dsh-client-ui-skin-'
+  const pnpmDir = join(stageRoot, 'node_modules', '.pnpm')
+  const extrasRoot = join(stageRoot, 'skins-extras')
+  mkdirSync(extrasRoot, { recursive: true })
+  let staged = 0
+  for (const entry of readdirSync(pnpmDir)) {
+    if (!entry.startsWith(prefix)) continue
+    const rest = entry.slice(prefix.length)
+    const at = rest.indexOf('@')
+    const id = at === -1 ? rest : rest.slice(0, at)
+    const target = join(pnpmDir, entry, 'node_modules', '@linxin666', `dsh-client-ui-skin-${id}`)
+    if (!existsSync(join(target, 'skin.json'))) continue
+    const link = join(extrasRoot, id)
+    try {
+      const stat = lstatSync(link)
+      if (!stat.isSymbolicLink()) {
+        throw new Error(`DSHCode packaging: ${link} exists and is not a symlink; remove it so the skins tree can be staged`)
+      }
+      if (readlinkSync(link) === target) continue
+      unlinkSync(link)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    mkdirSync(dirname(link), { recursive: true })
+    symlinkSync(target, link, 'junction')
+    staged += 1
+  }
+  return staged
 }
 
 /** Create a production deployment outside the source workspace for electron-builder. */
@@ -53,6 +97,8 @@ export function preparePackage() {
   const licenseRoot = resolve(stageRoot, 'licenses')
   mkdirSync(buildRoot, { recursive: true })
   mkdirSync(licenseRoot, { recursive: true })
+  const skinCount = assembleSkinsExtras()
+  console.log(`DSHCode packaging: ${skinCount} skin(s) staged at skins-extras`)
   copyFileSync(resolve(appRoot, 'electron-builder.yml'), resolve(stageRoot, 'electron-builder.yml'))
   copyFileSync(resolve(appRoot, 'assets/icon.svg'), resolve(buildRoot, 'icon.svg'))
   copyFileSync(resolve(workspaceRoot, 'LICENSE'), resolve(licenseRoot, 'LICENSE'))

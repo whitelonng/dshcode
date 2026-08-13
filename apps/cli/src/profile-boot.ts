@@ -252,6 +252,9 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
     // Before any config-tree entry mounts, so plugins resolve all launch-time
     // environment values from the same immutable provenance snapshot.
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)
+    // Profile-aware plugins persist composition changes into this invocation's
+    // own user layer instead of assuming the shipped `web` profile name.
+    hostCtx.provide('profileUserPatchPath', composed.profile.patchPath)
     // The command line and bounded exit request are launcher facts available
     // to every app plugin that injects the argument snapshot.
     provideCmdline(hostCtx, {
