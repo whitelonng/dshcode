@@ -34,6 +34,7 @@ switch (invocation.mode) {
       profile: invocation.profile,
       patchFiles: invocation.patches,
       args: invocation.args,
+      watchUserPatches: true,
     })
     break
   }

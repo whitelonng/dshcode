@@ -22,6 +22,9 @@ const RUNTIME_KINDS = ['dependencies', 'optionalDependencies'] as const
 /** All manifest sections that name an external package this file must disclose. */
 const ALL_KINDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const
 
+/** Build-time declarations whose runtime is embedded in a shipped application. */
+const PACKAGED_DEV_DEPENDENCIES = new Set(['electron'])
+
 /**
  * Workspace areas that never reach a user: repository tooling and gates (the
  * root manifest), test infrastructure, the documentation site, the runnable
@@ -376,7 +379,10 @@ export function tierExternalDeps(manifests: Map<string, Manifest>, names: Set<st
     for (const kind of ALL_KINDS) {
       for (const [dep, range] of Object.entries(manifest[kind] ?? {})) {
         if (names.has(dep) || range.startsWith('workspace:')) continue
-        const runtime = !devOnly && (RUNTIME_KINDS as readonly string[]).includes(kind)
+        const runtime = !devOnly && (
+          (RUNTIME_KINDS as readonly string[]).includes(kind)
+          || (kind === 'devDependencies' && PACKAGED_DEV_DEPENDENCIES.has(dep))
+        )
         tiers.set(dep, (tiers.get(dep) ?? false) || runtime)
       }
     }

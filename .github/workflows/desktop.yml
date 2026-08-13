@@ -1,0 +1,59 @@
+name: Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-v*'
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            runner: macos-15
+            command: dist:mac:arm64
+          - name: macOS Intel
+            runner: macos-15-intel
+            command: dist:mac:x64
+          - name: Windows x64
+            runner: windows-2025
+            command: dist:win:x64
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Package
+        run: pnpm --filter @dshcode/desktop run ${{ matrix.command }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dshcode-${{ runner.os }}-${{ runner.arch }}
+          path: .artifacts/desktop/release/*
+          if-no-files-found: error
+          retention-days: 14

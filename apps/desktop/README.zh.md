@@ -1,0 +1,51 @@
+# DSHCode 桌面应用
+
+[English](README.md) | 中文
+
+`@dshcode/desktop` 是 Electron 外壳，用于把现有 DeepSeek Harness Web UI 打包成可安装的 macOS 和 Windows 应用；它不会 fork 或复制渲染器 UI。
+
+## 运行模型
+
+Electron 主进程调用共享的 `@deepseek-ai/dsh/profile-boot` 入口，并在本进程内启动现有 `web` profile。应用不会 spawn CLI 进程，也不会启动需要单独管理的服务子进程。完整 Harness 树启动后，BrowserWindow 才会打开已激活 WebServer 服务报告的地址。
+
+打包版 Electron 不开放 Cordis HMR（热模块替换）所需的 Node loader 内部能力。因此，桌面启动器会关闭 profile 级和 home 级 `cordis.patch.yml` 文件的实时监听；启动时仍会加载这两个文件的内容，Web UI 管理的普通设置也会保留各自的实时行为。手动编辑任一 patch 文件后，请重启 DSHCode。
+
+## 安全与生命周期
+
+- WebServer 只绑定 `127.0.0.1`，端口值为 `0`，由操作系统以原子方式选择一个可用的临时端口。
+- Electron 只允许一个 DSHCode 实例。第二次启动时会聚焦现有窗口，不会再启动一棵 Harness 树或增加监听端口。
+- 渲染器启用上下文隔离和 Chromium 沙箱，关闭 Node 集成，拒绝权限请求，并且只能在应用自身的精确源内导航。HTTPS 链接会在系统浏览器中打开；其他跨源目标会被阻止。
+- 原生退出请求会先等待 Harness 关闭控制器完成。WebServer 的 dispose（资源释放）逻辑会关闭普通连接和升级连接；随后 Electron 退出，临时端口恢复可用。
+
+## 构建
+
+在仓库根目录安装声明的 Node.js 和 pnpm 版本，然后运行：
+
+```sh
+pnpm install
+pnpm run desktop:package
+```
+
+`desktop:package` 会构建仓库，并为当前平台创建未封装的应用。`desktop:dist` 会生成已配置的分发产物。输出写入 `.artifacts/desktop/release/`。
+
+### 平台构建目标
+
+```sh
+pnpm --filter @dshcode/desktop run dist:mac:arm64
+pnpm --filter @dshcode/desktop run dist:mac:x64
+pnpm --filter @dshcode/desktop run dist:win:x64
+```
+
+名为 `Desktop` 的 GitHub Actions 工作流会在原生 macOS 和 Windows runner 上执行相同目标。不支持把在 macOS 上交叉编译 Windows 安装包作为验证路径。
+
+## 打包
+
+暂存脚本会在源码工作区之外创建仅含生产依赖的 `pnpm deploy` 目录。部署前会验证每一个必需的工作区对等依赖（peer dependency）都是直接运行时依赖，从而避免安装后才出现包解析失败。由于 `pnpm deploy` 会把生产过滤条件写入共享工作区状态，暂存结束后还会恢复完整的源码工作区安装状态。
+
+应用使用非 ASAR 资源，因为 Harness profile 回退机制需要创建真实的包符号链接。分发包包含上游 MIT 许可证和生成的第三方声明。虽然 electron-builder 要求 Electron 在源码 manifest（元数据清单）中保持为开发依赖，但许可证生成器会把它视为实际分发的运行时依赖。
+
+## 当前限制
+
+- 除非构建环境提供平台签名凭据，否则安装包没有签名。macOS Gatekeeper 和 Windows SmartScreen 可能会对未签名的本地构建发出警告。
+- 尚未配置自动更新。
+- 使用上游 DeepSeek 图标或其他品牌素材公开分发需要另行获得许可；详见仓库的[许可证与品牌声明](../../README.md#license-and-branding)。

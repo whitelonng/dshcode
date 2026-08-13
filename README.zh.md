@@ -1,74 +1,58 @@
-# DeepSeek Harness
+# DSHCode
 
 [English](README.md) | 中文
 
-DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
-
-它采用**一切皆插件**的架构，并由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper)。
-
-## 开发者预览
-
-DeepSeek Harness 目前处于 _开发者预览_ 阶段，正在快速迭代。**未来将出现破坏兼容性的变更。**
+DSHCode 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 构建的独立 Electron 桌面发行版。它保持上游 Web UI 与插件运行时不变，同时增加可一键打开的 macOS 和 Windows 应用；最终用户不需要安装 Node.js，也不需要操作 CLI（命令行界面）。
 
 ## 运行
 
-### 通过 `npm` 运行
-
-安装 `Node.js`，然后运行：
-
-```sh
-npx @deepseek-ai/dsh web
-```
-
-该命令会启动 Web UI，默认地址为 `http://127.0.0.1:3080`。详见 [Web UI 指南](docs/user/guide/index.md)。
+安装 DSHCode 安装包后，从 macOS“应用程序”文件夹或 Windows“开始”菜单打开 `DSHCode`。应用会自行启动和停止内置 Web profile；安装版用户无需运行终端命令。
 
 ### 从源码运行
 
-如需从仓库源码运行：
+开发者仍可从仓库源码运行上游 Web 入口：
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+git clone https://github.com/whitelonng/dshcode.git
+cd dshcode
 pnpm install
 pnpm run build
 pnpm dsh web
 ```
 
-## 社区与支持
+命令会打印本地 Web UI 地址。详见 [Web UI 指南](docs/user/guide/index.md)。
 
-- 欢迎通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
-- 为你的插件仓库添加 [`dsh-plugin`](https://github.com/topics/dsh-plugin) 话题，便于被发现。
-- 欢迎加入 DeepSeek Harness 企微群：扫码添加企微小助手并填写入群问卷，完成后小助手会邀请你入群。
+## 桌面应用
 
-<table>
-  <thead>
-    <tr>
-      <th align="center">企微小助手</th>
-      <th align="center">入群问卷</th>
-      <th align="center">微信公众号</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center"><img src="assets/community-wecom-assistant.png" alt="DeepSeek Harness 企微小助手二维码" width="180" height="180"></td>
-      <td align="center"><a href="https://trtgsjkv6r.feishu.cn/share/base/form/shrcnIt5twSVdLGD52KJBckGCgg"><img src="assets/community-wecom-survey.png" alt="DeepSeek Harness 入群问卷二维码" width="180" height="180"></a></td>
-      <td align="center"><img src="assets/community-wechat-official-account.png" alt="DeepSeek Harness 团队微信公众号二维码" width="180" height="180"></td>
-    </tr>
-  </tbody>
-</table>
+打开 DSHCode 时，应用会启动内置的 Harness Web profile，并在经过安全加固的 Electron 窗口中显示。桌面外壳刻意保持精简；产品行为和 Web UI 仍由上游包提供，因此后续可以继续集成上游更新，而不必维护第二套界面。
 
-## 参与贡献
+架构、平台构建目标、打包方式和当前限制详见[桌面应用指南](apps/desktop/README.md)。
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+### 本地服务与端口
+
+应用每次启动时都会在 Electron 主进程内启动一个 HTTP 服务。该服务只绑定 `127.0.0.1`，并让操作系统分配一个可用的临时端口，因此不会占用固定端口，通常也不会与其他本地服务冲突。DSHCode 只允许一个应用实例，只加载其自身的精确回环地址；进程退出前会先释放 Harness 树，所以关闭应用也会停止服务并释放端口。
+
+### 构建桌面安装包
+
+```sh
+git clone https://github.com/whitelonng/dshcode.git
+cd dshcode
+pnpm install
+pnpm run desktop:dist
+```
+
+构建产物写入 `.artifacts/desktop/release/`。仓库还包含可手动触发或由 tag 触发的 GitHub Actions 工作流，用于生成 macOS Apple Silicon、macOS Intel 和 Windows x64 安装包。
+
+## 上游项目
+
+DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源插件式 agent harness（智能体框架）。DSHCode 保留上游包名、版权声明、架构、文档和 `upstream` Git 远程地址，以便正确归属来源并继续合并上游变更。DSHCode 是独立的衍生项目，不是 DeepSeek 官方发行版。
 
 ## 开发
 
-请先阅读[开发指南](docs/development.md)与[架构文档](docs/architecture.md)。
+请先阅读[开发指南](docs/development.md)、[架构文档](docs/architecture.md)和[桌面应用指南](apps/desktop/README.md)。面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 
-面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
+## 许可证与品牌
 
-## 许可证
+源码继续使用上游 [MIT 许可证](LICENSE)。再次分发时必须保留 DeepSeek 的版权与许可声明；内置第三方软件及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，桌面安装包会同时附带这两个文件。
 
-[MIT](LICENSE)
-
-第三方依赖及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+MIT 软件许可证本身不等于获得 DeepSeek 商标或 Logo 的 DSHCode 品牌使用许可。DeepSeek 的[用户协议](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html)（[中文版](https://cdn.deepseek.com/policies/zh-CN/deepseek-terms-of-use.html)）保留了这些品牌标识的相关权利。当前私有预览版沿用上游界面素材作评估用途；公开发布带品牌的二进制安装包前，应先取得书面许可，或替换应用图标及其他 DeepSeek 品牌素材。

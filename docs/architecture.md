@@ -24,6 +24,8 @@ Each declares itself in its own `package.json` under a `dsh` field: `dsh.profile
 
 [`dsh-base`](../packages/bundle/base/README.md) is the first layer of every profile: model adapters, tools, persistence, sandbox and approval policy, settings, credentials, telemetry. [`dsh-web-app`](../packages/bundle/web-app/README.md) adds the browser application; [`dsh-headless`](../packages/bundle/headless/README.md) adds a one-shot runner with no server at all.
 
+Both the CLI and [DSHCode desktop application](../apps/desktop/README.md) boot the same `web` profile. The desktop application embeds it in Electron, binds its existing HTTP/WebSocket carrier to a loopback address with an OS-assigned port, and owns the profile's shutdown; it does not fork the browser composition or spawn a CLI process.
+
 Layers apply to an empty entry list in this order: each bundle in the profile's listed order, then the profile's `cordis.patch.yml`, then the home-level one, then any `--patch` overlay. A patch targets a row by id and replaces its whole config, or inserts new rows.
 
 To see the tree your machine actually boots:
