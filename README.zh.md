@@ -4,9 +4,13 @@
 
 DSHCode 是面向 DeepSeek 官方开源项目 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的社区 Electron 桌面端配套应用。它把上游 Web UI 和插件运行时打包成可一键打开的 macOS 与 Windows 应用，安装版用户无需准备 Node.js 或操作 CLI（命令行界面）。
 
-<p align="center"><img src="assets/readme/dshcode-app-icon.png" alt="DSHCode macOS application" width="180"></p>
+<p align="center"><img src="apps/desktop/assets/icon.svg" alt="DSHCode application icon" width="180"></p>
 
 <p align="center"><img src="assets/readme/dshcode-dark.png" alt="DSHCode dark theme" width="49%"> <img src="assets/readme/dshcode-light.png" alt="DSHCode light theme" width="49%"></p>
+
+## 下载
+
+请从 [GitHub Releases](https://github.com/whitelonng/dshcode/releases) 下载 macOS Apple Silicon、macOS Intel 和 Windows x64 安装包。预览版安装包尚未进行代码签名或公证，因此 macOS Gatekeeper 与 Windows SmartScreen 可能在首次启动前发出警告。
 
 ## 运行
 
@@ -45,13 +49,15 @@ pnpm install
 pnpm run desktop:dist
 ```
 
-构建产物写入 `.artifacts/desktop/release/`。仓库还包含可手动触发或由 tag 触发的 GitHub Actions 工作流，用于生成 macOS Apple Silicon、macOS Intel 和 Windows x64 安装包。
+构建产物写入 `.artifacts/desktop/release/`。名为 `Desktop` 的 GitHub Actions 工作流会构建 macOS Apple Silicon、macOS Intel 和 Windows x64 安装包；`desktop-v*` tag 会把完整构建矩阵及 SHA-256 校验和发布到 GitHub Releases。
 
 ## 项目定位
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的官方开源插件式 agent harness（智能体框架）。DSHCode 作为桌面端配套发行版参与其插件生态，并使用 `dsh-plugin` 和 `deepseekharness-plugin` 仓库标签便于检索。项目保留上游包名、版权声明、架构、文档和 `upstream` Git 远程地址，以便正确归属来源并继续合并上游变更。
 
 DSHCode 是独立的社区项目。除非 DeepSeek 明确授权，否则它不代表 DeepSeek 官方发行、背书或认证。
+
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 
 ## 开发
 
@@ -61,4 +67,4 @@ DSHCode 是独立的社区项目。除非 DeepSeek 明确授权，否则它不�
 
 源码继续使用上游 [MIT 许可证](LICENSE)。再次分发时必须保留 DeepSeek 的版权与许可声明；内置第三方软件及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，桌面安装包会同时附带这两个文件。
 
-MIT 软件许可证本身不等于获得 DeepSeek 商标或 Logo 的 DSHCode 品牌使用许可。DeepSeek 的[用户协议](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html)（[中文版](https://cdn.deepseek.com/policies/zh-CN/deepseek-terms-of-use.html)）保留了这些品牌标识的相关权利。README 截图和当前预览版图标仅用于说明与上游界面的兼容关系，不代表官方背书；分发带品牌的二进制安装包前，应先取得书面许可，或替换 DeepSeek 品牌素材。
+MIT 软件许可证本身不等于获得 DeepSeek 商标或 Logo 的 DSHCode 品牌使用许可。DeepSeek 的[用户协议](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html)（[中文版](https://cdn.deepseek.com/policies/zh-CN/deepseek-terms-of-use.html)）保留了这些品牌标识的相关权利。DSHCode 发行版使用独立应用图标；内嵌 Harness 界面保留的上游身份标识及官方 `powered by dsh` 署名只用于说明兼容关系，不代表官方背书。

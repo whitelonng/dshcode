@@ -19,6 +19,7 @@ extraResources:
     to: licenses
 mac:
   category: public.app-category.developer-tools
+  identity: null
   icon: build/icon.svg
   hardenedRuntime: true
   target:

@@ -38,14 +38,16 @@ pnpm --filter @dshcode/desktop run dist:win:x64
 
 The `Desktop` GitHub Actions workflow runs the same targets on native macOS and Windows runners. Cross-compiling the Windows installer on macOS is not the supported verification path.
 
+A `desktop-v*` tag publishes the complete successful matrix and `SHA256SUMS.txt` to [GitHub Releases](https://github.com/whitelonng/dshcode/releases). Manual workflow runs retain their packages as ordinary Actions artifacts without creating a Release.
+
 ## Packaging
 
 The staging script creates a production-only `pnpm deploy` directory outside the source workspace. Before deployment it verifies that every required workspace peer is a direct runtime dependency, preventing delayed package-resolution failures after installation. The full source workspace installation is restored after staging because `pnpm deploy` records its production filter in shared workspace state.
 
-The application uses unpacked resources because the Harness profile fallback creates real package symlinks. The distribution includes the upstream MIT license and generated third-party notices. Electron is treated as a shipped runtime dependency even though electron-builder requires it to remain a development dependency in the source manifest.
+The application uses unpacked resources because the Harness profile fallback creates real package symlinks. The distribution includes the upstream MIT license, generated third-party notices, and an independent DSHCode application icon; the embedded Web UI retains its upstream attribution. Electron is treated as a shipped runtime dependency even though electron-builder requires it to remain a development dependency in the source manifest.
 
 ## Current limitations
 
-- Packages are unsigned unless the build environment supplies platform signing credentials. macOS Gatekeeper and Windows SmartScreen may warn about unsigned local builds.
+- Preview packages are deliberately unsigned. macOS Gatekeeper and Windows SmartScreen may warn about local builds until a future release configures platform signing and macOS notarization.
 - Automatic updates are not configured.
-- Public distribution with the upstream DeepSeek icon or other brand assets requires separate permission; see the repository [license and branding notice](../../README.md#license-and-branding).
+- The embedded Web UI retains upstream identity, but desktop application and installer branding use the independent DSHCode icon; see the repository [license and branding notice](../../README.md#license-and-branding).

@@ -24,12 +24,15 @@ jobs:
           - name: macOS Apple Silicon
             runner: macos-15
             command: dist:mac:arm64
+            artifact: macos-arm64
           - name: macOS Intel
             runner: macos-15-intel
             command: dist:mac:x64
+            artifact: macos-x64
           - name: Windows x64
             runner: windows-2025
             command: dist:win:x64
+            artifact: windows-x64
     steps:
       - uses: actions/checkout@v6
         with:
@@ -53,7 +56,48 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dshcode-${{ runner.os }}-${{ runner.arch }}
-          path: .artifacts/desktop/release/*
+          name: dshcode-${{ matrix.artifact }}
+          path: |
+            .artifacts/desktop/release/*.dmg
+            .artifacts/desktop/release/*.zip
+            .artifacts/desktop/release/*.exe
           if-no-files-found: error
           retention-days: 14
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: dshcode-*
+          path: release
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: release
+        run: sha256sum * > SHA256SUMS.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: |
+            Installable DSHCode desktop preview for macOS and Windows.
+
+            These preview packages are not code-signed or notarized. macOS Gatekeeper and Windows SmartScreen may warn before first launch.
+        run: |
+          version="${GITHUB_REF_NAME#desktop-v}"
+          release_args=()
+          if [[ "$version" == *-* ]]; then
+            release_args+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "DSHCode $version" \
+            --notes "$RELEASE_NOTES" \
+            --verify-tag \
+            "${release_args[@]}"

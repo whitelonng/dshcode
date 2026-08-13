@@ -11,6 +11,7 @@ const builderCli = require.resolve('electron-builder/cli.js')
 const built = spawnSync(process.execPath, [builderCli,
   '--projectDir', stageRoot,
   `--config.directories.output=${outputRoot}`,
+  '--publish', 'never',
   ...process.argv.slice(2),
 ], {
   cwd: stageRoot,
