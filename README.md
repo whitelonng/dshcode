@@ -2,7 +2,11 @@
 
 English | [中文](README.zh.md)
 
-DSHCode is an independent Electron desktop distribution built from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It keeps the upstream Web UI and plugin runtime intact while adding a one-click macOS and Windows application that does not require users to install Node.js or operate a CLI.
+DSHCode is a community-maintained Electron desktop companion for the official open-source [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) project. It packages the upstream Web UI and plugin runtime as a one-click macOS and Windows application, so installed users do not need Node.js or a CLI.
+
+<p align="center"><img src="assets/readme/dshcode-app-icon.png" alt="DSHCode macOS application" width="180"></p>
+
+<p align="center"><img src="assets/readme/dshcode-dark.png" alt="DSHCode dark theme" width="49%"> <img src="assets/readme/dshcode-light.png" alt="DSHCode light theme" width="49%"></p>
 
 ## Run
 
@@ -43,9 +47,11 @@ pnpm run desktop:dist
 
 Artifacts are written to `.artifacts/desktop/release/`. The repository also contains a manual/tag-triggered GitHub Actions workflow for macOS Apple Silicon, macOS Intel, and Windows x64 packages.
 
-## Upstream
+## Project positioning
 
-DeepSeek Harness (`dsh`) is the open-source plugin-based agent harness developed by [DeepSeek AI](https://deepseek.com). DSHCode retains the upstream package names, copyright notices, architecture, documentation, and `upstream` Git remote so changes remain attributable and mergeable. DSHCode is an independent derivative and is not an official DeepSeek release.
+DeepSeek Harness (`dsh`) is the official open-source plugin-based agent harness developed by [DeepSeek AI](https://deepseek.com). DSHCode participates in its plugin ecosystem as a desktop companion distribution and uses the `dsh-plugin` and `deepseekharness-plugin` repository topics for discovery. It retains the upstream package names, copyright notices, architecture, documentation, and `upstream` Git remote so changes remain attributable and mergeable.
+
+DSHCode is an independent community project. Unless DeepSeek grants explicit authorization, it is not an official DeepSeek release, endorsement, or certification.
 
 ## Development
 
@@ -55,4 +61,4 @@ Start with the [development guide](docs/development.md), [architecture documenta
 
 The source remains available under the upstream [MIT License](LICENSE). Redistribution must retain DeepSeek's copyright and permission notice; bundled third-party software and licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), and the desktop package includes both files.
 
-The MIT software license does not by itself grant permission to use DeepSeek trademarks or logos as DSHCode branding. DeepSeek's [Terms of Use](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html) ([Chinese version](https://cdn.deepseek.com/policies/zh-CN/deepseek-terms-of-use.html)) reserve those brand features. The current private preview reuses upstream interface assets for evaluation; obtain written permission or replace the application icon and other DeepSeek brand assets before a public branded binary release.
+The MIT software license does not by itself grant permission to use DeepSeek trademarks or logos as DSHCode branding. DeepSeek's [Terms of Use](https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html) ([Chinese version](https://cdn.deepseek.com/policies/zh-CN/deepseek-terms-of-use.html)) reserve those brand features. The screenshots and current preview icon identify compatibility with the upstream interface, not endorsement; obtain written permission or replace DeepSeek brand assets before distributing branded binaries.
