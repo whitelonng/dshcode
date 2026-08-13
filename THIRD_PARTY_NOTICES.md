@@ -38,7 +38,20 @@ External packages that a workspace package resolves at runtime. The tier covers 
 | [`@earendil-works/pi-ai`](https://github.com/earendil-works/pi) | MIT |
 | [`@joplin/turndown-plugin-gfm`](https://github.com/laurent22/joplin-turndown-plugin-gfm) | MIT |
 | [`@jridgewell/gen-mapping`](https://github.com/jridgewell/sourcemaps) | MIT |
+| [`@linxin666/dsh-client-ui-aionui-panel`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-client-ui-git-graph`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-client-ui-skin-center`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-client-ui-skin-whale-song`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-client-ui-task-board`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-client-ui-web-ui-settings`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-live-stats`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-pet`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-remote-web-ui`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-ssh`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
+| [`@linxin666/dsh-web-ui-all`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
 | [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) | MIT |
+| [`@omdsh-dev/dsh-annotation`](https://github.com/omdsh-dev/dsh-annotation) | MIT |
+| [`@omdsh-dev/dsh-genui`](https://github.com/omdsh-dev/dsh-genui) | MIT |
 | [`@opentelemetry/api`](https://github.com/open-telemetry/opentelemetry-js) | Apache-2.0 |
 | [`@opentelemetry/api-logs`](https://github.com/open-telemetry/opentelemetry-js) | Apache-2.0 |
 | [`@opentelemetry/exporter-logs-otlp-http`](https://github.com/open-telemetry/opentelemetry-js) | Apache-2.0 |
@@ -94,6 +107,7 @@ External packages that a workspace package resolves at runtime. The tier covers 
 
 pnpm applies local patches to the following packages at install time, so shipped artifacts carry modified copies; each patch file is the complete record of the modification:
 
+- `@linxin666/dsh-client-ui-skin-center` — [`patches/@linxin666__dsh-client-ui-skin-center.patch`](patches/@linxin666__dsh-client-ui-skin-center.patch)
 - `node-pty@1.1.0` — [`patches/node-pty@1.1.0.patch`](patches/node-pty@1.1.0.patch)
 
 ## Official Claude Code platform payloads

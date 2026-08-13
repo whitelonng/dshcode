@@ -63,6 +63,13 @@ DSHCode 是独立的社区项目。除非 DeepSeek 明确授权，否则它不�
 
 请先阅读[开发指南](docs/development.md)、[架构文档](docs/architecture.md)和[桌面应用指南](apps/desktop/README.md)。面向 agent：请遵循 [AGENTS.md](AGENTS.md)。
 
+## 致谢
+
+- [LINUX DO](https://linux.do) — 本项目也在 LINUX DO 社区持续分享与交流。
+- [dsh-genui](https://github.com/omdsh-dev/dsh-genui) — 为内置生成式 UI 能力提供插件实现。
+- [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation) — 为内置文本批注流程提供插件实现。
+- [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) — 为内置 Web UI 功能与皮肤集合提供插件实现。
+
 ## 许可证与品牌
 
 源码继续使用上游 [MIT 许可证](LICENSE)。再次分发时必须保留 DeepSeek 的版权与许可声明；内置第三方软件及其许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，桌面安装包会同时附带这两个文件。

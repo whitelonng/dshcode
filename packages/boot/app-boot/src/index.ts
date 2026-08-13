@@ -25,6 +25,8 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Harness-home path resolver available to Loader `!!js` config expressions. */
     dshHomePath?: typeof dshHomePath
+    /** Absolute user patch layer of the profile currently being launched. */
+    profileUserPatchPath?: string
   }
 }
 

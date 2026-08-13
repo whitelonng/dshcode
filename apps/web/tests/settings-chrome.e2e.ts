@@ -24,7 +24,9 @@ import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/settings-chrome', import.meta.url))
 const DIALOG_EXPECTED = join(SNAPSHOT_DIR, 'dialog.expected.md')
 const PLUGINS_EXPECTED = join(SNAPSHOT_DIR, 'plugins.expected.md')
-const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$="ui-settings"]'
+const PLUGIN_CONTROLS_EXPECTED = join(SNAPSHOT_DIR, 'plugin-controls.expected.md')
+const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$=":ui-settings"]'
+const PLUGIN_CONTROL_PANEL_SELECTOR = '[data-plugin-control-panel]'
 const MODE = webSnapshotMode()
 
 describe('web e2e: settings modal and General preferences', () => {
@@ -126,6 +128,58 @@ describe('web e2e: settings modal and General preferences', () => {
     await trigger.click()
     await page.getByRole('dialog', { name: '设置' }).getByRole('button', { name: '关闭' }).click()
     await expect.poll(() => page.getByRole('dialog', { name: '设置' }).count(), { timeout: 5_000 }).toBe(0)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
+  it('persists a restart-time built-in plugin switch from the third Plugins tab', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-plugin-control'))
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '设置' })
+    await dialog.getByRole('button', { name: '插件', exact: true }).click()
+    const tab = dialog.getByRole('tab', { name: '插件开关', exact: true })
+    await tab.waitFor({ timeout: 10_000 })
+    await tab.click()
+    expect(await tab.getAttribute('aria-selected')).toBe('true')
+
+    const panel = dialog.locator(PLUGIN_CONTROL_PANEL_SELECTOR)
+    await panel.waitFor({ timeout: 10_000 })
+    await expect.poll(() => panel.locator('[data-plugin-control]').count(), { timeout: 10_000 }).toBe(3)
+    expect(await panel.locator('[data-plugin-control="genui"] strong').textContent()).toBe('dsh-genui')
+    expect(await panel.locator('[data-plugin-control="annotation"] strong').textContent()).toBe('dsh-annotation')
+    expect(await panel.locator('[data-plugin-control="web-ui"] strong').textContent()).toBe('dsh-web-ui')
+    const snapshot = await captureStableAria(page, PLUGIN_CONTROL_PANEL_SELECTOR, scaffold.workspaceCwd)
+    await compareOrRefreshGolden(PLUGIN_CONTROLS_EXPECTED, snapshot, MODE)
+
+    const row = panel.locator('[data-plugin-control="genui"]')
+    const pluginSwitch = row.getByRole('switch')
+    expect(await pluginSwitch.getAttribute('aria-checked')).toBe('true')
+    const disableResponse = page.waitForResponse(response => response.url().includes('/plugin-control/set-enabled'))
+    await pluginSwitch.click()
+    const disableResponseText = await (await disableResponse).text()
+    if (!disableResponseText.includes('"ok":true')) {
+      throw new Error(`plugin-control disable request failed: ${disableResponseText}`)
+    }
+    await expect.poll(() => [...scaffold.ctx.loader.entries()].find(entry => entry.options.id === 'genui')?.disabled, {
+      timeout: 10_000,
+    }).toBe(false)
+    await expect.poll(() => readFile(scaffold.profilePatchPath, 'utf8'), { timeout: 10_000 })
+      .toMatch(/# dsh-plugin-control: genui[\s\S]*id: genui[\s\S]*disabled: true/)
+    await expect.poll(() => pluginSwitch.getAttribute('aria-checked'), { timeout: 10_000 }).toBe('false')
+    expect(await panel.getByRole('status').textContent()).toBe('更改已保存，请重启 DSH 使其生效。')
+
+    const enableResponse = page.waitForResponse(response => response.url().includes('/plugin-control/set-enabled'))
+    await pluginSwitch.click()
+    const enableResponseText = await (await enableResponse).text()
+    if (!enableResponseText.includes('"ok":true')) {
+      throw new Error(`plugin-control enable request failed: ${enableResponseText}`)
+    }
+    await expect.poll(() => [...scaffold.ctx.loader.entries()].find(entry => entry.options.id === 'genui')?.disabled, {
+      timeout: 10_000,
+    }).toBe(false)
+    await expect.poll(() => readFile(scaffold.profilePatchPath, 'utf8'), { timeout: 10_000 })
+      .toMatch(/# dsh-plugin-control: genui[\s\S]*id: genui[\s\S]*disabled: false/)
+    await expect.poll(() => pluginSwitch.getAttribute('aria-checked'), { timeout: 10_000 }).toBe('true')
+    await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
@@ -480,6 +534,10 @@ describe('web e2e: settings modal and General preferences', () => {
 
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['dialog.expected.md', 'plugins.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      'dialog.expected.md',
+      'plugin-controls.expected.md',
+      'plugins.expected.md',
+    ])
   })
 })
