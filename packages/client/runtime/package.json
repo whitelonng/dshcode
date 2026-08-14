@@ -56,7 +56,7 @@
     "@deepseek-ai/dsh-tools": "workspace:^",
     "immer": "^10.1.1",
     "react": "^18.2.0",
-    "zustand": "~4.4.7"
+    "zustand": "~5.0.14"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
