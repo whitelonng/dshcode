@@ -24,9 +24,7 @@ import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/settings-chrome', import.meta.url))
 const DIALOG_EXPECTED = join(SNAPSHOT_DIR, 'dialog.expected.md')
 const PLUGINS_EXPECTED = join(SNAPSHOT_DIR, 'plugins.expected.md')
-const PLUGIN_CONTROLS_EXPECTED = join(SNAPSHOT_DIR, 'plugin-controls.expected.md')
 const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$=":ui-settings"]'
-const PLUGIN_CONTROL_PANEL_SELECTOR = '[data-plugin-control-panel]'
 const MODE = webSnapshotMode()
 
 describe('web e2e: settings modal and General preferences', () => {
@@ -96,12 +94,14 @@ describe('web e2e: settings modal and General preferences', () => {
     await dialog.getByRole('button', { name: '模型' }).click()
     await expect.poll(() => dialog.getByRole('button', { name: '模型' }).getAttribute('aria-current'), { timeout: 5_000 }).toBe('true')
     expect(await dialog.getByRole('button', { name: '通用设置' }).getAttribute('aria-current')).toBeNull()
-    // Plugins is a read-only projection of the same assembled Loader tree.
-    // Capture one stable shipped row rather than the whole inventory so adding
-    // an unrelated plugin does not rewrite this surface's golden.
+    // Plugins is a projection of the same assembled Loader tree: the merged
+    // list tab keeps user plugins on top and built-ins collapsed below.
+    // Capture one stable shipped row rather than the whole inventory so
+    // adding an unrelated plugin does not rewrite this surface's golden.
     await dialog.getByRole('button', { name: '插件', exact: true }).click()
     await dialog.getByRole('heading', { name: '插件', exact: true }).waitFor({ timeout: 10_000 })
     await dialog.getByRole('tab', { name: '插件列表', exact: true }).click()
+    await dialog.getByText('内置插件', { exact: true }).click()
     const pluginRow = dialog.locator(PLUGIN_ROW_SELECTOR)
     await pluginRow.waitFor({ timeout: 10_000 })
     const expectedPluginCount = [...scaffold.ctx.loader.entries()]
@@ -128,36 +128,6 @@ describe('web e2e: settings modal and General preferences', () => {
     await trigger.click()
     await page.getByRole('dialog', { name: '设置' }).getByRole('button', { name: '关闭' }).click()
     await expect.poll(() => page.getByRole('dialog', { name: '设置' }).count(), { timeout: 5_000 }).toBe(0)
-    expect(tripwire.pageErrors).toEqual([])
-  }, 60_000)
-
-  it('renders the shipped community plugin cards unavailable until installed', async () => {
-    onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-plugin-control'))
-    await page.getByRole('button', { name: '设置', exact: true }).click()
-    const dialog = page.getByRole('dialog', { name: '设置' })
-    await dialog.getByRole('button', { name: '插件', exact: true }).click()
-    const tab = dialog.getByRole('tab', { name: '插件开关', exact: true })
-    await tab.waitFor({ timeout: 10_000 })
-    await tab.click()
-    expect(await tab.getAttribute('aria-selected')).toBe('true')
-
-    const panel = dialog.locator(PLUGIN_CONTROL_PANEL_SELECTOR)
-    await panel.waitFor({ timeout: 10_000 })
-    await expect.poll(() => panel.locator('[data-plugin-control]').count(), { timeout: 10_000 }).toBe(3)
-    expect(await panel.locator('[data-plugin-control="genui"] strong').textContent()).toBe('dsh-genui')
-    expect(await panel.locator('[data-plugin-control="annotation"] strong').textContent()).toBe('dsh-annotation')
-    expect(await panel.locator('[data-plugin-control="web-ui"] strong').textContent()).toBe('dsh-web-ui')
-    // The community products ship as installable packages, not mounted rows:
-    // until a profile installs them, every card is unavailable and its
-    // restart-time switch stays disabled.
-    for (const controlId of ['genui', 'annotation', 'web-ui']) {
-      const row = panel.locator(`[data-plugin-control="${controlId}"]`)
-      await expect.poll(() => row.getByRole('switch').isDisabled(), { timeout: 5_000 }).toBe(true)
-      expect(await row.getByText('不可用', { exact: true }).count()).toBe(1)
-    }
-    const snapshot = await captureStableAria(page, PLUGIN_CONTROL_PANEL_SELECTOR, scaffold.workspaceCwd)
-    await compareOrRefreshGolden(PLUGIN_CONTROLS_EXPECTED, snapshot, MODE)
-    await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
@@ -514,7 +484,6 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'dialog.expected.md',
-      'plugin-controls.expected.md',
       'plugins.expected.md',
     ])
   })

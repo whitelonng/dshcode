@@ -9,7 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { ConnectionRpcHandler, HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import { apply, CHANNEL, Config, inject } from '../src/index.ts'
 import type { Config as PluginInstallerConfig } from '../src/index.ts'
-import { fetchWithTimeout } from '../src/registry.ts'
+import { fetchWithTimeout, installNpmPackage } from '../src/registry.ts'
 import * as tar from 'tar'
 
 const tempRoots: string[] = []
@@ -147,6 +147,20 @@ describe('plugin-installer gateway', () => {
     expect(badToggle.error.code).toBe('bad-request')
   })
 
+  it('rejects prose and pasted URLs before any registry request', async () => {
+    const h = await harness()
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const pasted = await h.handler('install', {
+      spec: '嘿嘿，也欢迎大家试试我的生成式UI https://github.com/dsh-external/dsh-genui 和批注功能插件 https://github.com/dsh-external/dsh-annotation',
+    }, new AbortController().signal)
+    expect(pasted.ok).toBe(false)
+    if (pasted.ok) throw new Error('unreachable')
+    expect(pasted.error.message).toContain('invalid install spec')
+    expect(pasted.error.message).toContain('one npm package name')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('persists enablement changes on the managed patch row', async () => {
     const fixtureDir = await mkdtemp(join(tmpdir(), 'dsh-plugin-installer-toggle-'))
     tempRoots.push(fixtureDir)
@@ -173,6 +187,56 @@ describe('plugin-installer gateway', () => {
     expect(missing.ok).toBe(false)
     if (missing.ok) throw new Error('unreachable')
     expect(missing.error.message).toContain('not installed')
+  })
+
+  it('reports download progress from the tarball content length', async () => {
+    const fixtureDir = await mkdtemp(join(tmpdir(), 'dsh-plugin-installer-progress-'))
+    tempRoots.push(fixtureDir)
+    const tarball = await fixtureTarball(fixtureDir, '1.0.0')
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array(tarball), {
+      status: 200,
+      headers: { 'content-length': String(tarball.byteLength) },
+    }))
+    const packument = {
+      'dist-tags': { latest: '1.0.0' },
+      versions: { '1.0.0': { dist: { tarball: 'https://reg.example/demo.tgz' } } },
+    }
+    const seen: number[] = []
+    await installNpmPackage('demo', '1.0.0', packument, join(fixtureDir, 'out'), undefined, (percent) => { seen.push(percent) })
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen[seen.length - 1]).toBe(100)
+  })
+
+  it('reports the running mutation through status and resets to idle', async () => {
+    const fixtureDir = await mkdtemp(join(tmpdir(), 'dsh-plugin-installer-status-'))
+    tempRoots.push(fixtureDir)
+    const tarball = await fixtureTarball(fixtureDir, '1.0.0')
+    let releaseTarball!: () => void
+    const gate = new Promise<void>((resolve) => { releaseTarball = resolve })
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/@scope%2Fdemo') {
+        return new Response(JSON.stringify({
+          'dist-tags': { latest: '1.0.0' },
+          versions: { '1.0.0': { dist: { tarball: 'https://reg.example/demo.tgz' } } },
+        }), { status: 200 })
+      }
+      await gate
+      return new Response(new Uint8Array(tarball), {
+        status: 200,
+        headers: { 'content-length': String(tarball.byteLength) },
+      })
+    })
+    const h = await harness()
+    const installing = call(h.handler, 'install', { spec: '@scope/demo' })
+    await vi.waitFor(async () => {
+      const status = await call<{ progress: { kind: string } }>(h.handler, 'status', {})
+      expect(status.progress.kind).toBe('install')
+    })
+    releaseTarball()
+    await installing
+    const idle = await call<{ progress: { kind: string } }>(h.handler, 'status', {})
+    expect(idle.progress.kind).toBe('idle')
   })
 
   it('turns a stalled registry request into a timeout error instead of hanging', async () => {

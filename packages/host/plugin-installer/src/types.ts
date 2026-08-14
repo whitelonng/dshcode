@@ -66,3 +66,16 @@ export interface SetPluginEnabledRequest {
   /** Desired next-start enablement. */
   enabled: boolean
 }
+
+/** One install/update operation phase reported to the browser. */
+export type InstallStage = 'fetch' | 'download' | 'extract' | 'write'
+
+/** Point-in-time progress of the currently running install or update. */
+export interface InstallProgress {
+  /** 'idle' when no mutation runs, otherwise which mutation reports. */
+  readonly kind: 'idle' | 'install' | 'update'
+  /** Current phase of the running mutation ('fetch' while idle). */
+  readonly stage: InstallStage
+  /** Download completion in percent (0–100), absent outside the download phase. */
+  readonly percent?: number
+}

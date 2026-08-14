@@ -20,7 +20,7 @@ async function patchFile(content: string): Promise<string> {
 }
 
 describe('profile patch rows', () => {
-  it('inserts a managed row and preserves unowned content and comments', async () => {
+  it('inserts a managed insert row and preserves unowned content and comments', async () => {
     const path = await patchFile(`# my patch layer
 - id: existing
   name: '@deepseek-ai/dsh-base'
@@ -31,6 +31,7 @@ describe('profile patch rows', () => {
     expect(text).toContain('# my patch layer')
     expect(text).toContain('- id: existing')
     expect(text).toContain('# dsh-plugin-installer: @example/demo')
+    expect(text).toContain('insert:')
     expect(text).toContain('id: "@example/demo"')
   })
 
@@ -70,18 +71,34 @@ describe('profile patch rows', () => {
     await removePluginRow(join(root, 'absent.yml'), 'demo')
   })
 
-  it('reads and persists the saved enablement of a managed row', async () => {
+  it('reads and persists the saved enablement of a managed insert row', async () => {
     const path = await patchFile('[]\n')
     expect(readPluginRowEnabled(path, 'demo')).toBe(true)
 
     await setPluginRowEnabled(path, 'demo', false)
     expect(readPluginRowEnabled(path, 'demo')).toBe(false)
+    expect(await readFile(path, 'utf8')).toContain('insert:')
     expect(await readFile(path, 'utf8')).toContain('disabled: true')
     expect(await readFile(path, 'utf8')).toContain('# dsh-plugin-installer: demo')
 
     await setPluginRowEnabled(path, 'demo', true)
     expect(readPluginRowEnabled(path, 'demo')).toBe(true)
     expect(await readFile(path, 'utf8')).toContain('disabled: false')
+  })
+
+  it('replaces a legacy bare row with the insert format on the next toggle', async () => {
+    const path = await patchFile(`# dsh-plugin-installer: demo
+- id: demo
+  name: demo
+  disabled: true
+`)
+    // The legacy bare row never mounted anything, so it reads as enabled.
+    expect(readPluginRowEnabled(path, 'demo')).toBe(true)
+    await setPluginRowEnabled(path, 'demo', false)
+    const text = await readFile(path, 'utf8')
+    expect(text).toContain('insert:')
+    expect(text).not.toContain('id: demo\n  name: demo')
+    expect(readPluginRowEnabled(path, 'demo')).toBe(false)
   })
 
   it('treats a missing patch file as an enabled plugin', async () => {

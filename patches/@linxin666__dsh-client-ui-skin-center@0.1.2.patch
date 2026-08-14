@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..5ab903f752ff7ae6aa96b7062e84c62929b80c22 100644
+index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..19fc6ee654618a5bef04f41fe24f48b49aadba79 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -4,6 +4,24 @@ import { lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSy
@@ -51,7 +51,19 @@ index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..5ab903f752ff7ae6aa96b7062e84c629
  	lines.push(MANAGED_END);
  	return lines.join("\n");
  }
-@@ -436,7 +453,7 @@ function postRoute(path, run) {
+@@ -263,7 +280,10 @@ function useSkin(name, opts = {}) {
+ 		const warn = checkInstalled(entry, paths.profileModulesDir);
+ 		if (warn !== null) notices.push(warn);
+ 	}
+-	const next = `${stripLegacySkinRows(stripManaged(readPatch(paths.patchPath))).replace(/\s+$/, "")}\n\n${renderManaged(official ? null : name, registry)}\n`;
++	const base = stripLegacySkinRows(stripManaged(readPatch(paths.patchPath))).replace(/\s+$/, "");
++	// A leftover empty document (`[]` from older initializers) is invalid YAML once
++	// the managed section follows it; normalize it away so the section owns the file.
++	const next = (base === "" || base === "[]") ? `${renderManaged(official ? null : name, registry)}\n` : `${base}\n\n${renderManaged(official ? null : name, registry)}\n`;
+ 	writePatchAtomic(paths.patchPath, next);
+ 	const core = official ? "restored the official stock look — the config watcher applies it within seconds; refresh the page to see it." : `skin switched to "${name}" — the config watcher applies it within seconds; refresh the page (or the manifest re-fetches) to see it.`;
+ 	return notices.length ? `${core}\n${notices.join("\n")}` : core;
+@@ -436,7 +456,7 @@ function postRoute(path, run) {
  	};
  }
  /** Repo layout: skin bundles live at packages/skins/<id>/lib/client.js. */
@@ -60,7 +72,7 @@ index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..5ab903f752ff7ae6aa96b7062e84c629
  /**
  * Map skin id -> directory under packages/skins/, scanned from each
  * skin.json. The id is validated against this map (never used as a raw
-@@ -522,6 +539,53 @@ function bundleRoute() {
+@@ -522,6 +542,53 @@ function bundleRoute() {
  * Build the skin-center route family.
  * @param deps - optional runner override (tests).
  */
@@ -114,7 +126,7 @@ index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..5ab903f752ff7ae6aa96b7062e84c629
  function makeSkinCenterRoutes(deps = {}) {
  	const run = deps.run ?? runDshSkin;
  	const current = () => run(["current"]).then((out) => out.trim() || "none");
-@@ -538,6 +602,13 @@ function makeSkinCenterRoutes(deps = {}) {
+@@ -538,6 +605,13 @@ function makeSkinCenterRoutes(deps = {}) {
  				if (skin !== void 0) throw new Error("invalid-skin: skin and official are mutually exclusive");
  			} else if (typeof skin !== "string" || skin === "") throw new Error("invalid-skin: pass a skin name or official: true");
  			const out = await run(["use", official ? "official" : skin]);
@@ -128,7 +140,7 @@ index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..5ab903f752ff7ae6aa96b7062e84c629
  			return {
  				ok: true,
  				active: await current(),
-@@ -551,7 +622,7 @@ function makeSkinCenterRoutes(deps = {}) {
+@@ -551,7 +625,7 @@ function makeSkinCenterRoutes(deps = {}) {
  /** Stable cordis plugin name (matches cordis.patch.yml insert id). */
  const name = "ui-skin-center";
  /** Services required before the skin-center can mount its routes. */
@@ -137,7 +149,7 @@ index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..5ab903f752ff7ae6aa96b7062e84c629
  /**
  * Settings namespace for the main-interface background scrim, owned by the
  * skin center. The browser half spells the same string so it can bind the
-@@ -573,7 +644,7 @@ function apply(ctx) {
+@@ -573,7 +647,7 @@ function apply(ctx) {
  		setSource: () => {},
  		onChange: () => {}
  	});

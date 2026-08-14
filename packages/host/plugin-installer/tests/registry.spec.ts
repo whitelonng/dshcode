@@ -1,7 +1,7 @@
 /** npm spec parsing and version resolution tests. */
 
 import { describe, expect, it } from 'vitest'
-import { isGitSpec, parseNpmSpec, resolveNpmVersion, type NpmPackument } from '../src/registry.ts'
+import { isGitSpec, parseNpmSpec, resolveNpmVersion, validateInstallSpec, type NpmPackument } from '../src/registry.ts'
 
 function packument(latest: string, versions: string[]): NpmPackument {
   return {
@@ -31,6 +31,25 @@ describe('isGitSpec', () => {
     expect(isGitSpec('demo')).toBe(false)
     expect(isGitSpec('@scope/demo@1.0.0')).toBe(false)
     expect(isGitSpec('https://example.com/a/b/c')).toBe(false)
+  })
+})
+
+describe('validateInstallSpec', () => {
+  it('accepts npm names, scoped names, versions, and git sources', () => {
+    expect(() => validateInstallSpec('demo')).not.toThrow()
+    expect(() => validateInstallSpec('@scope/demo')).not.toThrow()
+    expect(() => validateInstallSpec('demo@1.0.0')).not.toThrow()
+    expect(() => validateInstallSpec('https://github.com/dsh-external/dsh-genui')).not.toThrow()
+    expect(() => validateInstallSpec('git+https://github.com/a/b.git')).not.toThrow()
+  })
+
+  it('rejects prose, pasted URLs, and mixed text with a readable error', () => {
+    const pasted = '嘿嘿，也欢迎大家试试我的生成式UI https://github.com/dsh-external/dsh-genui 和批注功能插件 https://github.com/dsh-external/dsh-annotation'
+    expect(() => validateInstallSpec(pasted)).toThrow(/invalid install spec/)
+    expect(() => validateInstallSpec(pasted)).toThrow('expected one npm package name')
+    expect(() => validateInstallSpec('https://github.com/a/b https://github.com/c/d')).toThrow(/invalid install spec/)
+    expect(() => validateInstallSpec('demo and another')).toThrow(/invalid install spec/)
+    expect(() => validateInstallSpec('https://example.com/not-a-repo')).toThrow(/invalid install spec/)
   })
 })
 

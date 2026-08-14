@@ -90,13 +90,9 @@
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
 
-    # Loopback-only projection and enablement of current Loader entries for
-    # trusted client RPCs. Saved switches write rows to the user patch layer.
+    # Read-only projection of current Loader entries for trusted client RPCs.
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
-      inject: [profileUserPatchPath]
-      config:
-        profilePatchPath: !!js ctx.profileUserPatchPath
 
     # Loopback-only profile controls. The catalog groups the requested
     # community bundles as three products; dsh-web-ui's rows move together.
@@ -110,10 +106,12 @@
             name: dsh-genui
             repository: https://github.com/omdsh-dev/dsh-genui
             entryIds: [genui]
+            packages: ['@omdsh-dev/dsh-genui']
           - id: annotation
             name: dsh-annotation
-            repository: https://github.com/omdsh-dev/dsh-annotation
+            repository: https://github.com/dsh-external/dsh-annotation
             entryIds: [dsh-annotation]
+            packages: ['@omdsh-dev/dsh-annotation']
           - id: web-ui
             name: dsh-web-ui
             repository: https://github.com/zhu1090093659/dsh-web-ui
@@ -127,6 +125,16 @@
               - ssh
               - ui-web-ui-settings
               - ui-skin-center
+            packages:
+              - '@linxin666/dsh-client-ui-aionui-panel'
+              - '@linxin666/dsh-client-ui-task-board'
+              - '@linxin666/dsh-client-ui-git-graph'
+              - '@linxin666/dsh-pet'
+              - '@linxin666/dsh-remote-web-ui'
+              - '@linxin666/dsh-live-stats'
+              - '@linxin666/dsh-ssh'
+              - '@linxin666/dsh-client-ui-web-ui-settings'
+              - '@linxin666/dsh-client-ui-skin-center'
 
     # Loopback-only user-plugin installs and updates into the shared fallback.
     - id: plugin-installer
@@ -232,12 +240,6 @@
 
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
-
-    - id: ui-settings-plugin-inventory
-      name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
-
-    - id: ui-settings-plugin-control
-      name: '@deepseek-ai/dsh-client-ui-settings-plugin-control'
 
     - id: ui-settings-archive
       name: '@deepseek-ai/dsh-client-ui-settings-archive'

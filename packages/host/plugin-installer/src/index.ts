@@ -19,11 +19,13 @@ import {
   parseNpmSpec,
   removeInstalledDir,
   resolveNpmVersion,
+  validateInstallSpec,
 } from './registry.ts'
 import { readPluginState, writePluginState } from './state.ts'
 import type {
   InstalledPlugin,
   InstalledPluginRecord,
+  InstallProgress,
   PluginInstallId,
   PluginStateFile,
   PluginUpdateInfo,
@@ -37,6 +39,7 @@ const INSTALL_ENDPOINT = 'install'
 const UPDATE_ENDPOINT = 'update'
 const UNINSTALL_ENDPOINT = 'uninstall'
 const SET_ENABLED_ENDPOINT = 'set-enabled'
+const STATUS_ENDPOINT = 'status'
 const LIST_ENDPOINT = 'list'
 const CHECK_UPDATES_ENDPOINT = 'check-updates'
 
@@ -95,6 +98,7 @@ export class PluginInstallerGateway {
   private readonly profilePatchPath: string
   private readonly fallbackDir: string
   private mutation = Promise.resolve()
+  private progress: InstallProgress = { kind: 'idle', stage: 'fetch' }
 
   constructor(ctx: Context, config: Config) {
     void ctx
@@ -129,12 +133,17 @@ export class PluginInstallerGateway {
     return { ...plugin, enabled: readPluginRowEnabled(this.profilePatchPath, plugin.name) }
   }
 
-  private async installedFromNpm(spec: string, signal?: AbortSignal): Promise<InstalledPluginRecord> {
+  private async installedFromNpm(
+    spec: string,
+    signal?: AbortSignal,
+    onProgress?: (percent: number) => void,
+  ): Promise<InstalledPluginRecord> {
     const { name, version: versionSpec } = parseNpmSpec(spec)
     const packument = await fetchPackument(name, this.registry, signal)
     const version = resolveNpmVersion(versionSpec, packument)
     const targetDir = join(this.fallbackDir, name)
-    await installNpmPackage(name, version, packument, targetDir, signal)
+    this.progress = { kind: this.progress.kind, stage: 'download' }
+    await installNpmPackage(name, version, packument, targetDir, signal, onProgress)
     const identity = await readInstalledIdentity(targetDir)
     return {
       id: identity.name as PluginInstallId,
@@ -171,9 +180,13 @@ export class PluginInstallerGateway {
   private async installCore(spec: string, signal?: AbortSignal): Promise<InstalledPlugin> {
     const trimmed = spec.trim()
     if (trimmed === '') throw new Error('plugin-installer: install spec must not be empty')
+    validateInstallSpec(trimmed)
     const plugin = isGitSpec(trimmed)
       ? await this.installedFromGit(trimmed, signal)
-      : await this.installedFromNpm(trimmed, signal)
+      : await this.installedFromNpm(trimmed, signal, (percent) => {
+        this.progress = { kind: 'install', stage: 'download', percent }
+      })
+    this.progress = { kind: 'install', stage: 'write' }
     const state = this.stateUpsert(this.readState(), plugin)
     await this.writeState(state)
     await insertPluginRow(this.profilePatchPath, plugin.name)
@@ -187,7 +200,22 @@ export class PluginInstallerGateway {
    * @returns the installed plugin row.
    */
   install(request: { spec: string }, signal?: AbortSignal): Promise<{ plugin: InstalledPlugin }> {
-    return this.enqueue(async () => ({ plugin: await this.installCore(request.spec, signal) }))
+    return this.enqueue(async () => {
+      this.progress = { kind: 'install', stage: 'fetch' }
+      try {
+        return { plugin: await this.installCore(request.spec, signal) }
+      } finally {
+        this.progress = { kind: 'idle', stage: 'fetch' }
+      }
+    })
+  }
+
+  /**
+   * Read the current install/update progress for the browser's polling.
+   * @returns the point-in-time progress state.
+   */
+  status(): { progress: InstallProgress } {
+    return { progress: this.progress }
   }
 
   /**
@@ -198,17 +226,25 @@ export class PluginInstallerGateway {
    */
   update(request: { id: string }, signal?: AbortSignal): Promise<{ plugin: InstalledPlugin }> {
     return this.enqueue(async () => {
-      const state = this.readState()
-      const existing = state.plugins.find(plugin => plugin.id === request.id as PluginInstallId)
-      if (existing === undefined) {
-        throw new Error(`plugin-installer: ${JSON.stringify(request.id)} is not installed`)
+      this.progress = { kind: 'update', stage: 'fetch' }
+      try {
+        const state = this.readState()
+        const existing = state.plugins.find(plugin => plugin.id === request.id as PluginInstallId)
+        if (existing === undefined) {
+          throw new Error(`plugin-installer: ${JSON.stringify(request.id)} is not installed`)
+        }
+        const plugin = existing.source.kind === 'git'
+          ? await this.installedFromGit(existing.source.spec, signal)
+          : await this.installedFromNpm(existing.source.spec, signal, (percent) => {
+            this.progress = { kind: 'update', stage: 'download', percent }
+          })
+        this.progress = { kind: 'update', stage: 'write' }
+        await this.writeState(this.stateUpsert(this.readState(), plugin))
+        await insertPluginRow(this.profilePatchPath, plugin.name)
+        return { plugin: this.saved(plugin) }
+      } finally {
+        this.progress = { kind: 'idle', stage: 'fetch' }
       }
-      const plugin = existing.source.kind === 'git'
-        ? await this.installedFromGit(existing.source.spec, signal)
-        : await this.installedFromNpm(existing.source.spec, signal)
-      await this.writeState(this.stateUpsert(this.readState(), plugin))
-      await insertPluginRow(this.profilePatchPath, plugin.name)
-      return { plugin: this.saved(plugin) }
     })
   }
 
@@ -329,6 +365,10 @@ export function apply(ctx: Context, config: Config): void {
         case SET_ENABLED_ENDPOINT: {
           const parsed = setEnabledRequestSchema.parse(payload)
           return { ok: true as const, value: await gateway.setEnabled(parsed) }
+        }
+        case STATUS_ENDPOINT: {
+          z.object({}).strict().parse(payload)
+          return { ok: true as const, value: gateway.status() }
         }
         default:
           return { ok: false as const, error: { code: 'bad-request', message: `unknown plugin-installer endpoint ${JSON.stringify(endpoint)}`, details: { issues: [] } } }

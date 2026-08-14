@@ -141,10 +141,10 @@ flowchart TD
     pkg_client_ui_plan["client-ui-plan"]
     pkg_client_ui_primitives["client-ui-primitives"]
     pkg_client_ui_settings["client-ui-settings"]
+    pkg_client_ui_settings_archive["client-ui-settings-archive"]
     pkg_client_ui_settings_general["client-ui-settings-general"]
     pkg_client_ui_settings_models["client-ui-settings-models"]
-    pkg_client_ui_settings_plugin_control["client-ui-settings-plugin-control"]
-    pkg_client_ui_settings_plugin_inventory["client-ui-settings-plugin-inventory"]
+    pkg_client_ui_settings_plugin_installer["client-ui-settings-plugin-installer"]
     pkg_client_ui_settings_plugins["client-ui-settings-plugins"]
     pkg_client_ui_sidebar["client-ui-sidebar"]
     pkg_client_ui_skill["client-ui-skill"]
@@ -211,6 +211,7 @@ flowchart TD
     pkg_host_directory_picker_native["host-directory-picker-native"]
     pkg_host_frontend_static["host-frontend-static"]
     pkg_host_plugin_control["host-plugin-control"]
+    pkg_host_plugin_installer["host-plugin-installer"]
     pkg_host_plugin_inventory["host-plugin-inventory"]
     pkg_host_webserver["host-webserver"]
   end
@@ -375,6 +376,7 @@ flowchart TD
   pkg_subprocess_e2b --> pkg_timeout
   pkg_host_frontend_static --> pkg_host_webserver
   pkg_host_frontend_static --> pkg_invariants
+  pkg_host_plugin_inventory --> pkg_atomic_write
   pkg_host_plugin_inventory --> pkg_brand
   pkg_host_plugin_inventory --> pkg_invariants
   pkg_host_plugin_inventory --> pkg_typert_protocol
@@ -413,6 +415,10 @@ flowchart TD
   pkg_host_plugin_control --> pkg_brand
   pkg_host_plugin_control --> pkg_client_connection
   pkg_host_plugin_control --> pkg_invariants
+  pkg_host_plugin_installer --> pkg_atomic_write
+  pkg_host_plugin_installer --> pkg_client_connection
+  pkg_host_plugin_installer --> pkg_home_paths
+  pkg_host_plugin_installer --> pkg_invariants
   pkg_settings_file --> pkg_atomic_write
   pkg_settings_file --> pkg_home_paths
   pkg_settings_file --> pkg_invariants
@@ -1195,21 +1201,21 @@ flowchart TD
   pkg_client_ui_input_trigger --> pkg_client_ui_primitives
   pkg_client_ui_input_trigger --> pkg_client_ui_slots
   pkg_client_ui_input_trigger --> pkg_invariants
-  pkg_client_ui_settings_plugin_control --> pkg_api_remotes
-  pkg_client_ui_settings_plugin_control --> pkg_client_connection
-  pkg_client_ui_settings_plugin_control --> pkg_client_locale
-  pkg_client_ui_settings_plugin_control --> pkg_client_runtime
-  pkg_client_ui_settings_plugin_control --> pkg_client_ui_primitives
-  pkg_client_ui_settings_plugin_control --> pkg_client_ui_settings
-  pkg_client_ui_settings_plugin_control --> pkg_client_ui_slots
-  pkg_client_ui_settings_plugin_control --> pkg_invariants
-  pkg_client_ui_settings_plugin_inventory --> pkg_api_remotes
-  pkg_client_ui_settings_plugin_inventory --> pkg_client_locale
-  pkg_client_ui_settings_plugin_inventory --> pkg_client_runtime
-  pkg_client_ui_settings_plugin_inventory --> pkg_client_ui_primitives
-  pkg_client_ui_settings_plugin_inventory --> pkg_client_ui_settings
-  pkg_client_ui_settings_plugin_inventory --> pkg_client_ui_slots
-  pkg_client_ui_settings_plugin_inventory --> pkg_invariants
+  pkg_client_ui_settings_archive --> pkg_client_connection
+  pkg_client_ui_settings_archive --> pkg_client_locale
+  pkg_client_ui_settings_archive --> pkg_client_runtime
+  pkg_client_ui_settings_archive --> pkg_client_ui_primitives
+  pkg_client_ui_settings_archive --> pkg_client_ui_settings
+  pkg_client_ui_settings_archive --> pkg_client_ui_slots
+  pkg_client_ui_settings_archive --> pkg_invariants
+  pkg_client_ui_settings_plugin_installer --> pkg_api_remotes
+  pkg_client_ui_settings_plugin_installer --> pkg_client_connection
+  pkg_client_ui_settings_plugin_installer --> pkg_client_locale
+  pkg_client_ui_settings_plugin_installer --> pkg_client_runtime
+  pkg_client_ui_settings_plugin_installer --> pkg_client_ui_primitives
+  pkg_client_ui_settings_plugin_installer --> pkg_client_ui_settings
+  pkg_client_ui_settings_plugin_installer --> pkg_client_ui_slots
+  pkg_client_ui_settings_plugin_installer --> pkg_invariants
   pkg_client_ui_settings_plugins --> pkg_api_remotes
   pkg_client_ui_settings_plugins --> pkg_client_connection
   pkg_client_ui_settings_plugins --> pkg_client_locale
@@ -1480,7 +1486,7 @@ flowchart TD
 | [`credentials`](../packages/credentials/credentials) | `credentials` | [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | `e2b` | [`e2b`](../packages/e2b/e2b), [`invariants`](../packages/runtime-diagnostics/invariants), [`subprocess`](../packages/subprocess/subprocess), [`timeout`](../packages/util/timeout) |
 | [`host-frontend-static`](../packages/host/frontend-static) | `host` | [`host-webserver`](../packages/host/webserver), [`invariants`](../packages/runtime-diagnostics/invariants) |
-| [`host-plugin-inventory`](../packages/host/plugin-inventory) | `host` | [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`typert-protocol`](../packages/typert/protocol) |
+| [`host-plugin-inventory`](../packages/host/plugin-inventory) | `host` | [`atomic-write`](../packages/util/atomic-write), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`typert-protocol`](../packages/typert/protocol) |
 | [`anonymous-user-id`](../packages/identity/anonymous-user-id) | `identity` | [`brand`](../packages/util/brand), [`home-paths`](../packages/util/home-paths), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`settings`](../packages/settings/settings) | `settings` | [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`storage-domain`](../packages/storage/storage-domain) | `storage` | [`invariants`](../packages/runtime-diagnostics/invariants), [`storage`](../packages/storage/storage) |
@@ -1493,6 +1499,7 @@ flowchart TD
 | [`attachment-local`](../packages/attachment/attachment-local) | `attachment` | [`attachment`](../packages/attachment/attachment), [`home-paths`](../packages/util/home-paths), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`credentials-local`](../packages/credentials/credentials-local) | `credentials` | [`atomic-write`](../packages/util/atomic-write), [`credentials`](../packages/credentials/credentials), [`home-paths`](../packages/util/home-paths), [`invariants`](../packages/runtime-diagnostics/invariants), [`launch-environment`](../packages/util/launch-environment) |
 | [`host-plugin-control`](../packages/host/plugin-control) | `host` | [`atomic-write`](../packages/util/atomic-write), [`brand`](../packages/util/brand), [`client-connection`](../packages/client/connection), [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`host-plugin-installer`](../packages/host/plugin-installer) | `host` | [`atomic-write`](../packages/util/atomic-write), [`client-connection`](../packages/client/connection), [`home-paths`](../packages/util/home-paths), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`settings-file`](../packages/settings/settings-file) | `settings` | [`atomic-write`](../packages/util/atomic-write), [`home-paths`](../packages/util/home-paths), [`invariants`](../packages/runtime-diagnostics/invariants), [`settings`](../packages/settings/settings) |
 | [`llm-deepseek`](../packages/llm/llm-deepseek) | `llm` | [`anonymous-user-id`](../packages/identity/anonymous-user-id), [`attachment`](../packages/attachment/attachment), [`credentials`](../packages/credentials/credentials), [`invariants`](../packages/runtime-diagnostics/invariants), [`launch-environment`](../packages/util/launch-environment), [`llm`](../packages/llm/llm), [`settings`](../packages/settings/settings), [`timeout`](../packages/util/timeout) |
 | [`llm-pi-ai`](../packages/llm/llm-pi-ai) | `llm` | [`attachment`](../packages/attachment/attachment), [`credentials`](../packages/credentials/credentials), [`invariants`](../packages/runtime-diagnostics/invariants), [`launch-environment`](../packages/util/launch-environment), [`llm`](../packages/llm/llm), [`settings`](../packages/settings/settings), [`timeout`](../packages/util/timeout) |
@@ -1634,8 +1641,8 @@ flowchart TD
 | [`client-test-runtime`](../packages/test-support/client-runtime) | `test-support` | [`client-runtime`](../packages/client/runtime), [`client-ui-slots`](../packages/client/ui-slots), [`client-web-react`](../packages/client/web-react), [`host-apiproxy`](../packages/host/apiproxy), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-locale`](../packages/client/locale) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-ui-input-trigger`](../packages/client/ui-input-trigger) | `client` | [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/runtime-diagnostics/invariants) |
-| [`client-ui-settings-plugin-control`](../packages/client/ui-settings-plugin-control) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/runtime-diagnostics/invariants) |
-| [`client-ui-settings-plugin-inventory`](../packages/client/ui-settings-plugin-inventory) | `client` | [`api-remotes`](../packages/api/remotes), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`client-ui-settings-archive`](../packages/client/ui-settings-archive) | `client` | [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`client-ui-settings-plugin-installer`](../packages/client/ui-settings-plugin-installer) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-ui-settings-plugins`](../packages/client/ui-settings-plugins) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`client-web-react`](../packages/client/web-react), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-ui-sidebar`](../packages/client/ui-sidebar) | `client` | [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-ui-theme`](../packages/client/ui-theme) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-settings`](../packages/client/ui-settings), [`client-ui-slots`](../packages/client/ui-slots), [`host-webserver`](../packages/host/webserver), [`invariants`](../packages/runtime-diagnostics/invariants) |

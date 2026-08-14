@@ -101,5 +101,5 @@ minimumReleaseAgeExclude:
   - '@linxin666/dsh-client-ui-skin-whale-song@0.1.2'
 
 patchedDependencies:
-  '@linxin666/dsh-client-ui-skin-center': patches/@linxin666__dsh-client-ui-skin-center.patch
+  '@linxin666/dsh-client-ui-skin-center@0.1.2': patches/@linxin666__dsh-client-ui-skin-center@0.1.2.patch
   node-pty@1.1.0: patches/node-pty@1.1.0.patch

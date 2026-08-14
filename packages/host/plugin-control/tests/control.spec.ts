@@ -13,7 +13,7 @@ import {
   type Config as PluginControlConfig,
   type PluginControlSpec,
 } from '../src/index.ts'
-import { writePluginControlState } from '../src/control-file.ts'
+import { readUninstalledControls, writePluginControlState, writePluginControlUninstalled } from '../src/control-file.ts'
 
 const contexts: Context[] = []
 const tempRoots: string[] = []
@@ -47,13 +47,14 @@ async function harness(entryCount = 2): Promise<{
 
 function control(
   entryIds: string[],
-  options: { id?: string; name?: string; repository?: string } = {},
+  options: { id?: string; name?: string; repository?: string; packages?: string[] } = {},
 ): PluginControlSpec {
   return {
     id: options.id ?? 'fixture',
     name: options.name ?? 'Fixture plugin',
     repository: options.repository ?? 'https://example.com/plugin',
     entryIds,
+    packages: options.packages ?? entryIds.map(entryId => `pkg-${entryId}`),
   }
 }
 
@@ -98,7 +99,7 @@ describe('PluginControlGateway', () => {
     await fiber.dispose()
   })
 
-  it('projects enabled, mixed, disabled, and unavailable aggregate states', async () => {
+  it('projects enabled, mixed, disabled, and not-yet-mounted aggregate states', async () => {
     const h = await harness(2)
     const gateway = new PluginControlGateway(h.ctx, config(h.path, h.entryIds))
     expect(gateway.list().controls[0]?.state).toBe('enabled')
@@ -109,7 +110,9 @@ describe('PluginControlGateway', () => {
     expect(gateway.list().controls[0]?.state).toBe('disabled')
 
     await h.ctx.loader.remove(requiredAt(h.entryIds, 0))
-    expect(gateway.list().controls[0]?.state).toBe('unavailable')
+    await h.ctx.loader.remove(requiredAt(h.entryIds, 1))
+    // Rows absent from the Loader mean the product was never enabled: off, not broken.
+    expect(gateway.list().controls[0]?.state).toBe('disabled')
   })
 
   it('reports duplicate mounted local ids as unavailable', async () => {
@@ -152,8 +155,10 @@ describe('PluginControlGateway', () => {
     const text = await readFile(h.path, 'utf8')
     expect(text).toContain('# user-owned comment')
     expect(text).toContain('value: !!js ctx.value')
-    expect(text.match(/# dsh-plugin-control: fixture/g)).toHaveLength(2)
+    expect(text.match(/# dsh-plugin-control: fixture/g)).toHaveLength(1)
+    expect(text).toContain('insert:')
     expect(text.match(/disabled: false/g)).toHaveLength(2)
+    expect(text).toContain('name: pkg-')
     expect(text).not.toContain('disabled: true')
   })
 
@@ -171,6 +176,10 @@ describe('PluginControlGateway', () => {
     cancelled.abort(new Error('left'))
     await expect(gateway.handle('set-enabled', { pluginId: 'fixture', enabled: false }, cancelled.signal))
       .resolves.toMatchObject({ ok: false, error: { code: 'cancelled' } })
+    await expect(gateway.handle('uninstall', { pluginId: '' }, new AbortController().signal))
+      .resolves.toMatchObject({ ok: false, error: { code: 'bad-request' } })
+    await expect(gateway.handle('uninstall', { pluginId: 'fixture' }, cancelled.signal))
+      .resolves.toMatchObject({ ok: false, error: { code: 'cancelled' } })
     const unknown = await gateway.handle(
       'set-enabled', { pluginId: 'missing', enabled: false }, new AbortController().signal,
     )
@@ -180,14 +189,20 @@ describe('PluginControlGateway', () => {
     expect(unknown.error.message).toContain('unknown')
 
     await h.ctx.loader.remove(requiredAt(h.entryIds, 0))
-    const unavailable = await gateway.handle(
+    const absentRows = await gateway.handle(
       'set-enabled', { pluginId: 'fixture', enabled: false }, new AbortController().signal,
     )
-    expect(unavailable.ok).toBe(false)
-    if (unavailable.ok) throw new Error('unavailable control request unexpectedly succeeded')
-    expect(unavailable.error).toMatchObject({ code: 'internal' })
-    expect(unavailable.error.message).toContain('unavailable')
+    expect(absentRows.ok).toBe(true)
+    // Disabling an unmounted product writes nothing: absent rows are already off.
     expect(await readFile(h.path, 'utf8')).toBe('[]\n')
+    const firstEnable = await gateway.handle(
+      'set-enabled', { pluginId: 'fixture', enabled: true }, new AbortController().signal,
+    )
+    expect(firstEnable.ok).toBe(true)
+    const written = await readFile(h.path, 'utf8')
+    expect(written).toContain('insert:')
+    expect(written).toContain('name: pkg-')
+    expect(written).toContain('disabled: false')
 
     const h2 = await harness(1)
     const invalid = '- id: [not closed\n'
@@ -201,7 +216,8 @@ describe('PluginControlGateway', () => {
     expect(invalidResult.error).toMatchObject({ code: 'internal' })
     expect(invalidResult.error.message).toContain('invalid YAML')
     expect(await readFile(h2.path, 'utf8')).toBe(invalid)
-    expect(invalidGateway.list().controls[0]?.state).toBe('enabled')
+    // list() reads the patch layer for uninstall markers and fails loud too.
+    expect(() => { invalidGateway.list() }).toThrow('invalid YAML')
   })
 
   it('formats queued cancellation reasons without touching the profile', async () => {
@@ -226,10 +242,16 @@ describe('PluginControlGateway', () => {
 
   it('creates a missing patch, preserves unowned YAML items, and rejects wrong file types', async () => {
     const h = await harness(1)
-    const persisted = control(h.entryIds)
+    const persisted = {
+      id: 'fixture',
+      rows: h.entryIds.map(entryId => ({ entryId, package: `pkg-${entryId}` })),
+    }
     await rm(h.path)
     await writePluginControlState(h.path, persisted, false)
-    expect(await readFile(h.path, 'utf8')).toContain('disabled: true')
+    const created = await readFile(h.path, 'utf8')
+    expect(created).toContain('insert:')
+    expect(created).toContain('disabled: true')
+    expect(created).toContain('name: pkg-')
 
     await writeFile(h.path, '- scalar\n- id: plain\n')
     await writePluginControlState(h.path, persisted, true)
@@ -244,6 +266,99 @@ describe('PluginControlGateway', () => {
     const directory = `${h.path}.directory`
     await mkdir(directory)
     await expect(writePluginControlState(directory, persisted, true)).rejects.toMatchObject({ code: 'EISDIR' })
+  })
+
+  it('uninstalls a preset product, hides it from the list, and restores on re-enable', async () => {
+    const h = await harness(1)
+    const gateway = new PluginControlGateway(h.ctx, config(h.path, h.entryIds))
+    const enabled = await gateway.handle(
+      'set-enabled', { pluginId: 'fixture', enabled: true }, new AbortController().signal,
+    )
+    expect(enabled.ok).toBe(true)
+    expect(gateway.list().controls).toHaveLength(1)
+
+    const removedResult = await gateway.handle(
+      'uninstall', { pluginId: 'fixture' }, new AbortController().signal,
+    )
+    expect(removedResult.ok).toBe(true)
+    if (!removedResult.ok) throw new Error('uninstall request unexpectedly failed')
+    const removed = removedResult.value as { controls: unknown[] }
+    expect(removed.controls).toHaveLength(0)
+    const text = await readFile(h.path, 'utf8')
+    expect(text).toContain('uninstalled: true')
+    expect(text).toContain('# dsh-plugin-control: fixture')
+    expect(text).not.toContain('insert:')
+    expect(readUninstalledControls(h.path)).toEqual(new Set(['fixture']))
+
+    // A fresh gateway (a later boot) keeps the product hidden.
+    const rebooted = new PluginControlGateway(h.ctx, config(h.path, h.entryIds))
+    expect(rebooted.list().controls).toHaveLength(0)
+
+    // Re-enabling clears the uninstall marker and mounts the rows again.
+    const restored = await gateway.handle(
+      'set-enabled', { pluginId: 'fixture', enabled: true }, new AbortController().signal,
+    )
+    expect(restored.ok).toBe(true)
+    const after = await readFile(h.path, 'utf8')
+    expect(after).not.toContain('uninstalled: true')
+    expect(after).toContain('insert:')
+    expect(gateway.list().controls[0]?.state).toBe('enabled')
+
+    const missing = await gateway.handle(
+      'uninstall', { pluginId: 'missing' }, new AbortController().signal,
+    )
+    expect(missing.ok).toBe(false)
+    if (missing.ok) throw new Error('unknown control uninstall unexpectedly succeeded')
+    expect(missing.error.message).toContain('unknown')
+  })
+
+  it('treats a missing patch as no uninstalls and skips foreign markers', async () => {
+    const h = await harness(1)
+    const absent = join(h.path, '..', 'absent.yml')
+    expect(readUninstalledControls(absent)).toEqual(new Set())
+
+    await writeFile(h.path, `- scalar
+- id: plain
+# dsh-plugin-control:
+- uninstalled: true
+# dsh-plugin-control: other
+- uninstalled: nope
+# dsh-plugin-control: block
+- uninstalled: true
+  extra: 1
+# dsh-plugin-control: scalarfalse
+- uninstalled: false
+  extra: 1
+`)
+    expect(readUninstalledControls(h.path)).toEqual(new Set(['block']))
+
+    const directory = `${h.path}.directory`
+    await mkdir(directory)
+    await expect(() => readUninstalledControls(directory)).toThrow(/EISDIR|illegal operation/)
+    await expect(writePluginControlUninstalled(directory, 'fixture')).rejects.toThrow(/EISDIR|illegal operation/)
+
+    await rm(h.path)
+    await writePluginControlUninstalled(h.path, 'fixture')
+    expect(await readFile(h.path, 'utf8')).toContain('uninstalled: true')
+  })
+
+  it('writes and reads uninstall markers while preserving unowned items', async () => {
+    const h = await harness(1)
+    await writeFile(h.path, '# user comment\n- id: plain\n')
+    await writePluginControlUninstalled(h.path, 'fixture')
+    const text = await readFile(h.path, 'utf8')
+    expect(text).toContain('# user comment')
+    expect(text).toContain('id: plain')
+    expect(text).toContain('uninstalled: true')
+    expect(readUninstalledControls(h.path)).toEqual(new Set(['fixture']))
+
+    await writeFile(h.path, '{}\n')
+    expect(() => readUninstalledControls(h.path)).toThrow('top-level YAML array')
+    await expect(writePluginControlUninstalled(h.path, 'fixture')).rejects.toThrow('top-level YAML array')
+
+    await writeFile(h.path, '- id: [not closed\n')
+    expect(() => readUninstalledControls(h.path)).toThrow('invalid YAML')
+    await expect(writePluginControlUninstalled(h.path, 'fixture')).rejects.toThrow('invalid YAML')
   })
 
   it('fails loud on ambiguous or unsafe deployment catalogs', async () => {
@@ -274,6 +389,14 @@ describe('PluginControlGateway', () => {
       profilePatchPath: h.path,
       controls: [control([' padded '])],
     })).toThrow('surrounding whitespace in an entry id')
+    expect(() => new PluginControlGateway(h.ctx, {
+      profilePatchPath: h.path,
+      controls: [control(h.entryIds, { packages: ['only-one'] })],
+    })).toThrow('one package per entry id')
+    expect(() => new PluginControlGateway(h.ctx, {
+      profilePatchPath: h.path,
+      controls: [control(h.entryIds, { packages: h.entryIds.map(() => ' padded ') })],
+    })).toThrow('surrounding whitespace in a package name')
     expect(() => new PluginControlGateway(h.ctx, {
       profilePatchPath: h.path,
       controls: [

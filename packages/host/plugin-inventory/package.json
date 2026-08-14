@@ -54,7 +54,6 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
-    "@deepseek-ai/dsh-atomic-write": "workspace:^",
     "@deepseek-ai/dsh-brand": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
@@ -62,7 +61,6 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
-    "@deepseek-ai/dsh-atomic-write": "workspace:^",
     "@deepseek-ai/dsh-brand": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",

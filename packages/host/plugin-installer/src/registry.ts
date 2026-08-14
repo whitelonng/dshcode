@@ -4,6 +4,7 @@ import { rmSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
+import { ReadableStream as WebReadableStream } from 'node:stream/web'
 import semver from 'semver'
 import * as tar from 'tar'
 
@@ -67,7 +68,10 @@ export async function fetchPackument(name: string, registry: string, signal?: Ab
     headers: { accept: 'application/vnd.npm.install-v1+json' },
   }, PACKUMENT_TIMEOUT_MS)
   if (!response.ok) {
-    throw new Error(`plugin-installer: registry ${url} answered ${String(response.status)}`)
+    const hint = response.status === 404
+      ? ` (package ${JSON.stringify(name)} not found — check the name or the configured registry)`
+      : ''
+    throw new Error(`plugin-installer: registry answered ${String(response.status)} for ${JSON.stringify(name)}${hint}`)
   }
   const packument = (await response.json()) as Partial<NpmPackument>
   if (typeof packument['dist-tags'] !== 'object' || packument['dist-tags'] === null
@@ -127,6 +131,24 @@ export function parseNpmSpec(spec: string): { name: string; version: string | un
   return { name: spec.slice(0, at), version: spec.slice(at + 1) }
 }
 
+/** npm package-name pattern: an optional scope plus a URL-safe name (first character neither `.` nor `_`). */
+const NPM_NAME_PATTERN = /^(@[A-Za-z0-9][A-Za-z0-9._~-]*\/)?[A-Za-z0-9][A-Za-z0-9._~-]*$/
+
+/**
+ * Validate one user-supplied install spec before any registry request.
+ * Rejects prose, pasted URLs, and mixed text with a readable error instead
+ * of sending a malformed package path that the registry answers 406.
+ * @param spec - trimmed install spec from the browser.
+ * @throws when the spec is neither a git source nor a valid npm package spec.
+ */
+export function validateInstallSpec(spec: string): void {
+  if (isGitSpec(spec)) return
+  const { name } = parseNpmSpec(spec)
+  if (!NPM_NAME_PATTERN.test(name)) {
+    throw new Error(`plugin-installer: invalid install spec ${JSON.stringify(spec)}: expected one npm package name (e.g. @scope/name) or one git repository URL`)
+  }
+}
+
 /**
  * Whether an install spec names a git repository rather than an npm package.
  * @param spec - install spec string.
@@ -139,12 +161,15 @@ export function isGitSpec(spec: string): boolean {
 
 /**
  * Install one npm package version into a target directory: download the
- * tarball and extract it (package root at the target root).
+ * tarball and extract it (package root at the target root). Download
+ * progress is reported through `onProgress` when the response declares a
+ * content length.
  * @param name - package name (for the tarball lookup).
  * @param version - resolved version.
  * @param packument - metadata carrying the tarball URL.
  * @param targetDir - destination directory (created; existing contents removed).
  * @param signal - optional cancellation.
+ * @param onProgress - optional download completion callback (0–100 percent).
  * @returns resolution after extraction.
  */
 export async function installNpmPackage(
@@ -153,6 +178,7 @@ export async function installNpmPackage(
   packument: NpmPackument,
   targetDir: string,
   signal?: AbortSignal,
+  onProgress?: (percent: number) => void,
 ): Promise<void> {
   const entry = packument.versions[version]
   const tarball = entry?.dist?.tarball
@@ -171,10 +197,29 @@ export async function installNpmPackage(
   await rm(targetDir, { recursive: true, force: true })
   await mkdir(targetDir, { recursive: true })
   // Strip the package/ prefix of npm tarballs so the package root lands in
-  // the target directory.
+  // the target directory. Bytes are counted while bridging the web stream
+  // into Node so the browser can show download progress.
+  const total = Number(response.headers.get('content-length') ?? NaN)
+  const body = response.body as import('node:stream/web').ReadableStream
+  const reader = body.getReader()
+  let received = 0
+  const progress = Readable.fromWeb(new WebReadableStream({
+    async pull(controller) {
+      const chunk = await reader.read()
+      if (chunk.done) {
+        controller.close()
+        return
+      }
+      received += chunk.value.byteLength
+      if (Number.isFinite(total) && total > 0) {
+        onProgress?.(Math.min(100, Math.round(received / total * 100)))
+      }
+      controller.enqueue(chunk.value)
+    },
+  }))
   await new Promise<void>((resolve, reject) => {
     const extract = tar.x({ cwd: targetDir, strip: 1 })
-    Readable.fromWeb(response.body as import('node:stream/web').ReadableStream).pipe(extract)
+    progress.pipe(extract)
     extract.on('finish', () => resolve())
     extract.on('error', reject)
     // The fetch signal aborts the download; the stream error then rejects.
