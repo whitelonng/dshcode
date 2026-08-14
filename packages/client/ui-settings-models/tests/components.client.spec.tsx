@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** Section, setup-card, and hand-written editor behavior over a scripted wire face. */
+import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Schema from '@deepseek-ai/schemastery'
@@ -15,6 +16,8 @@ import {
 } from '../src/client/DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from '../src/client/apiKey.ts'
 import { deriveKeyRef, ModelsSettingsStore } from '../src/client/store.ts'
+import { ModelListEditor, type ModelDraft } from '../src/client/ModelListEditor.tsx'
+import { INVALID_EFFORTS } from '../src/client/reasoning-efforts.ts'
 import type { ProviderRow } from '../src/client/store.ts'
 import { en } from '../src/client/locales.ts'
 
@@ -1381,5 +1384,69 @@ describe('apiKeyFailure', () => {
     // heuristic leaves them alone rather than guessing at a paste error.
     expect(apiKeyFailure('"')).toBeUndefined()
     expect(apiKeyFailure('"a')).toBeUndefined()
+  })
+})
+
+
+describe('model reasoning-effort declaration editing', () => {
+  /** Render the editor with real local state so checkbox toggles round-trip. */
+  function mountEditor(onChange: (models: unknown[]) => void) {
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'third-party', reasoningEfforts: { high: 'high' } },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+          api={{ llm: { discoverModels: vi.fn() } } as never}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    expandRow(1)
+  }
+
+  it('parses the declaration text into the draft on edit', () => {
+    const onChange = vi.fn()
+    mountEditor(onChange)
+    const input = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`)
+    fireEvent.change(input, { target: { value: 'high: high, max: ultra' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: { high: 'high', max: 'ultra' } },
+    ])
+  })
+
+  it('parks the invalid sentinel for unreadable text and refuses it in validation', () => {
+    const onChange = vi.fn()
+    mountEditor(onChange)
+    const input = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`)
+    fireEvent.change(input, { target: { value: 'ultra: ultra' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: INVALID_EFFORTS },
+    ])
+    expect(validateDeepSeekModels([{ id: 'x', reasoningEfforts: INVALID_EFFORTS }]))
+      .toEqual({ index: 0, key: 'modelReasoningEffortsInvalid' })
+    expect(validateDeepSeekModels([{ id: 'x', reasoningEfforts: { high: 'high' } }])).toBeUndefined()
+    expect(validateDeepSeekModels([{ id: 'x', reasoningEfforts: false }])).toBeUndefined()
+  })
+
+  it('disables reasoning with the checkbox and clears the declaration when unchecked', () => {
+    const onChange = vi.fn()
+    mountEditor(onChange)
+    const toggle = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningOff} 1`)
+    fireEvent.click(toggle)
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party', reasoningEfforts: false }])
+    fireEvent.click(toggle)
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party' }])
+  })
+
+  it('shows the stored declaration as field text', () => {
+    mountEditor(() => {})
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`).value)
+      .toBe('high: high')
   })
 })

@@ -817,6 +817,26 @@ export interface PluginControlSpec {
 
 来源：[`packages/host/plugin-control/src/index.ts:44`](../packages/host/plugin-control/src/index.ts)
 
+<a id="deepseek-aidsh-host-plugin-installer"></a>
+
+## `@deepseek-ai/dsh-host-plugin-installer`
+
+Requires: `connection`
+
+```ts config-catalog
+/** Plugin-installer gateway configuration owned by the composing profile. */
+export interface Config {
+  /** Explicit Harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
+  dshHome?: string
+  /** npm registry base; omitted follows `npm_config_registry`, then npmjs. */
+  registry?: string
+  /** Absolute user patch layer of the running profile. */
+  profilePatchPath: string
+}
+```
+
+来源：[`packages/host/plugin-installer/src/index.ts:45`](../packages/host/plugin-installer/src/index.ts)
+
 <a id="deepseek-aidsh-host-webserver"></a>
 
 ## `@deepseek-ai/dsh-host-webserver`
@@ -3113,9 +3133,11 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-permission-presets`（[`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-plan`（[`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings`（[`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-archive`（[`packages/client/ui-settings-archive/src/index.ts`](../packages/client/ui-settings-archive/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugin-control`（[`packages/client/ui-settings-plugin-control/src/index.ts`](../packages/client/ui-settings-plugin-control/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-plugin-installer`（[`packages/client/ui-settings-plugin-installer/src/index.ts`](../packages/client/ui-settings-plugin-installer/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory`（[`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugins`（[`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）

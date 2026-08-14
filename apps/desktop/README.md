@@ -17,6 +17,15 @@ Packaged Electron does not expose the Node loader internals required by Cordis H
 - The renderer uses context isolation, disables Node integration, enables the Chromium sandbox, denies permission requests, and may navigate only within the exact application origin. HTTPS links open in the system browser; other cross-origin targets are blocked.
 - Native quit requests first await the Harness shutdown controller. The WebServer disposer closes normal and upgraded sockets, then Electron exits and the ephemeral port becomes reusable.
 
+## System tray and window close
+
+- The application always installs a system tray icon (colored on Windows and Linux, a monochrome template image on macOS). On Windows and Linux, left-clicking the tray shows and focuses the main window; the tray context menu offers 显示主界面 (show main window) and 退出 (quit). On macOS the context menu is the platform convention.
+- Clicking the window close button hides the window to the tray by default: the Harness tree keeps running and the tray restores the window. A real exit happens only through the tray 退出 item (or the macOS app menu) and still waits for the Harness shutdown controller first.
+- Windows and Linux run without the default Electron menu bar (File/Edit/View/...); macOS keeps its system menu bar with the standard edit roles.
+- On Windows the main window uses a custom single-row title bar: the web shell draws the product name and a menu button in a draggable strip, and native minimize/maximize/close buttons (`titleBarOverlay`) occupy the same row. The menu button pops a native menu with 隐藏到托盘 (hide to tray), 重启应用 (restart the application in place — applies profile and patch changes), and 退出 (quit). macOS and Linux keep their native title bars.
+- The renderer receives the frame mode and product name through the sandboxed preload bridge (`lib/preload.cjs`, CommonJS because sandboxed preloads cannot load ESM); the window-menu IPC handler accepts only senders from the application origin.
+- The runtime tray icons (`assets/tray.png` at 32 px and `assets/tray16.png` at 16 px, the colored app logo) are generated from `assets/icon.svg` with `rsvg-convert`; macOS loads both as an explicit 1x/2x representation pair so the menu bar logo stays crisp on Retina displays.
+
 ## Build
 
 From the repository root, install the declared Node.js and pnpm versions, then run:

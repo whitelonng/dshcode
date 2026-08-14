@@ -131,7 +131,7 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('persists a restart-time built-in plugin switch from the third Plugins tab', async () => {
+  it('renders the shipped community plugin cards unavailable until installed', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-settings-plugin-control'))
     await page.getByRole('button', { name: '设置', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '设置' })
@@ -147,38 +147,16 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(await panel.locator('[data-plugin-control="genui"] strong').textContent()).toBe('dsh-genui')
     expect(await panel.locator('[data-plugin-control="annotation"] strong').textContent()).toBe('dsh-annotation')
     expect(await panel.locator('[data-plugin-control="web-ui"] strong').textContent()).toBe('dsh-web-ui')
+    // The community products ship as installable packages, not mounted rows:
+    // until a profile installs them, every card is unavailable and its
+    // restart-time switch stays disabled.
+    for (const controlId of ['genui', 'annotation', 'web-ui']) {
+      const row = panel.locator(`[data-plugin-control="${controlId}"]`)
+      await expect.poll(() => row.getByRole('switch').isDisabled(), { timeout: 5_000 }).toBe(true)
+      expect(await row.getByText('不可用', { exact: true }).count()).toBe(1)
+    }
     const snapshot = await captureStableAria(page, PLUGIN_CONTROL_PANEL_SELECTOR, scaffold.workspaceCwd)
     await compareOrRefreshGolden(PLUGIN_CONTROLS_EXPECTED, snapshot, MODE)
-
-    const row = panel.locator('[data-plugin-control="genui"]')
-    const pluginSwitch = row.getByRole('switch')
-    expect(await pluginSwitch.getAttribute('aria-checked')).toBe('true')
-    const disableResponse = page.waitForResponse(response => response.url().includes('/plugin-control/set-enabled'))
-    await pluginSwitch.click()
-    const disableResponseText = await (await disableResponse).text()
-    if (!disableResponseText.includes('"ok":true')) {
-      throw new Error(`plugin-control disable request failed: ${disableResponseText}`)
-    }
-    await expect.poll(() => [...scaffold.ctx.loader.entries()].find(entry => entry.options.id === 'genui')?.disabled, {
-      timeout: 10_000,
-    }).toBe(false)
-    await expect.poll(() => readFile(scaffold.profilePatchPath, 'utf8'), { timeout: 10_000 })
-      .toMatch(/# dsh-plugin-control: genui[\s\S]*id: genui[\s\S]*disabled: true/)
-    await expect.poll(() => pluginSwitch.getAttribute('aria-checked'), { timeout: 10_000 }).toBe('false')
-    expect(await panel.getByRole('status').textContent()).toBe('更改已保存，请重启 DSH 使其生效。')
-
-    const enableResponse = page.waitForResponse(response => response.url().includes('/plugin-control/set-enabled'))
-    await pluginSwitch.click()
-    const enableResponseText = await (await enableResponse).text()
-    if (!enableResponseText.includes('"ok":true')) {
-      throw new Error(`plugin-control enable request failed: ${enableResponseText}`)
-    }
-    await expect.poll(() => [...scaffold.ctx.loader.entries()].find(entry => entry.options.id === 'genui')?.disabled, {
-      timeout: 10_000,
-    }).toBe(false)
-    await expect.poll(() => readFile(scaffold.profilePatchPath, 'utf8'), { timeout: 10_000 })
-      .toMatch(/# dsh-plugin-control: genui[\s\S]*id: genui[\s\S]*disabled: false/)
-    await expect.poll(() => pluginSwitch.getAttribute('aria-checked'), { timeout: 10_000 }).toBe('true')
     await page.keyboard.press('Escape')
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)

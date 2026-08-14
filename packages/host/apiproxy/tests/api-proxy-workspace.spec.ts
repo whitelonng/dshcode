@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentFactory } from '@deepseek-ai/dsh-agent'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { SESSION_FORMAT_VERSION, SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionHeader } from '@deepseek-ai/dsh-session'
 import type { Session } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
@@ -64,6 +65,8 @@ async function harness(
   extras: {
     openPath?: (path: string, signal: AbortSignal) => Promise<void>
     canOpenPath?: () => boolean
+    /** Headers seeded into the persistence stub (sessions that are not live). */
+    persisted?: readonly SessionHeader[]
   } = {},
 ) {
   const ctx = new Context()
@@ -75,7 +78,11 @@ async function harness(
   const storageDomain = new DomainFacility(ctx, { backend: 'memory', routes: {} })
   ctx.storage.mount('domain', storageDomain)
   ctx.provide('storageDomain', storageDomain)
-  ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
+  const persisted = new Map(extras.persisted?.map(header => [header.id, header]) ?? [])
+  ctx.provide('sessionPersistence', {
+    list: () => Promise.resolve([...persisted.values()]),
+    delete: async (id: SessionId) => { persisted.delete(id) },
+  } as never)
   await ctx.plugin(WorkspaceRegistry)
 
   const factory: AgentFactory = {
@@ -566,5 +573,65 @@ describe('Host Workspace increments', () => {
       error: { code: 'session-not-found', details: { sessionId: 'session-ghost' } },
     })
     abort.abort()
+  })
+
+  it('restores an archived session and streams the set once', async () => {
+    const { api, root } = await harness()
+    const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'restore-home') }))).workspace
+    const sessionId = SessionId('session-to-restore')
+    expectOk(await api.sessions.create(request({ workspaceId: workspace.workspaceId, sessionId })))
+    expectOk(await api.workspace.archiveSession(request({ sessionId })))
+
+    const abort = new AbortController()
+    const stream: AsyncIterator<RpcRequest<HostFrame>> =
+      api.events.host(request({}), abort.signal)[Symbol.asyncIterator]()
+    const changed = nextHostFrame(stream)
+    expect(expectOk(await api.workspace.restoreSession(request({ sessionId }))).archivedSessionIds).toEqual([])
+    expect(await changed).toMatchObject({
+      payload: { type: 'host/archived-sessions-changed', archivedSessionIds: [] },
+    })
+
+    const listed = expectOk(await api.workspace.list(request({})))
+    expect(listed.archivedSessionIds).toEqual([])
+    expect(listed.items[0]?.sessionIds).toEqual([sessionId])
+    abort.abort()
+  })
+
+  it('permanently deletes an archived session and drops its accounting', async () => {
+    const sessionId = SessionId('session-to-delete')
+    const { api } = await harness(undefined, undefined, {
+      persisted: [{ version: SESSION_FORMAT_VERSION, id: sessionId, createdAt: 1000 }],
+    })
+    expectOk(await api.workspace.archiveSession(request({ sessionId })))
+
+    const deleted = expectOk(await api.workspace.deleteSession(request({ sessionId })))
+    expect(deleted.archivedSessionIds).toEqual([])
+    expect(expectOk(await api.workspace.list(request({}))).archivedSessionIds).toEqual([])
+  })
+
+  it('refuses deleting a session that is not archived or still active', async () => {
+    const { api, root } = await harness()
+    const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'delete-guard') }))).workspace
+
+    const activeId = SessionId('active-session')
+    expectOk(await api.sessions.create(request({ workspaceId: workspace.workspaceId, sessionId: activeId })))
+    const active = await api.workspace.deleteSession(request({ sessionId: activeId }))
+    expect(active.result).toMatchObject({
+      ok: false,
+      error: { code: 'not-archived', details: { sessionId: activeId } },
+    })
+
+    expectOk(await api.workspace.archiveSession(request({ sessionId: activeId })))
+    const live = await api.workspace.deleteSession(request({ sessionId: activeId }))
+    expect(live.result).toMatchObject({
+      ok: false,
+      error: { code: 'session-active', details: { sessionId: activeId } },
+    })
+
+    const missing = await api.workspace.deleteSession(request({ sessionId: SessionId('session-ghost') }))
+    expect(missing.result).toMatchObject({
+      ok: false,
+      error: { code: 'not-archived', details: { sessionId: 'session-ghost' } },
+    })
   })
 })

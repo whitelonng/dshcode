@@ -39,7 +39,6 @@ import {
   composeEntries,
   healProfilesModuleFallback,
   loadOverlayPatches,
-  resolveBundleDir,
 } from '@deepseek-ai/dsh-app-boot'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
@@ -100,12 +99,6 @@ export function webSnapshotMode(): WebSnapshotMode {
 /** The first two layers of the shipped Web composition: base and Web application bundle patches. */
 const BASE_PATCH_PATH = join(REPO_ROOT, 'packages/bundle/base/cordis.patch.yml')
 const WEB_PATCH_PATH = join(REPO_ROOT, 'packages/bundle/web-app/cordis.patch.yml')
-/** Community bundle layers shipped after dsh-web-app in the Web profile. */
-const COMMUNITY_BUNDLES = [
-  '@omdsh-dev/dsh-genui',
-  '@omdsh-dev/dsh-annotation',
-  '@linxin666/dsh-web-ui-all',
-] as const
 /** The installation anchor whose dependency surface the profile module fallback mirrors. */
 const INSTALL_ANCHOR = join(REPO_ROOT, 'apps/cli/package.json')
 /** The deployment's own agent-preset root, shipped beside the app's config. */
@@ -379,21 +372,10 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   const surfacePatches = loadOverlayPatches('web e2e scaffold', WEB_PATCH_PATH)
   healProfilesModuleFallback(INSTALL_ANCHOR, harnessHome)
   const profileDir = join(harnessHome, 'profiles', 'scaffold')
-  const communityPatches = (await Promise.all(COMMUNITY_BUNDLES.map(async (packageName) => {
-    const packageDir = resolveBundleDir('web e2e scaffold', packageName, INSTALL_ANCHOR, profileDir)
-    const manifest = JSON.parse(await readFile(join(packageDir, 'package.json'), 'utf8')) as {
-      dsh?: { bundle?: { patch?: string } }
-    }
-    const relativePatch = manifest.dsh?.bundle?.patch
-    if (relativePatch === undefined) {
-      throw new Error(`web e2e scaffold: community bundle ${packageName} declares no patch`)
-    }
-    return loadOverlayPatches('web e2e scaffold', join(packageDir, relativePatch))
-  }))).flat()
   const extraOverlayPatches = options.extraOverlayPath === undefined
     ? []
     : loadOverlayPatches('web e2e scaffold', options.extraOverlayPath)
-  const composedRows = composeEntries([basePatches, surfacePatches, communityPatches, extraOverlayPatches])
+  const composedRows = composeEntries([basePatches, surfacePatches, extraOverlayPatches])
   const webRuntimeConfig = composedRows.find(row => row.id === 'web-runtime')?.config as {
     surfaceContext?: boolean
   } | undefined
@@ -401,7 +383,6 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   const patches: PatchOptions[] = [
     ...basePatches,
     ...surfacePatches,
-    ...communityPatches,
     ...extraOverlayPatches,
     // The roster's `roots` is an assembly fact AppCLIEntry resolves and patches
     // in, exactly like `distIndex` on the webserver row — the shipped preset

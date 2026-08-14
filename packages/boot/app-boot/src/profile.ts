@@ -115,16 +115,21 @@ export const PROFILE_TEMPLATES: Record<string, readonly string[]> = {
   web: [
     '@deepseek-ai/dsh-base',
     '@deepseek-ai/dsh-web-app',
-    '@omdsh-dev/dsh-genui',
-    '@omdsh-dev/dsh-annotation',
-    '@linxin666/dsh-web-ui-all',
   ],
   headless: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'],
 }
 
 /** Installation-owned bundle tuples normalized to the shipped template. */
 const INSTALLATION_OWNED_PROFILE_TUPLES: Record<string, readonly string[]> = {
-  web: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+  // The former five-bundle template: stock profiles carrying it migrate down
+  // to the two-bundle template; any other list is user-owned.
+  web: [
+    '@deepseek-ai/dsh-base',
+    '@deepseek-ai/dsh-web-app',
+    '@omdsh-dev/dsh-genui',
+    '@omdsh-dev/dsh-annotation',
+    '@linxin666/dsh-web-ui-all',
+  ],
   headless: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless'],
 }
 

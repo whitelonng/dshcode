@@ -17,6 +17,15 @@ Electron 主进程调用共享的 `@deepseek-ai/dsh/profile-boot` 入口，并�
 - 渲染器启用上下文隔离和 Chromium 沙箱，关闭 Node 集成，拒绝权限请求，并且只能在应用自身的精确源内导航。HTTPS 链接会在系统浏览器中打开；其他跨源目标会被阻止。
 - 原生退出请求会先等待 Harness 关闭控制器完成。WebServer 的 dispose（资源释放）逻辑会关闭普通连接和升级连接；随后 Electron 退出，临时端口恢复可用。
 
+## 系统托盘与窗口关闭
+
+- 应用默认安装系统托盘图标（Windows/Linux 为彩色图标，macOS 为单色模板图）。Windows 与 Linux 上单击托盘会显示并聚焦主窗口；托盘右键菜单提供「显示主界面」与「退出」。macOS 遵循平台惯例，点击托盘直接弹出菜单。
+- 默认情况下，点击窗口关闭按钮会把窗口隐藏到托盘：Harness 树继续运行，通过托盘可恢复窗口。真正的退出只发生在托盘「退出」项（或 macOS 应用菜单），并且同样会先等待 Harness 关闭控制器完成。
+- Windows 与 Linux 不再显示 Electron 默认菜单栏（File/Edit/View/...）；macOS 保留系统菜单栏与标准编辑快捷键。
+- Windows 上主窗口使用自绘单行标题栏：web 壳在可拖拽条中绘制产品名与菜单按钮，原生最小化/最大化/关闭按钮（`titleBarOverlay`）位于同一行。菜单按钮弹出原生菜单，提供「隐藏到托盘」、「重启应用」（原地重启应用以应用 profile 与 patch 变更）与「退出」。macOS 与 Linux 保留原生标题栏。
+- 渲染进程通过沙箱 preload 桥（`lib/preload.cjs`，沙箱 preload 无法加载 ESM，故为 CommonJS）获得窗口框架模式与产品名；窗口菜单 IPC 处理器只接受来自应用源（origin）的发送方。
+- 运行时托盘图标（`assets/tray.png` 32 px 与 `assets/tray16.png` 16 px，彩色应用 logo）由 `assets/icon.svg` 经 `rsvg-convert` 生成；macOS 以显式 1x/2x 表示对同时加载两份，保证 Retina 屏幕上菜单栏 logo 清晰。
+
 ## 构建
 
 在仓库根目录安装声明的 Node.js 和 pnpm 版本，然后运行：

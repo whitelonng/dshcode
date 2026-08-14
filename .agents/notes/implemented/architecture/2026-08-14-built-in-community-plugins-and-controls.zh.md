@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-`web` profile 模板按顺序包含五个组合包：`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@omdsh-dev/dsh-genui`、`@omdsh-dev/dsh-annotation` 和 `@linxin666/dsh-web-ui-all`。两个 Git 包锁定到确切 commit，npm 聚合包锁定到 `0.1.2`；lockfile 记录源码获取结果。`dsh-web-app` 组合包还直接把聚合包的九个入口包与 whale-song 皮肤包声明为同样锁定 `0.1.2` 的直接依赖：pnpm 的隔离布局不会把嵌套依赖放到组合包自身的 `node_modules` 上，而 profile 模块回退目录只镜像安装闭包中可从每个锚点解析的包，因此只有直接声明才能让 Loader 从 profile 目录解析这些入口行。旧的精确 base 加 Web 元组归安装所有，并会迁移到五组合包模板；任何自定义 bundle 列表仍归用户所有。本功能使用既有 profile bundle 机制，不会恢复已移除的 repository-Plugin 路径。
+`web` profile 模板按顺序包含两个组合包：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app`。三个社区产品随发行版提供但默认关闭——这一反转及其迁移由[社区插件默认关闭笔记](2026-08-14-community-plugins-opt-in-by-default.md)持有。两个 Git 包锁定到确切 commit，npm 聚合包锁定到 `0.1.2`；lockfile 记录源码获取结果。`dsh-web-app` 组合包还直接把聚合包的九个入口包与 whale-song 皮肤包声明为同样锁定 `0.1.2` 的直接依赖：pnpm 的隔离布局不会把嵌套依赖放到组合包自身的 `node_modules` 上，而 profile 模块回退目录只镜像安装闭包中可从每个锚点解析的包，因此只有直接声明才能让 Loader 从 profile 目录解析这些入口行。旧五组合包模板列表归安装所有，并会向下迁移为双组合包模板；任何自定义 bundle 列表仍归用户所有。本功能使用既有 profile bundle 机制，不会恢复已移除的 repository-Plugin 路径。
 
 dsh-web-ui 0.1.2 的皮肤中心假设 `skins/` 目录位于其 checkout 布局里（`packages/skins/<id>`），任何打包部署都没有这个目录，因此试穿与应用都会以 ENOENT 失败；其 0.1.2 聚合包也没有把皮肤行装进组合层（`skin.json` 的 `bundleWired: true` 与 npm 发布内容不符），所以即使重启，受管区段也不会挂载任何皮肤行。本发行版以四处弥合这个上游缺口：用 `patchedDependencies` 给 `@linxin666/dsh-client-ui-skin-center` 打补丁，让它在原始位置不存在时沿祖先目录向上查找 `skins/`；补丁同时让受管区段总是插入当前皮肤的插入行，并在应用接口成功后直接对运行中的 Loader 树做 live reconcile（挂载当前皮肤行、禁用其余行）——打包 Electron 无法提供 Cordis HMR 的 loader internals（`node-addon-require-builtin` 在 Electron 下不可用），而桌面版禁用 patch watcher，所以 live reconcile 是应用即时生效的唯一通道；`scripts/link-community-skins.mjs` 在 postinstall 时把安装好的皮肤包链接成工作区根 `node_modules/skins/<id>`（源码启动用）；桌面打包在 stage 时把同样一组皮肤装进 `skins-extras`，经 `extraResources` 落到 `app/node_modules/skins`（打包应用用）。whale-song 已发布但不在聚合包依赖里，而 0.1.2 的客户端注册表已列出它，因此把该包声明为直接依赖后皮肤中心七张卡片全部可用。
 
@@ -38,7 +38,7 @@ Web 组合包声明三个逻辑控制项：GenUI 的一个 Loader 行、Annotati
 
 ## 影响
 
-新的、归安装所有的 Web profile 会默认获得并启用三个社区产品。与旧随附元组完全一致的现有 profile 会自动迁移；自定义 profile 不会意外新增配置层。根目录双语 README 会明确致谢源码包与 LINUX DO，生成的第三方声明则记录其许可证。
+新的、迁移后的库存 Web profile 只挂载内置插件；三个社区产品随发行版提供但默认关闭，经安装器启用。与旧随附模板列表完全一致的现有 profile 会向下迁移；自定义 profile 不会意外新增或丢失配置层。根目录双语 README 会明确致谢源码包与 LINUX DO，生成的第三方声明则记录其许可证。
 
 Settings 仍只有一行“插件”导航，现在包含三个所有权独立的标签页。此前的功能自有标签页决策仍是 slot 架构权威；本记录扩展其具体名录并增加一项独立的特权能力。
 
@@ -48,4 +48,4 @@ GenUI 与 dsh-web-ui 可以改变模型可见的提示词与工具，Annotation 
 
 ## 测试
 
-Host 聚焦测试覆盖清单校验、回环注册、聚合状态、串行原子 YAML 写入、取消、无效 YAML、不可用控制项，以及无关节点保留。浏览器包测试覆盖 slot 生命周期、本地化、响应校验、可访问性、远程权限、重试、修改失败与延迟结算。Profile 测试覆盖五组合包模板、精确旧版本迁移与自定义列表保留。无密钥 Web 浏览器回放会启动真实五组合包组合、快照第三个标签页、通过真实回环路由写入开关的两个状态、确认运行中插件保持挂载，并校验受管 profile patch。
+Host 聚焦测试覆盖清单校验、回环注册、聚合状态、串行原子 YAML 写入、取消、无效 YAML、不可用控制项，以及无关节点保留。浏览器包测试覆盖 slot 生命周期、本地化、响应校验、可访问性、远程权限、重试、修改失败与延迟结算。Profile 测试覆盖双组合包模板、旧五组合包向下迁移与自定义列表保留。无密钥 Web 浏览器回放会启动真实双组合包组合、快照显示不可用卡片的第三个标签页；开关写入路径仍由 Host 单元测试覆盖。

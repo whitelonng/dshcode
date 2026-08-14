@@ -155,9 +155,6 @@ describe('loadProfile', () => {
     expect(PROFILE_TEMPLATES.web).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-web-app',
-      '@omdsh-dev/dsh-genui',
-      '@omdsh-dev/dsh-annotation',
-      '@linxin666/dsh-web-ui-all',
     ])
     try {
       loadProfile('t', 'web', anchor, home)
@@ -168,13 +165,10 @@ describe('loadProfile', () => {
       .toEqual([...PROFILE_TEMPLATES.web ?? []])
   })
 
-  it('normalizes only the former installation-owned web bundle tuple', () => {
+  it('normalizes only the exact installation-owned web bundle tuple', () => {
     const anchor = stageInstallation({
       '@deepseek-ai/dsh-base': { patch: '[]\n' },
       '@deepseek-ai/dsh-web-app': { patch: '[]\n' },
-      '@omdsh-dev/dsh-genui': { patch: '[]\n' },
-      '@omdsh-dev/dsh-annotation': { patch: '[]\n' },
-      '@linxin666/dsh-web-ui-all': { patch: '[]\n' },
       'custom-bundle': { patch: '[]\n' },
     })
     const home = tmp()
@@ -182,6 +176,19 @@ describe('loadProfile', () => {
     initProfile(stock, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
     loadProfile('t', 'web', anchor, home)
     expect(readProfileManifest('t', stock).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web)
+
+    // The former five-bundle template migrates down to the shipped one.
+    const migratedHome = tmp()
+    const migrated = resolveProfileDir('web', migratedHome)
+    initProfile(migrated, [
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      '@omdsh-dev/dsh-genui',
+      '@omdsh-dev/dsh-annotation',
+      '@linxin666/dsh-web-ui-all',
+    ])
+    loadProfile('t', 'web', anchor, migratedHome)
+    expect(readProfileManifest('t', migrated).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web)
 
     const customHome = tmp()
     const custom = resolveProfileDir('web', customHome)

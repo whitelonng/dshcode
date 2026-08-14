@@ -19,6 +19,12 @@ import type { ReactNode } from 'react'
 import type { DiscoveredModelView, IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
+import {
+  formatReasoningEfforts,
+  INVALID_EFFORTS,
+  parseReasoningEfforts,
+  type ReasoningEffortsValue,
+} from './reasoning-efforts.ts'
 import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
 import { messageOf } from './store.ts'
 import type { en } from './locales.ts'
@@ -187,6 +193,20 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const capacityText = (model: ModelDraft, index: number, field: CapacityField): string =>
     editing.get(bufferKey(index, field)) ?? capacitySpelling(numberOf(model, field))
 
+  /** Buffer key for a row's reasoning-efforts text. */
+  const effortsKey = (index: number): string => `${String(index)}:efforts`
+
+  /** Edit the reasoning-efforts text: parse into the draft, or park the sentinel. */
+  const editEfforts = (index: number, text: string): void => {
+    setEditing(current => new Map(current).set(effortsKey(index), text))
+    const parsed = parseReasoningEfforts(text)
+    patch(index, { reasoningEfforts: parsed.ok ? parsed.value : INVALID_EFFORTS })
+  }
+
+  /** What the reasoning-efforts field shows: the buffer while typing, else the stored declaration. */
+  const effortsText = (model: ModelDraft, index: number): string =>
+    editing.get(effortsKey(index)) ?? formatReasoningEfforts(model.reasoningEfforts as ReasoningEffortsValue | undefined)
+
   /** Drop one row's entries and shift the rows after it down, in one pass. */
   const reindexOnRemove = (
     current: ReadonlyMap<string, string>,
@@ -210,7 +230,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     })
   }
 
-  const patch = (index: number, next: Record<string, string | number | undefined>): void => {
+  const patch = (index: number, next: Record<string, string | number | boolean | object | undefined>): void => {
     onChange(models.map((model, at) => {
       if (at !== index) return model
       // Rebuilt rather than spread over: an emptied optional field has to leave
@@ -416,6 +436,39 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
                     disabled={disabled}
                     onChange={(event) => { editCapacity(index, 'maxTokens', event.target.value) }}
                   />
+                </label>
+                <label className={styles['modelField']}>
+                  <span className={styles['modelFieldLabel']}>{t('modelReasoningEfforts')}</span>
+                  <input
+                    className={styles['input']}
+                    type="text"
+                    value={effortsText(model, index)}
+                    placeholder={t('modelReasoningEffortsHint')}
+                    aria-label={`${t('modelReasoningEfforts')} ${index + 1}`}
+                    disabled={disabled || model.reasoningEfforts === false}
+                    onChange={(event) => { editEfforts(index, event.target.value) }}
+                  />
+                </label>
+                <label className={styles['modelFieldCheck']}>
+                  <input
+                    type="checkbox"
+                    checked={model.reasoningEfforts === false}
+                    disabled={disabled}
+                    aria-label={`${t('modelReasoningOff')} ${index + 1}`}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        setEditing((current) => {
+                          const next = new Map(current)
+                          next.delete(effortsKey(index))
+                          return next
+                        })
+                        patch(index, { reasoningEfforts: false })
+                      } else {
+                        patch(index, { reasoningEfforts: undefined })
+                      }
+                    }}
+                  />
+                  <span>{t('modelReasoningOff')}</span>
                 </label>
               </div>
             )

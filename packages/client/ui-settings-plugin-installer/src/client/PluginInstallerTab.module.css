@@ -1,0 +1,132 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.state {
+  padding: 24px 0;
+  color: var(--dsw-alias-label-secondary, #61666b);
+  font-size: 13px;
+}
+
+.installRow {
+  display: flex;
+  gap: 8px;
+}
+
+.spec {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 12%));
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
+  color: var(--dsw-alias-label-primary, #0f1115);
+  font-size: 13px;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #81858c);
+}
+
+.error {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-danger, rgb(220 38 38 / 10%));
+  color: var(--dsw-alias-label-danger, #dc2626);
+  font-size: 13px;
+}
+
+.actionsRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ok {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #81858c);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
+}
+
+.meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #0f1115);
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #81858c);
+  display: flex;
+  gap: 8px;
+}
+
+.latest {
+  color: var(--dsw-alias-brand-primary, #3964fe);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.restartRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-brand, rgb(57 100 254 / 10%));
+  color: var(--dsw-alias-label-primary, #0f1115);
+  font-size: 13px;
+}
+
+.confirmBody {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary, #61666b);
+  line-height: 1.6;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dangerButton {
+  background: var(--dsw-alias-bg-danger, #dc2626) !important;
+  border-color: var(--dsw-alias-bg-danger, #dc2626) !important;
+}

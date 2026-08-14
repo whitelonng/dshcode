@@ -512,6 +512,14 @@
   gap: 4px;
 }
 
+.modelFieldCheck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .modelFieldLabel {
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;

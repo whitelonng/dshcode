@@ -182,6 +182,10 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
     return this.coordinator.append(id, events)
   }
 
+  delete(id: SessionId): Promise<void> {
+    return this.coordinator.delete(id)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
     return this.coordinator.prepare(id, signal)
   }
@@ -335,6 +339,27 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
       throw error
       /* v8 ignore stop */
     }
+  }
+
+  /**
+   * Durably delete one stored session in ONE transaction: remove its event
+   * rows and its sessions row, or roll back entirely. Returns `false` when
+   * the id has no sessions row; the next {@link list} omits the session.
+   */
+  async deleteStored(id: SessionId): Promise<boolean> {
+    await this.ready
+    const present = this.db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(id)
+    if (present === undefined) return false
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare('DELETE FROM events WHERE session_id = ?').run(id)
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+    return true
   }
 
   /** List all materialized sessions' metadata (every row is a materialized session). */

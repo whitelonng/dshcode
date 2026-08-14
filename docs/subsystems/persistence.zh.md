@@ -296,6 +296,15 @@ abstract create(meta: SessionHeader): Promise<void>
 abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>
 
 /**
+ * Durably delete one persisted session: drop any in-memory state and remove
+ * the stored artifact (log file or rows). Resolves once the artifact, if
+ * any, is gone; the next {@link list} must no longer include the id.
+ * Refusing deletion of a live session is the caller's responsibility.
+ * @param id - persisted session id to delete.
+ */
+abstract delete(id: SessionId): Promise<void>
+
+/**
  * Prepare the exact unpublished Session used by resume. Implementations may
  * reuse object graphs retained by an earlier {@link inspect} after confirming
  * their durable revision is still current; disposal releases an unpublished

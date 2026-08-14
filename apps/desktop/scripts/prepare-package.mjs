@@ -122,6 +122,9 @@ export function preparePackage() {
   console.log(`DSHCode packaging: compat shim staged at ${compatDir ?? '(not installed)'}`)
   copyFileSync(resolve(appRoot, 'electron-builder.yml'), resolve(stageRoot, 'electron-builder.yml'))
   copyFileSync(resolve(appRoot, 'assets/icon.svg'), resolve(buildRoot, 'icon.svg'))
+  // Runtime resources (tray icons and later desktop-shell assets) ship inside
+  // the packaged app through the `assets/**` files entry.
+  cpSync(resolve(appRoot, 'assets'), resolve(stageRoot, 'assets'), { recursive: true })
   copyFileSync(resolve(workspaceRoot, 'LICENSE'), resolve(licenseRoot, 'LICENSE'))
   copyFileSync(resolve(workspaceRoot, 'THIRD_PARTY_NOTICES.md'), resolve(licenseRoot, 'THIRD_PARTY_NOTICES.md'))
 }
