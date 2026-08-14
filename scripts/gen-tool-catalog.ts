@@ -45,6 +45,7 @@ import * as ToolPwsh from '@deepseek-ai/dsh-tool-pwsh'
 import * as ToolBashPersistent from '@deepseek-ai/dsh-tool-bash-persistent'
 import CordisHostRunner from '@deepseek-ai/dsh-cordis-host-runner'
 import * as ToolCordis from '@deepseek-ai/dsh-tool-cordis'
+import * as ToolDescribeImage from '@deepseek-ai/dsh-tool-describe-image'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
@@ -292,6 +293,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'Standalone view/create/unique literal replace/line insert tool over the filesystem seam; it composes with any shell or terminal API.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-describe-image',
+    dir: 'tool-describe-image',
+    source: 'packages/vision/tool-describe-image/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolDescribeImage, { baseURL: 'https://catalog.example.invalid/v1', model: 'catalog-vision-model' })
+    },
+    note:
+      'describe_image sends one image (local path or http(s) URL) to an OpenAI-compatible vision-language endpoint and returns the text answer; the image never enters the conversation. The catalog harvest uses a placeholder endpoint — the schema is endpoint-independent, and execution would fail with an unresolvable host until a deployment configures baseURL, model, and a credential.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-fs',

@@ -1307,6 +1307,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     occupants: [
       'client-ui-settings-plugins BashCard id \'bash\'',
       'client-ui-settings-plugins AgentLoopCard id \'agent-loop\'',
+      'client-ui-settings-plugins DescribeImageCard id \'describe-image\'',
       'client-ui-settings-plugins WebSearchCard id \'web-search\'',
     ],
     replaceRisk: 'none',

@@ -19,9 +19,12 @@ import { PluginsSettingsSection } from '../src/client/PluginsSettingsSection.tsx
 import type { PluginsSettingsSectionProps, PluginsSettingsTabEntry } from '../src/client/PluginsSettingsSection.tsx'
 import { WebSearchCard } from '../src/client/WebSearchCard.tsx'
 import type { WebSearchCardProps } from '../src/client/WebSearchCard.tsx'
+import { DescribeImageCard } from '../src/client/DescribeImageCard.tsx'
+import type { DescribeImageCardProps } from '../src/client/DescribeImageCard.tsx'
 import type { AgentLoopCardState } from '../src/client/agent-loop-card-controller.ts'
 import type { BashCardState } from '../src/client/bash-card-controller.ts'
 import type { CardFieldState, CardShell } from '../src/client/card-form.ts'
+import type { DescribeImageCardState } from '../src/client/describe-image-card-controller.ts'
 import type { WebSearchCardState } from '../src/client/web-search-card-controller.ts'
 import { en } from '../src/client/locales.ts'
 
@@ -397,5 +400,74 @@ describe('WebSearchCard', () => {
       ['maxUses', '4'],
     ])
     expect(actions.resetField.mock.calls).toEqual([['baseURL'], ['maxUses']])
+  })
+})
+
+describe('DescribeImageCard', () => {
+  function renderDescribeImage(state: Partial<DescribeImageCardState> = {}) {
+    const store = createSnapshotStore<DescribeImageCardState>({
+      ...settled,
+      baseURL: field(''),
+      model: field(''),
+      apiKey: field(''),
+      apiKeyConfigured: false,
+      apiKeyWritable: true,
+      ...state,
+    })
+    const actions = cardActions()
+    const props = { ...actions, t, useDescribeImageCard: bindSnapshotSelector(store) } as unknown as DescribeImageCardProps
+    render(<DescribeImageCard {...props} />)
+    return actions
+  }
+
+  it('reports whether a key is configured without ever showing one', () => {
+    renderDescribeImage({ apiKeyConfigured: true })
+    fireEvent.click(screen.getByText(en.describeImageTitle))
+
+    expect(screen.getByText(en.describeImageApiKeySet)).toBeTruthy()
+    expect(screen.getByLabelText(en.describeImageApiKey)).toHaveProperty('type', 'password')
+  })
+
+  it('keeps the key control usable while the settings document is read-only', () => {
+    const actions = renderDescribeImage({ writable: false })
+    fireEvent.click(screen.getByText(en.describeImageTitle))
+
+    const key = screen.getByLabelText(en.describeImageApiKey)
+    expect(key).toHaveProperty('disabled', false)
+    expect(screen.getByLabelText(en.describeImageBaseUrl)).toHaveProperty('disabled', true)
+
+    fireEvent.change(key, { target: { value: 'vision-secret' } })
+
+    expect(actions.edit).toHaveBeenCalledWith('apiKey', 'vision-secret')
+  })
+
+  it('disables the key control when the reference itself is not writable', () => {
+    // A key coming from the process environment: the settings document is
+    // writable, the credential is not.
+    renderDescribeImage({ apiKeyConfigured: true, apiKeyWritable: false })
+    fireEvent.click(screen.getByText(en.describeImageTitle))
+
+    expect(screen.getByLabelText(en.describeImageApiKey)).toHaveProperty('disabled', true)
+    expect(screen.getByLabelText(en.describeImageBaseUrl)).toHaveProperty('disabled', false)
+  })
+
+  it('stages the endpoint, the model, and their resets', () => {
+    const actions = renderDescribeImage({
+      baseURL: field('https://vision.test/v1', { overridden: true }),
+      model: field('glm-4v-flash', { overridden: true }),
+    })
+    fireEvent.click(screen.getByText(en.describeImageTitle))
+
+    fireEvent.change(screen.getByLabelText(en.describeImageBaseUrl), { target: { value: 'https://other.test/v1' } })
+    fireEvent.change(screen.getByLabelText(en.describeImageModel), { target: { value: 'glm-4v-plus' } })
+    const resets = screen.getAllByRole('button', { name: en.reset })
+    expect(resets).toHaveLength(2)
+    for (const reset of resets) fireEvent.click(reset)
+
+    expect(actions.edit.mock.calls).toEqual([
+      ['baseURL', 'https://other.test/v1'],
+      ['model', 'glm-4v-plus'],
+    ])
+    expect(actions.resetField.mock.calls).toEqual([['baseURL'], ['model']])
   })
 })
