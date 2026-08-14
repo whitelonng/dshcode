@@ -6,7 +6,7 @@ import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
-import { writePluginControlState } from './control-file.ts'
+import { readUninstalledControls, writePluginControlState, writePluginControlUninstalled } from './control-file.ts'
 import type {
   PluginControlId,
   PluginControlItem,
@@ -20,12 +20,16 @@ export type * from './types.ts'
 const CHANNEL = '/plugin-control'
 const LIST_ENDPOINT = 'list'
 const SET_ENABLED_ENDPOINT = 'set-enabled'
+const UNINSTALL_ENDPOINT = 'uninstall'
 const CONTROL_ID_PATTERN = /^[A-Za-z0-9._~-]+$/
 
 const emptyRequestSchema = z.object({}).strict()
 const setEnabledRequestSchema = z.object({
   pluginId: z.string().min(1),
   enabled: z.boolean(),
+}).strict()
+const uninstallRequestSchema = z.object({
+  pluginId: z.string().min(1),
 }).strict()
 
 /** One deployment-configured logical control and its Loader rows. */
@@ -38,6 +42,8 @@ export interface PluginControlSpec {
   repository: string
   /** Complete Loader entry-id set controlled as one product. */
   entryIds: string[]
+  /** Module specifier for each entry id, in the same order. */
+  packages: string[]
 }
 
 /** Plugin-control gateway configuration owned by the composing profile. */
@@ -53,6 +59,7 @@ const controlSpecSchema = schema.object({
   name: schema.string().min(1).required(),
   repository: schema.string().min(1).required(),
   entryIds: schema.array(schema.string().min(1)).min(1).required(),
+  packages: schema.array(schema.string().min(1)).min(1).required(),
 })
 
 /** Validate the profile-owned control catalog before the route becomes reachable. */
@@ -105,9 +112,21 @@ function validateConfig(config: Config): void {
     if (repository.protocol !== 'https:' && repository.protocol !== 'http:') {
       throw new Error(`plugin-control: control ${JSON.stringify(control.id)} repository must use HTTP(S)`)
     }
-    for (const entryId of control.entryIds) {
+    if (control.packages.length !== control.entryIds.length) {
+      throw new Error(`plugin-control: control ${JSON.stringify(control.id)} must declare one package per entry id`)
+    }
+    for (let index = 0; index < control.entryIds.length; index += 1) {
+      const entryId = control.entryIds[index]
+      const packageName = control.packages[index]
+      /* v8 ignore next 3 -- the length check above guarantees index existence. */
+      if (entryId === undefined || packageName === undefined) {
+        throw new Error(`plugin-control: control ${JSON.stringify(control.id)} has a missing entry row`)
+      }
       if (entryId.trim() !== entryId) {
         throw new Error(`plugin-control: control ${JSON.stringify(control.id)} has surrounding whitespace in an entry id`)
+      }
+      if (packageName.trim() !== packageName) {
+        throw new Error(`plugin-control: control ${JSON.stringify(control.id)} has surrounding whitespace in a package name`)
       }
       if (entryIds.has(entryId)) {
         throw new Error(`plugin-control: Loader entry ${JSON.stringify(entryId)} belongs to more than one control`)
@@ -131,15 +150,20 @@ export class PluginControlGateway {
     validateConfig(config)
   }
 
-  /** Resolve profile-local ids to the unique entries in the mounted Include tree. */
-  private resolveEntries(entryIds: readonly string[]): { entries: Entry[]; unresolved: string[] } {
+  /** Resolve profile-local ids to their mounted entries, separating absent from ambiguous ids. */
+  private resolveEntries(entryIds: readonly string[]): { entries: Entry[]; missing: string[]; ambiguous: string[] } {
     const mounted = [...this.ctx.loader.entries()]
     const entries: Entry[] = []
-    const unresolved: string[] = []
+    const missing: string[] = []
+    const ambiguous: string[] = []
     for (const entryId of entryIds) {
       const matches = mounted.filter(entry => entry.options.id === entryId)
-      if (matches.length !== 1) {
-        unresolved.push(matches.length === 0 ? entryId : `${entryId} (${matches.length} matches)`)
+      if (matches.length === 0) {
+        missing.push(entryId)
+        continue
+      }
+      if (matches.length > 1) {
+        ambiguous.push(`${entryId} (${matches.length} matches)`)
         continue
       }
       const entry = matches[0]
@@ -149,7 +173,7 @@ export class PluginControlGateway {
       }
       entries.push(entry)
     }
-    return { entries, unresolved }
+    return { entries, missing, ambiguous }
   }
 
   /**
@@ -157,25 +181,31 @@ export class PluginControlGateway {
    * @returns configured controls and their saved or running aggregate states.
    */
   list(): PluginControlSnapshot {
+    const uninstalled = readUninstalledControls(this.config.profilePatchPath)
     return {
-      controls: this.config.controls.map((control): PluginControlItem => {
-        const controlled = this.resolveEntries(control.entryIds)
-        let state: PluginControlState
-        if (controlled.unresolved.length > 0) {
-          state = 'unavailable'
-        } else if (this.desired.has(control.id)) {
-          state = this.desired.get(control.id) === true ? 'enabled' : 'disabled'
-        } else {
-          const disabled = controlled.entries.map(entry => entry.disabled)
-          state = disabled.every(Boolean) ? 'disabled' : disabled.some(Boolean) ? 'mixed' : 'enabled'
-        }
-        return {
-          id: pluginControlId(control.id),
-          name: control.name,
-          repository: control.repository,
-          state,
-        }
-      }),
+      controls: this.config.controls
+        .filter(control => !uninstalled.has(control.id))
+        .map((control): PluginControlItem => {
+          const controlled = this.resolveEntries(control.entryIds)
+          let state: PluginControlState
+          if (controlled.ambiguous.length > 0) {
+            state = 'unavailable'
+          } else if (this.desired.has(control.id)) {
+            state = this.desired.get(control.id) === true ? 'enabled' : 'disabled'
+          } else if (controlled.missing.length === control.entryIds.length) {
+            // Rows not mounted yet: the product is off until the user enables it.
+            state = 'disabled'
+          } else {
+            const disabled = controlled.entries.map(entry => entry.disabled)
+            state = disabled.every(Boolean) ? 'disabled' : disabled.some(Boolean) ? 'mixed' : 'enabled'
+          }
+          return {
+            id: pluginControlId(control.id),
+            name: control.name,
+            repository: control.repository,
+            state,
+          }
+        }),
     }
   }
 
@@ -195,13 +225,46 @@ export class PluginControlGateway {
     return this.enqueue(async () => {
       if (signal.aborted) throw signal.reason
       const controlled = this.resolveEntries(control.entryIds)
-      if (controlled.unresolved.length > 0) {
-        throw new Error(`plugin control ${JSON.stringify(control.id)} is unavailable; unresolved Loader entries: ${controlled.unresolved.join(', ')}`)
+      if (controlled.ambiguous.length > 0) {
+        throw new Error(`plugin control ${JSON.stringify(control.id)} is unavailable; ambiguous Loader entries: ${controlled.ambiguous.join(', ')}`)
       }
-      await writePluginControlState(this.config.profilePatchPath, control, request.enabled)
-      // Community plugins are not required to support reversible lifecycle
-      // registration, so the running tree stays untouched until restart.
+      // Enabling writes (or refreshes) the insert rows that mount the product;
+      // disabling without mounted rows is already the effective state, so
+      // nothing needs writing. The running tree stays untouched either way.
+      if (request.enabled || controlled.missing.length !== control.entryIds.length) {
+        await writePluginControlState(this.config.profilePatchPath, {
+          id: control.id,
+          rows: control.entryIds.map((entryId, index) => {
+            const packageName = control.packages[index]
+            /* v8 ignore next 2 -- the catalog validator enforces equal lengths at construction. */
+            if (packageName === undefined) {
+              throw new Error(`plugin-control: control ${JSON.stringify(control.id)} has a missing entry row`)
+            }
+            return { entryId, package: packageName }
+          }),
+        }, request.enabled)
+      }
       this.desired.set(control.id, request.enabled)
+      return this.list()
+    })
+  }
+
+  /**
+   * Remove one preset product from the user's list: its managed rows are
+   * replaced by an `uninstalled` marker so it stays hidden across restarts.
+   * Re-enabling later (or reinstalling through the installer) clears the
+   * marker through the ordinary managed-item rewrite.
+   * @param request - logical control id to uninstall.
+   * @returns the refreshed snapshot without the removed control.
+   */
+  uninstall(request: { pluginId: string }): Promise<PluginControlSnapshot> {
+    return this.enqueue(async () => {
+      const control = this.config.controls.find(candidate => candidate.id === request.pluginId)
+      if (control === undefined) {
+        throw new Error(`unknown plugin control ${JSON.stringify(request.pluginId)}`)
+      }
+      await writePluginControlUninstalled(this.config.profilePatchPath, control.id)
+      this.desired.delete(control.id)
       return this.list()
     })
   }
@@ -215,8 +278,26 @@ export class PluginControlGateway {
       }
       return { ok: true, value: this.list() }
     }
-    if (endpoint !== SET_ENABLED_ENDPOINT) {
+    if (endpoint !== SET_ENABLED_ENDPOINT && endpoint !== UNINSTALL_ENDPOINT) {
       return { ok: false, error: { code: 'bad-request', message: `unknown plugin-control endpoint ${JSON.stringify(endpoint)}`, details: { issues: [] } } }
+    }
+    if (endpoint === UNINSTALL_ENDPOINT) {
+      const parsed = uninstallRequestSchema.safeParse(payload)
+      if (!parsed.success) {
+        return { ok: false, error: { code: 'bad-request', message: 'invalid plugin-control uninstall request', details: { issues: parsed.error.issues } } }
+      }
+      if (signal.aborted) {
+        return { ok: false, error: { code: 'cancelled', message: 'plugin-control request was cancelled', details: {} } }
+      }
+      try {
+        const value = await this.uninstall(parsed.data as { pluginId: string })
+        return { ok: true, value }
+      } catch (error) {
+        return {
+          ok: false,
+          error: { code: 'internal' as const, message: messageOf(error), details: {} },
+        } as const
+      }
     }
     const parsed = setEnabledRequestSchema.safeParse(payload)
     if (!parsed.success) {

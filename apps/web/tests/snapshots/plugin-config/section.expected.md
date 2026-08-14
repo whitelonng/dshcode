@@ -25,8 +25,6 @@
   - tablist "插件视图":
     - tab "插件配置" [selected]
     - tab "插件列表"
-    - tab "插件开关"
-    - tab "安装与更新"
   - tabpanel "插件配置":
     - list:
       - listitem:

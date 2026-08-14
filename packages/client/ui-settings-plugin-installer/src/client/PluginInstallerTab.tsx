@@ -1,14 +1,24 @@
 /**
- * Plugin install and update tab: an install box (npm spec or git URL) plus
- * one row per installed user plugin with version, update availability, and
- * update/uninstall actions. Uninstall requires confirmation; installs and
- * updates end with a restart affordance (the desktop preload bridge restarts
- * the application in place; the web build shows a hint instead).
+ * Merged plugin list tab: an install box plus one row per installed user
+ * plugin (saved enablement switch, version, update availability, update and
+ * uninstall actions) above a collapsed-by-default read-only built-in
+ * section (searchable, status only — built-ins carry no switches).
+ * Uninstall requires confirmation; installs, updates, and switches end with
+ * a restart affordance (the desktop preload bridge restarts the application
+ * in place; the web build shows a hint instead). Enablement switches persist
+ * to the profile patch layer and apply at the next restart.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button,
+  IconChevronDownOutline14,
+  IconSearchOutline16,
+  Modal,
+} from '@deepseek-ai/dsh-client-ui-primitives'
+import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { InstalledPluginItem, PluginUpdateItem } from './protocol.ts'
+import type { InstalledPluginItem, InstallProgressItem, PluginControlItem, PluginUpdateItem } from './protocol.ts'
+import type { PluginInstallerLocaleKey } from './locales.ts'
 import css from './PluginInstallerTab.module.css'
 
 /** Minimal face of the desktop preload bridge (defined in apps/desktop).
@@ -22,6 +32,8 @@ function desktopBridge(): DesktopBridge | undefined {
 
 /** Registration-side wire face used by the tab. */
 export interface PluginInstallerTabInjected {
+  /** Whether this browser has loopback authority to use the host routes. */
+  isLoopback: boolean
   /** Read the installed snapshot. */
   list: () => Promise<InstalledPluginItem[]>
   /** Install one plugin from an npm spec or git URL. */
@@ -30,8 +42,20 @@ export interface PluginInstallerTabInjected {
   update: (id: string) => Promise<InstalledPluginItem>
   /** Remove one plugin. */
   uninstall: (id: string) => Promise<InstalledPluginItem[]>
+  /** Persist one user plugin's next-start enablement. */
+  setEnabled: (id: string, enabled: boolean) => Promise<InstalledPluginItem>
   /** Compare installed versions against their sources. */
   checkUpdates: () => Promise<PluginUpdateItem[]>
+  /** Read the current install/update progress. */
+  status: () => Promise<InstallProgressItem>
+  /** Read the deployment-configured preset plugin switches. */
+  controlsList: () => Promise<PluginControlItem[]>
+  /** Persist one preset plugin's next-start enablement. */
+  controlsSetEnabled: (pluginId: string, enabled: boolean) => Promise<PluginControlItem[]>
+  /** Remove one preset product from the user's list. */
+  controlsUninstall: (pluginId: string) => Promise<PluginControlItem[]>
+  /** Read the current Loader entry inventory. */
+  inventoryList: () => Promise<PluginInventorySnapshot>
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -43,38 +67,143 @@ export type PluginInstallerTabProps =
 type ViewState =
   | { readonly status: 'loading' }
   | { readonly status: 'error' }
-  | { readonly status: 'ready'; readonly plugins: readonly InstalledPluginItem[] }
+  | {
+    readonly status: 'ready'
+    readonly plugins: readonly InstalledPluginItem[]
+    readonly snapshot: PluginInventorySnapshot
+    readonly controls: readonly PluginControlItem[]
+  }
 
 /** One row operation in flight. */
 type BusyAction = { readonly kind: 'install' | 'update' | 'uninstall' | 'check'; readonly id?: string }
 
-/** The plugin-install tab. */
+/** One enablement switch in flight: a user plugin or a preset product. */
+type ToggleBusy = { readonly kind: 'user' | 'preset'; readonly id: string }
+
+/** Compact a module specifier without guessing whether its Loader id was generated. */
+function moduleShortName(moduleName: string): string {
+  const unscoped = moduleName.startsWith('@') ? moduleName.slice(moduleName.indexOf('/') + 1) : moduleName
+  return unscoped
+    .replace(/^cordis:/, '')
+    .replace(/^cordis-plugin-/, '')
+    .replace(/^dsh-(?:host-|client-)?/, '')
+}
+
+/** Locale keys for the four preset-product states. */
+const CONTROL_STATE_KEYS = {
+  enabled: 'enabled',
+  disabled: 'disabled',
+  mixed: 'mixed',
+  unavailable: 'unavailable',
+} as const satisfies Record<PluginControlItem['state'], PluginInstallerLocaleKey>
+
+/** Localized label for one install phase, with percent when the download has one. */
+function progressLabel(progress: InstallProgressItem, t: PluginInstallerTabProps['t']): string {
+  if (progress.stage === 'fetch') return t('fetching')
+  if (progress.stage === 'extract') return t('extracting')
+  if (progress.stage === 'write') return t('writing')
+  return progress.percent === undefined
+    ? t('downloading')
+    : t('downloadingPercent', { percent: String(progress.percent) })
+}
+
+/** Whether an inventory row matches the local catalog query. */
+function matchesEntry(entry: PluginInventorySnapshot['entries'][number], normalizedQuery: string): boolean {
+  if (normalizedQuery.length === 0) return true
+  return [entry.moduleName, entry.entryId]
+    .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
+}
+
+/** The merged plugin list tab. */
 export function PluginInstallerTab(props: PluginInstallerTabProps) {
-  const { list, install, update, uninstall, checkUpdates } = props
+  const {
+    isLoopback,
+    list,
+    install,
+    update,
+    uninstall,
+    setEnabled,
+    checkUpdates,
+    status,
+    inventoryList,
+    controlsList,
+    controlsSetEnabled,
+    controlsUninstall,
+  } = props
   const t = props.t
   const [view, setView] = useState<ViewState>({ status: 'loading' })
   const [spec, setSpec] = useState('')
   const [updates, setUpdates] = useState<ReadonlyMap<string, string>>(new Map())
   const [busy, setBusy] = useState<BusyAction | undefined>(undefined)
+  const [toggleBusy, setToggleBusy] = useState<ToggleBusy | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
-  const [uninstallTarget, setUninstallTarget] = useState<string | undefined>(undefined)
-  const [dirty, setDirty] = useState(false)
 
-  const reload = async (): Promise<void> => {
-    setView({ status: 'ready', plugins: await list() })
-  }
+  /** One uninstall confirmation in flight: the row kind, its id, and its display name. */
+  type UninstallTarget = { readonly kind: 'user' | 'preset'; readonly id: string; readonly name: string }
+
+  const [uninstallTarget, setUninstallTarget] = useState<UninstallTarget | undefined>(undefined)
+  const [dirty, setDirty] = useState(false)
+  const [builtinOpen, setBuiltinOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  /** Saved user-plugin enablement written this session (the Loader row applies at restart). */
+  const [overlay, setOverlay] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  /** Install/update progress polled from the host while a mutation runs. */
+  const [progress, setProgress] = useState<InstallProgressItem>({ kind: 'idle', stage: 'fetch' })
+
+  useEffect(() => {
+    if (busy === undefined || (busy.kind !== 'install' && busy.kind !== 'update')) {
+      setProgress({ kind: 'idle', stage: 'fetch' })
+      return
+    }
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async (): Promise<void> => {
+      const next = await status().catch(() => undefined)
+      if (stopped || next === undefined) return
+      setProgress(next)
+      timer = setTimeout(() => { void poll() }, 400)
+    }
+    timer = setTimeout(() => { void poll() }, 100)
+    return () => {
+      stopped = true
+      /* v8 ignore next 1 -- the effect assigns the timer before ever returning the cleanup */
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }, [busy, status])
 
   useEffect(() => {
     let cancelled = false
-    list().then((plugins) => {
-      if (!cancelled) setView({ status: 'ready', plugins })
+    Promise.all([list(), inventoryList(), controlsList()]).then(([plugins, snapshot, controls]) => {
+      if (!cancelled) setView({ status: 'ready', plugins, snapshot, controls })
     }).catch(() => {
       if (!cancelled) setView({ status: 'error' })
     })
     return () => { cancelled = true }
-  }, [list])
+  }, [list, inventoryList, controlsList])
 
   const plugins = useMemo(() => view.status === 'ready' ? view.plugins : [], [view])
+  const snapshot = useMemo(() => view.status === 'ready' ? view.snapshot : undefined, [view])
+  const controls = useMemo(() => view.status === 'ready' ? view.controls : [], [view])
+
+  /** Saved enablement of one user plugin: this session's writes win over the host-computed saved state. */
+  const userEnabled = (plugin: InstalledPluginItem): boolean =>
+    overlay.get(plugin.id) ?? plugin.enabled
+
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const builtinEntries = useMemo(() => {
+    if (snapshot === undefined) return []
+    const userPluginIds = new Set(plugins.map(plugin => plugin.id))
+    return snapshot.entries.filter(entry => !userPluginIds.has(entry.entryId))
+  }, [snapshot, plugins])
+  const filteredBuiltins = useMemo(
+    () => builtinEntries.filter(entry => matchesEntry(entry, normalizedQuery)),
+    [builtinEntries, normalizedQuery],
+  )
+
+  const reload = async (): Promise<void> => {
+    const [plugins, snapshot, controls] = await Promise.all([list(), inventoryList(), controlsList()])
+    setView({ status: 'ready', plugins, snapshot, controls })
+  }
 
   const run = async (action: BusyAction, operation: () => Promise<void>): Promise<void> => {
     setBusy(action)
@@ -107,11 +236,23 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
     })
   }
 
-  const onUninstall = (id: string): void => {
-    void run({ kind: 'uninstall', id }, async () => {
-      await uninstall(id)
+  const onUninstall = (target: UninstallTarget): void => {
+    void run({ kind: 'uninstall', id: target.id }, async () => {
+      await uninstall(target.id)
       setUninstallTarget(undefined)
       await reload()
+    })
+  }
+
+  const onPresetUninstall = (target: UninstallTarget): void => {
+    void run({ kind: 'uninstall', id: target.id }, async () => {
+      const next = await controlsUninstall(target.id)
+      setView((current) => {
+        /* v8 ignore next 1 -- switches render only while ready; the view cannot be stale here */
+        if (current.status !== 'ready') return current
+        return { status: 'ready', plugins: current.plugins, snapshot: current.snapshot, controls: next }
+      })
+      setUninstallTarget(undefined)
     })
   }
 
@@ -122,15 +263,57 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
     })
   }
 
+  const onUserToggle = (id: string, enabled: boolean): void => {
+    setToggleBusy({ kind: 'user', id })
+    setError(undefined)
+    void setEnabled(id, enabled).then((plugin) => {
+      setOverlay(previous => new Map([...previous, [plugin.id, plugin.enabled]]))
+      setToggleBusy(undefined)
+      setDirty(true)
+    }).catch((reason: unknown) => {
+      setError(t('failed', { reason: reason instanceof Error ? reason.message : String(reason) }))
+      setToggleBusy(undefined)
+    })
+  }
+
+  const onPresetToggle = (id: string, enabled: boolean): void => {
+    setToggleBusy({ kind: 'preset', id })
+    setError(undefined)
+    void controlsSetEnabled(id, enabled).then((next) => {
+      setView((current) => {
+        /* v8 ignore next 1 -- switches render only while ready; the view cannot be stale here */
+        if (current.status !== 'ready') return current
+        return { status: 'ready', plugins: current.plugins, snapshot: current.snapshot, controls: next }
+      })
+      setToggleBusy(undefined)
+      setDirty(true)
+    }).catch((reason: unknown) => {
+      setError(t('failed', { reason: reason instanceof Error ? reason.message : String(reason) }))
+      setToggleBusy(undefined)
+    })
+  }
+
   const restart = (): void => {
     desktopBridge()?.restart()
   }
 
-  if (view.status === 'loading') return <div className={css.state}>{t('installing')}</div>
+  if (!isLoopback) {
+    return (
+      <div className={css.notice}>
+        <strong>{t('localOnlyTitle')}</strong>
+        <p>{t('localOnlyBody')}</p>
+      </div>
+    )
+  }
+
+  if (view.status === 'loading') return <div className={css.state}>{t('loading')}</div>
   if (view.status === 'error') return <div className={css.state}>{t('failed', { reason: 'load' })}</div>
 
+  /** Whether every enablement switch is locked while another mutation runs. */
+  const toggleDisabled = (): boolean => busy !== undefined || toggleBusy !== undefined
+
   return (
-    <div className={css.section}>
+    <div className={css.section} data-plugin-panel aria-busy={busy !== undefined || toggleBusy !== undefined}>
       <div className={css.installRow}>
         <input
           className={css.spec}
@@ -147,46 +330,177 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
         </Button>
       </div>
       <div className={css.hint}>{t('installHint')}</div>
+      {(busy?.kind === 'install' || busy?.kind === 'update') && (
+        <div className={css.progressRow} role="status">
+          <div className={css.progressTrack}>
+            <div
+              className={css.progressBar}
+              data-indeterminate={progress.percent === undefined ? 'true' : undefined}
+              style={progress.percent === undefined ? undefined : { width: `${progress.percent}%` }}
+            />
+          </div>
+          <span className={css.progressLabel}>{progressLabel(progress, t)}</span>
+        </div>
+      )}
       {error !== undefined && <div className={css.error}>{error}</div>}
+      {toggleBusy !== undefined && <p className={css.applying} aria-live="polite">{t('applying')}</p>}
       <div className={css.actionsRow}>
         <Button variant="outline" disabled={busy !== undefined} onClick={onCheck}>
           {busy?.kind === 'check' ? t('checking') : t('checkUpdates')}
         </Button>
         {updates.size === 0 && busy === undefined && plugins.length > 0 && <span className={css.ok}>{t('noUpdates')}</span>}
       </div>
-      {plugins.length === 0
-        ? <div className={css.state}>{t('empty')}</div>
-        : (
-          <ul className={css.list}>
-            {plugins.map(plugin => (
-              <li key={plugin.id} className={css.row}>
-                <div className={css.meta}>
-                  <div className={css.name}>{plugin.name}</div>
-                  <div className={css.sub}>
-                    {t('version', { version: plugin.version })}
-                    {updates.has(plugin.id) && (() => {
-                      const latest = updates.get(plugin.id)
-                      return latest === undefined
-                        ? null
-                        : <span className={css.latest}>{t('latest', { version: latest })}</span>
-                    })()}
-                  </div>
-                  <div className={css.sub}>{plugin.source.spec}</div>
-                </div>
-                <div className={css.actions}>
-                  {updates.has(plugin.id) && (
-                    <Button variant="primary" disabled={busy !== undefined} onClick={() => { onUpdate(plugin.id) }}>
-                      {busy?.kind === 'update' && busy.id === plugin.id ? t('updating') : t('update')}
-                    </Button>
-                  )}
-                  <Button variant="outline" disabled={busy !== undefined} onClick={() => { setUninstallTarget(plugin.id) }}>
-                    {t('uninstall')}
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+
+      <section className={css.group} aria-labelledby="dsh-user-plugins-heading">
+        <h3 className={css.sectionTitle} id="dsh-user-plugins-heading">{t('userPlugins')}</h3>
+        {plugins.length === 0 && controls.length === 0
+          ? <div className={css.state}>{t('empty')}</div>
+          : (
+            <ul className={css.list}>
+              {controls.map((control) => {
+                const checked = control.state === 'enabled'
+                const unavailable = control.state === 'unavailable'
+                return (
+                  <li key={control.id} className={css.row} data-preset-plugin={control.id}>
+                    <div className={css.meta}>
+                      <div className={css.name}>{control.name}</div>
+                      <div className={css.sub}>
+                        <a className={css.source} href={control.repository} target="_blank" rel="noreferrer">
+                          {t('source')}
+                        </a>
+                      </div>
+                    </div>
+                    <div className={css.actions}>
+                      <span className={css.state} data-state={control.state}>
+                        {t(CONTROL_STATE_KEYS[control.state])}
+                      </span>
+                      <button
+                        className={css.switch}
+                        type="button"
+                        role="switch"
+                        aria-checked={checked}
+                        aria-label={t(checked ? 'disableSwitch' : 'enableSwitch', { name: control.name })}
+                        disabled={unavailable || toggleDisabled()}
+                        onClick={() => { onPresetToggle(control.id, !checked) }}
+                      >
+                        <span aria-hidden="true" />
+                      </button>
+                      <Button
+                        variant="outline"
+                        disabled={busy !== undefined}
+                        onClick={() => { setUninstallTarget({ kind: 'preset', id: control.id, name: control.name }) }}
+                      >
+                        {t('uninstall')}
+                      </Button>
+                    </div>
+                  </li>
+                )
+              })}
+              {plugins.map((plugin) => {
+                const enabled = userEnabled(plugin)
+                return (
+                  <li key={plugin.id} className={css.row} data-user-plugin={plugin.id}>
+                    <div className={css.meta}>
+                      <div className={css.name}>{plugin.name}</div>
+                      <div className={css.sub}>
+                        {t('version', { version: plugin.version })}
+                        {updates.has(plugin.id) && (() => {
+                          const latest = updates.get(plugin.id)
+                          /* v8 ignore next 1 -- badges render only when the map holds the id */
+                          if (latest === undefined) return null
+                          return <span className={css.latest}>{t('latest', { version: latest })}</span>
+                        })()}
+                      </div>
+                      <div className={css.sub}>{plugin.source.spec}</div>
+                    </div>
+                    <div className={css.actions}>
+                      <span className={css.state} data-state={enabled ? 'enabled' : 'disabled'}>
+                        {t(enabled ? 'enabled' : 'disabled')}
+                      </span>
+                      <button
+                        className={css.switch}
+                        type="button"
+                        role="switch"
+                        aria-checked={enabled}
+                        aria-label={t(enabled ? 'disableSwitch' : 'enableSwitch', { name: plugin.name })}
+                        disabled={toggleDisabled()}
+                        onClick={() => { onUserToggle(plugin.id, !enabled) }}
+                      >
+                        <span aria-hidden="true" />
+                      </button>
+                      {updates.has(plugin.id) && (
+                        <Button variant="primary" disabled={busy !== undefined} onClick={() => { onUpdate(plugin.id) }}>
+                          {busy?.kind === 'update' && busy.id === plugin.id ? t('updating') : t('update')}
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        disabled={busy !== undefined}
+                        onClick={() => { setUninstallTarget({ kind: 'user', id: plugin.id, name: plugin.name }) }}
+                      >
+                        {t('uninstall')}
+                      </Button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+      </section>
+
+      <section className={css.group} aria-labelledby="dsh-builtin-plugins-heading">
+        <button
+          className={css.disclosure}
+          id="dsh-builtin-plugins-heading"
+          type="button"
+          aria-expanded={builtinOpen}
+          onClick={() => { setBuiltinOpen(open => !open) }}
+        >
+          <h3 className={css.sectionTitle}>{t('builtinPlugins')}</h3>
+          <span className={css.count} data-plugin-count={filteredBuiltins.length}>{filteredBuiltins.length}</span>
+          <IconChevronDownOutline14
+            className={builtinOpen ? css.chevronOpen : css.chevron}
+            size={14}
+            aria-hidden="true"
+          />
+        </button>
+        {builtinOpen && (
+          <>
+            <label className={css.search}>
+              <IconSearchOutline16 aria-hidden="true" />
+              <span className={css.visuallyHidden}>{t('search')}</span>
+              <input
+                type="search"
+                value={query}
+                placeholder={t('search')}
+                aria-label={t('search')}
+                onChange={(event) => { setQuery(event.currentTarget.value) }}
+              />
+            </label>
+            {filteredBuiltins.length === 0
+              ? <div className={css.state}>{normalizedQuery.length > 0 ? t('emptySearch') : t('empty')}</div>
+              : (
+                <ul className={css.list}>
+                  {filteredBuiltins.map((entry) => {
+                    const enabled = entry.enabled
+                    const title = moduleShortName(entry.moduleName)
+                    return (
+                      <li key={entry.entryId} className={css.row} data-plugin-entry={entry.entryId}>
+                        <div className={css.meta}>
+                          <div className={css.name} title={entry.moduleName}>{title}</div>
+                        </div>
+                        <span className={css.state} data-state={enabled ? 'enabled' : 'disabled'}>
+                          {t(enabled ? 'enabled' : 'disabled')}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+          </>
         )}
+      </section>
+
       {dirty && (
         <div className={css.restartRow}>
           <span>{t('restartHint')}</span>
@@ -201,12 +515,20 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
           open
           onClose={() => { setUninstallTarget(undefined) }}
         >
-          <p className={css.confirmBody}>{t('uninstallConfirmBody', { name: uninstallTarget })}</p>
+          <p className={css.confirmBody}>{t('uninstallConfirmBody', { name: uninstallTarget.name })}</p>
           <div className={css.modalActions}>
             <Button variant="outline" disabled={busy !== undefined} onClick={() => { setUninstallTarget(undefined) }}>
               {t('cancel')}
             </Button>
-            <Button variant="primary" className={css.dangerButton} disabled={busy !== undefined} onClick={() => { onUninstall(uninstallTarget) }}>
+            <Button
+              variant="primary"
+              className={css.dangerButton}
+              disabled={busy !== undefined}
+              onClick={() => {
+                if (uninstallTarget.kind === 'preset') onPresetUninstall(uninstallTarget)
+                else onUninstall(uninstallTarget)
+              }}
+            >
               {t('confirm')}
             </Button>
           </div>

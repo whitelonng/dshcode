@@ -1,7 +1,7 @@
 /** Wire-protocol tests for the plugin-installer tab. */
 
 import { describe, expect, it } from 'vitest'
-import { parseInstalledPlugin, parsePluginList, parseUpdateList } from '../src/client/protocol.ts'
+import { parseInstalledPlugin, parseInstallStatus, parsePluginControlSnapshot, parsePluginList, parseUpdateList } from '../src/client/protocol.ts'
 
 const PLUGIN = {
   id: '@scope/demo',
@@ -9,6 +9,7 @@ const PLUGIN = {
   version: '1.0.0',
   source: { kind: 'npm', spec: '@scope/demo' },
   installedAt: '2026-08-14T00:00:00.000Z',
+  enabled: true,
 }
 
 describe('plugin-installer protocol', () => {
@@ -17,6 +18,7 @@ describe('plugin-installer protocol', () => {
     expect(parsePluginList({ plugins: [] })).toEqual([])
     expect(parseInstalledPlugin({ plugin: { ...PLUGIN, commit: 'abc123' } }).commit).toBe('abc123')
     expect(parseInstalledPlugin({ plugin: PLUGIN }).commit).toBeUndefined()
+    expect(parseInstalledPlugin({ plugin: { ...PLUGIN, enabled: false } }).enabled).toBe(false)
   })
 
   it('parses update lists', () => {
@@ -25,10 +27,32 @@ describe('plugin-installer protocol', () => {
     expect(parseUpdateList({ updates: [] })).toEqual([])
   })
 
+  it('parses plugin-control snapshots and rejects malformed rows', () => {
+    expect(parsePluginControlSnapshot({ controls: [{ id: 'genui', name: 'dsh-genui', repository: 'https://github.com/a/b', state: 'disabled' }] }))
+      .toEqual([{ id: 'genui', name: 'dsh-genui', repository: 'https://github.com/a/b', state: 'disabled' }])
+    expect(parsePluginControlSnapshot({ controls: [] })).toEqual([])
+    expect(() => parsePluginControlSnapshot(null)).toThrow('controls array')
+    expect(() => parsePluginControlSnapshot({ controls: [{ id: 'x' }] })).toThrow('control row')
+    expect(() => parsePluginControlSnapshot({ controls: [{ id: 'x', name: 'y', repository: 'https://github.com/a/b', state: 'broken' }] }))
+      .toThrow('control row')
+  })
+
+  it('parses install progress states', () => {
+    expect(parseInstallStatus({ progress: { kind: 'idle', stage: 'fetch' } }))
+      .toEqual({ kind: 'idle', stage: 'fetch' })
+    expect(parseInstallStatus({ progress: { kind: 'install', stage: 'download', percent: 42 } }))
+      .toEqual({ kind: 'install', stage: 'download', percent: 42 })
+    expect(() => parseInstallStatus({ progress: { kind: 'install', stage: 'nope' } })).toThrow('progress')
+    expect(() => parseInstallStatus({ progress: { kind: 'repair', stage: 'fetch' } })).toThrow('progress')
+    expect(() => parseInstallStatus({ progress: { kind: 'install', stage: 'fetch', percent: 'half' } })).toThrow('progress')
+    expect(() => parseInstallStatus({})).toThrow('progress')
+  })
+
   it('rejects malformed rows and shapes', () => {
     expect(() => parsePluginList(null)).toThrow('must contain a plugins array')
     expect(() => parsePluginList({ plugins: [{ id: 'x' }] })).toThrow('is invalid')
     expect(() => parsePluginList({ plugins: [{ ...PLUGIN, source: { kind: 'tarball', spec: 'x' } }] })).toThrow('is invalid')
+    expect(() => parsePluginList({ plugins: [{ ...PLUGIN, enabled: 'yes' }] })).toThrow('is invalid')
     expect(() => parseInstalledPlugin({ plugin: 'nope' })).toThrow('must contain a plugin row')
     expect(() => parseUpdateList({ updates: [{ id: 'a' }] })).toThrow('is invalid')
     expect(() => parseUpdateList({})).toThrow('must contain an updates array')

@@ -179,6 +179,27 @@ export function initProfile(dir: string, bundles: readonly string[]): void {
   if (!existsSync(workspacePath)) writeFileSync(workspacePath, PROFILE_PNPM_WORKSPACE)
 }
 
+/**
+ * Whether a real directory at `link` is a package whose name matches the
+ * package `target` points at. The plugin installer manages real directories
+ * under the same fallback, so a same-named directory is the user's installed
+ * version winning over the shipped dependency, not foreign clutter.
+ * @param link - the fallback entry path (a real directory).
+ * @param target - the real package location the link would point at.
+ * @returns true when both directories own a package.json with the same name.
+ */
+function directoryOwnsSamePackage(link: string, target: string): boolean {
+  try {
+    const linkManifest = JSON.parse(readFileSync(join(link, 'package.json'), 'utf8')) as { name?: unknown }
+    const targetManifest = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8')) as { name?: unknown }
+    return typeof linkManifest.name === 'string'
+      && linkManifest.name === targetManifest.name
+  } catch {
+    // Missing or unparsable manifests are not a user install; fail loud below.
+    return false
+  }
+}
+
 /** Ensure `link` is a symlink to `target`, replacing a wrong or dangling link; a real directory throws. */
 function ensureSymlink(link: string, target: string): void {
   let stat
@@ -191,6 +212,9 @@ function ensureSymlink(link: string, target: string): void {
   }
   if (stat !== undefined) {
     if (!stat.isSymbolicLink()) {
+      // A same-named real directory is the user's own install (plugin
+      // installer) taking precedence; anything else stays fail-loud.
+      if (stat.isDirectory() && directoryOwnsSamePackage(link, target)) return
       throw new Error(`dsh: ${link} exists and is not a symlink; remove it so dsh can manage the installation fallback`)
     }
     if (readlinkSync(link) === target) return

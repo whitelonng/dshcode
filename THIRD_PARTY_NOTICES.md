@@ -109,7 +109,7 @@ External packages that a workspace package resolves at runtime. The tier covers 
 
 pnpm applies local patches to the following packages at install time, so shipped artifacts carry modified copies; each patch file is the complete record of the modification:
 
-- `@linxin666/dsh-client-ui-skin-center` — [`patches/@linxin666__dsh-client-ui-skin-center.patch`](patches/@linxin666__dsh-client-ui-skin-center.patch)
+- `@linxin666/dsh-client-ui-skin-center@0.1.2` — [`patches/@linxin666__dsh-client-ui-skin-center@0.1.2.patch`](patches/@linxin666__dsh-client-ui-skin-center@0.1.2.patch)
 - `node-pty@1.1.0` — [`patches/node-pty@1.1.0.patch`](patches/node-pty@1.1.0.patch)
 
 ## Official Claude Code platform payloads

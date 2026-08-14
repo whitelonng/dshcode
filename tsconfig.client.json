@@ -90,10 +90,8 @@
     { "path": "./packages/client/ui-settings" },
     { "path": "./packages/client/ui-settings-general" },
     { "path": "./packages/client/ui-settings-models" },
-    { "path": "./packages/client/ui-settings-plugin-control" },
     { "path": "./packages/client/ui-settings-archive" },
     { "path": "./packages/client/ui-settings-plugin-installer" },
-    { "path": "./packages/client/ui-settings-plugin-inventory" },
     { "path": "./packages/client/locale" },
     { "path": "./packages/client/web" },
     { "path": "./apps/web" }

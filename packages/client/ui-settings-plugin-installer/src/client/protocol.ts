@@ -12,6 +12,13 @@ export interface InstalledPluginItem {
   commit?: string
 }
 
+/** Point-in-time install/update progress reported by the host. */
+export interface InstallProgressItem {
+  kind: 'idle' | 'install' | 'update'
+  stage: 'fetch' | 'download' | 'extract' | 'write'
+  percent?: number
+}
+
 /** One plugin with a newer version available. */
 export interface PluginUpdateItem {
   id: string
@@ -66,6 +73,60 @@ export function parseInstalledPlugin(value: unknown): InstalledPluginItem {
     throw new Error('plugin-installer: response must contain a plugin row')
   }
   return parsePlugin(value.plugin, 0)
+}
+
+/** One deployment-configured logical product switch. */
+export interface PluginControlItem {
+  id: string
+  name: string
+  repository: string
+  state: 'enabled' | 'disabled' | 'mixed' | 'unavailable'
+}
+
+/**
+ * Validate and normalize a plugin-control `list` / `set-enabled` response.
+ * @param value - decoded but untrusted response value.
+ * @returns the typed control items.
+ */
+export function parsePluginControlSnapshot(value: unknown): PluginControlItem[] {
+  if (!isRecord(value) || !Array.isArray(value.controls)) {
+    throw new Error('plugin-control: response must contain a controls array')
+  }
+  return value.controls.map((control, index) => {
+    if (!isRecord(control) || typeof control.id !== 'string' || typeof control.name !== 'string'
+      || typeof control.repository !== 'string'
+      || (control.state !== 'enabled' && control.state !== 'disabled'
+        && control.state !== 'mixed' && control.state !== 'unavailable')) {
+      throw new Error(`plugin-control: control row ${String(index)} is invalid`)
+    }
+    return {
+      id: control.id,
+      name: control.name,
+      repository: control.repository,
+      state: control.state,
+    }
+  })
+}
+
+/**
+ * Validate and normalize a `status` response value.
+ * @param value - decoded but untrusted response value.
+ * @returns the typed progress state.
+ */
+export function parseInstallStatus(value: unknown): InstallProgressItem {
+  if (!isRecord(value) || !isRecord(value.progress)
+    || (value.progress.kind !== 'idle' && value.progress.kind !== 'install' && value.progress.kind !== 'update')
+    || (value.progress.stage !== 'fetch' && value.progress.stage !== 'download'
+      && value.progress.stage !== 'extract' && value.progress.stage !== 'write')
+    || (value.progress.percent !== undefined
+      && (typeof value.progress.percent !== 'number' || !Number.isFinite(value.progress.percent)))) {
+    throw new Error('plugin-installer: response must contain a valid progress state')
+  }
+  return {
+    kind: value.progress.kind,
+    stage: value.progress.stage,
+    ...typeof value.progress.percent === 'number' ? { percent: value.progress.percent } : {},
+  }
 }
 
 /**

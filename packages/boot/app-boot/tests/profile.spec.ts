@@ -284,6 +284,27 @@ describe('healProfilesModuleFallback', () => {
     expect(() => { healProfilesModuleFallback(anchor, home) }).toThrow('is not a symlink')
   })
 
+  it('keeps a real directory that owns the same package name as the target (user install wins)', () => {
+    const anchor = stageInstallation({})
+    const home = tmp()
+    const fallback = join(home, 'profiles', 'node_modules')
+    const entry = join(fallback, 'dsh-app')
+    mkdirSync(entry, { recursive: true })
+    writeFileSync(join(entry, 'package.json'), JSON.stringify({ name: 'dsh-app', version: '9.9.9' }))
+    expect(() => { healProfilesModuleFallback(anchor, home) }).not.toThrow()
+    expect(lstatSync(entry).isDirectory()).toBe(true)
+    expect(JSON.parse(readFileSync(join(entry, 'package.json'), 'utf8'))).toMatchObject({ version: '9.9.9' })
+  })
+
+  it('still throws for a real directory owning a different package name', () => {
+    const anchor = stageInstallation({})
+    const home = tmp()
+    const entry = join(home, 'profiles', 'node_modules', 'dsh-app')
+    mkdirSync(entry, { recursive: true })
+    writeFileSync(join(entry, 'package.json'), JSON.stringify({ name: 'some-other-package' }))
+    expect(() => { healProfilesModuleFallback(anchor, home) }).toThrow('is not a symlink')
+  })
+
   it('replaces a wrong symlink', () => {
     const anchor = stageInstallation({})
     const home = tmp()

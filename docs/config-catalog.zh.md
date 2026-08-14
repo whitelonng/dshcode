@@ -812,10 +812,12 @@ export interface PluginControlSpec {
   repository: string
   /** Complete Loader entry-id set controlled as one product. */
   entryIds: string[]
+  /** Module specifier for each entry id, in the same order. */
+  packages: string[]
 }
 ```
 
-来源：[`packages/host/plugin-control/src/index.ts:44`](../packages/host/plugin-control/src/index.ts)
+来源：[`packages/host/plugin-control/src/index.ts:50`](../packages/host/plugin-control/src/index.ts)
 
 <a id="deepseek-aidsh-host-plugin-installer"></a>
 
@@ -835,23 +837,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/host/plugin-installer/src/index.ts:48`](../packages/host/plugin-installer/src/index.ts)
-
-<a id="deepseek-aidsh-host-plugin-inventory"></a>
-
-## `@deepseek-ai/dsh-host-plugin-inventory`
-
-Requires: `loader`
-
-```ts config-catalog
-/** Plugin-inventory gateway configuration owned by the composing profile. */
-export interface Config {
-  /** Absolute user patch layer of the running profile. */
-  profilePatchPath: string
-}
-```
-
-来源：[`packages/host/plugin-inventory/src/index.ts:47`](../packages/host/plugin-inventory/src/index.ts)
+来源：[`packages/host/plugin-installer/src/index.ts:51`](../packages/host/plugin-installer/src/index.ts)
 
 <a id="deepseek-aidsh-host-webserver"></a>
 
@@ -3152,9 +3138,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-settings-archive`（[`packages/client/ui-settings-archive/src/index.ts`](../packages/client/ui-settings-archive/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-settings-plugin-control`（[`packages/client/ui-settings-plugin-control/src/index.ts`](../packages/client/ui-settings-plugin-control/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugin-installer`（[`packages/client/ui-settings-plugin-installer/src/index.ts`](../packages/client/ui-settings-plugin-installer/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-settings-plugin-inventory`（[`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugins`（[`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-skill`（[`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts)）
@@ -3175,6 +3159,7 @@ export interface Config {
 - `@deepseek-ai/dsh-goal-round-driver` — 需要 `agents` · `goals` · `sessions`（[`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker-auto` — 需要 `webServer` · `loader`（[`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker-native`（[`packages/host/directory-picker-native/src/index.ts`](../packages/host/directory-picker-native/src/index.ts)）
+- `@deepseek-ai/dsh-host-plugin-inventory`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-llm`（[`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts)）
 - `@deepseek-ai/dsh-lsp`（[`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts)）
 - `@deepseek-ai/dsh-schedule` — 需要 `agents` · `sessions` · `tools` · `sessionPersistence`（[`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts)）
