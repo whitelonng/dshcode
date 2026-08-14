@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/node-addon-landlock-run": "workspace:*",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.1",
     "tsx": "^4.20.6",
     "typescript": "^6.0.3"
   }
