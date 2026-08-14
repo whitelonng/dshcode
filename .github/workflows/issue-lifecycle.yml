@@ -28,13 +28,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: issue-lifecycle-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  # Fork note: the upstream per-issue key dereferences event payload fields
+  # that push events lack, which GitHub evaluates at trigger time and fails
+  # as a "workflow file issue". The run id keeps the serialization property
+  # without any event-specific access.
+  group: issue-lifecycle-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   lifecycle:
     name: Issue lifecycle
-    if: ${{ github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested') }}
+    if: ${{ github.event_name == 'issues' || github.event_name == 'pull_request' || github.event_name == 'pull_request_review' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy
