@@ -160,6 +160,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.input.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /**
+     * The input selector row's context hole, rendered in every conversation
+     * phase (cold start, blank-session hero, active seat) right above the
+     * composer card — the seat for session-maybe chips that ride beside the
+     * workspace selector (the git branch chip, the pet summon button). The
+     * owner supplies nothing; data and verbs arrive through each entry's own
+     * inject face, and the session id is optional for the same reason as
+     * {@link ComposerBarOwnerProps}.
+     */
+    'conversation.input.selector.context': { kind: 'list'; scope: 'session-maybe' }
+    /**
      * The band under the composer card, inside the bar's width column — the
      * seat for an ambient readout about the conversation (the shipped stats
      * line lives here). Same {@link InputZone} owner share as the other
@@ -573,6 +583,7 @@ export type ConversationSlotProps =
     | 'conversation.input.overlay'
     | 'conversation.input.dock' | 'conversation.composer.dock'
     | 'conversation.input.left' | 'conversation.input.right'
+    | 'conversation.input.selector.context'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
   >

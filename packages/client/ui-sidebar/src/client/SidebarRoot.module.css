@@ -250,6 +250,7 @@
 }
 
 .settingsArea,
+.remoteArea,
 .footerActions {
   flex: none;
   min-width: 0;
@@ -265,6 +266,7 @@
 }
 
 .collapsed .settingsArea,
+.collapsed .remoteArea,
 .collapsed .footerActions {
   display: flex;
   justify-content: center;

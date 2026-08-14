@@ -488,6 +488,17 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.hero.agentPreset')
   })
 
+  it('renders the input selector context row above the card in hero and active phases', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    expect(b.slotCalls).toContain('conversation.input.selector.context')
+    expect(b.view.getByTestId('view-conversation.input.selector.context')).toBeTruthy()
+    // The row is session-maybe: it stays mounted through the hero → active flip.
+    b.session.set(conversationSnapshot({ composerPhase: 'active', blank: false }))
+    b.rerender()
+    expect(b.slotCalls).toContain('conversation.input.selector.context')
+    expect(b.view.getByTestId('view-conversation.input.selector.context')).toBeTruthy()
+  })
+
   it('prompt failure renders the promptError strip (ordinary failure, no transaction UI)', () => {
     const b = mount(conversationSnapshot({
       promptError: { op: 'send', error: { code: 'offline', message: 'Message send failed' } as never },

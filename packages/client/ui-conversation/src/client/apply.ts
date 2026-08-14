@@ -203,6 +203,7 @@ export function apply(ctx: Context): void {
       'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' },
       'conversation.input.overlay': { kind: 'list', scope: 'session' },
       'conversation.input.dock': { kind: 'list', scope: 'session' },
+      'conversation.input.selector.context': { kind: 'list', scope: 'session-maybe' },
       'conversation.composer.dock': { kind: 'list', scope: 'session' },
       'conversation.input.left': { kind: 'list', scope: 'session' },
       'conversation.input.right': { kind: 'list', scope: 'session' },

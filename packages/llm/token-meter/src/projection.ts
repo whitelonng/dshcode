@@ -65,6 +65,26 @@ export interface ContextBreakdownProjection {
   messageTokens: number
 }
 
+/**
+ * Live per-request token accounting, republished as the current generation
+ * streams. Same four disjoint buckets as {@link TokenUsageProjection} — the
+ * value is the running total of the request in flight (or of the last
+ * settled request), not the durable whole-log cumulative — plus the live
+ * throughput reading and an estimate flag.
+ *
+ * The projection is registered by the live-stats host plugin
+ * (`@linxin666/dsh-live-stats`); this package owns the type because the
+ * buckets reuse {@link TokenUsageProjection} and the conversation stats line
+ * reads it through the standard projection channel. Absent while no provider
+ * has reported usage for the session.
+ */
+export interface LiveTokenUsageProjection extends TokenUsageProjection {
+  /** Whether the bucket figures are estimates instead of provider reports. */
+  estimated: boolean
+  /** Live decode throughput of the current generation; absent before the first output lands. */
+  tokensPerSecond?: number
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
     /** Provider-reported usage accumulated across the complete durable log. */
@@ -73,5 +93,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
     contextPressure: ContextPressureProjection
     /** Heuristic system/tools/message composition of the next request. */
     contextBreakdown: ContextBreakdownProjection
+    /** Live per-request usage with throughput; the live-stats plugin's contribution. */
+    liveTokenUsage: LiveTokenUsageProjection
   }
 }
