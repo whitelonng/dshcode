@@ -7,6 +7,8 @@ export interface InstalledPluginItem {
   version: string
   source: { kind: 'npm' | 'git'; spec: string }
   installedAt: string
+  /** Saved next-start enablement from the managed profile patch row. */
+  enabled: boolean
   commit?: string
 }
 
@@ -26,6 +28,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parsePlugin(value: unknown, index: number): InstalledPluginItem {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string'
     || typeof value.version !== 'string' || typeof value.installedAt !== 'string'
+    || typeof value.enabled !== 'boolean'
     || !isRecord(value.source) || (value.source.kind !== 'npm' && value.source.kind !== 'git')
     || typeof value.source.spec !== 'string') {
     throw new Error(`plugin-installer: plugin row ${String(index)} is invalid`)
@@ -36,6 +39,7 @@ function parsePlugin(value: unknown, index: number): InstalledPluginItem {
     version: value.version,
     source: { kind: value.source.kind, spec: value.source.spec },
     installedAt: value.installedAt,
+    enabled: value.enabled,
     ...typeof value.commit === 'string' ? { commit: value.commit } : {},
   }
 }

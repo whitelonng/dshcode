@@ -1,11 +1,16 @@
-/** Copy dictionaries for the plugin-installer Settings tab. */
+/** Copy dictionaries for the merged plugin-list Settings tab. */
 
 export const zh = {
-  tab: '安装与更新',
+  tab: '插件列表',
   installPlaceholder: 'npm 包名（如 @scope/name）或 git 仓库 URL',
   install: '安装',
   installing: '安装中…',
+  loading: '正在读取插件…',
+  userPlugins: '用户插件',
+  builtinPlugins: '内置插件',
   empty: '尚未安装任何用户插件。',
+  search: '搜索插件',
+  emptySearch: '没有匹配的插件。',
   version: '已安装 {version}',
   latest: '最新 {version}',
   updateAvailable: '有新版本',
@@ -24,15 +29,28 @@ export const zh = {
   restart: '重启应用',
   failed: '操作失败：{reason}',
   installHint: '安装会写入当前 profile 的 patch 层；应用重启后插件生效。',
+  enabled: '已开启',
+  disabled: '已关闭',
+  enableSwitch: '开启 {name}',
+  disableSwitch: '关闭 {name}',
+  applying: '正在应用更改…',
+  updateError: '更改未能应用，请重试。',
+  localOnlyTitle: '仅限本机操作',
+  localOnlyBody: '为了保护主机配置，插件开关只能从本机打开。',
 } satisfies Record<string, string>
 
 /** English copy dictionary for the tab. */
 export const en = {
-  tab: 'Install & update',
+  tab: 'Plugin list',
   installPlaceholder: 'npm package (e.g. @scope/name) or git repository URL',
   install: 'Install',
   installing: 'Installing…',
+  loading: 'Reading plugins…',
+  userPlugins: 'User plugins',
+  builtinPlugins: 'Built-in plugins',
   empty: 'No user plugins installed yet.',
+  search: 'Search plugins',
+  emptySearch: 'No matching plugins.',
   version: 'Installed {version}',
   latest: 'Latest {version}',
   updateAvailable: 'Update available',
@@ -51,6 +69,14 @@ export const en = {
   restart: 'Restart application',
   failed: 'Operation failed: {reason}',
   installHint: 'Installs write to the current profile patch layer; plugins load after a restart.',
+  enabled: 'On',
+  disabled: 'Off',
+  enableSwitch: 'Turn on {name}',
+  disableSwitch: 'Turn off {name}',
+  applying: 'Applying change…',
+  updateError: 'The change could not be applied. Try again.',
+  localOnlyTitle: 'Available on this computer only',
+  localOnlyBody: 'To protect host configuration, plugin switches can only be changed from a local browser.',
 } satisfies Record<string, string>
 
 /** Copy dictionary key for the tab. */

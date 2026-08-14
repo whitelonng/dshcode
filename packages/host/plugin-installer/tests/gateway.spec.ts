@@ -9,6 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { ConnectionRpcHandler, HostConnectionHandle } from '@deepseek-ai/dsh-client-connection'
 import { apply, CHANNEL, Config, inject } from '../src/index.ts'
 import type { Config as PluginInstallerConfig } from '../src/index.ts'
+import { fetchWithTimeout } from '../src/registry.ts'
 import * as tar from 'tar'
 
 const tempRoots: string[] = []
@@ -139,5 +140,55 @@ describe('plugin-installer gateway', () => {
     expect(unknown.ok).toBe(false)
     if (unknown.ok) throw new Error('unreachable')
     expect(unknown.error.code).toBe('bad-request')
+
+    const badToggle = await h.handler('set-enabled', { id: 'ghost', enabled: 'yes' }, new AbortController().signal)
+    expect(badToggle.ok).toBe(false)
+    if (badToggle.ok) throw new Error('unreachable')
+    expect(badToggle.error.code).toBe('bad-request')
+  })
+
+  it('persists enablement changes on the managed patch row', async () => {
+    const fixtureDir = await mkdtemp(join(tmpdir(), 'dsh-plugin-installer-toggle-'))
+    tempRoots.push(fixtureDir)
+    stubRegistry(fixtureDir, ['1.0.0'], '1.0.0')
+
+    const h = await harness()
+    const installed = await call<{ plugin: { enabled: boolean } }>(h.handler, 'install', { spec: '@scope/demo' })
+    expect(installed.plugin.enabled).toBe(true)
+
+    const disabled = await call<{ plugin: { enabled: boolean } }>(
+      h.handler, 'set-enabled', { id: '@scope/demo', enabled: false },
+    )
+    expect(disabled.plugin.enabled).toBe(false)
+    expect(await readFile(h.patchPath, 'utf8')).toContain('disabled: true')
+    const listed = await call<{ plugins: Array<{ enabled: boolean }> }>(h.handler, 'list', {})
+    expect(listed.plugins[0]?.enabled).toBe(false)
+
+    await call(h.handler, 'set-enabled', { id: '@scope/demo', enabled: true })
+    expect(await readFile(h.patchPath, 'utf8')).toContain('disabled: false')
+    const reenabled = await call<{ plugins: Array<{ enabled: boolean }> }>(h.handler, 'list', {})
+    expect(reenabled.plugins[0]?.enabled).toBe(true)
+
+    const missing = await h.handler('set-enabled', { id: 'ghost', enabled: false }, new AbortController().signal)
+    expect(missing.ok).toBe(false)
+    if (missing.ok) throw new Error('unreachable')
+    expect(missing.error.message).toContain('not installed')
+  })
+
+  it('turns a stalled registry request into a timeout error instead of hanging', async () => {
+    vi.stubGlobal('fetch', (_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        /* v8 ignore next -- the signal always carries a reason on abort */
+        reject(init.signal?.reason)
+      })
+    }))
+    await expect(fetchWithTimeout('https://reg.example/packument', {}, 20))
+      .rejects.toThrow('plugin-installer: registry request timed out after 20ms')
+  })
+
+  it('rethrows non-timeout registry failures unchanged', async () => {
+    const failure = new Error('registry unreachable')
+    vi.stubGlobal('fetch', () => Promise.reject(failure))
+    await expect(fetchWithTimeout('https://reg.example/packument', {}, 20)).rejects.toBe(failure)
   })
 })

@@ -76,12 +76,12 @@ function showMainWindow(): void {
 }
 
 /**
- * Install the system tray: the colored app logo on every platform, with
- * click-to-show on Windows/Linux and the context menu on macOS. Creation is
- * guarded because some Linux desktops provide no tray host; the window
- * close-to-tray policy then degrades to a real close. The macOS image carries
- * explicit 1x/2x representations so the logo renders crisply on Retina
- * displays.
+ * Install the system tray: the colored app logo on every platform, with the
+ * primary click showing the main window and the secondary click popping the
+ * context menu. Creation is guarded because some Linux desktops provide no
+ * tray host; the window close-to-tray policy then degrades to a real close.
+ * The macOS image carries explicit 1x/2x representations so the logo renders
+ * crisply on Retina displays.
  */
 function installTray(): void {
   if (tray !== undefined) return
@@ -97,14 +97,22 @@ function installTray(): void {
       : nativeImage.createFromPath(join(assetsDir, trayIconFile(process.platform)))
     const trayIcon = new Tray(image)
     trayIcon.setToolTip(PRODUCT_NAME)
-    trayIcon.setContextMenu(Menu.buildFromTemplate(buildTrayMenu({
+    const menu = Menu.buildFromTemplate(buildTrayMenu({
       show: showMainWindow,
       quit: () => {
         quitArmed = true
         requestQuit(0)
       },
-    })))
-    if (process.platform !== 'darwin') trayIcon.on('click', showMainWindow)
+    }))
+    if (process.platform === 'darwin') {
+      // On macOS a set context menu swallows the left-click event, so the
+      // primary click shows the window and the secondary click pops the menu.
+      trayIcon.on('click', showMainWindow)
+      trayIcon.on('right-click', () => { trayIcon.popUpContextMenu(menu) })
+    } else {
+      trayIcon.setContextMenu(menu)
+      trayIcon.on('click', showMainWindow)
+    }
     tray = trayIcon
   } catch (error) {
     console.error(`${PRODUCT_NAME}: system tray unavailable`, error)

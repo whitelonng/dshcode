@@ -25,14 +25,19 @@ export interface InstalledPlugin {
   source: PluginSource
   /** ISO timestamp of the install. */
   installedAt: string
+  /** Saved next-start enablement from the managed profile patch row. */
+  enabled: boolean
   /** Git HEAD commit at install time, when the source is a git repository. */
   commit?: string
 }
 
 /** The durable install-state file (`$DSH_HOME/plugins.json`). */
 export interface PluginStateFile {
-  plugins: InstalledPlugin[]
+  plugins: InstalledPluginRecord[]
 }
+
+/** One installed plugin as recorded durably (enablement is derived, not stored). */
+export type InstalledPluginRecord = Omit<InstalledPlugin, 'enabled'>
 
 /** The complete installed snapshot the browser renders. */
 export interface PluginInstallerSnapshot {
@@ -52,4 +57,12 @@ export interface PluginUpdateInfo {
 export interface InstallPluginRequest {
   /** npm spec (`name`, `name@version`, `name@range`) or git repository URL. */
   spec: string
+}
+
+/** `set-enabled` request payload. */
+export interface SetPluginEnabledRequest {
+  /** Installed plugin id (package name). */
+  id: PluginInstallId
+  /** Desired next-start enablement. */
+  enabled: boolean
 }

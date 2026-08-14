@@ -26,3 +26,11 @@ export interface PluginInventoryEntry {
 export interface PluginInventorySnapshot {
   readonly entries: readonly PluginInventoryEntry[]
 }
+
+/** Request that persists the next-start enablement of one Loader entry. */
+export interface SetPluginEnabledRequest {
+  /** Loader entry id whose saved enablement is rewritten. */
+  readonly entryId: PluginEntryId
+  /** Desired next-start enablement. */
+  readonly enabled: boolean
+}
