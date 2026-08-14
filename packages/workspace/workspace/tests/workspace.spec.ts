@@ -941,4 +941,42 @@ describe('registry-global session archive', () => {
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.archivedSessionIds).toEqual([])
   })
+
+  it('restores an archived session idempotently, keeping its accounting slot', async () => {
+    const dir = await makeDir('restore-home')
+    const result = await harness({ sessions: [header('s1', dir, 100)] })
+    const workspace = result.registry.list()[0]!
+    await result.registry.archiveSession(SessionId('s1'))
+    expect(result.registry.archivedSessionIds).toEqual(['s1'])
+    expect(workspace.sessionIds).toContain('s1')
+
+    await result.registry.restoreSession(SessionId('s1'))
+    expect(result.registry.archivedSessionIds).toEqual([])
+    expect(workspace.sessionIds).toContain('s1')
+    expect(storedState(result.pool).archivedSessionIds).toEqual([])
+
+    // Restoring an id that is not archived resolves without writing.
+    const changesBefore = result.changes.filter(change => change.table === '').length
+    await result.registry.restoreSession(SessionId('s1'))
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesBefore)
+  })
+
+  it('removes a deleted session from accounting and the archive set', async () => {
+    const dir = await makeDir('remove-home')
+    const result = await harness({ sessions: [header('s1', dir, 100), header('s2', dir, 200)] })
+    const workspace = result.registry.list()[0]!
+    await result.registry.archiveSession(SessionId('s1'))
+
+    await result.registry.removeSession(SessionId('s1'))
+
+    expect(workspace.sessionIds).not.toContain('s1')
+    expect(workspace.sessionIds).toContain('s2')
+    expect(result.registry.archivedSessionIds).toEqual([])
+    expect(storedState(result.pool).archivedSessionIds).toEqual([])
+
+    // Removing an unknown id is a no-op.
+    const changesBefore = result.changes.filter(change => change.table === '').length
+    await result.registry.removeSession(SessionId('ghost'))
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesBefore)
+  })
 })

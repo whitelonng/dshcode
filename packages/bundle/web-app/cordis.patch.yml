@@ -124,6 +124,13 @@
               - ui-web-ui-settings
               - ui-skin-center
 
+    # Loopback-only user-plugin installs and updates into the shared fallback.
+    - id: plugin-installer
+      name: '@deepseek-ai/dsh-host-plugin-installer'
+      inject: [profileUserPatchPath]
+      config:
+        profilePatchPath: !!js ctx.profileUserPatchPath
+
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.
     - id: api-gateway
@@ -227,6 +234,12 @@
 
     - id: ui-settings-plugin-control
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-control'
+
+    - id: ui-settings-archive
+      name: '@deepseek-ai/dsh-client-ui-settings-archive'
+
+    - id: ui-settings-plugin-installer
+      name: '@deepseek-ai/dsh-client-ui-settings-plugin-installer'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'

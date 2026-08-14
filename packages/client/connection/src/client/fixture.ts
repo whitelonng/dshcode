@@ -2694,6 +2694,28 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         return ok(request, { archivedSessionIds: [...archivedSessionIds] })
       },
+      restoreSession: (request) => {
+        const { sessionId } = request.payload
+        const next = archivedSessionIds.filter(id => id !== sessionId)
+        if (next.length !== archivedSessionIds.length) {
+          archivedSessionIds.splice(0, archivedSessionIds.length, ...next)
+          emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        }
+        return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      deleteSession: (request) => {
+        const { sessionId } = request.payload
+        if (!archivedSessionIds.includes(sessionId)) {
+          return err(request, { code: 'not-archived', message: 'not archived', details: { sessionId } })
+        }
+        archivedSessionIds.splice(archivedSessionIds.indexOf(sessionId), 1)
+        emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      listArchived: (request) => {
+        const items = archivedSessionIds.map(sessionId => ({ sessionId }))
+        return ok(request, { items })
+      },
     },
     agentPresets: {
       // Both trusts appear, because a surface must present a locally authored
@@ -3105,6 +3127,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'workspace.insertBefore': return this.api.workspace.insertBefore(request)
       case 'workspace.insertSessionBefore': return this.api.workspace.insertSessionBefore(request)
       case 'workspace.archiveSession': return this.api.workspace.archiveSession(request)
+      case 'workspace.restoreSession': return this.api.workspace.restoreSession(request)
+      case 'workspace.deleteSession': return this.api.workspace.deleteSession(request)
+      case 'workspace.listArchived': return this.api.workspace.listArchived(request)
       case 'skill.list': return this.api.skills.list(request)
       case 'agentPreset.list': return this.api.agentPresets.list(request)
       case 'agentPreset.select': return this.api.agentPresets.select(request)

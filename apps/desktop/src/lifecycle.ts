@@ -101,3 +101,144 @@ export function createQuitCoordinator(
     },
   }
 }
+
+/**
+ * One tray menu item template: the Electron `MenuItemConstructorOptions`
+ * subset the tray uses, with a zero-argument click callback so tests can
+ * invoke it without Electron menu arguments.
+ */
+export interface TrayMenuTemplateItem {
+  label?: string
+  type?: 'separator'
+  click?: () => void
+}
+
+/** The two tray actions the main process wires to window and quit flows. */
+export interface TrayActions {
+  /** Show and focus the main window, recreating it when it does not exist. */
+  show: () => void
+  /** Request a real application exit through the Harness shutdown controller. */
+  quit: () => void
+}
+
+/** Whether a main-window close request hides to the tray or really closes. */
+export type CloseDisposition = 'hide' | 'close'
+
+/**
+ * Decide a window close request under the tray policy: hide unless a real
+ * quit already owns teardown.
+ * @param quitArmed - whether a quit request is in flight or already completed.
+ * @returns the close disposition the main window must follow.
+ */
+export function windowCloseDisposition(quitArmed: boolean): CloseDisposition {
+  return quitArmed ? 'close' : 'hide'
+}
+
+/**
+ * Build the tray context-menu template. Product copy is Chinese, matching the
+ * embedded Web UI.
+ * @param actions - the show and quit callbacks the menu wires.
+ * @returns the menu template for `Menu.buildFromTemplate`.
+ */
+export function buildTrayMenu(actions: TrayActions): TrayMenuTemplateItem[] {
+  return [
+    { label: '显示主界面', click: actions.show },
+    { type: 'separator' },
+    { label: '退出', click: actions.quit },
+  ]
+}
+
+/**
+ * Resolve the tray icon file for a platform: the colored app logo everywhere.
+ * macOS loads it as a 1x/2x representation pair (`tray16.png`/`tray.png`);
+ * Windows and Linux use the 32 px file directly.
+ * @param platform - the running platform.
+ * @returns the icon filename under the packaged `assets/` directory.
+ */
+export function trayIconFile(platform: NodeJS.Platform): string {
+  return platform === 'darwin' ? 'tray16.png' : 'tray.png'
+}
+
+/** Launch argument marking a custom (hidden) window frame on Windows. */
+export const DESKTOP_FRAME_ARG = '--dsh-frame=custom'
+
+/** Launch-argument prefix carrying the URL-encoded product name. */
+export const DESKTOP_PRODUCT_ARG_PREFIX = '--dsh-product-name='
+
+/** IPC channel the renderer menu button invokes to pop the window menu. */
+export const DESKTOP_SHOW_MENU_CHANNEL = 'desktop:show-menu'
+
+/** IPC channel the renderer invokes to restart the application in place. */
+export const DESKTOP_RESTART_CHANNEL = 'desktop:restart'
+
+/** What the renderer learns about the desktop window frame. */
+export interface DesktopBridgePayload {
+  /** 'custom' when the window renders its own title-bar row (Windows). */
+  readonly frame: 'custom' | 'native'
+  /** The application product name shown in the title-bar row. */
+  readonly productName: string
+}
+
+/**
+ * Build the preload launch arguments carrying the window frame mode and the
+ * product name (URL-encoded because the renderer receives them verbatim).
+ * @param productName - the application product name.
+ * @returns the `additionalArguments` for the main window.
+ */
+export function desktopLaunchArguments(productName: string): string[] {
+  return [DESKTOP_FRAME_ARG, `${DESKTOP_PRODUCT_ARG_PREFIX}${encodeURIComponent(productName)}`]
+}
+
+/**
+ * Parse the preload bridge payload from the renderer process arguments.
+ * @param argv - the renderer `process.argv` (includes `additionalArguments`).
+ * @returns the bridge payload; an absent product name yields an empty string.
+ */
+export function desktopBridgePayload(argv: readonly string[], _platform: NodeJS.Platform): DesktopBridgePayload {
+  const productArg = argv.find(arg => arg.startsWith(DESKTOP_PRODUCT_ARG_PREFIX))
+  return {
+    frame: argv.includes(DESKTOP_FRAME_ARG) ? 'custom' : 'native',
+    productName: productArg === undefined ? '' : decodeURIComponent(productArg.slice(DESKTOP_PRODUCT_ARG_PREFIX.length)),
+  }
+}
+
+/**
+ * Verify an IPC sender against the application origin before honoring it.
+ * @param senderUrl - the sender frame URL (`event.senderFrame.url`), absent
+ * when the frame is gone.
+ * @param applicationOrigin - the exact application origin.
+ * @returns whether the sender is a page of the application.
+ */
+export function desktopIpcSenderIsApplication(senderUrl: string | undefined, applicationOrigin: string): boolean {
+  if (senderUrl === undefined) return false
+  try {
+    return new URL(senderUrl).origin === applicationOrigin
+  } catch {
+    return false
+  }
+}
+
+/** The two actions the title-bar window menu wires. */
+export interface WindowMenuActions {
+  /** Hide the main window to the tray. */
+  hide: () => void
+  /** Restart the whole application in place (applies profile/patch changes). */
+  restart: () => void
+  /** Request a real application exit through the Harness shutdown controller. */
+  quit: () => void
+}
+
+/**
+ * Build the window menu template popped by the title-bar menu button.
+ * @param actions - the hide, restart, and quit callbacks the menu wires.
+ * @returns the menu template for `Menu.buildFromTemplate`.
+ */
+export function buildWindowMenu(actions: WindowMenuActions): TrayMenuTemplateItem[] {
+  return [
+    { label: '隐藏到托盘', click: actions.hide },
+    { type: 'separator' },
+    { label: '重启应用', click: actions.restart },
+    { type: 'separator' },
+    { label: '退出', click: actions.quit },
+  ]
+}

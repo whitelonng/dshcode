@@ -13,6 +13,9 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "归档会话":
+      - img
+      - text: 归档会话
   - button "打开配置文件"
   - button "关闭":
     - img
@@ -23,6 +26,7 @@
     - tab "插件配置" [selected]
     - tab "插件列表"
     - tab "插件开关"
+    - tab "安装与更新"
   - tabpanel "插件配置":
     - list:
       - listitem:
@@ -37,5 +41,3 @@
         - 'button "展开设置: 网页搜索"':
           - text: 网页搜索 DeepSeek 搜索提供方。
           - img
-      - listitem:
-        - 'button "展开: Web UI 插件"': Web UI 插件 统一管理 dsh-web-ui 全家桶插件的启用与配置。 ▾

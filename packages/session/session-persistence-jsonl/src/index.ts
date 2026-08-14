@@ -181,6 +181,10 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     return this.coordinator.append(id, events)
   }
 
+  delete(id: SessionId): Promise<void> {
+    return this.coordinator.delete(id)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
     return this.coordinator.prepare(id, signal)
   }
@@ -234,6 +238,24 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
       if (isENOENT(error)) return undefined
       throw error
     }
+  }
+
+  /**
+   * Durably delete one stored log: remove the per-session directory (the log
+   * file and any sibling metadata) under its project directory. The deletion
+   * is visible to the next {@link list} walk, so search indexes reconcile the
+   * removal. A session with no artifact resolves `false` without touching
+   * anything.
+   */
+  async deleteStored(id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted()
+    await this.ensureRootEncoding()
+    signal?.throwIfAborted()
+    const path = await this.findLog(id, signal)
+    if (path === undefined) return false
+    await rm(dirname(path), { recursive: true, force: true })
+    signal?.throwIfAborted()
+    return true
   }
 
   /**

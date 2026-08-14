@@ -14,6 +14,8 @@ directories:
 files:
   - lib/**/*
   - package.json
+  # Runtime tray icons resolved from the bundled lib directory's ../assets.
+  - assets/**/*
 extraResources:
   - from: licenses
     to: licenses

@@ -6,17 +6,17 @@
     - strong: dsh-genui
     - link "查看源码":
       - /url: https://github.com/omdsh-dev/dsh-genui
-    - text: 已开启
-    - switch "关闭 dsh-genui" [checked]
+    - text: 不可用
+    - switch "开启 dsh-genui" [disabled]
   - listitem:
     - strong: dsh-annotation
     - link "查看源码":
       - /url: https://github.com/omdsh-dev/dsh-annotation
-    - text: 已开启
-    - switch "关闭 dsh-annotation" [checked]
+    - text: 不可用
+    - switch "开启 dsh-annotation" [disabled]
   - listitem:
     - strong: dsh-web-ui
     - link "查看源码":
       - /url: https://github.com/zhu1090093659/dsh-web-ui
-    - text: 已开启
-    - switch "关闭 dsh-web-ui" [checked]
+    - text: 不可用
+    - switch "开启 dsh-web-ui" [disabled]

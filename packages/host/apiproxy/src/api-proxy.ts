@@ -2907,6 +2907,63 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
       },
+
+      async restoreSession(request) {
+        const { sessionId } = request.payload
+        await ctx.workspaceRegistry.restoreSession(sessionId)
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async deleteSession(request) {
+        const { sessionId } = request.payload
+        if (!ctx.workspaceRegistry.archivedSessionIds.includes(sessionId)) {
+          return err(request, {
+            code: 'not-archived',
+            message: `session '${sessionId}' is not archived and cannot be permanently deleted`,
+            details: { sessionId },
+          })
+        }
+        if (ctx.sessions.get(sessionId) !== undefined) {
+          return err(request, {
+            code: 'session-active',
+            message: `session '${sessionId}' is still active; close it before deleting`,
+            details: { sessionId },
+          })
+        }
+        // The log deletion is the irreversible step; workspace accounting is
+        // dropped only after the durable delete settles. Attachment bytes
+        // are content-addressed and shared, so they are left in place.
+        await ctx.sessionPersistence.delete(sessionId)
+        await ctx.workspaceRegistry.removeSession(sessionId)
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async listArchived(request) {
+        const ids = ctx.workspaceRegistry.archivedSessionIds
+        // Title folding is best-effort: without sessionQuery (cold harnesses,
+        // disabled search) items carry only identity and age.
+        const sessionQuery = ctx.get('sessionQuery')
+        let titles: ReadonlyMap<SessionId, string> | undefined
+        if (sessionQuery !== undefined && ids.length > 0) {
+          const observations = await sessionQuery.readTitleSnapshots(ids)
+          titles = new Map(observations.flatMap((result) => {
+            if (result.status === 'rejected') return []
+            return result.value.title === undefined ? [] : [[result.value.session.id, result.value.title.title] as const]
+          }))
+        }
+        const headers = await ctx.sessionPersistence.list()
+        const byId = new Map(headers.map(header => [header.id, header] as const))
+        const items = ids.map((sessionId) => {
+          const createdAt = byId.get(sessionId)?.createdAt
+          const title = titles?.get(sessionId)
+          return {
+            sessionId,
+            ...title === undefined ? {} : { title },
+            ...createdAt === undefined ? {} : { createdAt },
+          }
+        })
+        return ok(request, { items })
+      },
     },
 
     host: {

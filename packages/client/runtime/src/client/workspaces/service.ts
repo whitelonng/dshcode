@@ -293,6 +293,26 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Restore one session from the registry-global set: it reappears in its
+   * original workspace position.
+   * @param sessionId - session to restore.
+   */
+  async restoreSession(sessionId: SessionId): Promise<void> {
+    const result = await this.manager.restoreSession(sessionId)
+    if (!result.ok) throw new Error(`session restore failed: ${result.error.code}: ${result.error.message}`)
+  }
+
+  /**
+   * Permanently delete one archived session on the host. Irreversible; the
+   * caller must confirm first.
+   * @param sessionId - archived session to delete.
+   */
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    const result = await this.manager.deleteSession(sessionId)
+    if (!result.ok) throw new Error(`session delete failed: ${result.error.code}: ${result.error.message}`)
+  }
+
+  /**
    * Move a session within its Workspace's manual order (DOM-insertBefore-like).
    * @param workspaceId - owning workspace.
    * @param sessionId - accounted session to move.
