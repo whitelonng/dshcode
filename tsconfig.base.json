@@ -253,6 +253,7 @@
         "./packages/jobs/*/src",
         "./packages/workflow/*/src",
         "./packages/web/*/src",
+        "./packages/vision/*/src",
         "./packages/attachment/*/src",
         "./packages/spill/*/src",
         "./packages/todo/*/src",

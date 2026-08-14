@@ -2402,6 +2402,40 @@ export interface Config {
 
 Source: [`packages/shell/tool-bash-persistent/src/index.ts:405`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-describe-image"></a>
+
+## `@deepseek-ai/dsh-tool-describe-image`
+
+Requires: `tools`
+
+```ts config-catalog
+/**
+ * Deployment configuration for the describe-image tool. The interface keeps every field optional so
+ * programmatic construction is re-judged by {@link resolveConfig}; the schema requires `baseURL` and
+ * `model` for composition entries.
+ */
+export interface Config {
+  /** Root of the OpenAI-compatible endpoint, e.g. `https://api.openai.com/v1`; trailing slashes are stripped. */
+  baseURL?: string
+  /** Vision model id for the configured endpoint. */
+  model?: string
+  /** Inline API key; prefer `apiKeyEnv` with the credential seam. Feed from the environment via `!!js process.env.VISION_API_KEY`. */
+  apiKey?: string
+  /** Credential reference (environment-variable name) for the API key; defaults to `VISION_API_KEY`. */
+  apiKeyEnv?: string
+  /** Instruction used when a call omits its `prompt`; defaults to a concise factual description. */
+  defaultPrompt?: string
+  /** Image byte bound; defaults to {@link DEFAULT_MAX_BYTES}. */
+  maxBytes?: number
+  /** Output-token cap sent to the vision model; defaults to {@link DEFAULT_MAX_OUTPUT_TOKENS}. */
+  maxOutputTokens?: number
+  /** Per-call request timeout; defaults to {@link DEFAULT_TIMEOUT_MS}. */
+  timeoutMs?: number
+}
+```
+
+Source: [`packages/vision/tool-describe-image/src/index.ts:42`](../packages/vision/tool-describe-image/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`
