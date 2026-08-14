@@ -65,8 +65,8 @@ importers:
         specifier: ^3.0.1
         version: 3.0.1
       js-yaml:
-        specifier: ^4.2.0
-        version: 4.2.0
+        specifier: ^5.2.1
+        version: 5.2.1
       jscpd:
         specifier: ^5.0.12
         version: 5.0.12
@@ -305,8 +305,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       js-yaml:
-        specifier: ^4.2.0
-        version: 4.2.0
+        specifier: ^5.2.1
+        version: 5.2.1
       node-addon-require-builtin:
         specifier: ^0.1.4
         version: 0.1.4
@@ -1228,8 +1228,8 @@ importers:
   packages/boot/app-boot:
     dependencies:
       js-yaml:
-        specifier: ^4.2.0
-        version: 4.2.0
+        specifier: ^5.2.1
+        version: 5.2.1
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -6031,8 +6031,8 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       js-yaml:
-        specifier: ^4.1.0
-        version: 4.2.0
+        specifier: ^5.2.1
+        version: 5.2.1
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -9220,7 +9220,7 @@ importers:
         version: link:../cosmokit
       js-yaml:
         specifier: ^4.1.0
-        version: 4.2.0
+        version: 4.3.1
 
   vendor/loader:
     dependencies:
@@ -13562,8 +13562,8 @@ packages:
   hast-util-whitespace@3.0.0:
     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
 
-  hono@4.13.1:
-    resolution: {integrity: sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw==}
+  hono@4.13.2:
+    resolution: {integrity: sha512-JydRilDRkYBQMt9qR9U92mXxmbGqsqSn/IKOrh4e7/gEbn+0zSr8igTu0obwJoNGN4sez28DIql7FBHWydoJpA==}
     engines: {node: '>=16.9.0'}
 
   hookable@5.5.3:
@@ -13753,12 +13753,12 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@4.2.0:
-    resolution: {integrity: sha512-ePWsvanv0DWuDRsW8dnt+R4jQ31SCRCQ7hhNcPXZPsoBZiemuZNYGf7adZdqX2D86j6rvKp3RpCxVTSb8WQlOw==}
-    hasBin: true
-
   js-yaml@4.3.1:
     resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
+    hasBin: true
+
+  js-yaml@5.2.1:
+    resolution: {integrity: sha512-zfLtNfQqxVqq3uaTqSkh4x4hZw3KHobGUA0fJUj4wawW8bsQLTVqpHdXSIzidh7o+4lEW36tANuAGdaFx6Zgnw==}
     hasBin: true
 
   jscpd-darwin-arm64@5.0.12:
@@ -16902,9 +16902,9 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@hono/node-server@1.19.17(hono@4.13.1)':
+  '@hono/node-server@1.19.17(hono@4.13.2)':
     dependencies:
-      hono: 4.13.1
+      hono: 4.13.2
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -17344,7 +17344,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.29.0(zod@4.4.3)':
     dependencies:
-      '@hono/node-server': 1.19.17(hono@4.13.1)
+      '@hono/node-server': 1.19.17(hono@4.13.2)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -17354,7 +17354,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.2.1
       express-rate-limit: 8.6.2(express@5.2.1)
-      hono: 4.13.1
+      hono: 4.13.2
       jose: 6.2.8
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -20144,7 +20144,7 @@ snapshots:
     dependencies:
       '@types/hast': 3.0.5
 
-  hono@4.13.1: {}
+  hono@4.13.2: {}
 
   hookable@5.5.3: {}
 
@@ -20299,11 +20299,11 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@4.2.0:
+  js-yaml@4.3.1:
     dependencies:
       argparse: 2.0.1
 
-  js-yaml@4.3.1:
+  js-yaml@5.2.1:
     dependencies:
       argparse: 2.0.1
 

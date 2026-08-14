@@ -50,7 +50,7 @@
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^5.2.1",
     "@deepseek-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
