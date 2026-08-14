@@ -11,8 +11,6 @@ on:
       - unlabeled
       - closed
       - reopened
-      - field_added
-      - field_removed
   pull_request:
     types:
       - opened
