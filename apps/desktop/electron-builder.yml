@@ -23,6 +23,10 @@ extraResources:
   # exact ancestor the patched skin center resolves.
   - from: skins-extras
     to: app/node_modules/skins
+  # The dsh-web-ui compat shim (npm-unpublished) ships beside the family
+  # packages so bare plugin rows resolve it from the app's own node_modules.
+  - from: compat-extras
+    to: app/node_modules/@linxin666
 mac:
   category: public.app-category.developer-tools
   identity: null
