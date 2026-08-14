@@ -1,8 +1,8 @@
 /** Stage a production-only workspace deployment for electron-builder. */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync, lstatSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync, lstatSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { tmpdir } from 'node:os'
+import { tmpdir, homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
@@ -66,6 +66,25 @@ function assembleSkinsExtras() {
   return staged
 }
 
+/**
+ * Stage the dsh-web-ui compat shim from the harness-home profile fallback.
+ * The shim restores the legacy data-pane / data-dsh-frame DOM hooks the
+ * @linxin666 plugin family mounts through; it is not published to npm, so no
+ * dependency declaration can resolve it. Bare plugin rows import from the
+ * packaged app's own node_modules, so the shim must ship beside the family
+ * packages: copy the profile-installed package into compat-extras, shipped by
+ * extraResources to `app/node_modules/@linxin666/dsh-web-ui-compat`.
+ * @returns the staged compat package directory, or undefined when not installed.
+ */
+function assembleCompatExtras() {
+  const source = join(homedir(), '.dsh/profiles/node_modules/@linxin666/dsh-web-ui-compat')
+  if (!existsSync(join(source, 'package.json'))) return undefined
+  const target = join(stageRoot, 'compat-extras', 'dsh-web-ui-compat')
+  mkdirSync(dirname(target), { recursive: true })
+  cpSync(source, target, { recursive: true })
+  return target
+}
+
 /** Create a production deployment outside the source workspace for electron-builder. */
 export function preparePackage() {
   const verified = runPnpm(['run', 'verify-desktop-runtime-closure'])
@@ -99,6 +118,8 @@ export function preparePackage() {
   mkdirSync(licenseRoot, { recursive: true })
   const skinCount = assembleSkinsExtras()
   console.log(`DSHCode packaging: ${skinCount} skin(s) staged at skins-extras`)
+  const compatDir = assembleCompatExtras()
+  console.log(`DSHCode packaging: compat shim staged at ${compatDir ?? '(not installed)'}`)
   copyFileSync(resolve(appRoot, 'electron-builder.yml'), resolve(stageRoot, 'electron-builder.yml'))
   copyFileSync(resolve(appRoot, 'assets/icon.svg'), resolve(buildRoot, 'icon.svg'))
   copyFileSync(resolve(workspaceRoot, 'LICENSE'), resolve(licenseRoot, 'LICENSE'))
