@@ -1400,7 +1400,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     declaredBy: 'an entry in \'settings.section\' (client-ui-settings-plugins), so it exists while that entry is mounted',
     occupants: [
       'client-ui-settings-plugin-control PluginControlSettingsTab id \'controls\'',
-      'client-ui-settings-plugin-installer PluginInstallerTab id \'installer\'',
+      'client-ui-settings-plugin-installer PluginInstallerTab id \'plugins\'',
       'client-ui-settings-plugin-inventory PluginInventorySettingsTab id \'all\'',
       'client-ui-settings-plugins ConfigurablePluginsTab id \'configurable\'',
     ],
