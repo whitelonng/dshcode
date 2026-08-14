@@ -90,9 +90,13 @@
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
 
-    # Read-only projection of current Loader entries for trusted client RPCs.
+    # Loopback-only projection and enablement of current Loader entries for
+    # trusted client RPCs. Saved switches write rows to the user patch layer.
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
+      inject: [profileUserPatchPath]
+      config:
+        profilePatchPath: !!js ctx.profileUserPatchPath
 
     # Loopback-only profile controls. The catalog groups the requested
     # community bundles as three products; dsh-web-ui's rows move together.

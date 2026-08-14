@@ -10,6 +10,35 @@ import * as tar from 'tar'
 /** Default registry for installs and update checks. */
 export const DEFAULT_REGISTRY = 'https://registry.npmjs.org/'
 
+/** Hard deadline for npm registry metadata requests. */
+const PACKUMENT_TIMEOUT_MS = 30_000
+
+/** Hard deadline for plugin tarball downloads. */
+const TARBALL_TIMEOUT_MS = 60_000
+
+/**
+ * Fetch with a hard timeout, honoring an optional caller cancellation signal.
+ * A stalled registry must surface as an error instead of leaving the UI in a
+ * permanent installing state.
+ * @param url - request URL.
+ * @param init - fetch options (caller signal optional).
+ * @param timeoutMs - hard deadline started at call time.
+ * @returns the response.
+ * @throws a descriptive error when the deadline elapses before the response.
+ */
+export async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = init.signal == null ? timeout : AbortSignal.any([init.signal, timeout])
+  try {
+    return await fetch(url, { ...init, signal })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error(`plugin-installer: registry request timed out after ${timeoutMs}ms`)
+    }
+    throw error
+  }
+}
+
 /** One version row of the npm packument. */
 interface NpmVersionEntry {
   dist?: { tarball?: string }
@@ -33,10 +62,10 @@ export async function fetchPackument(name: string, registry: string, signal?: Ab
   const base = registry.endsWith('/') ? registry : `${registry}/`
   // Canonical scoped encoding: keep %2F escaped, decode only %40 (npm accepts @scope%2Fname).
   const url = `${base}${encodeURIComponent(name).replaceAll('%40', '@')}`
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     ...signal === undefined ? {} : { signal },
     headers: { accept: 'application/vnd.npm.install-v1+json' },
-  })
+  }, PACKUMENT_TIMEOUT_MS)
   if (!response.ok) {
     throw new Error(`plugin-installer: registry ${url} answered ${String(response.status)}`)
   }
@@ -130,7 +159,9 @@ export async function installNpmPackage(
   if (tarball === undefined) {
     throw new Error(`plugin-installer: version ${JSON.stringify(version)} of ${name} has no tarball`)
   }
-  const response = await fetch(tarball, { ...signal === undefined ? {} : { signal } })
+  const response = await fetchWithTimeout(tarball, {
+    ...signal === undefined ? {} : { signal },
+  }, TARBALL_TIMEOUT_MS)
   if (!response.ok) {
     throw new Error(`plugin-installer: tarball ${tarball} answered ${String(response.status)}`)
   }

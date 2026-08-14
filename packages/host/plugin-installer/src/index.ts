@@ -9,7 +9,7 @@ import type { ConnectionRpcHandler } from '@deepseek-ai/dsh-client-connection'
 import schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
 import { gitRemoteHead, installFromGit } from './git-source.ts'
-import { insertPluginRow, removePluginRow } from './patch.ts'
+import { insertPluginRow, readPluginRowEnabled, removePluginRow, setPluginRowEnabled } from './patch.ts'
 import {
   DEFAULT_REGISTRY,
   fallbackModulesDir,
@@ -23,6 +23,7 @@ import {
 import { readPluginState, writePluginState } from './state.ts'
 import type {
   InstalledPlugin,
+  InstalledPluginRecord,
   PluginInstallId,
   PluginStateFile,
   PluginUpdateInfo,
@@ -35,11 +36,13 @@ export const CHANNEL = '/plugin-installer'
 const INSTALL_ENDPOINT = 'install'
 const UPDATE_ENDPOINT = 'update'
 const UNINSTALL_ENDPOINT = 'uninstall'
+const SET_ENABLED_ENDPOINT = 'set-enabled'
 const LIST_ENDPOINT = 'list'
 const CHECK_UPDATES_ENDPOINT = 'check-updates'
 
 const installRequestSchema = z.object({ spec: z.string().min(1) }).strict()
 const idRequestSchema = z.object({ id: z.string().min(1) }).strict()
+const setEnabledRequestSchema = z.object({ id: z.string().min(1), enabled: z.boolean() }).strict()
 
 /** Plugin-installer gateway configuration owned by the composing profile. */
 export interface Config {
@@ -116,12 +119,17 @@ export class PluginInstallerGateway {
     await withFileLock(join(this.home, 'plugins.json'), () => writePluginState(this.home, state))
   }
 
-  private stateUpsert(state: PluginStateFile, plugin: InstalledPlugin): PluginStateFile {
+  private stateUpsert(state: PluginStateFile, plugin: InstalledPluginRecord): PluginStateFile {
     const plugins = state.plugins.filter(existing => existing.id !== plugin.id)
     return { plugins: [plugin, ...plugins] }
   }
 
-  private async installedFromNpm(spec: string, signal?: AbortSignal): Promise<InstalledPlugin> {
+  /** Complete an install row with the enablement saved on the patch row. */
+  private saved(plugin: InstalledPluginRecord): InstalledPlugin {
+    return { ...plugin, enabled: readPluginRowEnabled(this.profilePatchPath, plugin.name) }
+  }
+
+  private async installedFromNpm(spec: string, signal?: AbortSignal): Promise<InstalledPluginRecord> {
     const { name, version: versionSpec } = parseNpmSpec(spec)
     const packument = await fetchPackument(name, this.registry, signal)
     const version = resolveNpmVersion(versionSpec, packument)
@@ -137,7 +145,7 @@ export class PluginInstallerGateway {
     }
   }
 
-  private async installedFromGit(spec: string, signal?: AbortSignal): Promise<InstalledPlugin> {
+  private async installedFromGit(spec: string, signal?: AbortSignal): Promise<InstalledPluginRecord> {
     const staging = join(this.fallbackDir, `.staging-${Date.now()}`)
     try {
       const commit = await installFromGit(spec, staging)
@@ -169,7 +177,7 @@ export class PluginInstallerGateway {
     const state = this.stateUpsert(this.readState(), plugin)
     await this.writeState(state)
     await insertPluginRow(this.profilePatchPath, plugin.name)
-    return plugin
+    return this.saved(plugin)
   }
 
   /**
@@ -200,7 +208,7 @@ export class PluginInstallerGateway {
         : await this.installedFromNpm(existing.source.spec, signal)
       await this.writeState(this.stateUpsert(this.readState(), plugin))
       await insertPluginRow(this.profilePatchPath, plugin.name)
-      return { plugin }
+      return { plugin: this.saved(plugin) }
     })
   }
 
@@ -220,16 +228,40 @@ export class PluginInstallerGateway {
       await removePluginRow(this.profilePatchPath, existing.name)
       const next = { plugins: state.plugins.filter(plugin => plugin.id !== existing.id) }
       await this.writeState(next)
-      return { plugins: next.plugins }
+      return { plugins: next.plugins.map(plugin => this.saved(plugin)) }
     })
   }
 
   /**
    * Read the installed snapshot.
-   * @returns the recorded installed-plugin rows.
+   * @returns the recorded installed-plugin rows with their saved enablement.
    */
   list(): { plugins: InstalledPlugin[] } {
-    return this.readState()
+    const state = this.readState()
+    return {
+      plugins: state.plugins.map(plugin => ({
+        ...plugin,
+        enabled: readPluginRowEnabled(this.profilePatchPath, plugin.name),
+      })),
+    }
+  }
+
+  /**
+   * Persist one installed plugin's next-start enablement on its managed
+   * profile patch row.
+   * @param request - installed plugin id and desired enablement.
+   * @returns the refreshed plugin row.
+   */
+  setEnabled(request: { id: string; enabled: boolean }): Promise<{ plugin: InstalledPlugin }> {
+    return this.enqueue(async () => {
+      const state = this.readState()
+      const existing = state.plugins.find(plugin => plugin.id === request.id as PluginInstallId)
+      if (existing === undefined) {
+        throw new Error(`plugin-installer: ${JSON.stringify(request.id)} is not installed`)
+      }
+      await setPluginRowEnabled(this.profilePatchPath, existing.name, request.enabled)
+      return { plugin: { ...existing, enabled: request.enabled } }
+    })
   }
 
   /**
@@ -293,6 +325,10 @@ export function apply(ctx: Context, config: Config): void {
         case UNINSTALL_ENDPOINT: {
           const parsed = idRequestSchema.parse(payload)
           return { ok: true as const, value: await gateway.uninstall(parsed) }
+        }
+        case SET_ENABLED_ENDPOINT: {
+          const parsed = setEnabledRequestSchema.parse(payload)
+          return { ok: true as const, value: await gateway.setEnabled(parsed) }
         }
         default:
           return { ok: false as const, error: { code: 'bad-request', message: `unknown plugin-installer endpoint ${JSON.stringify(endpoint)}`, details: { issues: [] } } }

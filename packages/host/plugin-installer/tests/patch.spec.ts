@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { insertPluginRow, removePluginRow } from '../src/patch.ts'
+import { insertPluginRow, readPluginRowEnabled, removePluginRow, setPluginRowEnabled } from '../src/patch.ts'
 
 const tempRoots: string[] = []
 afterEach(async () => {
@@ -62,9 +62,31 @@ describe('profile patch rows', () => {
     const path = await patchFile('{ not an array')
     await expect(insertPluginRow(path, 'demo')).rejects.toThrow('invalid YAML')
     await expect(removePluginRow(path, 'demo')).rejects.toThrow('invalid YAML')
+    await expect(setPluginRowEnabled(path, 'demo', false)).rejects.toThrow('invalid YAML')
+    expect(() => readPluginRowEnabled(path, 'demo')).toThrow('invalid YAML')
 
     const root = await mkdtemp(join(tmpdir(), 'dsh-plugin-patch-remove-missing-'))
     tempRoots.push(root)
     await removePluginRow(join(root, 'absent.yml'), 'demo')
+  })
+
+  it('reads and persists the saved enablement of a managed row', async () => {
+    const path = await patchFile('[]\n')
+    expect(readPluginRowEnabled(path, 'demo')).toBe(true)
+
+    await setPluginRowEnabled(path, 'demo', false)
+    expect(readPluginRowEnabled(path, 'demo')).toBe(false)
+    expect(await readFile(path, 'utf8')).toContain('disabled: true')
+    expect(await readFile(path, 'utf8')).toContain('# dsh-plugin-installer: demo')
+
+    await setPluginRowEnabled(path, 'demo', true)
+    expect(readPluginRowEnabled(path, 'demo')).toBe(true)
+    expect(await readFile(path, 'utf8')).toContain('disabled: false')
+  })
+
+  it('treats a missing patch file as an enabled plugin', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-plugin-patch-enabled-missing-'))
+    tempRoots.push(root)
+    expect(readPluginRowEnabled(join(root, 'absent.yml'), 'demo')).toBe(true)
   })
 })

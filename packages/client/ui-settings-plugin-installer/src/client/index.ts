@@ -1,4 +1,4 @@
-/** Plugin-installer Settings tab: wire face and tab registration. */
+/** User-plugin install and update Settings tab. */
 
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
@@ -16,7 +16,7 @@ import {
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** Copy for the plugin install/update tab. */
+    /** Copy for the merged plugin list tab. */
     'settings.pluginInstaller': PluginInstallerLocaleKey
   }
 }
@@ -29,10 +29,10 @@ const UPDATE_ENDPOINT = 'update'
 const UNINSTALL_ENDPOINT = 'uninstall'
 const CHECK_UPDATES_ENDPOINT = 'check-updates'
 
-/** Services required by the Settings registration and RPC caller. */
+/** Services required by the Settings registration and RPC callers. */
 export const inject = ['slots', 'locale', 'connection']
 
-/** Contribute the plugin install/update tab to the Plugins settings section. */
+/** Contribute the merged plugin list tab to the Plugins settings section. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-plugin-installer: dictionaries')
 
@@ -54,12 +54,18 @@ export function apply(ctx: ClientContext): void {
     parsePluginList(await call(UNINSTALL_ENDPOINT, { id }))
   const checkUpdates = async (): Promise<PluginUpdateItem[]> =>
     parseUpdateList(await call(CHECK_UPDATES_ENDPOINT, {}))
-  const injected = (): PluginInstallerTabInjected => ({ list, install, update, uninstall, checkUpdates })
+  const injected = (): PluginInstallerTabInjected => ({
+    list,
+    install,
+    update,
+    uninstall,
+    checkUpdates,
+  })
 
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
-    id: 'installer',
-    order: 30,
+    id: 'plugins',
+    order: 10,
     label: () => ctx.locale.bind(NS)('tab'),
     locale: NS,
     inject: injected,
