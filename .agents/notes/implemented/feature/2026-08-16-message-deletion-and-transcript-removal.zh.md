@@ -14,7 +14,7 @@ Status: implemented
 
 `sessions.deleteMessage`（apiproxy RPC）把一个目标消息 seq 展开为 surface 区间：用户消息删除整个轮次（直到下一条用户消息之前的节点）；assistant 消息删除自身及其同一步骤产生的工具结果，不会留下孤儿工具结果。运行中的智能体返回 `agent-busy`；非消息、未知或已被阴影的 seq 返回 `delete-unavailable`。子代理会话在本地以同样的 `agent-busy` 围栏拒绝。
 
-客户端转录在会话组装器中折叠删除：`foldDeletedRanges` 丢弃每个原始 `[start, end]` 区间，剪除失去全部内容的轮次的 `turn/start..turn/end` 括号与被掏空步骤的 `step/start..step/end` 括号，并且从不渲染删除标记本身。该折叠应用于每次窗口重建（打开、前翻页、重同步），删除因此经得起分页与重连。UI 在人类撰写的用户气泡与 assistant 轮次尾部加入删除操作（有轮次运行中时禁用；RPC 失败时展示可重试的提示）。
+客户端转录在会话组装器中折叠删除：`foldTranscript` 丢弃每个原始 `[start, end]` 区间与人类编辑替换事件被阴影的节点，剪除失去全部内容的轮次的 `turn/start..turn/end` 括号与被掏空步骤的 `step/start..step/end` 括号，并且从不渲染删除标记本身。该折叠应用于每次窗口重建（打开、前翻页、重同步），删除因此经得起分页与重连。UI 在人类撰写的用户气泡与 assistant 轮次尾部加入删除操作（有轮次运行中时禁用；RPC 失败时展示可重试的提示）。
 
 点赞/点踩界面在同一改动中移除：删除 `dsh-client-ui-message-feedback` 与 `dsh-message-feedback` 两个包、其 Remote 挂载与 bundle 行，并把两条已实现笔记归档。
 

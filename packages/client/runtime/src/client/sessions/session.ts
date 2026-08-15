@@ -291,6 +291,41 @@ export class Session implements SessionFace {
   }
 
   /**
+   * Edit the conversation's last user message and regenerate its turn: the
+   * host shadows the old turn's surface range and the new turn answers the
+   * edited prompt. Subagent conversations refuse locally.
+   * @param seq - seq of the user message to edit.
+   * @param content - replacement text (plus optional browser image uploads).
+   * @returns acceptance, or the business error.
+   */
+  async editMessage(seq: number, content: PromptContentPart[]): Promise<RpcResult<{ accepted: true }>> {
+    this.lastAgentError = null
+    let result: RpcResult<{ accepted: true }>
+    try {
+      if (this.address === undefined) {
+        result = (await this.api.sessions.editMessage({
+          sessionId: this.sessionId,
+          seq,
+          content,
+          clientTimeZone: resolvedClientTimeZone(),
+        })).result
+      } else {
+        result = {
+          ok: false,
+          error: {
+            code: 'agent-busy',
+            message: 'subagent conversations do not support message editing',
+            details: { reason: 'subagent-read-only' },
+          },
+        }
+      }
+    } catch (error) {
+      result = transportError(error)
+    }
+    return result
+  }
+
+  /**
    * Resolve one image referenced by this session into browser-consumable bytes.
    * @param attachmentId - opaque id found in the folded session log.
    * @returns the authenticated reference and decoded bytes.

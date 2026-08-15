@@ -145,6 +145,14 @@ export class FixtureSession implements SessionFace {
   deleteMessage(): never {
     throw new Error(`test session "${this.sessionId}": deleteMessage is not stubbed — supply it on the fixture's session face`)
   }
+
+  /**
+   * Fail-loud stub; supply `editMessage` on the fixture's session face to exercise it.
+   * @returns never — always throws.
+   */
+  editMessage(): never {
+    throw new Error(`test session "${this.sessionId}": editMessage is not stubbed — supply it on the fixture's session face`)
+  }
 }
 
 /** One live test session: fixture-derived stores plus its minted scope state. */

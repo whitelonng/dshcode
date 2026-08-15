@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
-  IconBranchOutline16, IconCheckOutline16, IconCopyOutline16, IconTrashOutline16, Tooltip, writeClipboard,
+  IconBranchOutline16, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconTrashOutline16, Tooltip, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { formatLatencySeconds, formatMessageClock, formatRunDuration, formatTokensPerSecond } from './message-chrome.ts'
@@ -34,6 +34,8 @@ export interface MessageIconActionsProps {
   onDelete?: (() => Promise<boolean>) | undefined
   /** The message's turn is still running, so delete stays visible but unavailable. */
   deleteUnavailable?: boolean | undefined
+  /** Open the inline editor for this message; omission hides the edit action. */
+  onEdit?: (() => void) | undefined
   /** Parent layout class composed onto the actions row. */
   className?: string | undefined
   /**
@@ -52,7 +54,7 @@ export interface MessageIconActionsProps {
  */
 export function MessageIconActions({
   text, time, runMs, ttftMs, tokensPerSecond, clock, onBranch, branchUnavailable = false, className,
-  onDelete, deleteUnavailable = false, extraActions, t,
+  onDelete, deleteUnavailable = false, onEdit, extraActions, t,
 }: MessageIconActionsProps) {
   const day = useCalendarDay()
   const reasonId = useId()
@@ -155,6 +157,13 @@ export function MessageIconActions({
       )}
       {onDelete !== undefined && deleteUnavailable && (
         <span id={deleteReasonId} className={css.visuallyHidden}>{t('message.deleteUnavailable')}</span>
+      )}
+      {onEdit !== undefined && (
+        <Tooltip label={t('message.edit')} side="bottom">
+          <button type="button" className={css.action} aria-label={t('message.edit')} onClick={onEdit}>
+            <IconEditOutline16 />
+          </button>
+        </Tooltip>
       )}
       {onBranch !== undefined && (
         <Tooltip label={branchUnavailable ? t('message.branchUnavailable') : t('message.branch')} side="bottom">

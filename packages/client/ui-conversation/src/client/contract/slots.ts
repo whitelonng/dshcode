@@ -377,6 +377,11 @@ export interface ChatNodeOwnerProps {
    * agent or an already-shadowed seq).
    */
   deleteAt: (seq: number) => Promise<boolean>
+  /**
+   * Edit the conversation's last user message and regenerate its turn;
+   * resolves false when the host refused.
+   */
+  editAt?: ((seq: number, text: string) => Promise<boolean>) | undefined
   /** Resolve a session-authorized historical image for inline display. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
@@ -717,6 +722,8 @@ export interface ChatViewInjected {
   forkAt: (seq: number) => void
   /** Delete the message at `seq`; resolves false when the host refused. */
   deleteAt: (seq: number) => Promise<boolean>
+  /** Edit the last user message at `seq` with `text` and regenerate; resolves false on refusal. */
+  editAt: (seq: number, text: string) => Promise<boolean>
   /**
    * Prose file-mention vocabulary for one closing message, from the optional
    * {@link ChatFileMentions} service (resolved lazily per call, so composing

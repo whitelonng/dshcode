@@ -1,6 +1,7 @@
 # Agent Note: Drop the user-message edit stub
 
 Status: implemented
+Archived: 2026-08-16
 
 English | [中文](2026-07-31-drop-user-message-edit-stub.zh.md)
 

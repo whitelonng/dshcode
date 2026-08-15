@@ -25,11 +25,13 @@ const DELETE_EXPECTED = join(SNAPSHOT_DIR, 'delete.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'message-actions-web-e2e'
 const DELETE_SEED_ID = 'message-actions-web-e2e-delete'
+const EDIT_SEED_ID = 'message-actions-web-e2e-edit'
 
 const PROMPT = 'Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop.'
 const MID_TURN_TEXT = 'I will read both files before answering.'
 const SECOND_PROMPT = 'Now give the final answer.'
 const DELETE_PROMPT = 'Delete this answer next.'
+const EDIT_PROMPT = 'Edit this prompt next.'
 
 /**
  * Adapt the borrowed recording into response -> tools -> interrupted Think,
@@ -124,7 +126,8 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     await branchButtons.first().focus()
     await expect.poll(() => page.getByRole('tooltip').textContent(), { timeout: 5_000 })
       .toBe('Available only on the last message of a completed turn')
-    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(0)
+    // Exactly one edit action: the last user message of the transcript.
+    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(1)
   }, 60_000)
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden with IconActions and clocks', async () => {
@@ -226,6 +229,40 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(DELETE_SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(DELETE_EXPECTED, snapshot, MODE)
+  })
+
+  it.skipIf(MODE === 'record')('edits the last user message and shadows the previous answer', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-message-edit'))
+    const raw = completedTailFixture(await readFile(SEED, 'utf8'), EDIT_PROMPT)
+    await seedSession(scaffold, raw, EDIT_SEED_ID)
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 15_000 }).toBe(6)
+    await page.locator('[role="treeitem"]').nth(1).click()
+    await expect.poll(() => page.getByText(EDIT_PROMPT, { exact: false }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    // The transcript's only editable message is its last user prompt.
+    await page.getByRole('button', { name: 'Edit' }).click()
+    const textarea = page.getByRole('textbox', { name: 'Edit message' })
+    await textarea.waitFor({ timeout: 5_000 })
+    await textarea.fill('Edited regeneration prompt')
+    await page.getByRole('button', { name: 'Regenerate' }).click()
+    // The replacement user message shadows the old turn's answer.
+    await expect.poll(
+      () => scaffold.ctx.sessions.get(SessionId(EDIT_SEED_ID))?.deriveMessages().some(message =>
+        message.content.some(block => block.type === 'text' && block.text === 'DONE')),
+      { timeout: 10_000 },
+    ).toBe(false)
+    await expect.poll(
+      () => scaffold.ctx.sessions.get(SessionId(EDIT_SEED_ID))?.deriveMessages().some(message =>
+        message.content.some(block => block.type === 'text' && block.text === 'Edited regeneration prompt')),
+      { timeout: 10_000 },
+    ).toBe(true)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(
+      () => page.getByText('Edited regeneration prompt', { exact: false }).count(),
+      { timeout: 10_000 },
+    ).toBeGreaterThanOrEqual(1)
   })
 
   it.skipIf(MODE === 'record')('issued zero model calls and kept a closed inventory', async () => {

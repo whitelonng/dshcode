@@ -236,7 +236,7 @@ export function PendingSteeringBubble({ content, loadImage, t }: {
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, loadImage, deleteAt, t, useSession,
+  node, loadImage, deleteAt, editAt, t, useSession,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
   const isHuman = (data.source as { kind?: unknown } | undefined)?.kind === 'user'
@@ -245,21 +245,72 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
     if (location.kind !== 'turn' && location.kind !== 'step') return false
     return snapshot.chat.timeline.turns.get(location.turn.turn)?.status === 'open'
   })
+  const isLastUser = useSession((snapshot) => {
+    let last: number | undefined
+    for (const candidate of snapshot.chat.nodes.values()) {
+      if (candidate.kind !== 'user') continue
+      last = last === undefined ? candidate.anchorSeq : Math.max(last, candidate.anchorSeq)
+    }
+    return last === node.anchorSeq
+  })
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [editPending, setEditPending] = useState(false)
+  const [editFailed, setEditFailed] = useState(false)
+  const openEditor = (): void => {
+    setDraft(contentParts(data.content).text)
+    setEditFailed(false)
+    setEditing(true)
+  }
+  const submitEdit = (): void => {
+    if (editAt === undefined || editPending) return
+    setEditPending(true)
+    setEditFailed(false)
+    void editAt(node.data.seq, draft).then((ok) => {
+      setEditPending(false)
+      if (ok) {
+        setEditing(false)
+        return
+      }
+      setEditFailed(true)
+    })
+  }
+  const canEdit = isHuman && isLastUser && !openTurn && editAt !== undefined
   return (
     <UserStyleBubble
       content={data.content}
       imageLoader={loadImage}
       t={t}
       actions={text => (
-        <MessageIconActions
-          text={text}
-          time={data.time}
-          clock="start"
-          className={css.actions}
-          t={t}
-          onDelete={isHuman ? () => deleteAt(data.seq) : undefined}
-          deleteUnavailable={openTurn}
-        />
+        <>
+          {editing && (
+            <div className={css.editRow} data-edit-row>
+              <textarea
+                className={css.editTextarea}
+                aria-label={t('message.edit.aria')}
+                value={draft}
+                onChange={(event) => { setDraft(event.target.value) }}
+              />
+              <button type="button" className={css.editSubmit} aria-label={t('message.edit.submit')} onClick={submitEdit}>
+                {t('message.edit.submit')}
+              </button>
+              <button type="button" className={css.editCancel} aria-label={t('message.edit.cancel')} onClick={() => { setEditing(false) }}>
+                {t('message.edit.cancel')}
+              </button>
+              {editFailed && <span className={css.editFailed} role="status">{t('message.editFailed')}</span>}
+            </div>
+          )}
+          <MessageIconActions
+            text={text}
+            time={data.time}
+            clock="start"
+            className={css.actions}
+            t={t}
+            onDelete={isHuman ? () => deleteAt(data.seq) : undefined}
+            deleteUnavailable={openTurn}
+            onEdit={canEdit ? openEditor : undefined}
+          />
+        </>
       )}
     />
   )

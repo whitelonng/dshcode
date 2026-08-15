@@ -44,6 +44,8 @@
   - img
 - button "Delete":
   - img
+- button "Edit":
+  - img
 - paragraph: DONE
 - button "Copy":
   - img

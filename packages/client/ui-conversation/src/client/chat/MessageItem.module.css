@@ -282,3 +282,43 @@
   white-space: nowrap;
   vertical-align: baseline;
 }
+
+/* Inline edit editor under the edited user bubble. */
+.editRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: min(525px, 82%);
+}
+.editTextarea {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  border: 1px solid var(--dsw-alias-border, rgba(128, 128, 128, 0.35));
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--dsw-alias-label-primary, inherit);
+  background: var(--dsw-specific-bubble, transparent);
+}
+.editSubmit,
+.editCancel {
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.editSubmit {
+  background: var(--dsw-alias-accent, #2f6feb);
+  color: #fff;
+}
+.editCancel {
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #888);
+}
+.editFailed {
+  font-size: 13px;
+  color: var(--dsw-alias-danger, #c0392b);
+}

@@ -49,6 +49,8 @@ export class FakeApiClient implements IApiClient {
   onRename: (payload: unknown) => Promise<RpcResponse<{ title: string; seq: number }>> = () => Promise.resolve(ok({ title: 'fk-renamed', seq: 0 }))
   onDeleteMessage: (payload: unknown) => Promise<RpcResponse<{ start: number; end: number; deletedSeqs: number[] }>> =
     () => Promise.resolve(ok({ start: 0, end: 0, deletedSeqs: [0] }))
+  onEditMessage: (payload: unknown) => Promise<RpcResponse<{ accepted: true }>> =
+    () => Promise.resolve(ok({ accepted: true as const }))
   onFork: (payload: unknown) => Promise<RpcResponse<{ sessionId: SessionId }>> = () => Promise.resolve(ok({ sessionId: 'fk-fork' as SessionId }))
   onHistory: (payload: { sessionId: SessionId; beforeSeq?: number; maxMessages?: number })
   => Promise<RpcResponse<{ events: never[]; hasMore: boolean; modelSelection: ModelSelection }>> =
@@ -119,6 +121,7 @@ export class FakeApiClient implements IApiClient {
       this.record('session.selectModel', payload, this.onSelectModel(payload)),
     rename: (payload: unknown) => this.record('session.rename', payload, this.onRename(payload)),
     deleteMessage: (payload: unknown) => this.record('session.deleteMessage', payload, this.onDeleteMessage(payload)),
+    editMessage: (payload: unknown) => this.record('session.editMessage', payload, this.onEditMessage(payload)),
     fork: (payload: unknown) => this.record('session.fork', payload, this.onFork(payload)),
     prompt: (payload: unknown) => this.record('session.prompt', payload, this.onPrompt(payload)),
     attachment: (payload: unknown) => this.record('session.attachment', payload, this.onAttachment(payload)),

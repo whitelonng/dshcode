@@ -89,6 +89,16 @@ export interface ISession {
    * (`agent-busy` while running, `delete-unavailable` for a non-message seq).
    */
   deleteMessage(seq: number): Promise<RpcResult<{ start: number; end: number; deletedSeqs: number[] }>>
+  /**
+   * Edit the conversation's last user message and regenerate its turn: the
+   * host shadows the old turn's surface range and the new turn answers the
+   * edited prompt.
+   * @param seq - seq of the user message to edit.
+   * @param content - replacement text (plus optional browser image uploads).
+   * @returns acceptance, or the business error (`agent-busy` while running,
+   * `edit-unavailable` when the seq is not the last editable user message).
+   */
+  editMessage(seq: number, content: PromptContentPart[]): Promise<RpcResult<{ accepted: true }>>
 }
 
 /**

@@ -2456,6 +2456,84 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return ok(request, { start, end, deletedSeqs: shadowedSeqs })
       },
 
+      async editMessage(request) {
+        const { sessionId, seq, content, clientTimeZone } = request.payload
+        const canonicalTimeZone = clientTimeZone === undefined
+          ? undefined
+          : canonicalClientTimeZone(clientTimeZone)
+        if (clientTimeZone !== undefined && canonicalTimeZone === undefined) {
+          return err(request, {
+            code: 'invalid-time-zone',
+            message: 'clientTimeZone must be UTC or a valid IANA Area/Location name',
+            details: { value: clientTimeZone },
+          })
+        }
+        const resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
+        if ('refused' in resolved) return resolved.refused
+        const agent = resolved.agent
+        const session = agent.session
+        const events = session.events
+        const target = events[seq]
+        if (target === undefined || target.type !== 'user/message'
+          || (target.data.source.kind !== 'user')) {
+          return err(request, {
+            code: 'edit-unavailable',
+            message: `event ${String(seq)} is not an editable user message`,
+            details: { sessionId, seq },
+          })
+        }
+        const nodes = session.surface.nodes
+        const lastUserIndex = nodes.findLastIndex(node => events[node]?.type === 'user/message')
+        if (lastUserIndex === -1 || nodes[lastUserIndex] !== seq) {
+          return err(request, {
+            code: 'edit-unavailable',
+            message: 'only the last user message of a conversation can be edited',
+            details: { sessionId, seq },
+          })
+        }
+        const lastTurnStart = events.findLastIndex(event => event.type === 'turn/start')
+        const lastTurnEnd = events.findLastIndex(event => event.type === 'turn/end')
+        if (lastTurnStart > lastTurnEnd) {
+          return err(request, {
+            code: 'agent-busy',
+            message: 'message editing is unavailable while the agent is running; stop the turn first',
+            details: { reason: 'turn-open' },
+          })
+        }
+        // The edited message replaces its whole turn (the last user message has
+        // no later user nodes, so the range runs to the surface tail).
+        const end = deleteSurfaceEndOf(nodes, events, seq)
+        const shadowedSeqs = [...nodes.slice(nodes.indexOf(seq), nodes.indexOf(end) + 1)]
+        const source: MessageSource = {
+          kind: 'user',
+          rpcId: request.rpcId,
+          ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
+        }
+        const hasImage = content.some(part => part.type === 'image')
+        const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
+          try {
+            const durable = await durablePromptContent(ctx, content)
+            const message: UserMessage = createUserMessage({ content: durable, source })
+            agent.followup(message, { start: seq, end, sourceEventSeqs: shadowedSeqs })
+          } catch (error: unknown) {
+            if (error instanceof AttachmentError) {
+              return err(request, {
+                code: 'attachment-error',
+                message: error.message,
+                details: { reason: error.code },
+              })
+            }
+            return err(request, {
+              code: 'agent-busy',
+              message: 'edit rejected',
+              details: { reason: String(error) },
+            })
+          }
+          return ok(request, { accepted: true as const })
+        }
+        return hasImage ? serializeImageAdmission(agent, admit) : admit()
+      },
+
       async fork(request) {
         const { sessionId, atSeq } = request.payload
         let source: SessionReadState

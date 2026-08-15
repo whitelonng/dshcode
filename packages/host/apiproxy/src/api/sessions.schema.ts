@@ -140,6 +140,7 @@ export const sessionDeleteMessageValueSchema = z.object({
   deletedSeqs: z.array(z.number().int().nonnegative()),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.deleteMessage'>>>
 
+
 /** session.fork request payload (atSeq anchors the completed-turn cut). */
 export const sessionForkRequestSchema = z.object({
   sessionId: sessionIdSchema,
@@ -313,6 +314,18 @@ export const sessionPromptValueSchema = z.object({
     text: z.string().optional(),
   }).optional(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.prompt'>>>
+/** session.editMessage request payload (the message seq to edit plus its replacement text). */
+export const sessionEditMessageRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  seq: z.number().int().nonnegative(),
+  content: z.array(promptContentPartSchema),
+  clientTimeZone: z.string().optional(),
+}) as unknown as z.ZodType<RequestPayload<'session.editMessage'>>
+
+/** session.editMessage response value. */
+export const sessionEditMessageValueSchema = z.object({
+  accepted: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.editMessage'>>>
 
 /** Opaque attachment id after string-shape validation. */
 export const attachmentIdSchema = z.string().min(1) as unknown as z.ZodType<AttachmentIdType>

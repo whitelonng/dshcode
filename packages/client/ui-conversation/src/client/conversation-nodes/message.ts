@@ -27,12 +27,18 @@ function isCompactionCheckpoint(event: Parameters<ConversationNodeDefinition['ma
   return source.kind === 'plugin' && source.plugin === 'compact'
 }
 
+/** A human edit-and-regenerate replacement prompt (not a compaction checkpoint). */
+function isHumanEditReplace(event: Parameters<ConversationNodeDefinition['match']>[0]): boolean {
+  return event.type === 'user/message' && isReplacementSurfaceEvent(event)
+    && event.data.source.kind === 'user'
+}
+
 /** User, steering, and injected-context message classification Definition. */
 export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   kind: 'input-message',
   target: 'chat',
   match: event => event.type === 'user/message'
-    && isAppendSurfaceEvent(event)
+    && (isAppendSurfaceEvent(event) || isHumanEditReplace(event))
     && !isCompactionCheckpoint(event)
     ? { id: String(event.data.id), role: 'start' }
     : null,
