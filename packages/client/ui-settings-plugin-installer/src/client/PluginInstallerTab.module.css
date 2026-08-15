@@ -387,3 +387,10 @@
     transition: background-color 140ms var(--ds-ease-in-out, ease-in-out), transform 140ms var(--ds-ease-in-out, ease-in-out);
   }
 }
+
+.errorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}

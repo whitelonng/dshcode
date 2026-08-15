@@ -12,7 +12,7 @@ import { usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as applyHostEntry } from '../src/index.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { PluginInstallerTab } from '../src/client/PluginInstallerTab.tsx'
-import type { PluginInstallerTabInjected } from '../src/client/PluginInstallerTab.tsx'
+import type { PluginInstallerTabInjected, PluginInstallerTabProps } from '../src/client/PluginInstallerTab.tsx'
 
 usePinnedBrowserLanguages('zh-CN')
 afterEach(cleanup)
@@ -222,5 +222,42 @@ describe('ui-settings-plugin-installer browser plugin', () => {
       expect(b.slots.entries('settings.plugins.tab')[0]?.component).toBe(PluginInstallerTab)
     })
     await fiber.dispose()
+  })
+})
+
+describe('ui-settings-plugin-installer install handoff', () => {
+  it('offers the repair conversation when an install fails', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const entry = requiredAt(b.slots.entries('settings.plugins.tab'), 0)
+    const injected = (entry.inject as unknown as () => PluginInstallerTabInjected)()
+    const install = vi.fn<PluginInstallerTabInjected['install']>().mockRejectedValue(new Error('pnpm add failed'))
+    const repairPlugin = vi.fn<PluginInstallerTabInjected['repairPlugin']>().mockResolvedValue(undefined)
+    const { render, fireEvent, screen, waitFor, within } = await import('@testing-library/react')
+    const { makeTranslate } = await import('@deepseek-ai/dsh-client-test-runtime')
+    const { zh } = await import('../src/client/locales.ts')
+    const { zh: commonZh } = await import('@deepseek-ai/dsh-client-locale/src/locales/zh.ts')
+    const t = makeTranslate(zh, commonZh) as PluginInstallerTabProps['t']
+    const base = injected as unknown as PluginInstallerTabProps
+    render(<PluginInstallerTab
+      {...base}
+      install={install}
+      repairPlugin={repairPlugin}
+      t={t}
+    />)
+    // Wait for the initial list load, then run a failing install.
+    await waitFor(() => { expect(screen.queryByText(/安装失败/)).toBeNull() })
+    fireEvent.change(screen.getByPlaceholderText(/npm 包名/), { target: { value: '@scope/broken' } })
+    fireEvent.click(screen.getByRole('button', { name: '安装' }))
+    await waitFor(() => { expect(screen.getByText(/操作失败/)).toBeTruthy() })
+    const errorRow = screen.getByText(/操作失败/).closest('div')
+    if (errorRow === null) throw new Error('install error row missing')
+    const repair = within(errorRow as HTMLElement).getByRole('button', { name: '让 Agent 修复' })
+    fireEvent.click(repair)
+    await waitFor(() => { expect(repairPlugin).toHaveBeenCalled() })
+    expect(repairPlugin.mock.calls[0]?.[0]).toBe('/home/.dsh/profiles')
+    expect(repairPlugin.mock.calls[0]?.[1]).toContain('@scope/broken')
+    await b.ctx.fiber.dispose()
   })
 })
