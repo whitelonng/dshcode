@@ -41,7 +41,7 @@ const t = (key: string, params?: Record<string, string>): string => {
     restart: '重启应用',
     failed: '操作失败：{reason}',
     installPlaceholder: 'npm 包名（如 @scope/name）或 git 仓库 URL',
-    installHint: '安装会写入当前 profile 的 patch 层；应用重启后插件生效。',
+    installHint: '在 GitHub 或 npm 找到插件后，粘贴其 npm 包名或仓库地址安装；应用重启后插件生效。',
     enabled: '已开启',
     disabled: '已关闭',
     enableSwitch: '开启 {name}',
@@ -54,10 +54,19 @@ const t = (key: string, params?: Record<string, string>): string => {
     writing: '正在写入配置…',
     mixed: '部分开启',
     unavailable: '不可用',
+    uninstalled: '已卸载',
+    restore: '恢复',
     source: '查看源码',
     updateError: '更改未能应用，请重试。',
     localOnlyTitle: '仅限本机操作',
     localOnlyBody: '为了保护主机配置，插件开关只能从本机打开。',
+    failureBadge: '启动失败',
+    repair: '让 Agent 修复',
+    repairing: '正在创建修复对话…',
+    copyError: '复制错误',
+    copied: '已复制',
+    safeModeBanner: '安全模式：用户插件配置已跳过，插件开关不可用。',
+    exitSafeMode: '恢复正常模式并重启',
   }
   let text = copy[key] ?? key
   for (const [name, replacement] of Object.entries(params ?? {})) {
@@ -106,6 +115,9 @@ function mount(overrides: Partial<PluginInstallerTabProps> = {}) {
   const setEnabled = vi.fn().mockResolvedValue({ ...PLUGIN_A, enabled: false })
   const checkUpdates = vi.fn().mockResolvedValue([{ id: 'a', current: '1.0.0', latest: '1.1.0' }])
   const status = vi.fn().mockResolvedValue({ kind: 'idle', stage: 'fetch' })
+  const failures = vi.fn().mockResolvedValue({ items: [], pluginRoot: '/home/.dsh/profiles', safeMode: false })
+  const setSafeMode = vi.fn().mockResolvedValue(undefined)
+  const repairPlugin = vi.fn().mockResolvedValue(undefined)
   const controlsList = vi.fn().mockResolvedValue([])
   const controlsSetEnabled = vi.fn().mockResolvedValue([])
   const controlsUninstall = vi.fn().mockResolvedValue([])
@@ -121,6 +133,9 @@ function mount(overrides: Partial<PluginInstallerTabProps> = {}) {
     setEnabled,
     checkUpdates,
     status,
+    failures,
+    setSafeMode,
+    repairPlugin,
     inventoryList,
     controlsList,
     controlsSetEnabled,
@@ -129,8 +144,8 @@ function mount(overrides: Partial<PluginInstallerTabProps> = {}) {
   } as never
   const utils = render(<PluginInstallerTab {...props} />)
   return {
-    list, install, update, uninstall, setEnabled, checkUpdates, status, inventoryList,
-    controlsList, controlsSetEnabled, controlsUninstall,
+    list, install, update, uninstall, setEnabled, checkUpdates, status, failures, setSafeMode, repairPlugin,
+    inventoryList, controlsList, controlsSetEnabled, controlsUninstall,
     ...overrides,
     ...utils,
   }
@@ -341,6 +356,25 @@ describe('PluginInstallerTab', () => {
     expect(await screen.findByText('插件变更将在重启应用后生效。')).toBeTruthy()
   })
 
+  it('shows a restore action for uninstalled presets and restores them', async () => {
+    const { controlsSetEnabled } = mount({
+      controlsList: vi.fn().mockResolvedValue([
+        { id: 'web-ui', name: 'dsh-web-ui', repository: 'https://github.com/zhu1090093659/dsh-web-ui', state: 'uninstalled' },
+      ]),
+      controlsSetEnabled: vi.fn().mockResolvedValue([
+        { id: 'web-ui', name: 'dsh-web-ui', repository: 'https://github.com/zhu1090093659/dsh-web-ui', state: 'disabled' },
+      ]),
+    })
+    await screen.findAllByText('@scope/a')
+    expect(screen.getByText('已卸载')).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: /dsh-web-ui/ })).toBeNull()
+    act(() => { screen.getByText('恢复').click() })
+    await waitFor(() => { expect(controlsSetEnabled).toHaveBeenCalledWith('web-ui', true) })
+    await waitFor(() => { expect(screen.queryByText('已卸载')).toBeNull() })
+    expect(screen.getByRole('switch', { name: '开启 dsh-web-ui' })).toBeTruthy()
+    expect(await screen.findByText('插件变更将在重启应用后生效。')).toBeTruthy()
+  })
+
   it('persists a user-plugin enablement switch and shows the restart hint', async () => {
     const { setEnabled } = mount()
     await screen.findAllByText('@scope/a')
@@ -465,5 +499,86 @@ describe('PluginInstallerTab', () => {
       list: vi.fn().mockRejectedValue(new Error('offline')),
     })
     expect(await screen.findByText('操作失败：load')).toBeTruthy()
+  })
+
+  it('shows the startup-failure badge and opens a repair conversation seeded with the record', async () => {
+    const failure = {
+      pluginId: 'a',
+      kind: 'load-failure' as const,
+      message: 'boom at import',
+      stack: 'Error: boom at import\n    at a',
+      installPath: '/home/.dsh/profiles/node_modules/@scope/a',
+      at: '2026-08-14T00:00:00.000Z',
+    }
+    const repairPlugin = vi.fn().mockResolvedValue(undefined)
+    mount({
+      failures: vi.fn().mockResolvedValue({
+        items: [failure],
+        pluginRoot: '/home/.dsh/profiles',
+        safeMode: false,
+      }),
+      repairPlugin,
+    })
+    expect(await screen.findByText('启动失败')).toBeTruthy()
+    expect(screen.getByText('boom at import')).toBeTruthy()
+    act(() => { screen.getByText('让 Agent 修复').click() })
+    await waitFor(() => {
+      expect(repairPlugin).toHaveBeenCalledWith(
+        '/home/.dsh/profiles',
+        expect.stringContaining('boom at import'),
+      )
+    })
+    const message = repairPlugin.mock.calls[0]?.[1] as string
+    expect(message).toContain('插件「a」上次启动失败')
+    expect(message).toContain('/home/.dsh/profiles/node_modules/@scope/a')
+  })
+
+  it('surfaces a repair failure and copies the failure text on demand', async () => {
+    const failure = {
+      pluginId: 'a',
+      kind: 'hang' as const,
+      message: 'hung',
+      stack: 'at hang',
+      installPath: '/x',
+      at: '2026-08-14T00:00:00.000Z',
+    }
+    const repairPlugin = vi.fn().mockRejectedValue(new Error('session create failed'))
+    mount({
+      failures: vi.fn().mockResolvedValue({ items: [failure], pluginRoot: '/p', safeMode: false }),
+      repairPlugin,
+    })
+    await screen.findByText('启动失败')
+    act(() => { screen.getByText('让 Agent 修复').click() })
+    expect(await screen.findByText('操作失败：session create failed')).toBeTruthy()
+    expect(repairPlugin).toHaveBeenCalled()
+
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) }
+    Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true })
+    act(() => { screen.getByText('复制错误').click() })
+    await waitFor(() => { expect(clipboard.writeText).toHaveBeenCalledWith('hung\n\nat hang') })
+    expect(await screen.findByText('已复制')).toBeTruthy()
+  })
+
+  it('shows the safe-mode banner, locks switches, and restores normal mode through the bridge', async () => {
+    const restart = vi.fn()
+    window.dshDesktop = { restart, frame: 'custom', productName: 'DSHCode', showMenu: () => {} }
+    const { setSafeMode } = mount({
+      failures: vi.fn().mockResolvedValue({ items: [], pluginRoot: '/p', safeMode: true }),
+    })
+    expect(await screen.findByText('安全模式：用户插件配置已跳过，插件开关不可用。')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: '关闭 @scope/a' }).hasAttribute('disabled')).toBe(true)
+    act(() => { screen.getByText('恢复正常模式并重启').click() })
+    await waitFor(() => { expect(setSafeMode).toHaveBeenCalledWith(false) })
+    await waitFor(() => { expect(restart).toHaveBeenCalledOnce() })
+  })
+
+  it('falls back to the restart hint when leaving safe mode without the bridge', async () => {
+    const { setSafeMode } = mount({
+      failures: vi.fn().mockResolvedValue({ items: [], pluginRoot: '/p', safeMode: true }),
+    })
+    await screen.findByText('安全模式：用户插件配置已跳过，插件开关不可用。')
+    act(() => { screen.getByText('恢复正常模式并重启').click() })
+    await waitFor(() => { expect(setSafeMode).toHaveBeenCalledWith(false) })
+    expect(await screen.findByText('插件变更将在重启应用后生效。')).toBeTruthy()
   })
 })

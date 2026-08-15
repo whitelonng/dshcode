@@ -10,6 +10,10 @@ The Electron main process calls the shared `@deepseek-ai/dsh/profile-boot` entry
 
 Packaged Electron does not expose the Node loader internals required by Cordis HMR. The desktop launcher therefore disables live watching of the profile-level and home-level `cordis.patch.yml` files; their contents are still loaded at startup, and ordinary settings managed by the Web UI keep their own live behavior. Restart DSHCode after manually editing either patch file.
 
+## Plugin boot-failure recovery
+
+One incompatible plugin must never brick the application. Startup failures are attributed to installed plugins and recorded in a bounded per-plugin ring (`$DSH_HOME/boot-failures.json`, at most 8 records, 90-day retention); a native recovery dialog then offers 继续（禁用插件并重启） (disable the blamed plugins and restart — the same patch-row write the settings switch performs), 安全模式启动 (start with the user patch layers skipped, via `$DSH_HOME/safe-mode`), or 退出. The plugin list in Settings shows a 启动失败 badge per affected plugin with 让 Agent 修复 (opens a conversation whose workspace is the plugin install root `$DSH_HOME/profiles`, seeded with the failure record and install path) and 复制错误. Hard crashes and hangs are covered by a boot lifecycle marker (`$DSH_HOME/boot-marker.json`): a launch that dies before the marker reaches `ok` continues the failure streak, and after three consecutive failures the dialog defaults to safe mode.
+
 ## Security and lifecycle
 
 - The WebServer binds only to `127.0.0.1` with port `0`, which asks the operating system to atomically select an available ephemeral port.
@@ -60,3 +64,4 @@ The application uses unpacked resources because the Harness profile fallback cre
 - Preview packages are deliberately unsigned. macOS Gatekeeper and Windows SmartScreen may warn about local builds until a future release configures platform signing and macOS notarization.
 - Automatic updates are not configured.
 - The embedded Web UI retains upstream identity, but desktop application and installer branding use the independent DSHCode icon; see the repository [license and branding notice](../../README.md#license-and-branding).
+- The recovery dialog, tray, and custom title bar need a manual pass on a native Windows build.

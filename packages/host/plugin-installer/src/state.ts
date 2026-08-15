@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import type { InstalledPluginRecord, PluginStateFile } from './types.ts'
+import type { PluginStateFile } from './types.ts'
 
 /** State filename under the Harness home. */
 export const PLUGIN_STATE_FILENAME = 'plugins.json'
@@ -36,7 +36,7 @@ export function readPluginState(home: string): PluginStateFile {
   if (!Array.isArray(parsed.plugins)) {
     throw new Error(`plugin-installer: ${path} must contain a plugins array`)
   }
-  return { plugins: parsed.plugins as InstalledPluginRecord[] }
+  return { plugins: parsed.plugins }
 }
 
 /**

@@ -4,7 +4,7 @@ import type { Branded } from '@deepseek-ai/dsh-brand'
 export type PluginControlId = Branded<'PluginControlId'>
 
 /** Saved or running aggregate state of the Loader entries governed by one logical control. */
-export type PluginControlState = 'enabled' | 'disabled' | 'mixed' | 'unavailable'
+export type PluginControlState = 'enabled' | 'disabled' | 'mixed' | 'unavailable' | 'uninstalled'
 
 /** One logical plugin product exposed to the browser control panel. */
 export interface PluginControlItem {

@@ -16,6 +16,7 @@ This table connects model-visible tool names to the plugin package and service s
 | Tool package | Model-visible names | Requires | Writes / affects | Shipped aliases | Deployment note |
 | --- | --- | --- | --- | --- | --- |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`, `ctx.userQuestions` | `tool/call`, `tool/result after a UI/provider answers the question` | - | ask_user_question pauses the tool call until the active UI provider returns a human answer. |
+| `@deepseek-ai/dsh-host-plugin-installer` | `plugin_install`, `plugin_search`, `plugin_status`, `plugin_uninstall` | `ctx.tools`, `ctx.connection` | `tool/call`, `tool/result` | - | The plugin_* tools share the installer gateway state with the desktop plugin list. |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`, `ctx.codeRuntime (execution time)`, `ctx.systemPrompt` | `tool/call`, `one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`, `tool/result` | - | Owned by the tool registry as a reserved transport outside filterable capability layers under `mode: code` / `mode: both` (see the Code Mode Agent Note). Under `code` it is the registry's only wire contribution; the other visible capabilities are declared in a generated SDK section in the loaded runtime's language, and a program calls them through bindings scheduled under the native concurrency contract (submission-ordered starts and policy; concurrency-safe bodies overlap up to `maxParallelSubCalls`) that re-enter the complete guarded tool pipeline and link each nested execution to this outer result. |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`, `ctx.systemPrompt`, `ctx.userQuestions (execution time, opportunistic)` | `tool/call`, `plan/mode inactive on an approved review`, `tool/result` | - | exit_plan_mode stays in the model-facing schema while planning is inactive so transitions add no tool-catalog churn on top of the plan-policy change. Its execute path rejects calls outside plan mode; in plan mode it presents the plan over the user-questions seam (approve / keep planning with feedback), and approval logs plan mode inactive at the step boundary. |
 | `@deepseek-ai/dsh-tool-bash` | `bash` | `ctx.tools`, `ctx.shell`, `ctx.systemPrompt`, `ctx.shellEnv`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The bash tool is the model-facing consumer of the bash executor seam. A `run_in_background` run registers with the generic `ctx.jobs` runtime and is collected/stopped through the `job_*` tools from `@deepseek-ai/dsh-tool-jobs`; the `enableRunInBackground` config (default true) removes the parameter entirely when disabled. |
@@ -114,6 +115,98 @@ Ask the user a concise question when you need confirmation, a choice, or missing
 Source: [`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts)
 
 ask_user_question pauses the tool call until the active UI provider returns a human answer.
+
+<a id="deepseek-aidsh-host-plugin-installer"></a>
+
+## `@deepseek-ai/dsh-host-plugin-installer`
+
+### `plugin_install`
+
+Install a DSH plugin from an npm package name or git repository. A bundle plugin (its manifest declares dsh.bundle) joins the profile bundle layer stack; a plain plugin gets a profile patch insert row. Changes apply after the application restarts.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "Install source: an npm package name (bundle or plain plugin) or a git repository."
+    }
+  },
+  "required": [
+    "source"
+  ]
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
+
+### `plugin_search`
+
+Search installable DSH plugins across the registered index sources (cached catalog enumeration with a 6h TTL; the default source is the dsh-external hub catalog). With `source`, probes that source — an index JSON file/URL (hub catalog format: {"repos": [...]}) — lazily and remembers it. Results carry the owning source and its trust level.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Substring to match against plugin id or description. Empty returns all."
+    },
+    "source": {
+      "type": "string",
+      "description": "A registered source id, or a new index JSON file/URL to probe and remember."
+    },
+    "refresh": {
+      "type": "boolean",
+      "description": "Force re-enumeration, ignoring cached snapshots."
+    }
+  }
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
+
+### `plugin_status`
+
+Show installed DSH plugins: id, version, install source, and saved enablement for each.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Plugin id or package name to inspect."
+    }
+  }
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
+
+### `plugin_uninstall`
+
+Remove an installed DSH plugin by its id (package name): the dependency, the profile patch rows, and the recorded state entry. Changes apply after the application restarts.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Plugin id (npm package name) to remove."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
+
+The plugin_* tools share the installer gateway state with the desktop plugin list.
 
 <a id="deepseek-aidsh-tools"></a>
 

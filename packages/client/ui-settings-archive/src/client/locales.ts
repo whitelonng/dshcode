@@ -16,6 +16,14 @@ export const zh = {
   cancel: '取消',
   deleteFailed: '删除失败：{reason}',
   created: '创建于 {time}',
+  search: '搜索归档会话',
+  selectAll: '全选',
+  selected: '已选 {count} 项',
+  selectItem: '选择 {title}',
+  restoreSelected: '恢复所选',
+  deleteSelected: '删除所选',
+  bulkDeleteConfirmBody: '将永久删除 {count} 个会话日志，无法恢复。附件文件可能仍占用存储空间。',
+  emptySearch: '没有匹配的归档会话。',
 } satisfies Record<string, string>
 
 /** English copy dictionary for the section. */
@@ -35,6 +43,14 @@ export const en = {
   cancel: 'Cancel',
   deleteFailed: 'Delete failed: {reason}',
   created: 'Created {time}',
+  search: 'Search archived sessions',
+  selectAll: 'Select all',
+  selected: '{count} selected',
+  selectItem: 'Select {title}',
+  restoreSelected: 'Restore selected',
+  deleteSelected: 'Delete selected',
+  bulkDeleteConfirmBody: 'The logs of {count} sessions will be removed permanently and cannot be recovered. Attachment files may still occupy storage.',
+  emptySearch: 'No archived sessions match the search.',
 } satisfies Record<string, string>
 
 /** Copy dictionary key for the section. */

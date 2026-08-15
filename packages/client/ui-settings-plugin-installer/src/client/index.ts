@@ -2,12 +2,13 @@
 
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { workspaceTitleOf, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import { PluginInstallerTab, type PluginInstallerTabInjected } from './PluginInstallerTab.tsx'
 import { en, zh, type PluginInstallerLocaleKey } from './locales.ts'
 import {
+  parseFailuresSnapshot,
   parseInstalledPlugin,
   parseInstallStatus,
   parsePluginControlSnapshot,
@@ -16,6 +17,7 @@ import {
   type InstalledPluginItem,
   type InstallProgressItem,
   type PluginControlItem,
+  type PluginFailuresSnapshot,
   type PluginUpdateItem,
 } from './protocol.ts'
 
@@ -36,9 +38,11 @@ const UNINSTALL_ENDPOINT = 'uninstall'
 const SET_ENABLED_ENDPOINT = 'set-enabled'
 const CHECK_UPDATES_ENDPOINT = 'check-updates'
 const STATUS_ENDPOINT = 'status'
+const FAILURES_ENDPOINT = 'failures'
+const SET_SAFE_MODE_ENDPOINT = 'set-safe-mode'
 
 /** Services required by the Settings registration and RPC callers. */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.pluginInventory']
+export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.pluginInventory', 'workspaces', 'sessions']
 
 /** Contribute the merged plugin list tab to the Plugins settings section. */
 export function apply(ctx: ClientContext): void {
@@ -66,6 +70,36 @@ export function apply(ctx: ClientContext): void {
     parseUpdateList(await call(CHECK_UPDATES_ENDPOINT, {}))
   const status = async (): Promise<InstallProgressItem> =>
     parseInstallStatus(await call(STATUS_ENDPOINT, {}))
+  const failures = async (): Promise<PluginFailuresSnapshot> =>
+    parseFailuresSnapshot(await call(FAILURES_ENDPOINT, {}))
+  const setSafeMode = async (enabled: boolean): Promise<void> => {
+    await call(SET_SAFE_MODE_ENDPOINT, { enabled })
+  }
+  /**
+   * Start a repair conversation for a failed plugin: resolve a workspace over
+   * the plugin install root (created once, reused after), open a fresh
+   * session there, and seed its first prompt with the failure details. The
+   * session's workspace is the plugin home so the agent's file tools reach
+   * the plugin code without leaving the workspace boundary.
+   * @param pluginRoot - absolute plugin install root.
+   * @param message - the seeded first user message.
+   * @returns resolution after the prompt is accepted and the session opens.
+   */
+  const repairPlugin = async (pluginRoot: string, message: string): Promise<void> => {
+    const workspace = await ctx.workspaces.create({ path: pluginRoot })
+    // A freshly created system workspace gets a friendly title; a pre-existing
+    // one (already titled by the user) keeps it. A rename conflict must not
+    // break the repair flow.
+    if (workspace.title === workspaceTitleOf(workspace.path)) {
+      await ctx.workspaces.rename(workspace.workspaceId, 'DSH 插件').catch(() => {})
+    }
+    const sessionId = await ctx.workspaces.connectWorkspace(workspace.workspaceId)
+    const binding = ctx.sessions.binding(sessionId)
+    if (binding === undefined) throw new Error(`repair session ${sessionId} is unavailable`)
+    const result = await binding.session.prompt([{ type: 'text', text: message }], 'queue')
+    if (!result.ok) throw new Error(`repair prompt failed: ${result.error.code}: ${result.error.message}`)
+    ctx.sessions.open(sessionId)
+  }
   const controlCall = async (endpoint: string, payload: unknown): Promise<unknown> => {
     const result = await connection.rpc.call(CONTROL_CHANNEL, endpoint, payload)
     if (!result.ok) {
@@ -95,6 +129,9 @@ export function apply(ctx: ClientContext): void {
     setEnabled,
     checkUpdates,
     status,
+    failures,
+    setSafeMode,
+    repairPlugin,
     inventoryList,
     controlsList,
     controlsSetEnabled,

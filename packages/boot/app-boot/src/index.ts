@@ -601,17 +601,24 @@ export const FAIL_LOUD_RELEASE_TIMEOUT_MS = 2_000
  * the process mid-teardown, stranding exactly the terminal state this restores —
  * so a latch keeps the first rejection the reported one and lets later
  * rejections (including the release's own) fall through to the pending exit.
+ *
+ * `report` runs between the diagnostic and the release: a surface that needs
+ * to record the failure before the process exits (the desktop recovery flow)
+ * provides it; absent, the exit path is unchanged.
  * @param binName - the diagnostic prefix on the fatal-failure line.
  * @param proc - the process slice to register on; tests inject a fake.
  * @param release - optional teardown awaited before exit, used by a
  *   terminal-owning surface to restore the terminal. Its own failure is
  *   swallowed because the pending fatal exit already owns the outcome.
+ * @param report - optional observer of the fatal rejection, invoked before
+ *   release and exit.
  * @returns the uninstaller that removes the rejection handler.
  */
 export function installFailLoud(
   binName: string,
   proc: FailLoudProcess = process,
   release?: () => Promise<void> | void,
+  report?: (error: unknown) => void,
 ): () => void {
   let exiting = false
   const handler = (err: unknown): void => {
@@ -622,6 +629,7 @@ export function installFailLoud(
     if (exiting) return
     exiting = true
     proc.stderr.write(`${binName}: fatal load failure: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`)
+    report?.(err)
     if (release === undefined) {
       proc.exit(1)
       return
@@ -727,6 +735,44 @@ export async function assertEntriesActivated(ctx: Context, binName: string): Pro
 }
 
 /**
+ * Render a loader failure chain as one line per distinct error, expanding
+ * every `AggregateError` into its individual causes. The Loader folds several
+ * failed rows into one `AggregateError` whose own message names none of them;
+ * unflattened, a multi-row failure says only "loader entries failed to apply"
+ * and the operator has nothing to act on. A cause whose message its parent
+ * already embeds (the Loader's entry-wrap errors embed their cause) is not
+ * repeated, so each failing row still contributes exactly one named line.
+ * @param error - the thrown value to render.
+ * @returns the one-line-per-cause description.
+ */
+export function formatLoaderFailure(error: unknown): string {
+  const lines: string[] = []
+  const visit = (value: unknown, indent: string, embedded: boolean): void => {
+    try {
+      const message = value instanceof Error ? value.message : String(value)
+      if (!embedded) lines.push(`${indent}${message}`)
+      if (value instanceof AggregateError) {
+        for (const cause of value.errors) visit(cause, `${indent}  `, false)
+      }
+      if (value instanceof Error && value.cause !== undefined) {
+        const cause = value.cause
+        const causeMessage = cause instanceof Error
+          ? cause.message
+          : typeof cause === 'string' ? cause : ''
+        visit(cause, indent, causeMessage !== '' && message.includes(causeMessage))
+      }
+    } catch {
+      // Only a hostile value (throwing message/cause/errors getter or
+      // toString) reaches here; this renderer feeds startup diagnostics, so
+      // one hostile node collapses instead of the whole chain.
+      lines.push(`${indent}<unrenderable value>`)
+    }
+  }
+  visit(error, '', false)
+  return lines.join('\n')
+}
+
+/**
  * Boot the Loader against `absoluteConfigPath` and return only after the whole
  * tree settles. Relative entry names resolve against the config directory;
  * bare package names resolve there by default or against an explicit
@@ -754,7 +800,9 @@ export async function assertEntriesActivated(ctx: Context, binName: string): Pro
  * surface disposed the tree while startup was still in flight.
  * @throws a labelled error after disposing the partial context — `host
  * preparation failed` when `prepare` threw before any config-tree entry
- * mounted, `plugin tree failed to load` afterwards.
+ * mounted, `plugin tree failed to load` afterwards. Aggregate failures are
+ * flattened with {@link formatLoaderFailure}, so a multi-row failure names
+ * every failed row instead of only "loader entries failed to apply".
  */
 export async function boot(
   binName: string,
@@ -790,10 +838,11 @@ export async function boot(
     // fiber.ts hardening) and a repeated call returns the settled single-shot
     // result, so this await cannot reject and replace `cause`.
     await ctx.fiber.dispose()
-    const detail = cause instanceof Error ? cause.message : String(cause)
+    const detail = formatLoaderFailure(cause)
     // The transactional Loader wraps a failing entry apply in one message per
-    // tree layer; every layer's message is folded into `detail` above, and the
-    // deepest cause is the plugin's own thrown error, whose stack names the
+    // tree layer; every layer's message is folded into `detail` above (with
+    // every AggregateError expanded into its named causes), and the deepest
+    // cause is the plugin's own thrown error, whose stack names the
     // real failure site — append it so the startup diagnostic preserves the
     // original activation error instead of only the wrap chain.
     let deepest: unknown = cause

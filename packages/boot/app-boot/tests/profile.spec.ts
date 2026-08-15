@@ -143,6 +143,20 @@ describe('loadProfile', () => {
     expect(bare.layers).toEqual([])
   })
 
+  it('skips the user patch layer without parsing it when userLayer is false', () => {
+    const anchor = stageInstallation({ 'bundle-a': { patch: '- insert:\n    - id: a\n      name: pkg-a\n' } })
+    const home = tmp()
+    const dir = resolveProfileDir('demo', home)
+    initProfile(dir, ['bundle-a'])
+    // Safe mode must boot past a broken user patch file: skip, never parse.
+    writeFileSync(join(dir, PROFILE_PATCH_FILENAME), 'not: [valid yaml\n')
+    const skipped = loadProfile('t', 'demo', anchor, home, { userLayer: false })
+    expect(skipped.patches).toEqual([])
+    expect(skipped.layers.map(layer => layer.packageName)).toEqual(['bundle-a'])
+    // The default still parses (and rejects) the broken file.
+    expect(() => loadProfile('t', 'demo', anchor, home)).toThrow('failed to parse overlay')
+  })
+
   it('auto-initializes only shipped templates and fails loud otherwise', () => {
     const anchor = stageInstallation({})
     const home = tmp()

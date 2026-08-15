@@ -2,7 +2,17 @@
 
 [English](README.md) | 中文
 
+**DeepSeek Harness 图片理解插件** —— `describe_image` 工具，经 OpenAI 兼容的 VLM 端点给纯文本模型识图能力（图片理解 · 多模态 · 视觉语言模型）。
+
 面向模型的 `describe_image` 工具：为纯文本模型提供识图能力——把一张图（本地文件路径、http(s) URL 或持久附件引用）交给 OpenAI 兼容端点的视觉语言模型描述，返回的文本走普通工具结果路径，图片本身从不进入对话。本包拥有模型侧契约（工具名、JSON schema、参数名、规范值、结果渲染与 `generic`/`read` 调用卡片）以及 HTTP 客户端及其安全策略；没有可替换的 provider 缝——端点、模型与凭据都是本插件自己的配置。
+
+## 安装
+
+```sh
+dsh plugin --profile web add github:whitelonng/dsh-plugin-describe-image
+```
+
+桌面应用的插件列表安装框可直接粘贴同一条 spec，插件在应用重启后加载。
 
 ## 工具
 
@@ -74,6 +84,20 @@ schema 与描述不变时前缀稳定；插件生命周期或改变描述的配�
 #### KV Cache effect
 
 仅追加；新可见内容接在可复用的请求前缀之后，不会使已有 KV-cache 条目失效。
+
+## 常见问题
+
+**它是干什么的？**
+注册面向模型的 `describe_image` 工具：一张图进去，配置的视觉模型的描述文本出来。
+
+**支持哪些视觉模型？**
+任何 OpenAI 兼容端点——Qwen-VL、GLM-4V、GPT-4o，或本地 Ollama 端点。
+
+**图片会进入对话或会话日志吗？**
+不会——只有返回的描述文本跨入对话。
+
+**API Key 怎么配置？**
+内联 `apiKey` → 凭据缝（`apiKeyEnv`，默认 `VISION_API_KEY`）→ 启动环境；密钥从不写入日志。
 
 ## Known Limitations and Deferred Work
 

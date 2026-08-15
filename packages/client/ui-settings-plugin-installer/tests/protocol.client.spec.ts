@@ -1,7 +1,14 @@
 /** Wire-protocol tests for the plugin-installer tab. */
 
 import { describe, expect, it } from 'vitest'
-import { parseInstalledPlugin, parseInstallStatus, parsePluginControlSnapshot, parsePluginList, parseUpdateList } from '../src/client/protocol.ts'
+import {
+  parseFailuresSnapshot,
+  parseInstalledPlugin,
+  parseInstallStatus,
+  parsePluginControlSnapshot,
+  parsePluginList,
+  parseUpdateList,
+} from '../src/client/protocol.ts'
 
 const PLUGIN = {
   id: '@scope/demo',
@@ -56,5 +63,37 @@ describe('plugin-installer protocol', () => {
     expect(() => parseInstalledPlugin({ plugin: 'nope' })).toThrow('must contain a plugin row')
     expect(() => parseUpdateList({ updates: [{ id: 'a' }] })).toThrow('is invalid')
     expect(() => parseUpdateList({})).toThrow('must contain an updates array')
+  })
+
+  it('parses failures snapshots', () => {
+    const snapshot = {
+      items: [{
+        pluginId: '@scope/broken',
+        kind: 'load-failure',
+        message: 'boom',
+        stack: 'at boom',
+        installPath: '/x/@scope/broken',
+        at: '2026-08-14T00:00:00.000Z',
+      }],
+      pluginRoot: '/home/.dsh/profiles',
+      safeMode: false,
+    }
+    expect(parseFailuresSnapshot(snapshot)).toEqual(snapshot)
+    expect(parseFailuresSnapshot({ items: [], pluginRoot: '/x', safeMode: true }).safeMode).toBe(true)
+  })
+
+  it('rejects malformed failures snapshots', () => {
+    const base = { items: [], pluginRoot: '/x', safeMode: false }
+    expect(() => parseFailuresSnapshot(null)).toThrow('failures snapshot')
+    expect(() => parseFailuresSnapshot({ ...base, items: 'nope' })).toThrow('failures snapshot')
+    expect(() => parseFailuresSnapshot({ ...base, pluginRoot: 5 })).toThrow('failures snapshot')
+    expect(() => parseFailuresSnapshot({ ...base, safeMode: 'yes' })).toThrow('failures snapshot')
+    expect(() => parseFailuresSnapshot({ items: [{ pluginId: 'x' }], pluginRoot: '/x', safeMode: false }))
+      .toThrow('failure row 0 is invalid')
+    expect(() => parseFailuresSnapshot({
+      items: [{ pluginId: 'x', kind: 'crashed', message: 'm', stack: 's', installPath: '/x', at: 't' }],
+      pluginRoot: '/x',
+      safeMode: false,
+    })).toThrow('failure row 0 is invalid')
   })
 })

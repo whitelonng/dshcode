@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Web 设置中的归档会话页面。一个 section（`settings.section`，id `archive`）列出每个注册表级归档会话及其折叠标题与创建时间，每行两个操作：
+Web 设置中的归档会话页面。一个 section（`settings.section`，id `archive`）列出每个注册表级归档会话及其折叠标题与创建时间。搜索框按标题或会话 id 过滤行；每行带选择复选框与全选开关，选中后出现批量工具栏（恢复所选立即执行——恢复非破坏性；删除所选需要显式确认弹窗，随后逐行调用 `workspace.deleteSession`——不可逆）。单行操作：
 
 - **恢复** —— 通过 `workspace.restoreSession` 把会话移出归档集合；会话在其原 workspace 位置重新出现。
 - **彻底删除** —— 需要显式确认弹窗，然后调用 `workspace.deleteSession`；宿主从持久化中移除会话日志，并清除其 workspace 记账与归档集合条目。不可逆。

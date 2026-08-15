@@ -2,7 +2,17 @@
 
 English | [中文](README.zh.md)
 
+**DeepSeek Harness image-understanding plugin** — the `describe_image` tool that gives a text-only model vision via an OpenAI-compatible VLM endpoint (image understanding · multimodal · vision-language model).
+
 The model-facing `describe_image` tool: gives a text-only model image understanding by asking a vision-language model at an OpenAI-compatible endpoint to describe one image. The image — a local file path, an http(s) URL, or a durable attachment reference — never enters the conversation: the tool returns only the vision model's text answer, which flows through the ordinary tool-result path. This package owns the model-facing contract (tool name, JSON schemas, argument names, canonical value, result rendering, and the `generic`/`read` call card) plus the HTTP client and its security policy; there is no replaceable provider seam — the endpoint, model, and credential are this plugin's own config.
+
+## Install
+
+```sh
+dsh plugin --profile web add github:whitelonng/dsh-plugin-describe-image
+```
+
+The desktop app's plugin list accepts the same spec in its install box; the plugin loads after an application restart.
 
 ## Tool
 
@@ -74,6 +84,20 @@ Data-dependent results are resent until compaction; the tool itself adds no pers
 #### KV Cache effect
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
+
+## FAQ
+
+**What does it do?**
+Registers the model-facing `describe_image` tool: one image in, the configured vision model's description text out.
+
+**Which vision models work?**
+Any OpenAI-compatible endpoint — Qwen-VL, GLM-4V, GPT-4o, or a local Ollama endpoint.
+
+**Does the image reach the conversation or the session log?**
+No — only the returned description text crosses into the conversation.
+
+**How is the API key configured?**
+Inline `apiKey` → credential seam (`apiKeyEnv`, default `VISION_API_KEY`) → launch environment; the key is never logged.
 
 ## Known Limitations and Deferred Work
 

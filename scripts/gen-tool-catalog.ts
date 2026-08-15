@@ -9,6 +9,10 @@
 import { globSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import * as PluginInstaller from '@deepseek-ai/dsh-host-plugin-installer'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -195,6 +199,23 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'ask_user_question pauses the tool call until the active UI provider returns a human answer.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-host-plugin-installer',
+    dir: 'plugin-installer',
+    source: 'packages/host/plugin-installer/src/tools.ts',
+    requires: ['ctx.tools', 'ctx.connection'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // The gateway tools share the gateway's install state; the harvest only
+      // reads schemas, so a temp home and a loopback-stub connection suffice.
+      const home = mkdtempSync(join(tmpdir(), 'dsh-plugin-installer-catalog-'))
+      const patchPath = join(home, 'cordis.patch.yml')
+      writeFileSync(patchPath, '[]\n')
+      ctx.provide('connection', { rpc: { handle: () => async () => {}, intercept: () => {} } })
+      await ctx.plugin(PluginInstaller, { dshHome: home, profilePatchPath: patchPath })
+    },
+    note: 'The plugin_* tools share the installer gateway state with the desktop plugin list.',
   },
   {
     pkg: '@deepseek-ai/dsh-tools',

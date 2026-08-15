@@ -134,17 +134,21 @@ function allPatches(composed: ComposedProfile): PatchOptions[] {
  * platform on its own rows), the profile's user layer, the home-level user
  * layer (`$DSH_HOME/cordis.patch.yml` — machine-local preferences that apply
  * to every profile, so it outranks the per-profile layer), `--patch` overlays,
- * then the telemetry switch.
+ * then the telemetry switch. `skipUserPatches` drops the profile's and the
+ * home-level user layers without parsing them — a broken user patch file must
+ * not block a safe-mode boot.
  * @param name - the profile name.
  * @param patchFiles - `--patch` overlay paths, in argv order.
+ * @param skipUserPatches - whether to omit the user patch layers (safe mode).
  * @returns the profile, its patch layers, and the composed row index.
  */
 function composeProfile(
   name: string,
   patchFiles: readonly string[],
+  skipUserPatches = false,
 ): ComposedProfile {
-  const profile = prepareProfile(name)
-  const homePatches = loadOptionalPatches(NAME, homePatchPath()) ?? []
+  const profile = prepareProfile(name, !skipUserPatches)
+  const homePatches = skipUserPatches ? [] : (loadOptionalPatches(NAME, homePatchPath()) ?? [])
   const overlays = patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))
   const bundlePatches = profile.layers.flatMap(layer => layer.patches)
   const rows = new Map<string, EntryOptions>()
@@ -182,6 +186,19 @@ export interface RunProfileOptions {
   args: readonly string[]
   /** Whether profile and home patch-layer files remain watched after boot. */
   watchUserPatches: boolean
+  /**
+   * Skip the profile's and the home-level user patch layers entirely (safe
+   * mode), without even parsing them: a broken user patch file is a recovery
+   * case, not a boot blocker. Bundle layers and overlays still apply.
+   */
+  skipUserPatches?: boolean
+  /**
+   * Report a late unhandled plugin-init rejection before the fail-loud exit.
+   * Absent, the CLI default writes one labelled stderr diagnostic and exits.
+   * A surface that needs to record or redirect the failure (the desktop
+   * recovery flow) provides this hook.
+   */
+  failLoud?: (error: unknown) => void
 }
 
 /**
@@ -207,7 +224,7 @@ function suppressShutdownError(ctx: Context, signal: AbortSignal, error: unknown
  * @returns the settled root context and the shutdown controller.
  */
 export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Context; shutdown: ProcessShutdown }> {
-  const composed = composeProfile(options.profile, options.patchFiles)
+  const composed = composeProfile(options.profile, options.patchFiles, options.skipUserPatches)
   const app: { current?: Context } = {}
   const shutdown = createProcessShutdown(async () => { await app.current?.fiber.dispose() })
   const signalShutdown = new AbortController()
@@ -224,7 +241,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   process.on('SIGINT', () => { interrupt(130) })
   installFailLoud(NAME, process, async () => {
     await app.current?.fiber.dispose()
-  })
+  }, options.failLoud)
 
   const rootConfig = join(composed.profile.dir, PROFILE_ROOT_FILENAME)
   // Recomposition for the live user layers: bundle layers below, overlays
@@ -241,8 +258,8 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // removing the override could never revert the row to the bundle default.
   const composeLive = (): PatchOptions[] => structuredClone([
     ...composed.bundlePatches,
-    ...loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
-    ...loadOptionalPatches(NAME, homePatchPath()) ?? [],
+    ...options.skipUserPatches === true ? [] : loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
+    ...options.skipUserPatches === true ? [] : loadOptionalPatches(NAME, homePatchPath()) ?? [],
     ...composed.overlays,
   ])
   // Cloned for the same insert-aliasing reason as composeLive: the boot

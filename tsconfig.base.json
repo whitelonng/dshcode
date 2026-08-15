@@ -174,6 +174,8 @@
       "@deepseek-ai/dsh-host-plugin-control/types": ["./packages/host/plugin-control/src/types.ts"],
       "@deepseek-ai/dsh-host-plugin-inventory": ["./packages/host/plugin-inventory/src"],
       "@deepseek-ai/dsh-host-plugin-inventory/types": ["./packages/host/plugin-inventory/src/types.ts"],
+      "@deepseek-ai/dsh-host-plugin-installer": ["./packages/host/plugin-installer/src"],
+      "@deepseek-ai/dsh-host-plugin-installer/types": ["./packages/host/plugin-installer/src/types.ts"],
       "@deepseek-ai/dsh-client-ui-slots": ["./packages/client/ui-slots/src"],
       "@deepseek-ai/dsh-client-ui-attachment": ["./packages/client/ui-attachment/src"],
       "@deepseek-ai/dsh-client-ui-primitives": ["./packages/client/ui-primitives/src"],
