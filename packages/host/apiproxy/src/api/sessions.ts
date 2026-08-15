@@ -326,6 +326,23 @@ export interface SessionsApi {
   Promise<RpcResponse<{ start: number; end: number; deletedSeqs: number[] }>>
 
   /**
+   * Edits the last user message of a conversation and regenerates its turn:
+   * the replacement rides the new turn's own `user/message` as a surface
+   * `replace` over the old turn's range, so the previous answer is shadowed
+   * and the model answers the edited prompt. Refuses with `edit-unavailable`
+   * for a non-human message or one that is not the surface's last user
+   * message, and with `agent-busy` while a turn runs. Session-backed
+   * subagents reject with `agent-busy`.
+   */
+  editMessage(request: RpcRequest<{
+    sessionId: SessionId
+    seq: number
+    content: PromptContentPart[]
+    clientTimeZone?: string
+  }>):
+  Promise<RpcResponse<{ accepted: true }>>
+
+  /**
    * Sends a message. content is core's ContentBlock[] verbatim; mode maps 1:1 — queue→send, steer→steer.
    * A prompt whose content is exactly one text block starting with '/' is a slash command: the host
    * executes it through the command registry (mode-agnostic) and it is never sent to the model. A

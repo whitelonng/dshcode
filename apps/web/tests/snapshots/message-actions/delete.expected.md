@@ -43,6 +43,8 @@
   - img
 - button "Delete":
   - img
+- button "Edit":
+  - img
 - textbox "Message the agent"
 - button "Commands":
   - img

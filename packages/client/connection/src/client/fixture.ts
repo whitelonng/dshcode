@@ -2331,6 +2331,40 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         })
         return ok(request, { start: seq, end: seq, deletedSeqs: [seq] })
       },
+      editMessage: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        const { sessionId, seq, content } = request.payload
+        const events = logOf(sessionId)
+        const target = events[seq]
+        if (target === undefined || target.type !== 'user/message') {
+          return err(request, {
+            code: 'edit-unavailable',
+            message: 'not an editable user message',
+            details: { sessionId, seq },
+          })
+        }
+        // The edited prompt replaces its whole turn (through the node before
+        // the next user message), mirroring the host's range expansion.
+        const shadowed = [seq]
+        for (let i = seq + 1; i < events.length; i += 1) {
+          const event = events[i]
+          if (event?.type === 'user/message') break
+          if (event?.type === 'assistant/message' || event?.type === 'tool/result') shadowed.push(i)
+        }
+        const end = shadowed.at(-1) ?? seq
+        const text = content
+          .filter(part => part.type === 'text')
+          .map(part => (part as { text: string }).text)
+          .join('')
+        append(sessionId, {
+          type: 'user/message',
+          data: { content: [{ type: 'text', text }], source: { kind: 'user' } },
+          surfaceOp: { op: 'replace', start: seq, end },
+          sourceEventSeqs: shadowed,
+        })
+        return ok(request, { accepted: true as const })
+      },
       fork: (request) => {
         const { sessionId, atSeq } = request.payload
         const source = summaryOf(sessionId)
@@ -3130,6 +3164,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
       case 'session.deleteMessage': return this.api.sessions.deleteMessage(request)
+      case 'session.editMessage': return this.api.sessions.editMessage(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
       case 'session.attachment': return this.api.sessions.attachment(request)

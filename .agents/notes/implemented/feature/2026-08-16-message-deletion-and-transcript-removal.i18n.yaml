@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-16-message-deletion-and-transcript-removal.md
-2026-08-16-message-deletion-and-transcript-removal.md: 49b1005728e6c4066cef2bf09fcec8f0d019e7fe
-2026-08-16-message-deletion-and-transcript-removal.zh.md: 3dab9371dc72a50378bf98cb389005c8d1e8e8c8
+2026-08-16-message-deletion-and-transcript-removal.md: 2487ec71e1c1168728b4d600d3b65113344e90d4
+2026-08-16-message-deletion-and-transcript-removal.zh.md: 474ce55e08b1ae201252eaf4323727780b9be8f2

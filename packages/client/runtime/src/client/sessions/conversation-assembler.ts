@@ -38,31 +38,33 @@ interface PendingMatch {
   readonly match: ConversationMatch
 }
 
-/** One durable transcript deletion: the raw seq interval a `message/delete` removed. */
-export interface DeletedTranscriptRange {
-  readonly start: number
-  readonly end: number
-}
-
 /**
- * Fold `message/delete` ranges over a complete window: drop the raw intervals
+ * Fold transcript edits over a complete window: drop the raw intervals of
+ * `message/delete` deletions and the shadowed nodes of human edit-replace
+ * events (a `user/message` whose `surfaceOp` replaces its cited sources),
  * plus the Turn/Step brackets of turns and steps that lose all their content,
- * so the transcript never renders an empty turn row. The deletion markers
- * themselves are structural and never render. Turn/step membership is
+ * so the transcript never renders an empty turn row or a superseded answer.
+ * The deletion markers themselves are structural and never render; the
+ * replacement event stays (it is the edited prompt). Compaction checkpoints
+ * (plugin-source replaces) are deliberately not folded — the transcript
+ * keeps the compacted history it already showed. Turn/step membership is
  * derived with the same positional scan the location index uses, because
  * user messages carry no turn field of their own.
  * @param entries - complete contiguous window in ascending seq order.
- * @param ranges - recorded deletion ranges.
  * @returns the visible window in ascending seq order.
  */
-export function foldDeletedRanges(
-  entries: readonly ConversationEventInput[],
-  ranges: readonly DeletedTranscriptRange[],
-): ConversationEventInput[] {
-  if (ranges.length === 0) return [...entries]
+export function foldTranscript(entries: readonly ConversationEventInput[]): ConversationEventInput[] {
   const hidden = new Set<number>()
-  for (const range of ranges) {
-    for (let seq = range.start; seq <= range.end; seq += 1) hidden.add(seq)
+  for (const { event } of entries) {
+    if (event.type === 'message/delete') {
+      for (let seq = event.data.start; seq <= event.data.end; seq += 1) hidden.add(seq)
+      continue
+    }
+    if (event.type === 'user/message' && event.surfaceOp !== 'append'
+      && (event.data.source as { kind?: unknown } | undefined)?.kind === 'user'
+      && event.sourceEventSeqs !== undefined) {
+      for (const seq of event.sourceEventSeqs) hidden.add(seq)
+    }
   }
   const turnOf = new Map<number, number>()
   const stepOf = new Map<number, number>()
@@ -99,10 +101,18 @@ export function foldDeletedRanges(
   }
   const contentTurns = new Set<number>()
   const contentSteps = new Set<string>()
+  const hiddenContentTurns = new Set<number>()
+  const hiddenContentSteps = new Set<string>()
   for (const { event } of entries) {
-    if (hidden.has(event.seq) || isLocationBoundary(event.type)) continue
+    if (isLocationBoundary(event.type)) continue
     const turn = turnOf.get(event.seq)
     if (turn === undefined) continue
+    if (hidden.has(event.seq)) {
+      hiddenContentTurns.add(turn)
+      const step = stepOf.get(event.seq)
+      if (step !== undefined) hiddenContentSteps.add(`${turn}:${step}`)
+      continue
+    }
     contentTurns.add(turn)
     const step = stepOf.get(event.seq)
     if (step !== undefined) contentSteps.add(`${turn}:${step}`)
@@ -111,10 +121,11 @@ export function foldDeletedRanges(
     if (event.type === 'message/delete') return false
     if (hidden.has(event.seq)) return false
     if (event.type === 'turn/start' || event.type === 'turn/end') {
-      return contentTurns.has(event.data.turn)
+      return contentTurns.has(event.data.turn) || !hiddenContentTurns.has(event.data.turn)
     }
     if (event.type === 'step/start' || event.type === 'step/end') {
-      return contentSteps.has(`${event.data.turn}:${event.data.step}`)
+      const key = `${event.data.turn}:${event.data.step}`
+      return contentSteps.has(key) || !hiddenContentSteps.has(key)
     }
     return true
   })
@@ -222,7 +233,6 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
   private readonly contextsBySeq = new Map<number, Set<InternalContext>>()
   private readonly inputs = new Map<number, ConversationEventInput>()
   private readonly locationIndex = new ConversationLocationIndex()
-  private readonly deletedRanges: DeletedTranscriptRange[] = []
   private readonly dirty = new Set<InternalContext>()
   private readonly revised = new Set<InternalContext>()
   private readonly dependents = new Map<string, Set<InternalContext>>()
@@ -259,7 +269,7 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     this.hasMore = hasMore
     const sorted = [...entries].sort((left, right) => left.event.seq - right.event.seq)
     for (const entry of sorted) this.inputs.set(entry.event.seq, entry)
-    const visible = foldDeletedRanges(sorted, this.deletedRanges)
+    const visible = foldTranscript(sorted)
     this.locationIndex.rebuild(visible)
     this.timelineDirty = true
     for (const entry of visible) this.matchInput(entry)
@@ -279,11 +289,12 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     if (this.inputs.has(input.event.seq)) return 'none'
     this.revised.clear()
     this.inputs.set(input.event.seq, input)
-    if (input.event.type === 'message/delete') {
-      // A deletion shadows the raw seq interval: rebuild the visible window
-      // so the removed messages, tool cards, and emptied turn brackets leave
-      // the transcript in one atomic replace.
-      this.deletedRanges.push({ start: input.event.data.start, end: input.event.data.end })
+    if (input.event.type === 'message/delete'
+      || (input.event.type === 'user/message' && input.event.surfaceOp !== 'append'
+        && input.event.data.source.kind === 'user')) {
+      // A deletion or an edit-replace shadows earlier raw seqs: rebuild the
+      // visible window so the superseded messages, tool cards, and emptied
+      // turn brackets leave the transcript in one atomic replace.
       return this.replaceWindow(this.sortedInputs(), this.hasMore)
     }
     let publication: ConversationPublication = 'none'
@@ -320,7 +331,7 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
       .sort((left, right) => left.event.seq - right.event.seq)
     for (const entry of fresh) this.inputs.set(entry.event.seq, entry)
     this.hasMore = hasMore
-    const visible = foldDeletedRanges(this.sortedInputs(), this.deletedRanges)
+    const visible = foldTranscript(this.sortedInputs())
     const visibleSeqs = new Set(visible.map(entry => entry.event.seq))
     const previousTimeline = this.locationIndex.snapshot()
     const changedLocations = this.locationIndex.rebuild(visible)

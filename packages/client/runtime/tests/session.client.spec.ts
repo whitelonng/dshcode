@@ -1055,3 +1055,30 @@ describe('deleteMessage', () => {
     expect(result.error.code).toBe('internal')
   })
 })
+
+describe('editMessage', () => {
+  it('passes the replacement text through the sessions RPC', async () => {
+    const api = new FakeApiClient()
+    const { session } = makeSession(api)
+    await session.open()
+    const result = await session.editMessage(9, [{ type: 'text', text: 'edited' }])
+    expect(result).toEqual({ ok: true, value: { accepted: true } })
+    expect(api.callsOf('session.editMessage')).toMatchObject([{
+      sessionId: SID, seq: 9, content: [{ type: 'text', text: 'edited' }],
+    }])
+  })
+
+  it('refuses locally for subagent conversations', async () => {
+    const api = new FakeApiClient()
+    const session = new Session(SID, api, fakeRemote(), {
+      address: { parentSessionId: PARENT, childSessionId: SID, mode: 'continuable' },
+      parentAvailable: true,
+    })
+    await session.open()
+    const result = await session.editMessage(3, [{ type: 'text', text: 'edited' }])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('agent-busy')
+    expect(api.callsOf('session.editMessage')).toEqual([])
+  })
+})

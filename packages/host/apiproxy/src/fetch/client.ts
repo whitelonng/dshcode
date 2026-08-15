@@ -27,6 +27,7 @@ import {
   sessionModelsValueSchema,
   sessionPromptValueSchema,
   sessionDeleteMessageValueSchema,
+  sessionEditMessageValueSchema,
   sessionRenameValueSchema,
   sessionSearchValueSchema,
   sessionSelectModelValueSchema,
@@ -98,6 +99,7 @@ export interface IApiClient {
     selectModel(payload: RequestPayload<'session.selectModel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.selectModel'>>>
     rename(payload: RequestPayload<'session.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.rename'>>>
     deleteMessage(payload: RequestPayload<'session.deleteMessage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.deleteMessage'>>>
+    editMessage(payload: RequestPayload<'session.editMessage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.editMessage'>>>
     fork(payload: RequestPayload<'session.fork'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.fork'>>>
     prompt(payload: RequestPayload<'session.prompt'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.prompt'>>>
     attachment(payload: RequestPayload<'session.attachment'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.attachment'>>>
@@ -186,6 +188,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'session.selectModel': sessionSelectModelValueSchema,
   'session.rename': sessionRenameValueSchema,
   'session.deleteMessage': sessionDeleteMessageValueSchema,
+  'session.editMessage': sessionEditMessageValueSchema,
   'session.fork': sessionForkValueSchema,
   'session.prompt': sessionPromptValueSchema,
   'session.attachment': sessionAttachmentValueSchema,
@@ -430,6 +433,7 @@ export abstract class AbstractApiClient implements IApiClient {
     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),
     deleteMessage: (payload, signal) => this.callUnary('session.deleteMessage', payload, signal),
+    editMessage: (payload, signal) => this.callUnary('session.editMessage', payload, signal),
     fork: (payload, signal) => this.callUnary('session.fork', payload, signal),
     prompt: (payload, signal) => this.callUnary('session.prompt', payload, signal),
     attachment: (payload, signal) => this.callUnary('session.attachment', payload, signal),

@@ -428,6 +428,12 @@ export function apply(ctx: Context): void {
           const result = await session.deleteMessage(seq).catch(() => undefined)
           return result?.ok ?? false
         },
+        editAt: async (seq, text) => {
+          const session = sessions.binding(sessionId)?.session
+          if (session === undefined) return false
+          const result = await session.editMessage(seq, [{ type: 'text', text }]).catch(() => undefined)
+          return result?.ok ?? false
+        },
       }
     },
   }, ChatView)

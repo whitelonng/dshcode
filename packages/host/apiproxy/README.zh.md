@@ -36,6 +36,8 @@ Settings 分节中的 `reasoningEffort` 在 agent-default-model 插件配置中�
 
 `session.deleteMessage` 通过追加一条 `message/delete` 事件，把一条用户或 assistant 消息移出模型可见 surface：用户消息展开为其整个轮次，assistant 消息展开为自身加其同一步骤产生的工具结果。运行中的智能体以 `agent-busy` 拒绝；非消息、未知或已被阴影的 seq 以 `delete-unavailable` 拒绝。语义归 [消息删除决策](../../../.agents/notes/implemented/feature/2026-08-16-message-deletion-and-transcript-removal.md) 所有。
 
+`session.editMessage` 编辑 surface 上的最后一条用户消息并重新生成其轮次：替换内容作为 surface `replace` 骑在新轮次自己的 `user/message` 上，覆盖旧轮次区间，因此旧回答被阴影，模型直接回答编辑后的提示。非人类消息或不是最后一条用户消息以 `edit-unavailable` 拒绝；运行中的智能体以 `agent-busy` 拒绝。语义归 [编辑决策](../../../.agents/notes/implemented/feature/2026-08-16-user-message-edit-and-regenerate.md) 所有。
+
 会话模型选择属于会话领域约定。`session.models` 将当前 `ModelSelection` 与按提供方分组的建议性模型、精确模型的推理元数据和逐提供方查询失败记录分开返回。该选择可能不在这些分组中，也绝不会作为合成行注入；客户端可以提示用户作出另一项选择，而无需把目录变成路由白名单。`session.selectModel` 校验由适配器持有的可选推理强度，并指定下次组装提示词时使用的完整选择。目录成员关系不构成校验：适配器可以解析未列出的模型，而不可用的提供方或不受支持的推理强度会返回 `model-unavailable`。历史（或待处理收件箱）携带图片的会话仍可选择声明了 `imagePolicy: 'note'` 的纯文本目标 —— 它会把图片块序列化为文本备注，因此切换不会让会话搁浅；未声明该策略的纯文本目标则会返回 `model-unavailable`。`session.models` 还会报告 `routable`，即当前是否有适配器为所选提供方提供服务。该值刻意不从分组推导，因为适配器可以服务未公布的模型。`session.prompt` 会依据同一事实，在开启轮次之前以 `model-unavailable` 拒绝；客户端禁用 composer 只是提示性设计，这个方法始终可被调用。
 
 `session.prompt` 和 `subagent.prompt` 接受可选的请求本地 `clientTimeZone` 来源信息。若提供该值，Host 会在进入 Agent 前校验 `UTC` 或 IANA Area/Location 并将其规范化；无效输入以 `invalid-time-zone` 拒绝，规范值则与 `rpcId` 一起记录在这条确切的 `user-rpc` 消息上。该值不属于 Session、连接、create、resume 或 fork 状态；非浏览器调用方可以省略它。

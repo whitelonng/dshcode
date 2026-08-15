@@ -31,13 +31,27 @@ export interface AgentOptions {
 }
 
 /** Options for {@link Agent.cancel}. */
-export interface CancelOptions {
-  /**
+export interface CancelOptions {  /**
    * Preserve queued and steering inbox items instead of discarding them. The
    * active turn is still aborted, but un-started and pending work survives for a
    * later turn and no canceled inbox splice is logged.
    */
   keepInbox?: boolean | undefined
+}
+
+/**
+ * Surface rewrite metadata for an edit-and-regenerate follow-up turn: the
+ * first claimed message of the turn replaces the current surface range
+ * [`start`, `end`] instead of appending, shadowing the cited nodes (the old
+ * prompt and its whole answer).
+ */
+export interface FollowupReplace {
+  /** Inclusive start seq of the current surface range to shadow. */
+  start: number
+  /** Inclusive end seq of the current surface range to shadow. */
+  end: number
+  /** Every shadowed surface node in surface order (provenance validation). */
+  sourceEventSeqs: number[]
 }
 
 /**
@@ -120,8 +134,12 @@ export interface Agent {
    * Queue an ordinary follow-up turn and wake the driver. The item becomes the
    * sole ordinary message of its own turn.
    * @param message - identified prompt content and the source that supplied it.
+   * @param replace - optional surface rewrite for the first claimed message of
+   * this turn: instead of appending, it replaces the current surface range
+   * [`start`, `end`] with the message (a human edit-and-regenerate), citing
+   * every shadowed node in `sourceEventSeqs`.
    */
-  followup(message: UserMessage): void
+  followup(message: UserMessage, replace?: FollowupReplace): void
 
   /**
    * Submit steering for the nearest step. An idle driver starts a turn;
