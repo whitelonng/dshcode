@@ -38,6 +38,88 @@ interface PendingMatch {
   readonly match: ConversationMatch
 }
 
+/** One durable transcript deletion: the raw seq interval a `message/delete` removed. */
+export interface DeletedTranscriptRange {
+  readonly start: number
+  readonly end: number
+}
+
+/**
+ * Fold `message/delete` ranges over a complete window: drop the raw intervals
+ * plus the Turn/Step brackets of turns and steps that lose all their content,
+ * so the transcript never renders an empty turn row. The deletion markers
+ * themselves are structural and never render. Turn/step membership is
+ * derived with the same positional scan the location index uses, because
+ * user messages carry no turn field of their own.
+ * @param entries - complete contiguous window in ascending seq order.
+ * @param ranges - recorded deletion ranges.
+ * @returns the visible window in ascending seq order.
+ */
+export function foldDeletedRanges(
+  entries: readonly ConversationEventInput[],
+  ranges: readonly DeletedTranscriptRange[],
+): ConversationEventInput[] {
+  if (ranges.length === 0) return [...entries]
+  const hidden = new Set<number>()
+  for (const range of ranges) {
+    for (let seq = range.start; seq <= range.end; seq += 1) hidden.add(seq)
+  }
+  const turnOf = new Map<number, number>()
+  const stepOf = new Map<number, number>()
+  let currentTurn: number | undefined
+  let currentStep: number | undefined
+  for (const { event } of entries) {
+    const data = event.data as { turn?: unknown; step?: unknown }
+    const explicitTurn = Number.isSafeInteger(data.turn) ? data.turn as number : undefined
+    const explicitStep = Number.isSafeInteger(data.step) ? data.step as number : undefined
+    if (event.type === 'turn/start') {
+      currentTurn = explicitTurn
+      currentStep = undefined
+    }
+    if (event.type === 'step/start') {
+      currentTurn = explicitTurn
+      currentStep = explicitStep
+    }
+    if (explicitTurn !== undefined) {
+      if (currentTurn !== explicitTurn) currentStep = undefined
+      currentTurn = explicitTurn
+      if (explicitStep !== undefined) currentStep = explicitStep
+    }
+    const turn = explicitTurn ?? currentTurn
+    if (turn !== undefined) turnOf.set(event.seq, turn)
+    const step = explicitStep ?? (turn === currentTurn ? currentStep : undefined)
+    if (turn !== undefined && step !== undefined) stepOf.set(event.seq, step)
+    if (event.type === 'step/end' && currentTurn === explicitTurn && currentStep === explicitStep) {
+      currentStep = undefined
+    }
+    if (event.type === 'turn/end' && currentTurn === explicitTurn) {
+      currentTurn = undefined
+      currentStep = undefined
+    }
+  }
+  const contentTurns = new Set<number>()
+  const contentSteps = new Set<string>()
+  for (const { event } of entries) {
+    if (hidden.has(event.seq) || isLocationBoundary(event.type)) continue
+    const turn = turnOf.get(event.seq)
+    if (turn === undefined) continue
+    contentTurns.add(turn)
+    const step = stepOf.get(event.seq)
+    if (step !== undefined) contentSteps.add(`${turn}:${step}`)
+  }
+  return entries.filter(({ event }) => {
+    if (event.type === 'message/delete') return false
+    if (hidden.has(event.seq)) return false
+    if (event.type === 'turn/start' || event.type === 'turn/end') {
+      return contentTurns.has(event.data.turn)
+    }
+    if (event.type === 'step/start' || event.type === 'step/end') {
+      return contentSteps.has(`${event.data.turn}:${event.data.step}`)
+    }
+    return true
+  })
+}
+
 interface ViewState {
   readonly target: string
   readonly builder: ConversationViewBuilder
@@ -140,6 +222,7 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
   private readonly contextsBySeq = new Map<number, Set<InternalContext>>()
   private readonly inputs = new Map<number, ConversationEventInput>()
   private readonly locationIndex = new ConversationLocationIndex()
+  private readonly deletedRanges: DeletedTranscriptRange[] = []
   private readonly dirty = new Set<InternalContext>()
   private readonly revised = new Set<InternalContext>()
   private readonly dependents = new Map<string, Set<InternalContext>>()
@@ -176,9 +259,10 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     this.hasMore = hasMore
     const sorted = [...entries].sort((left, right) => left.event.seq - right.event.seq)
     for (const entry of sorted) this.inputs.set(entry.event.seq, entry)
-    this.locationIndex.rebuild(sorted)
+    const visible = foldDeletedRanges(sorted, this.deletedRanges)
+    this.locationIndex.rebuild(visible)
     this.timelineDirty = true
-    for (const entry of sorted) this.matchInput(entry)
+    for (const entry of visible) this.matchInput(entry)
     this.replayDependencies()
     this.revised.clear()
     for (const context of this.contexts.values()) this.dirty.add(context)
@@ -195,6 +279,13 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     if (this.inputs.has(input.event.seq)) return 'none'
     this.revised.clear()
     this.inputs.set(input.event.seq, input)
+    if (input.event.type === 'message/delete') {
+      // A deletion shadows the raw seq interval: rebuild the visible window
+      // so the removed messages, tool cards, and emptied turn brackets leave
+      // the transcript in one atomic replace.
+      this.deletedRanges.push({ start: input.event.data.start, end: input.event.data.end })
+      return this.replaceWindow(this.sortedInputs(), this.hasMore)
+    }
     let publication: ConversationPublication = 'none'
     if (isLocationBoundary(input.event.type)) {
       const previousTimeline = this.locationIndex.snapshot()
@@ -229,12 +320,15 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
       .sort((left, right) => left.event.seq - right.event.seq)
     for (const entry of fresh) this.inputs.set(entry.event.seq, entry)
     this.hasMore = hasMore
+    const visible = foldDeletedRanges(this.sortedInputs(), this.deletedRanges)
+    const visibleSeqs = new Set(visible.map(entry => entry.event.seq))
     const previousTimeline = this.locationIndex.snapshot()
-    const changedLocations = this.locationIndex.rebuild(this.sortedInputs())
+    const changedLocations = this.locationIndex.rebuild(visible)
     if (this.locationIndex.snapshot() !== previousTimeline) this.timelineDirty = true
     const affected = this.refreshMatchLocations(changedLocations)
     const pending = new Map<string, PendingMatch[]>()
     for (const entry of fresh) {
+      if (!visibleSeqs.has(entry.event.seq)) continue
       publication = maximumPublication(publication, this.collectInput(entry, pending))
     }
     this.applyPendingMatches(pending, affected)

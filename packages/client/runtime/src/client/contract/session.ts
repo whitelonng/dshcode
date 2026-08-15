@@ -79,6 +79,16 @@ export interface ISession {
    * @returns the admission result, or the Remote face's error branch.
    */
   command(line: string): Promise<RemoteResult<{ matched: boolean }>>
+  /**
+   * Delete one user or assistant message from the transcript and the
+   * model-visible history; the host expands the target seq to its surface
+   * range (a user message's whole turn, an assistant message plus its step's
+   * tool results).
+   * @param seq - seq of the message event to delete.
+   * @returns the host-computed removed range, or the business error
+   * (`agent-busy` while running, `delete-unavailable` for a non-message seq).
+   */
+  deleteMessage(seq: number): Promise<RpcResult<{ start: number; end: number; deletedSeqs: number[] }>>
 }
 
 /**

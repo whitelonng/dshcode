@@ -1,6 +1,7 @@
-# Agent Note：消息反馈的 Web 界面
+# Agent Note: 消息反馈的 Web 界面
 
 Status: implemented
+Archived: 2026-08-16
 
 [English](2026-08-11-message-feedback-web-surface.md) | 中文
 

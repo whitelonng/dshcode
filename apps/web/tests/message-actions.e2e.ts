@@ -21,12 +21,15 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/message-actions', import
 const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
 const FORK_EXPECTED = join(SNAPSHOT_DIR, 'fork.expected.md')
+const DELETE_EXPECTED = join(SNAPSHOT_DIR, 'delete.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'message-actions-web-e2e'
+const DELETE_SEED_ID = 'message-actions-web-e2e-delete'
 
 const PROMPT = 'Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop.'
 const MID_TURN_TEXT = 'I will read both files before answering.'
 const SECOND_PROMPT = 'Now give the final answer.'
+const DELETE_PROMPT = 'Delete this answer next.'
 
 /**
  * Adapt the borrowed recording into response -> tools -> interrupted Think,
@@ -35,7 +38,7 @@ const SECOND_PROMPT = 'Now give the final answer.'
  * @param raw - Recorded seeded-history JSONL.
  * @returns A contiguous, closed two-turn fixture.
  */
-function completedTailFixture(raw: string): string {
+function completedTailFixture(raw: string, secondPrompt = SECOND_PROMPT): string {
   const kept: string[] = []
   for (const line of raw.trimEnd().split('\n')) {
     const row = JSON.parse(line) as {
@@ -59,7 +62,7 @@ function completedTailFixture(raw: string): string {
     { type: 'step/end', seq: 101, time: 1784974102749, data: { turn: 1, step: 2 } },
     { type: 'turn/end', seq: 102, time: 1784974102750, data: { turn: 1, reason: { kind: 'aborted' } } },
     { type: 'turn/start', seq: 103, time: 1784974103000, data: { turn: 2, trigger: { kind: 'message', source: { kind: 'user', rpcId: '{{rpcId}}' } } } },
-    { type: 'user/message', seq: 104, time: 1784974103001, data: { content: [{ type: 'text', text: SECOND_PROMPT }], source: { kind: 'user', rpcId: '{{rpcId}}' } }, surfaceOp: 'append' },
+    { type: 'user/message', seq: 104, time: 1784974103001, data: { content: [{ type: 'text', text: secondPrompt }], source: { kind: 'user', rpcId: '{{rpcId}}' } }, surfaceOp: 'append' },
     { type: 'step/start', seq: 105, time: 1784974103002, data: { turn: 2, step: 1 } },
     { type: 'assistant/message', seq: 106, time: 1784974103003, data: { turn: 2, step: 1, content: [{ type: 'text', text: 'DONE' }], provenance: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }, sourceEventSeqs: [], surfaceOp: 'append' },
     { type: 'step/end', seq: 107, time: 1784974103004, data: { turn: 2, step: 1 } },
@@ -191,9 +194,43 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     await compareOrRefreshGolden(FORK_EXPECTED, tree, MODE)
   })
 
+  it.skipIf(MODE === 'record')('deletes the last assistant answer and folds it out of the transcript', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-message-delete'))
+    // A fresh seeded session isolates the deletion from the fork tests: its
+    // second prompt is unique, so the view switch is verifiable.
+    const raw = completedTailFixture(await readFile(SEED, 'utf8'), DELETE_PROMPT)
+    await seedSession(scaffold, raw, DELETE_SEED_ID)
+    // The seeded session joins the sidebar list only after a reload: the
+    // already-open mux never announced it as a live frame.
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 15_000 }).toBe(5)
+    await page.locator('[role="treeitem"]').nth(1).click()
+    await expect.poll(() => page.getByText(DELETE_PROMPT, { exact: false }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    const deleteButton = page.getByRole('button', { name: 'Delete' }).last()
+    await deleteButton.focus()
+    await deleteButton.click()
+    // The host folds the assistant message out of the model-visible surface.
+    await expect.poll(
+      () => scaffold.ctx.sessions.get(SessionId(DELETE_SEED_ID))?.deriveMessages().some(message =>
+        message.content.some(block => block.type === 'text' && block.text === 'DONE')),
+      { timeout: 10_000 },
+    ).toBe(false)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    // The user prompt survives the deletion.
+    await expect.poll(
+      () => page.getByText(DELETE_PROMPT, { exact: false }).count(),
+      { timeout: 5_000 },
+    ).toBeGreaterThanOrEqual(1)
+    const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
+      .split(DELETE_SEED_ID).join('{{seededId}}')
+    await compareOrRefreshGolden(DELETE_EXPECTED, snapshot, MODE)
+  })
+
   it.skipIf(MODE === 'record')('issued zero model calls and kept a closed inventory', async () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['fork.expected.md', 'ui.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['delete.expected.md', 'fork.expected.md', 'ui.expected.md'])
   })
 })

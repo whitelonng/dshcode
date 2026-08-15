@@ -313,6 +313,19 @@ export interface SessionsApi {
   Promise<RpcResponse<{ title: string; seq: number }>>
 
   /**
+   * Deletes one user or assistant message from the model-visible surface.
+   * A user message removes its whole turn (the surface range through the node
+   * before the next user message); an assistant message removes itself plus
+   * the tool results its own step produced, so no orphan tool results remain.
+   * Appends a `message/delete` event and never runs during an open turn: a
+   * running agent fails with `agent-busy`, and a seq that is not a current
+   * surface message fails with `delete-unavailable`. Session-backed subagents
+   * reject with `agent-busy`.
+   */
+  deleteMessage(request: RpcRequest<{ sessionId: SessionId; seq: number }>):
+  Promise<RpcResponse<{ start: number; end: number; deletedSeqs: number[] }>>
+
+  /**
    * Sends a message. content is core's ContentBlock[] verbatim; mode maps 1:1 — queue→send, steer→steer.
    * A prompt whose content is exactly one text block starting with '/' is a slash command: the host
    * executes it through the command registry (mode-agnostic) and it is never sent to the model. A

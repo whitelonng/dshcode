@@ -1,6 +1,7 @@
 # Agent Note: 绑定生命周期的消息反馈伴随记录
 
 Status: implemented
+Archived: 2026-08-16
 
 [English](2026-08-10-message-feedback-sidecar.md) | 中文
 

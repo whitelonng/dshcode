@@ -508,6 +508,47 @@ function sessionBlank(session: Session): boolean {
   return !session.events.some(event => event.type === 'turn/start')
 }
 
+/**
+ * Resolve the inclusive surface-range end for deleting one message node.
+ * Deleting a user message removes its whole turn (everything through the node
+ * before the next user message); deleting an assistant message removes it plus
+ * the tool results its own step produced, so no orphan tool results remain
+ * model-visible. The caller has verified `start` is a current surface node.
+ * @param nodes - current surface node seqs in model-visible order.
+ * @param events - the session log.
+ * @param start - seq of the message node being deleted.
+ * @returns the inclusive end seq of the surface range to remove.
+ */
+function deleteSurfaceEndOf(nodes: readonly number[], events: readonly SessionEvent[], start: number): number {
+  const target = events[start]
+  if (target?.type !== 'user/message' && target?.type !== 'assistant/message') {
+    throw new Error(`deleteSurfaceEndOf: node ${start} is not a deletable message`)
+  }
+  const index = nodes.indexOf(start)
+  if (target.type === 'user/message') {
+    for (let i = index + 1; i < nodes.length; i += 1) {
+      const node = nodes[i]
+      if (node === undefined) continue
+      const event = events[node]
+      if (event?.type === 'user/message') {
+        const previous = nodes[i - 1]
+        return previous ?? start
+      }
+    }
+    return nodes.at(-1) ?? start
+  }
+  let end = start
+  for (let i = index + 1; i < nodes.length; i += 1) {
+    const node = nodes[i]
+    if (node === undefined) break
+    const event = events[node]
+    if (event?.type !== 'tool/result') break
+    if (event.data.turn !== target.data.turn || event.data.step !== target.data.step) break
+    end = node
+  }
+  return end
+}
+
 /** Advance the Session-list hint projection by one committed event. */
 function applySessionListMetadata(state: SessionListMetadata, event: SessionEvent): SessionListMetadata {
   const blank = state.blank && event.type !== 'turn/start'
@@ -2364,6 +2405,55 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
+      },
+
+      async deleteMessage(request) {
+        const { sessionId, seq } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        const session = found.agent.session
+        const events = session.events
+        const target = events[seq]
+        if (target === undefined || (target.type !== 'user/message' && target.type !== 'assistant/message')) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: `event ${String(seq)} is not a deletable message`,
+            details: { sessionId, seq },
+          })
+        }
+        const nodes = session.surface.nodes
+        if (!nodes.includes(seq)) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: `event ${String(seq)} is not a current conversation message (already shadowed by compaction or an earlier edit)`,
+            details: { sessionId, seq },
+          })
+        }
+        const lastTurnStart = events.findLastIndex(event => event.type === 'turn/start')
+        const lastTurnEnd = events.findLastIndex(event => event.type === 'turn/end')
+        if (lastTurnStart > lastTurnEnd) {
+          return err(request, {
+            code: 'agent-busy',
+            message: 'message deletion is unavailable while the agent is running; stop the turn first',
+            details: { reason: 'turn-open' },
+          })
+        }
+        const start = seq
+        const end = deleteSurfaceEndOf(nodes, events, start)
+        const shadowedSeqs = [...nodes.slice(nodes.indexOf(start), nodes.indexOf(end) + 1)]
+        try {
+          session.append('message/delete', { start, end }, {
+            surfaceOp: { op: 'delete', start, end },
+            sourceEventSeqs: shadowedSeqs,
+          })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `failed to delete message at event ${String(seq)}: ${error instanceof Error ? error.message : String(error)}`,
+            details: { sessionId, seq },
+          })
+        }
+        return ok(request, { start, end, deletedSeqs: shadowedSeqs })
       },
 
       async fork(request) {

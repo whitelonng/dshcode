@@ -43,6 +43,7 @@ function props(
     openFile: vi.fn(),
     inspectCall: vi.fn(),
     forkAt: vi.fn(),
+    deleteAt: vi.fn(() => Promise.resolve(true)),
     fileMentions: vi.fn(),
     t,
   } as unknown as ToolTreeProps

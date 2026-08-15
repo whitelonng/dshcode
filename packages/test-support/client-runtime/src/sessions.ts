@@ -137,6 +137,14 @@ export class FixtureSession implements SessionFace {
   rename(): never {
     throw new Error(`test session "${this.sessionId}": rename is not stubbed — supply it on the fixture's session face`)
   }
+
+  /**
+   * Fail-loud stub; supply `deleteMessage` on the fixture's session face to exercise it.
+   * @returns never — always throws.
+   */
+  deleteMessage(): never {
+    throw new Error(`test session "${this.sessionId}": deleteMessage is not stubbed — supply it on the fixture's session face`)
+  }
 }
 
 /** One live test session: fixture-derived stores plus its minted scope state. */

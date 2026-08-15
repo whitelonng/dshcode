@@ -422,6 +422,12 @@ export function apply(ctx: Context): void {
               // Fork or child-rename failure keeps the source view untouched.
             })
         },
+        deleteAt: async (seq) => {
+          const session = sessions.binding(sessionId)?.session
+          if (session === undefined) return false
+          const result = await session.deleteMessage(seq).catch(() => undefined)
+          return result?.ok ?? false
+        },
       }
     },
   }, ChatView)

@@ -86,6 +86,15 @@ interface SessionEventMap {
     error?: { name: string; code: string }
     meta?: JsonValue
   }
+  /**
+   * Removes the surface range [`start`, `end`] (inclusive, both existing
+   * surface node seqs) from the model-visible history without replacement.
+   * Log-only: derives no message, but the surface fold must know the range —
+   * its `surfaceOp` carries the same {@link SurfaceOp delete} values and
+   * `sourceEventSeqs` cites every removed node. Appended only outside an open
+   * turn, by a human transcript edit (delete message / discard a turn).
+   */
+  'message/delete': { start: number; end: number }
   /** Whole-list snapshot; latest write wins on replay. Log-only UI state; never derived history. */
   'todo/write': { todos: TodoItem[] }
   /**
@@ -264,6 +273,7 @@ type SurfaceEventType =
   | 'user/message'
   | 'assistant/message'
   | 'tool/result'
+  | 'message/delete'
 ```
 
 ### `SurfaceOp`：事件如何进入 surface
@@ -281,10 +291,16 @@ type SurfaceEventType =
  *   node. The node's {@link SessionEvent.sourceEventSeqs} must include every
  *   shadowed surface node. Used by compaction; any surface-replacing producer
  *   may use it.
+ * - `{ op: 'delete', start, end }`: removes surface nodes from `start`
+ *   (inclusive) through `end` (inclusive) without a replacement. Only
+ *   `message/delete` events carry it — a human-edited transcript removal. Both
+ *   ends must exist as surface nodes in the current surface; the event's
+ *   {@link SessionEvent.sourceEventSeqs} must include every removed node.
  */
 type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: number; end: number }
+  | { op: 'delete'; start: number; end: number }
 ```
 
 `'append'` 是常规的尾部追加路径。`replace` 会遮蔽从 `start` 到 `end`（含两端）的 surface 条目（两者都必须是有效的 surface seq；`start === end` 时仅替换单个条目），并在原位置插入新事件。
@@ -323,7 +339,7 @@ interface SurfaceIntent {
 interface SessionSurface {
   /** Current surface event sequences in model-visible order. */
   readonly nodes: readonly number[]
-  /** Monotonic count of committed positional replacements. */
+  /** Monotonic count of committed positional rewrites (replacements and deletions). */
   readonly replaceGeneration: number
 }
 ```

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { ConversationNodeAssembler } from '../src/client/sessions/conversation-assembler.ts'
+import { ConversationNodeAssembler, foldDeletedRanges } from '../src/client/sessions/conversation-assembler.ts'
 import type {
   ConversationEventInput, ConversationMatch, ConversationNodeContext,
   ConversationNodeDefinition, ConversationViewDefinition, ConversationViewNode,
@@ -1043,5 +1043,72 @@ describe('ConversationNodeAssembler', () => {
     )).toThrow(/received more than one start Match/)
     assembler.flush()
     expect([...chatSnapshot(assembler)?.nodes.values() ?? []][0]?.data).toBe(1)
+  })
+
+  it('rebuilds the transcript without the deleted range or its emptied turn', () => {
+    const assembler = new ConversationNodeAssembler(
+      new TestEventDefinitions([fallbackDefinition(() => 'tail')]),
+      new TestViewDefinitions([testView()]),
+    )
+    assembler.replaceWindow([
+      input(at(0, 'turn/start', { turn: 1 })),
+      input(at(1, 'user/message', { content: [] })),
+      input(at(2, 'step/start', { turn: 1, step: 1 })),
+      input(at(3, 'assistant/message', { turn: 1, step: 1 })),
+      input(at(4, 'step/end', { turn: 1, step: 1 })),
+      input(at(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } })),
+    ], false)
+    assembler.flush()
+    expect(chatSnapshot(assembler)?.order.length).toBeGreaterThan(0)
+
+    assembler.append(input(at(6, 'message/delete', { start: 1, end: 3 })))
+    assembler.flush()
+    // Every message node and the emptied turn's brackets leave the transcript.
+    expect(chatSnapshot(assembler)?.order).toEqual([])
+  })
+})
+
+describe('foldDeletedRanges', () => {
+  const window = [
+    input(at(0, 'turn/start', { turn: 1 })),
+    input(at(1, 'user/message', { content: [] })),
+    input(at(2, 'step/start', { turn: 1, step: 1 })),
+    input(at(3, 'assistant/message', { turn: 1, step: 1 })),
+    input(at(4, 'step/end', { turn: 1, step: 1 })),
+    input(at(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } })),
+    input(at(6, 'turn/start', { turn: 2 })),
+    input(at(7, 'user/message', { content: [] })),
+    input(at(8, 'step/start', { turn: 2, step: 1 })),
+    input(at(9, 'assistant/message', { turn: 2, step: 1 })),
+    input(at(10, 'step/end', { turn: 2, step: 1 })),
+    input(at(11, 'turn/end', { turn: 2, reason: { kind: 'completed' } })),
+  ]
+
+  it('returns the window unchanged without deletion ranges', () => {
+    expect(foldDeletedRanges(window, []).map(entry => entry.event.seq)).toEqual(
+      window.map(entry => entry.event.seq),
+    )
+  })
+
+  it('drops a whole-turn range and prunes its emptied brackets', () => {
+    const visible = foldDeletedRanges(window, [{ start: 1, end: 3 }])
+    // Turn 1 vanishes entirely; turn 2 keeps every event.
+    expect(visible.map(entry => entry.event.seq)).toEqual([6, 7, 8, 9, 10, 11])
+  })
+
+  it('prunes an emptied step but keeps a turn whose user message remains', () => {
+    const visible = foldDeletedRanges(window, [{ start: 3, end: 3 }])
+    expect(visible.map(entry => entry.event.seq)).toEqual([
+      0, 1, 5, 6, 7, 8, 9, 10, 11,
+    ])
+  })
+
+  it('folds a range whose start and end are the user message alone', () => {
+    // Only the user message hides; the turn keeps its assistant step, so the
+    // turn and step brackets stay.
+    const visible = foldDeletedRanges(window, [{ start: 1, end: 1 }])
+    expect(visible.map(entry => entry.event.seq)).toEqual([
+      0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    ])
   })
 })

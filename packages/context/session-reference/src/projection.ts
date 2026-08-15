@@ -51,6 +51,10 @@ function projectSessionConversation(snapshot: SessionSurfaceSnapshot): Projected
       }
       case 'tool/result':
         break
+      case 'message/delete':
+        // A deletion projects to no message: the surface fold already removed
+        // the shadowed nodes before projection reads them.
+        break
       /* v8 ignore next 2 -- SurfaceEventType is closed and every variant is handled above. */
       default:
         assertNever(event, 'session-reference surface event')

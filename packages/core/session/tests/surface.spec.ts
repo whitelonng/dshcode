@@ -5,6 +5,7 @@ import {
   SessionId,
   foldSurface,
   isAppendSurfaceEvent,
+  isDeleteSurfaceEvent,
   isReplacementSurfaceEvent,
   isSurfaceEligibleType,
   isSurfaceEvent,
@@ -962,5 +963,179 @@ describe('SurfaceManager.replaceGeneration', () => {
       content: [{ type: 'text', text: 'summary' }], source: { kind: 'plugin', plugin: 'compact' },
     }), { surfaceOp: { op: 'replace', start: nodes[0]!, end: nodes[1]! }, sourceEventSeqs: [nodes[0]!, nodes[1]!] })
     expect(s.surface.replaceGeneration).toBe(1)
+  })
+})
+
+/** Build a raw `message/delete` event citing the removed surface nodes. */
+function deleteEvent(
+  seq: number,
+  start: number,
+  end: number,
+  sourceEventSeqs: number[],
+): SessionEvent {
+  return {
+    type: 'message/delete',
+    seq,
+    time: seq,
+    data: { start, end },
+    surfaceOp: { op: 'delete', start, end },
+    sourceEventSeqs,
+  } as unknown as SessionEvent
+}
+
+describe('foldSurface deletions', () => {
+  it('removes the declared range from the surface nodes', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      provenanceEvent(1, undefined),
+      provenanceEvent(2, undefined),
+      deleteEvent(3, 1, 2, [1, 2]),
+    ] as SessionEvent[]
+    expect(foldSurface(events).nodes).toEqual([0])
+  })
+
+  it('deletes a single node when start === end', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      provenanceEvent(1, undefined),
+      deleteEvent(2, 1, 1, [1]),
+    ] as SessionEvent[]
+    expect(foldSurface(events).nodes).toEqual([0])
+  })
+
+  it('records no replacement metadata for a deletion', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      deleteEvent(1, 0, 0, [0]),
+    ] as SessionEvent[]
+    const folded = foldSurface(events)
+    expect(folded.nodes).toEqual([])
+    expect(folded.replacements).toEqual([])
+  })
+
+  it('rejects a deletion whose sourceEventSeqs omit a removed node', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      provenanceEvent(1, undefined),
+      deleteEvent(2, 0, 1, [0]),
+    ] as SessionEvent[]
+    expect(() => foldSurface(events)).toThrow(/surface delete: sourceEventSeqs must include every shadowed surface node; missing 1/)
+  })
+
+  it('rejects an empty sourceEventSeqs list on a deletion', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      deleteEvent(1, 0, 0, []),
+    ] as SessionEvent[]
+    expect(() => foldSurface(events)).toThrow(/sourceEventSeqs must not be empty/)
+  })
+
+  it('rejects a delete surfaceOp on a message-producing event', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      {
+        ...provenanceEvent(1, [0]),
+        surfaceOp: { op: 'delete', start: 0, end: 0 },
+      },
+    ] as SessionEvent[]
+    expect(() => foldSurface(events)).toThrow(/cannot carry a delete surfaceOp/)
+  })
+
+  it('rejects append and replace surfaceOps on a message/delete event', () => {
+    const appended = [
+      provenanceEvent(0, undefined),
+      {
+        ...deleteEvent(1, 0, 0, [0]),
+        surfaceOp: 'append',
+      },
+    ] as SessionEvent[]
+    const replaced = [
+      provenanceEvent(0, undefined),
+      {
+        ...deleteEvent(1, 0, 0, [0]),
+        surfaceOp: { op: 'replace', start: 0, end: 0 },
+      },
+    ] as SessionEvent[]
+    expect(() => foldSurface(appended)).toThrow(/message\/delete" requires a delete surfaceOp/)
+    expect(() => foldSurface(replaced)).toThrow(/message\/delete" requires a delete surfaceOp/)
+  })
+
+  it('rejects a deletion range whose start is not a current surface node', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      deleteEvent(1, 9, 0, [0]),
+    ] as SessionEvent[]
+    expect(() => foldSurface(events)).toThrow(/surface delete: start seq 9 not found in surface/)
+  })
+
+  it('rejects a deletion range whose end is not a current surface node', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      deleteEvent(1, 0, 9, [0]),
+    ] as SessionEvent[]
+    expect(() => foldSurface(events)).toThrow(/surface delete: end seq 9 not found in surface/)
+  })
+
+  it('rejects a deletion whose start is after its end', () => {
+    const events = [
+      provenanceEvent(0, undefined),
+      provenanceEvent(1, undefined),
+      deleteEvent(2, 1, 0, [0, 1]),
+    ] as SessionEvent[]
+    expect(() => foldSurface(events)).toThrow(/surface delete: start seq 1 .* is after end seq 0/)
+  })
+})
+
+describe('message/delete through a live Session', () => {
+  it('shadows the deleted turn from deriveMessages and the surface', () => {
+    const s = surfaceSession()
+    const user = s.events.find(e => e.type === 'user/message')!
+    const assistant = s.events.find(e => e.type === 'assistant/message')!
+    expect(s.deriveMessages().map(message => message.role)).toEqual(['user', 'assistant'])
+
+    s.append('message/delete', { start: user.seq, end: assistant.seq }, {
+      surfaceOp: { op: 'delete', start: user.seq, end: assistant.seq },
+      sourceEventSeqs: [user.seq, assistant.seq],
+    })
+    expect(s.surface.nodes).toEqual([])
+    expect(s.deriveMessages()).toEqual([])
+  })
+
+  it('removes only the assistant message when deleting it alone', () => {
+    const s = surfaceSession()
+    const user = s.events.find(e => e.type === 'user/message')!
+    const assistant = s.events.find(e => e.type === 'assistant/message')!
+    s.append('message/delete', { start: assistant.seq, end: assistant.seq }, {
+      surfaceOp: { op: 'delete', start: assistant.seq, end: assistant.seq },
+      sourceEventSeqs: [assistant.seq],
+    })
+    expect(s.surface.nodes).toEqual([user.seq])
+    expect(s.deriveMessages().map(message => message.role)).toEqual(['user'])
+  })
+
+  it('rebuilds the derived cache after the generation bump', () => {
+    const s = surfaceSession()
+    const assistant = s.events.find(e => e.type === 'assistant/message')!
+    expect(s.deriveMessages().map(message => message.role)).toEqual(['user', 'assistant'])
+
+    s.append('message/delete', { start: assistant.seq, end: assistant.seq }, {
+      surfaceOp: { op: 'delete', start: assistant.seq, end: assistant.seq },
+      sourceEventSeqs: [assistant.seq],
+    })
+    expect(s.surface.replaceGeneration).toBe(1)
+    expect(s.deriveMessages().map(message => message.role)).toEqual(['user'])
+  })
+
+  it('narrows deletion events with the marker guard', () => {
+    const s = surfaceSession()
+    const user = s.events.find(e => e.type === 'user/message')!
+    s.append('message/delete', { start: user.seq, end: user.seq }, {
+      surfaceOp: { op: 'delete', start: user.seq, end: user.seq },
+      sourceEventSeqs: [user.seq],
+    })
+    const deletion = s.events.at(-1)!
+    expect(isAppendSurfaceEvent(deletion)).toBe(false)
+    expect(isReplacementSurfaceEvent(deletion)).toBe(false)
+    expect(isDeleteSurfaceEvent(deletion)).toBe(true)
   })
 })

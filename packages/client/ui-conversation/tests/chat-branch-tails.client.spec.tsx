@@ -62,7 +62,14 @@ function MessageItem({ node, t: translate }: MessageItemProps) {
     visibility: 'visible',
     data: node.kind === 'model-retry' ? { attempts: [node], current: node } : node,
   }
-  const props = { node: viewNode, t: translate } as ChatNodeViewProps
+  const props = {
+    node: viewNode,
+    t: translate,
+    loadImage: vi.fn(),
+    deleteAt: vi.fn(() => Promise.resolve(true)),
+    useSession: ((selector: (snapshot: unknown) => unknown) =>
+      selector({ chat: { timeline: { turns: new Map() } } })) as ChatNodeViewProps['useSession'],
+  } as unknown as ChatNodeViewProps
   switch (node.kind) {
     case 'user':
     case 'steering':
@@ -972,5 +979,72 @@ describe('small branch tails', () => {
       />,
     )
     expect(view.container.textContent).toBe('1 轮 · 1 步| 输入 0 tok · 输出 10 tok')
+  })
+})
+
+describe('message deletion actions', () => {
+  function userViewNode(seq: number, source: unknown): ChatConversationViewNode {
+    return {
+      key: `delete-fixture:${String(seq)}`,
+      kind: 'user',
+      id: String(seq),
+      target: 'chat',
+      anchorSeq: seq,
+      location: { kind: 'session' },
+      visibility: 'visible',
+      data: {
+        kind: 'user', seq, time: 1_700_000_000_000,
+        content: [{ type: 'text', text: `prompt ${String(seq)}` }],
+        source,
+      },
+    }
+  }
+
+  const props = (
+    node: ChatConversationViewNode,
+    overrides: Partial<{
+      deleteAt: () => Promise<boolean>
+      turns: ReadonlyMap<number, { status: 'open' | 'closed' }>
+    }> = {},
+  ): ChatNodeViewProps<'user'> => ({
+    node: node as ChatNodeViewProps<'user'>['node'],
+    t,
+    loadImage: vi.fn(),
+    deleteAt: overrides.deleteAt ?? vi.fn(() => Promise.resolve(true)),
+    useSession: ((selector: (snapshot: unknown) => unknown) => selector({
+      chat: { timeline: { turns: overrides.turns ?? new Map() } },
+    })) as ChatNodeViewProps['useSession'],
+  } as unknown as ChatNodeViewProps<'user'>)
+
+  it('shows delete only on human-authored messages and calls deleteAt with the seq', async () => {
+    const deleteAt = vi.fn(() => Promise.resolve(true))
+    const injected = render(<UserMessageNodeView {...props(userViewNode(7, { kind: 'plugin', plugin: 'x' }))} />)
+    expect(injected.queryByRole('button', { name: '删除' })).toBeNull()
+
+    const human = render(<UserMessageNodeView {...props(userViewNode(7, { kind: 'user' }), { deleteAt })} />)
+    const button = human.getByRole('button', { name: '删除' })
+    fireEvent.click(button)
+    expect(deleteAt).toHaveBeenCalledWith(7)
+  })
+
+  it('disables delete while the owning turn is open', () => {
+    const node = {
+      ...userViewNode(7, { kind: 'user' }),
+      location: { kind: 'turn', turn: { turn: 1, start: null, end: null, status: 'open', steps: [], data: {} } },
+    } as unknown as ChatConversationViewNode
+    const view = render(<UserMessageNodeView {...props(node, {
+      turns: new Map([[1, { status: 'open' }]]),
+    })} />)
+    expect(view.getByRole('button', { name: '删除' }).getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('surfaces a failed deletion on the tooltip label', async () => {
+    const view = render(<UserMessageNodeView {...props(userViewNode(7, { kind: 'user' }), {
+      deleteAt: () => Promise.resolve(false),
+    })} />)
+    const button = view.getByRole('button', { name: '删除' })
+    fireEvent.click(button)
+    button.focus()
+    await expect.poll(() => view.getByRole('tooltip').textContent).toBe('删除失败，请重试')
   })
 })
