@@ -150,6 +150,24 @@ ${failure.stack}
 请检查并修复该插件；修复完成后告诉我如何重新启用。`
 }
 
+/**
+ * The seeded first message for a failed-install handoff conversation: the
+ * install target and the error text, self-contained for the agent.
+ * @param spec - the install target (npm package or git URL) that failed.
+ * @param reason - the rendered install error.
+ * @returns the repair prompt text.
+ */
+function installRepairMessage(spec: string, reason: string): string {
+  return `插件安装失败，请帮我诊断并修复。
+
+安装目标：${spec}
+
+错误信息：
+${reason}
+
+请检查该插件并重新安装；完成后告诉我结果。`
+}
+
 /** The merged plugin list tab. */
 export function PluginInstallerTab(props: PluginInstallerTabProps) {
   const {
@@ -262,11 +280,21 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
     }
   }
 
+  /** The install spec whose latest attempt failed; arms the handoff action. */
+  const [failedSpec, setFailedSpec] = useState<string | undefined>(undefined)
+
   const onInstall = (): void => {
+    const target = spec.trim()
     void run({ kind: 'install' }, async () => {
-      await install(spec.trim())
-      setSpec('')
-      await reload()
+      try {
+        await install(target)
+        setFailedSpec(undefined)
+        setSpec('')
+        await reload()
+      } catch (reason) {
+        setFailedSpec(target)
+        throw reason
+      }
     })
   }
 
@@ -354,6 +382,20 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
     })
   }
 
+  /** Hand the latest failed install off to a repair conversation over the install root. */
+  const onRepairInstall = (): void => {
+    if (failedSpec === undefined || view.status !== 'ready') return
+    setRepairing(failedSpec)
+    void repairPlugin(view.failures.pluginRoot, installRepairMessage(failedSpec, error ?? '')).then(() => {
+      setRepairing(undefined)
+      setError(undefined)
+      setFailedSpec(undefined)
+    }).catch((reason: unknown) => {
+      setRepairing(undefined)
+      setError(t('failed', { reason: reason instanceof Error ? reason.message : String(reason) }))
+    })
+  }
+
   /** Copy the failure text for a manual repair conversation. */
   const onCopy = (failure: PluginFailureItem): void => {
     const text = `${failure.message}\n\n${failure.stack}`
@@ -431,7 +473,16 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
           <span className={css.progressLabel}>{progressLabel(progress, t)}</span>
         </div>
       )}
-      {error !== undefined && <div className={css.error}>{error}</div>}
+      {error !== undefined && (
+        <div className={css.errorRow}>
+          <span className={css.error}>{error}</span>
+          {failedSpec !== undefined && (
+            <Button variant="outline" disabled={repairing !== undefined} onClick={onRepairInstall}>
+              {repairing !== undefined ? t('repairing') : t('repair')}
+            </Button>
+          )}
+        </div>
+      )}
       {toggleBusy !== undefined && <p className={css.applying} aria-live="polite">{t('applying')}</p>}
       <div className={css.actionsRow}>
         <Button variant="outline" disabled={busy !== undefined} onClick={onCheck}>
