@@ -70,6 +70,7 @@ DeepSeek request identity is separate from app attribution. After credential res
 - The adapter-owned `off` effort maps to `thinking: {type: 'disabled'}` and never crosses the wire as `reasoning_effort: 'off'`.
 - The first thinking-mode chunk carries `reasoning_content: ""` — handled (no spurious reasoning block).
 - **Reasoning passback rule**: on assistant turns that carried tool calls, `reasoning_content` is serialized back in history (required by the API in thinking mode); on tool-call-free turns it is dropped (ignored anyway — saves tokens).
+- **Image blocks flatten into attachment notes**: this wire route is text-only, so an image content block serializes into the copyable `[image attachment …]` reference (the exact JSON `describe_image` accepts) — image data never crosses the wire. The adapter advertises `imagePolicy: 'note'` for every model, so the host admits and switches to this route even when a session carries images.
 - Cache accounting: `cacheReadTokens` ← `prompt_cache_hit_tokens` / `prompt_tokens_details.cached_tokens`; DeepSeek reports no cache-write metric.
 
 ## Errors

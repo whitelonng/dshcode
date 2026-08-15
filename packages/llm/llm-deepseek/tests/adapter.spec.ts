@@ -658,8 +658,8 @@ describe('plugin registration and config', () => {
     await ctx.plugin(LlmDeepSeek, { baseURL: 'http://127.0.0.1:1' })
     expect(ctx.llm.listProviders()).toEqual([{ id: 'deepseek-official', name: 'DeepSeek' }])
     await expect(ctx.llm.listModels('deepseek-official')).resolves.toEqual([
-      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', inputModalities: ['text'] },
-      { provider: 'deepseek-official', id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', inputModalities: ['text'] },
+      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', inputModalities: ['text'], imagePolicy: 'note' },
+      { provider: 'deepseek-official', id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', inputModalities: ['text'], imagePolicy: 'note' },
     ])
     await expect(ctx.llm.resolveModelInfo('deepseek-official', 'deepseek-v4-flash'))
       .resolves.toMatchObject({
@@ -753,8 +753,8 @@ describe('plugin registration and config', () => {
     await ctx.plugin(LlmRuntime)
     LlmDeepSeek.apply(ctx, { baseURL: 'http://127.0.0.1:1' })
     await expect(ctx.llm.listModels('deepseek-official')).resolves.toEqual([
-      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', inputModalities: ['text'] },
-      { provider: 'deepseek-official', id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', inputModalities: ['text'] },
+      { provider: 'deepseek-official', id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', inputModalities: ['text'], imagePolicy: 'note' },
+      { provider: 'deepseek-official', id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', inputModalities: ['text'], imagePolicy: 'note' },
     ])
   })
 
@@ -774,8 +774,8 @@ describe('plugin registration and config', () => {
       ],
     })
     await expect(ctx.llm.listModels('deepseek-official')).resolves.toEqual([
-      { provider: 'deepseek-official', id: 'private-fast', name: 'private-fast', inputModalities: ['text'] },
-      { provider: 'deepseek-official', id: 'private-reasoner', name: 'Private Reasoner', description: 'Higher reasoning budget', inputModalities: ['text'] },
+      { provider: 'deepseek-official', id: 'private-fast', name: 'private-fast', inputModalities: ['text'], imagePolicy: 'note' },
+      { provider: 'deepseek-official', id: 'private-reasoner', name: 'Private Reasoner', description: 'Higher reasoning budget', inputModalities: ['text'], imagePolicy: 'note' },
     ])
     await expect(ctx.llm.resolveModelInfo('deepseek-official', 'private-fast'))
       .resolves.toMatchObject({ context: { contextWindow: 32_000 } })
@@ -788,6 +788,10 @@ describe('plugin registration and config', () => {
       .resolves.toMatchObject({
         context: { contextWindow: 1_000_000 },
         defaultMaxTokens: 256_000,
+        // The uncatalogued fallback keeps the note policy: image-bearing
+        // sessions flatten into attachment notes on this route.
+        inputModalities: ['text'],
+        imagePolicy: 'note',
       })
   })
 

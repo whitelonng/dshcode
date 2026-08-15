@@ -562,6 +562,8 @@ describe('LlmRuntime', () => {
     [{ provider: 'route', id: 'model', name: 1 }, 'non-string name'],
     [{ provider: 'route', id: 'model', name: '' }, 'empty name'],
     [{ provider: 'route', id: 'model', name: 'Model', description: 1 }, 'non-string description'],
+    [{ provider: 'route', id: 'model', name: 'Model', imagePolicy: 'native' }, 'unknown image policy'],
+    [{ provider: 'route', id: 'model', name: 'Model', imagePolicy: 1 }, 'non-string image policy'],
   ] as const)('rejects invalid exact model metadata (%s: %s)', async (metadata, _label) => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
@@ -584,6 +586,7 @@ describe('LlmRuntime', () => {
         return Promise.resolve({
           provider: 'route', id: 'model', name: 'Model',
           inputModalities: ['text', 'image'],
+          imagePolicy: 'note',
         })
       }
     }(SCRIPT)
@@ -594,6 +597,7 @@ describe('LlmRuntime', () => {
     await expect(ctx.llm.resolveModelInfo('route', 'model')).resolves.toEqual({
       provider: 'route', id: 'model', name: 'Model',
       inputModalities: ['text', 'image'],
+      imagePolicy: 'note',
     })
   })
 
@@ -990,6 +994,7 @@ describe('LlmRuntime', () => {
     [{ provider: 'route', id: 'm', name: 1 }, 'non-string name'],
     [{ provider: 'route', id: 'm', name: '' }, 'empty name'],
     [{ provider: 'route', id: 'm', name: 'M', description: 1 }, 'non-string description'],
+    [{ provider: 'route', id: 'm', name: 'M', imagePolicy: 'native' }, 'unknown image policy'],
   ] as const)('rejects invalid model metadata (%s: %s)', async (metadata, _label) => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

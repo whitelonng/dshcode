@@ -401,6 +401,15 @@ interface LlmModelInfo {
   description?: string
   /** Accepted request modalities; absent means unknown, while an explicit omission is negative capability. */
   inputModalities?: readonly ModelModality[]
+  /**
+   * How the adapter carries image content blocks on this route when the
+   * endpoint does not accept image input natively (see {@link inputModalities}).
+   * `note` — image blocks serialize into copyable text notes, so image-bearing
+   * sessions run; `reject` — image-bearing requests fail. Absent is the
+   * conservative negative: treat as `reject`. A route whose `inputModalities`
+   * includes `image` carries images natively and needs no policy.
+   */
+  imagePolicy?: 'note' | 'reject'
 }
 ```
 
