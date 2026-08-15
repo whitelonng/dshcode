@@ -282,17 +282,24 @@ describe('PluginControlGateway', () => {
     )
     expect(removedResult.ok).toBe(true)
     if (!removedResult.ok) throw new Error('uninstall request unexpectedly failed')
-    const removed = removedResult.value as { controls: unknown[] }
-    expect(removed.controls).toHaveLength(0)
+    const removed = removedResult.value as { controls: Array<{ id: string; name: string; repository: string; state: string }> }
+    expect(removed.controls).toEqual([{
+      id: 'fixture',
+      name: 'Fixture plugin',
+      repository: 'https://example.com/plugin',
+      state: 'uninstalled',
+    }])
     const text = await readFile(h.path, 'utf8')
     expect(text).toContain('uninstalled: true')
     expect(text).toContain('# dsh-plugin-control: fixture')
     expect(text).not.toContain('insert:')
     expect(readUninstalledControls(h.path)).toEqual(new Set(['fixture']))
 
-    // A fresh gateway (a later boot) keeps the product hidden.
+    // A fresh gateway (a later boot) keeps the product uninstalled.
     const rebooted = new PluginControlGateway(h.ctx, config(h.path, h.entryIds))
-    expect(rebooted.list().controls).toHaveLength(0)
+    expect(rebooted.list().controls).toEqual([
+      { id: 'fixture', name: 'Fixture plugin', repository: 'https://example.com/plugin', state: 'uninstalled' },
+    ])
 
     // Re-enabling clears the uninstall marker and mounts the rows again.
     const restored = await gateway.handle(
@@ -334,7 +341,7 @@ describe('PluginControlGateway', () => {
 
     const directory = `${h.path}.directory`
     await mkdir(directory)
-    await expect(() => readUninstalledControls(directory)).toThrow(/EISDIR|illegal operation/)
+    expect(() => { readUninstalledControls(directory) }).toThrow(/EISDIR|illegal operation/)
     await expect(writePluginControlUninstalled(directory, 'fixture')).rejects.toThrow(/EISDIR|illegal operation/)
 
     await rm(h.path)

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Archived conversations page in Web Settings. One section (`settings.section`, id `archive`) listing every registry-global archived session with its folded title and creation time, plus two actions per row:
+Archived conversations page in Web Settings. One section (`settings.section`, id `archive`) listing every registry-global archived session with its folded title and creation time. A search box filters the rows by title or session id; each row carries a selection checkbox with a select-all toggle, and the selection drives a bulk toolbar (恢复所选 runs immediately — restore is non-destructive; 删除所选 requires an explicit confirmation modal, then calls `workspace.deleteSession` per row — irreversible). Single-row actions:
 
 - **恢复 (Restore)** — removes the session from the archive set through `workspace.restoreSession`; the session reappears in its original workspace position.
 - **彻底删除 (Delete permanently)** — requires an explicit confirmation modal, then calls `workspace.deleteSession`; the host removes the session log from persistence and drops its workspace accounting and archive-set entries. Irreversible.

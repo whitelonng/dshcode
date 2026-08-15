@@ -115,25 +115,14 @@
           - id: web-ui
             name: dsh-web-ui
             repository: https://github.com/zhu1090093659/dsh-web-ui
+            # Trimmed suite: only the skin center and the pet ship with the
+            # built-in product (redundant features were removed to avoid
+            # duplicate sidebar entries and conflict with user installs).
             entryIds:
-              - ui-dsh-aionui-panel
-              - ui-task-board
-              - ui-git-graph
               - pet
-              - remote-web-ui
-              - live-stats
-              - ssh
-              - ui-web-ui-settings
               - ui-skin-center
             packages:
-              - '@linxin666/dsh-client-ui-aionui-panel'
-              - '@linxin666/dsh-client-ui-task-board'
-              - '@linxin666/dsh-client-ui-git-graph'
               - '@linxin666/dsh-pet'
-              - '@linxin666/dsh-remote-web-ui'
-              - '@linxin666/dsh-live-stats'
-              - '@linxin666/dsh-ssh'
-              - '@linxin666/dsh-client-ui-web-ui-settings'
               - '@linxin666/dsh-client-ui-skin-center'
 
     # Loopback-only user-plugin installs and updates into the shared fallback.
@@ -142,6 +131,15 @@
       inject: [profileUserPatchPath]
       config:
         profilePatchPath: !!js ctx.profileUserPatchPath
+        # Optional GitHub mirror for restricted networks (e.g. DSH_GITHUB_MIRROR
+        # = https://gh-proxy.com/ in ~/.dsh/.env); unset downloads from GitHub
+        # directly.
+        githubMirror: !!js process.env.DSH_GITHUB_MIRROR
+        # When the user installs a webui suite themselves, the built-in web-ui
+        # product's rows are disabled so the two do not double-mount.
+        disableControlsOnInstall:
+          - id: web-ui
+            matches: ['dsh-web-ui']
 
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.

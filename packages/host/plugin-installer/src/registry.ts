@@ -1,5 +1,6 @@
 /** npm registry interaction: metadata fetch, version resolution, tarball install. */
 
+import { createHash } from 'node:crypto'
 import { rmSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -42,7 +43,7 @@ export async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs
 
 /** One version row of the npm packument. */
 interface NpmVersionEntry {
-  dist?: { tarball?: string }
+  dist?: { tarball?: string; integrity?: string }
 }
 
 /** The subset of the npm packument the installer reads. */
@@ -73,12 +74,14 @@ export async function fetchPackument(name: string, registry: string, signal?: Ab
       : ''
     throw new Error(`plugin-installer: registry answered ${String(response.status)} for ${JSON.stringify(name)}${hint}`)
   }
-  const packument = (await response.json()) as Partial<NpmPackument>
-  if (typeof packument['dist-tags'] !== 'object' || packument['dist-tags'] === null
-    || typeof packument.versions !== 'object' || packument.versions === null) {
+  const raw = (await response.json()) as { 'dist-tags'?: unknown; versions?: unknown }
+  const distTags = raw['dist-tags']
+  const versions = raw.versions
+  if (typeof distTags !== 'object' || distTags === null
+    || typeof versions !== 'object' || versions === null) {
     throw new Error(`plugin-installer: registry ${url} returned an invalid packument`)
   }
-  return packument as NpmPackument
+  return { 'dist-tags': distTags, versions } as NpmPackument
 }
 
 /**
@@ -91,7 +94,7 @@ export async function fetchPackument(name: string, registry: string, signal?: Ab
  */
 export function resolveNpmVersion(spec: string | undefined, packument: NpmPackument): string {
   const available = Object.keys(packument.versions)
-  const latest = packument['dist-tags']?.latest
+  const latest = packument['dist-tags'].latest
   if (spec === undefined || spec === '' || spec === 'latest') {
     if (latest === undefined || !available.includes(latest)) {
       throw new Error('plugin-installer: the packument has no dist-tags.latest version')
@@ -132,17 +135,41 @@ export function parseNpmSpec(spec: string): { name: string; version: string | un
 }
 
 /** npm package-name pattern: an optional scope plus a URL-safe name (first character neither `.` nor `_`). */
-const NPM_NAME_PATTERN = /^(@[A-Za-z0-9][A-Za-z0-9._~-]*\/)?[A-Za-z0-9][A-Za-z0-9._~-]*$/
+/** npm package-name pattern: an optional scope plus a URL-safe name (first character neither `.` nor `_`). */
+export const NPM_NAME_PATTERN = /^(@[A-Za-z0-9][A-Za-z0-9._~-]*\/)?[A-Za-z0-9][A-Za-z0-9._~-]*$/
+
+/**
+ * Normalize a pasted install value: a whole CLI command (`dsh plugin
+ * --profile <name> add <spec>`, `pnpm add <spec>`, `npm install <spec>`)
+ * reduces to the spec it installs; anything else passes through unchanged.
+ * @param input - the raw install box value.
+ * @returns the installable spec.
+ */
+export function normalizeInstallSpec(input: string): string {
+  const trimmed = input.trim()
+  const dshMatch = /^dsh\s+plugin(?:\s+--profile\s+\S+)?\s+add\s+(.+)$/.exec(trimmed)
+  if (dshMatch !== null) return (dshMatch[1] ?? '').trim()
+  const managerMatch = /^(?:pnpm\s+(?:add|i)|npm\s+(?:install|i))\s+(.+)$/.exec(trimmed)
+  if (managerMatch !== null) return (managerMatch[1] ?? '').trim()
+  return trimmed
+}
 
 /**
  * Validate one user-supplied install spec before any registry request.
- * Rejects prose, pasted URLs, and mixed text with a readable error instead
- * of sending a malformed package path that the registry answers 406.
+ * Rejects prose, pasted URLs, shell commands, and mixed text with a readable
+ * error instead of sending a malformed package path that the registry answers
+ * 406.
  * @param spec - trimmed install spec from the browser.
  * @throws when the spec is neither a git source nor a valid npm package spec.
  */
 export function validateInstallSpec(spec: string): void {
   if (isGitSpec(spec)) return
+  if (/^(?:dsh|pnpm|npm|npx|yarn)\b/.test(spec)) {
+    throw new Error(
+      `plugin-installer: invalid install spec ${JSON.stringify(spec)}: looks like a shell command — `
+      + 'paste only the npm package name or the git repository URL (e.g. github:Nagi-ovo/dsh-visualize)',
+    )
+  }
   const { name } = parseNpmSpec(spec)
   if (!NPM_NAME_PATTERN.test(name)) {
     throw new Error(`plugin-installer: invalid install spec ${JSON.stringify(spec)}: expected one npm package name (e.g. @scope/name) or one git repository URL`)
@@ -156,7 +183,7 @@ export function validateInstallSpec(spec: string): void {
  */
 export function isGitSpec(spec: string): boolean {
   return spec.startsWith('git+') || spec.startsWith('git://') || spec.startsWith('github:')
-    || /^https?:\/\/[^/]+\/[^/]+\/[^/]+(\.git)?$/.test(spec)
+    || /^https?:\/\/[^/]+\/[^/]+\/[^/#]+(\.git)?(#[^/]+)?$/.test(spec)
 }
 
 /**
@@ -171,6 +198,56 @@ export function isGitSpec(spec: string): boolean {
  * @param signal - optional cancellation.
  * @param onProgress - optional download completion callback (0–100 percent).
  * @returns resolution after extraction.
+ */
+/**
+ * Subresource-integrity verification of one downloaded tarball. The registry
+ * publishes `dist.integrity` as one or more `<algorithm>-<base64>` tokens
+ * (npm uses sha512/sha256/sha384); the tarball must match at least one of the
+ * tokens this verifier knows. A missing declaration verifies nothing (the
+ * transport is still HTTPS), a declaration with no supported algorithm fails
+ * loud — pinning without a verifiable algorithm would be false confidence.
+ * @param digest - the sha256/384/512 digests of the tarball bytes.
+ * @param integrity - the registry's SRI string.
+ * @param tarball - the tarball URL (diagnostics only).
+ * @throws when no supported token matches or none exists.
+ */
+export function verifySRI(
+  digest: Record<'sha256' | 'sha384' | 'sha512', string>,
+  integrity: string,
+  tarball: string,
+): void {
+  let supported = false
+  for (const token of integrity.split(/\s+/)) {
+    if (token === '') continue
+    const dash = token.indexOf('-')
+    const algorithm = dash === -1 ? '' : token.slice(0, dash)
+    const expected = dash === -1 ? '' : token.slice(dash + 1)
+    if ((algorithm === 'sha256' || algorithm === 'sha384' || algorithm === 'sha512') && expected !== '') {
+      supported = true
+      if (digest[algorithm] === expected) return
+    }
+  }
+  if (!supported) {
+    throw new Error(`plugin-installer: tarball ${tarball} declares integrity with no supported algorithm (${integrity})`)
+  }
+  throw new Error(`plugin-installer: tarball ${tarball} failed integrity verification (expected ${integrity})`)
+}
+
+/**
+ * Install one npm package version into a target directory: download the
+ * tarball and extract it (package root at the target root). Download
+ * progress is reported through `onProgress` when the response declares a
+ * content length, and a declared `dist.integrity` is verified against the
+ * downloaded bytes before the extraction result is kept.
+ * @param name - package name (for the tarball lookup).
+ * @param version - resolved version.
+ * @param packument - metadata carrying the tarball URL.
+ * @param targetDir - destination directory (created; existing contents removed,
+ *   and the directory removed again when the install fails).
+ * @param signal - optional cancellation.
+ * @param onProgress - optional download completion callback (0–100 percent).
+ * @returns resolution after extraction and integrity verification; a failed
+ *   install leaves no target directory behind.
  */
 export async function installNpmPackage(
   name: string,
@@ -198,32 +275,61 @@ export async function installNpmPackage(
   await mkdir(targetDir, { recursive: true })
   // Strip the package/ prefix of npm tarballs so the package root lands in
   // the target directory. Bytes are counted while bridging the web stream
-  // into Node so the browser can show download progress.
+  // into Node so the browser can show download progress, and hashed for the
+  // integrity check the registry's SRI pins.
   const total = Number(response.headers.get('content-length') ?? NaN)
-  const body = response.body as import('node:stream/web').ReadableStream
+  const hashers = {
+    sha256: createHash('sha256'),
+    sha384: createHash('sha384'),
+    sha512: createHash('sha512'),
+  }
+  const body = response.body as import('node:stream/web').ReadableStream<Uint8Array>
   const reader = body.getReader()
   let received = 0
-  const progress = Readable.fromWeb(new WebReadableStream({
+  const source = new WebReadableStream<Uint8Array>({
     async pull(controller) {
       const chunk = await reader.read()
       if (chunk.done) {
         controller.close()
         return
       }
-      received += chunk.value.byteLength
+      const value = chunk.value
+      received += value.byteLength
+      hashers.sha256.update(value)
+      hashers.sha384.update(value)
+      hashers.sha512.update(value)
       if (Number.isFinite(total) && total > 0) {
         onProgress?.(Math.min(100, Math.round(received / total * 100)))
       }
-      controller.enqueue(chunk.value)
+      controller.enqueue(value)
     },
-  }))
-  await new Promise<void>((resolve, reject) => {
-    const extract = tar.x({ cwd: targetDir, strip: 1 })
-    progress.pipe(extract)
-    extract.on('finish', () => resolve())
-    extract.on('error', reject)
-    // The fetch signal aborts the download; the stream error then rejects.
   })
+  const progress = Readable.fromWeb(source)
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const extract = tar.x({ cwd: targetDir, strip: 1 })
+      progress.pipe(extract)
+      extract.on('finish', () => { resolve() })
+      extract.on('error', reject)
+      // The fetch signal aborts the download; the stream error then rejects.
+    })
+    const integrity = entry?.dist?.integrity
+    if (integrity !== undefined && integrity !== '') {
+      verifySRI({
+        sha256: hashers.sha256.digest('base64'),
+        sha384: hashers.sha384.digest('base64'),
+        sha512: hashers.sha512.digest('base64'),
+      }, integrity, tarball)
+    }
+  } catch (error) {
+    // A failed download, extraction, or integrity check must not leave an
+    // empty or half-written package directory behind: Node's resolver then
+    // reports "Cannot find package" for a directory that exists, which reads
+    // as the package being installed while defeating every parent-directory
+    // fallback and every later boot that imports it.
+    await rm(targetDir, { recursive: true, force: true })
+    throw error
+  }
 }
 
 /**

@@ -16,7 +16,7 @@ Plugin management was closed: `plugin-control` toggles deployment-configured pro
 
 `@deepseek-ai/dsh-host-plugin-installer` registers `/plugin-installer` on the Connection channel (`authority: 'loopback'`), configured by the composing profile (`profilePatchPath`, optional `dshHome` and `registry`). Endpoints: `list`, `install { spec }`, `update { id }`, `uninstall { id }`, `check-updates`.
 
-- **Sources.** An npm spec (`name`, `name@version`, `name@range`) resolves against the registry packument (default `npm_config_registry`, then npmjs) with semver range selection (exact → range → `dist-tags.latest`, prereleases excluded from ranges); the tarball is downloaded over HTTPS and extracted with `tar` into the flat module fallback `$DSH_HOME/profiles/node_modules/<name>` (scoped names keep their `@scope/` directory). A git URL (git+, git://, github:, or an https repository path) is shallow-cloned with the `git` binary into a staging directory, its package identity is read, and the package is moved to its final fallback location.
+- **Sources.** An npm spec (`name`, `name@version`, `name@range`) resolves against the registry packument (default `npm_config_registry`, then npmjs) with semver range selection (exact → range → `dist-tags.latest`, prereleases excluded from ranges); the tarball is downloaded over HTTPS and extracted with `tar` into the flat module fallback `$DSH_HOME/profiles/node_modules/<name>` (scoped names keep their `@scope/` directory). A GitHub URL (`github:owner/repo`, `https://github.com/owner/repo`, optionally with a `#ref` pin) downloads its source tarball from codeload and resolves its commit through the GitHub API — no `git` binary; other git hosts (git+, git://, https repository paths) shallow-clone with the `git` binary, and a GitHub URL falls back to a clone when its tarball path fails and git exists. The package is staged in a temporary directory, its identity is read and validated, and it is moved to its final fallback location.
 - **State.** `$DSH_HOME/plugins.json` records every install: id (package name), display name, version, source kind/spec, install time, and the git commit for repository sources. Writes are atomic under a file lock; a malformed state fails loud.
 - **Patch layer.** Every install/update inserts a managed loader row (`id` + `name` = package name, marked with a `dsh-plugin-installer:` comment) into the profile user patch layer via YAML document manipulation that preserves unowned nodes, comments, and `!!js` expressions; uninstall removes it.
 - **Updates.** `check-updates` compares npm `dist-tags.latest` (or the remote HEAD for git sources) against the installed version per plugin, degrading silently per plugin when a source is offline or gone.
@@ -34,7 +34,7 @@ The host suite covers state round-trips and loud malformed-state failure, spec p
 
 **Add integrity pinning (npm `integrity`) to tarball installs.** Rejected: the registry packument carries it, but verification adds a hash pipeline; HTTPS + the user-owned code-execution decision covers v1, documented as a known limitation.
 
-**Install by spawning the npm CLI.** Rejected: packaged Electron ships no npm; the registry HTTP + `tar` path is self-contained, and git remains an explicit machine requirement only for repository sources.
+**Install by spawning the npm CLI.** Rejected: packaged Electron ships no npm; the registry HTTP + `tar` path is self-contained, and git remains an explicit machine requirement only for non-GitHub repository sources (GitHub sources install from codeload without it).
 
 **Apply plugin changes via the client HMR channel instead of restart.** Rejected: a new install adds a Loader row, which the host-side config reload — disabled in packaged Electron — would need; the restart channel already exists and is honest about the packaged constraint.
 
@@ -42,5 +42,10 @@ The host suite covers state round-trips and loud malformed-state failure, spec p
 
 - Users can install, update, and uninstall plugins from npm or git sources entirely from Settings; the install state and sources are durable in `$DSH_HOME/plugins.json`.
 - New plugins take effect after an application restart (desktop: one-click via the bridge; browser: restart the `dsh web` process).
-- Repository sources require `git` on the machine; npm installs have no integrity pinning yet — both documented as known limitations.
+- Non-GitHub repository sources require `git` on the machine (GitHub sources download from codeload without it, subject to the GitHub API's unauthenticated rate limit); npm installs have no integrity pinning yet — both documented as known limitations.
 - The settings dialog gains one tab (安装与更新), covered by the replayed web suite.
+
+## Related
+
+- [Desktop plugin boot-failure recovery](../../implemented/architecture/2026-08-15-desktop-plugin-boot-recovery.md) reuses this gateway's managed patch-row and state helpers for the disable-and-restart recovery flow, and extends the gateway with the `failures`/`set-safe-mode` endpoints.
+- [GitHub plugin installs ride codeload tarballs and the GitHub API](../../implemented/architecture/2026-08-15-github-tarball-installs.md) replaces the shallow clone for GitHub sources; this note's identity validation and commit recording are what that path still runs.

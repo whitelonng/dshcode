@@ -1,6 +1,6 @@
 /** Stage a production-only workspace deployment for electron-builder. */
 
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync, lstatSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir, homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -24,7 +24,7 @@ function runPnpm(args) {
 
 /**
  * Assemble the deployment-owned skins tree the skin center reads:
- * `<stage>/skins-extras/<id>` links to the staged skin packages. The
+ * `<stage>/skins-extras/<id>` holds a copy of each staged skin package. The
  * patched `@linxin666/dsh-client-ui-skin-center` resolves `skins/` beside
  * an ancestor `node_modules`, and electron-builder ships this tree at
  * `app/node_modules/skins` through `extraResources` (the node-module
@@ -33,6 +33,9 @@ function runPnpm(args) {
  * so the scan walks `node_modules/.pnpm` store entries and keeps only the
  * packages carrying a `skin.json` (the skin-center plugin itself shares
  * the package-name prefix but is not a skin).
+ * The packages are copied, never symlinked: the stage lives under the
+ * system temporary directory, so a link would ship into the app bundle
+ * pointing at a path the OS may delete at any time.
  * @returns the number of staged skins.
  */
 function assembleSkinsExtras() {
@@ -48,19 +51,10 @@ function assembleSkinsExtras() {
     const id = at === -1 ? rest : rest.slice(0, at)
     const target = join(pnpmDir, entry, 'node_modules', '@linxin666', `dsh-client-ui-skin-${id}`)
     if (!existsSync(join(target, 'skin.json'))) continue
-    const link = join(extrasRoot, id)
-    try {
-      const stat = lstatSync(link)
-      if (!stat.isSymbolicLink()) {
-        throw new Error(`DSHCode packaging: ${link} exists and is not a symlink; remove it so the skins tree can be staged`)
-      }
-      if (readlinkSync(link) === target) continue
-      unlinkSync(link)
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
-    }
-    mkdirSync(dirname(link), { recursive: true })
-    symlinkSync(target, link, 'junction')
+    const copy = join(extrasRoot, id)
+    rmSync(copy, { recursive: true, force: true })
+    mkdirSync(dirname(copy), { recursive: true })
+    cpSync(target, copy, { recursive: true })
     staged += 1
   }
   return staged

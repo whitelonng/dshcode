@@ -10,6 +10,10 @@ Electron 主进程调用共享的 `@deepseek-ai/dsh/profile-boot` 入口，并�
 
 打包版 Electron 不开放 Cordis HMR（热模块替换）所需的 Node loader 内部能力。因此，桌面启动器会关闭 profile 级和 home 级 `cordis.patch.yml` 文件的实时监听；启动时仍会加载这两个文件的内容，Web UI 管理的普通设置也会保留各自的实时行为。手动编辑任一 patch 文件后，请重启 DSHCode。
 
+## 插件启动失败恢复
+
+一个不兼容的插件绝不能让应用打不开。启动失败会被归因到已安装插件，并记录到有界的按插件环形文件（`$DSH_HOME/boot-failures.json`，至多 8 条、90 天留存）；随后弹出原生恢复对话框，提供「继续（禁用插件并重启）」（禁用被归咎插件并重启——与设置页开关相同的 patch 行写入）、「安全模式启动」（跳过用户 patch 层启动，通过 `$DSH_HOME/safe-mode` 标记）与「退出」。设置中的插件列表为受影响的插件显示「启动失败」徽标，带「让 Agent 修复」（打开一个工作区为插件安装根目录 `$DSH_HOME/profiles` 的对话，首条消息内嵌失败记录与安装路径）与「复制错误」。硬崩溃与挂起由启动生命周期标记（`$DSH_HOME/boot-marker.json`）兜底：在标记写入 `ok` 之前死掉的启动会延续失败计数，连续三次失败后对话框默认选择安全模式。
+
 ## 安全与生命周期
 
 - WebServer 只绑定 `127.0.0.1`，端口值为 `0`，由操作系统以原子方式选择一个可用的临时端口。
@@ -60,3 +64,4 @@ pnpm --filter @dshcode/desktop run dist:win:x64
 - 预览版安装包目前明确保持未签名状态。在后续版本配置平台签名及 macOS 公证前，macOS Gatekeeper 与 Windows SmartScreen 可能会对本地构建发出警告。
 - 尚未配置自动更新。
 - 内嵌 Web UI 保留上游身份标识，但桌面应用与安装器使用独立 DSHCode 图标；详见仓库的[许可证与品牌声明](../../README.md#license-and-branding)。
+- 恢复对话框、托盘与自绘标题栏需要在原生 Windows 构建上手动验证。

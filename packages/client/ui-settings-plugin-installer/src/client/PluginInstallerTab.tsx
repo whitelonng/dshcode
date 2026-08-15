@@ -17,7 +17,14 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { InstalledPluginItem, InstallProgressItem, PluginControlItem, PluginUpdateItem } from './protocol.ts'
+import type {
+  InstalledPluginItem,
+  InstallProgressItem,
+  PluginControlItem,
+  PluginFailureItem,
+  PluginFailuresSnapshot,
+  PluginUpdateItem,
+} from './protocol.ts'
 import type { PluginInstallerLocaleKey } from './locales.ts'
 import css from './PluginInstallerTab.module.css'
 
@@ -48,6 +55,12 @@ export interface PluginInstallerTabInjected {
   checkUpdates: () => Promise<PluginUpdateItem[]>
   /** Read the current install/update progress. */
   status: () => Promise<InstallProgressItem>
+  /** Read the recorded boot failures, plugin root, and safe-mode state. */
+  failures: () => Promise<PluginFailuresSnapshot>
+  /** Persist the safe-mode marker (toggled together with a restart). */
+  setSafeMode: (enabled: boolean) => Promise<void>
+  /** Start a repair conversation over the plugin install root. */
+  repairPlugin: (pluginRoot: string, message: string) => Promise<void>
   /** Read the deployment-configured preset plugin switches. */
   controlsList: () => Promise<PluginControlItem[]>
   /** Persist one preset plugin's next-start enablement. */
@@ -72,6 +85,7 @@ type ViewState =
     readonly plugins: readonly InstalledPluginItem[]
     readonly snapshot: PluginInventorySnapshot
     readonly controls: readonly PluginControlItem[]
+    readonly failures: PluginFailuresSnapshot
   }
 
 /** One row operation in flight. */
@@ -89,12 +103,13 @@ function moduleShortName(moduleName: string): string {
     .replace(/^dsh-(?:host-|client-)?/, '')
 }
 
-/** Locale keys for the four preset-product states. */
+/** Locale keys for the preset-product states. */
 const CONTROL_STATE_KEYS = {
   enabled: 'enabled',
   disabled: 'disabled',
   mixed: 'mixed',
   unavailable: 'unavailable',
+  uninstalled: 'uninstalled',
 } as const satisfies Record<PluginControlItem['state'], PluginInstallerLocaleKey>
 
 /** Localized label for one install phase, with percent when the download has one. */
@@ -114,6 +129,27 @@ function matchesEntry(entry: PluginInventorySnapshot['entries'][number], normali
     .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
 }
 
+/**
+ * The seeded first message of a repair conversation: the failure record and
+ * the plugin's absolute install path, self-contained so the agent never needs
+ * to read files outside its workspace to start.
+ * @param failure - the recorded failure of the plugin.
+ * @returns the repair prompt text.
+ */
+function repairMessage(failure: PluginFailureItem): string {
+  return `插件「${failure.pluginId}」上次启动失败，当前已被禁用。请修复它。
+
+失败详情：
+${failure.message}
+
+原始堆栈：
+${failure.stack}
+
+插件安装目录：${failure.installPath}
+
+请检查并修复该插件；修复完成后告诉我如何重新启用。`
+}
+
 /** The merged plugin list tab. */
 export function PluginInstallerTab(props: PluginInstallerTabProps) {
   const {
@@ -125,6 +161,9 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
     setEnabled,
     checkUpdates,
     status,
+    failures,
+    setSafeMode,
+    repairPlugin,
     inventoryList,
     controlsList,
     controlsSetEnabled,
@@ -137,6 +176,10 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
   const [busy, setBusy] = useState<BusyAction | undefined>(undefined)
   const [toggleBusy, setToggleBusy] = useState<ToggleBusy | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
+  /** The plugin id whose repair conversation is being opened. */
+  const [repairing, setRepairing] = useState<string | undefined>(undefined)
+  /** The plugin id whose failure text was just copied. */
+  const [copied, setCopied] = useState<string | undefined>(undefined)
 
   /** One uninstall confirmation in flight: the row kind, its id, and its display name. */
   type UninstallTarget = { readonly kind: 'user' | 'preset'; readonly id: string; readonly name: string }
@@ -173,17 +216,18 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([list(), inventoryList(), controlsList()]).then(([plugins, snapshot, controls]) => {
-      if (!cancelled) setView({ status: 'ready', plugins, snapshot, controls })
+    Promise.all([list(), inventoryList(), controlsList(), failures()]).then(([plugins, snapshot, controls, failureSnapshot]) => {
+      if (!cancelled) setView({ status: 'ready', plugins, snapshot, controls, failures: failureSnapshot })
     }).catch(() => {
       if (!cancelled) setView({ status: 'error' })
     })
     return () => { cancelled = true }
-  }, [list, inventoryList, controlsList])
+  }, [list, inventoryList, controlsList, failures])
 
   const plugins = useMemo(() => view.status === 'ready' ? view.plugins : [], [view])
   const snapshot = useMemo(() => view.status === 'ready' ? view.snapshot : undefined, [view])
   const controls = useMemo(() => view.status === 'ready' ? view.controls : [], [view])
+  const failureSnapshot = useMemo(() => view.status === 'ready' ? view.failures : undefined, [view])
 
   /** Saved enablement of one user plugin: this session's writes win over the host-computed saved state. */
   const userEnabled = (plugin: InstalledPluginItem): boolean =>
@@ -201,8 +245,8 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
   )
 
   const reload = async (): Promise<void> => {
-    const [plugins, snapshot, controls] = await Promise.all([list(), inventoryList(), controlsList()])
-    setView({ status: 'ready', plugins, snapshot, controls })
+    const [plugins, snapshot, controls, failureSnapshot] = await Promise.all([list(), inventoryList(), controlsList(), failures()])
+    setView({ status: 'ready', plugins, snapshot, controls, failures: failureSnapshot })
   }
 
   const run = async (action: BusyAction, operation: () => Promise<void>): Promise<void> => {
@@ -250,7 +294,7 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
       setView((current) => {
         /* v8 ignore next 1 -- switches render only while ready; the view cannot be stale here */
         if (current.status !== 'ready') return current
-        return { status: 'ready', plugins: current.plugins, snapshot: current.snapshot, controls: next }
+        return { status: 'ready', plugins: current.plugins, snapshot: current.snapshot, controls: next, failures: current.failures }
       })
       setUninstallTarget(undefined)
     })
@@ -283,7 +327,7 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
       setView((current) => {
         /* v8 ignore next 1 -- switches render only while ready; the view cannot be stale here */
         if (current.status !== 'ready') return current
-        return { status: 'ready', plugins: current.plugins, snapshot: current.snapshot, controls: next }
+        return { status: 'ready', plugins: current.plugins, snapshot: current.snapshot, controls: next, failures: current.failures }
       })
       setToggleBusy(undefined)
       setDirty(true)
@@ -295,6 +339,42 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
 
   const restart = (): void => {
     desktopBridge()?.restart()
+  }
+
+  /** Open a repair conversation seeded with the failure record. */
+  const onRepair = (failure: PluginFailureItem): void => {
+    if (failureSnapshot === undefined) return
+    setRepairing(failure.pluginId)
+    setError(undefined)
+    void repairPlugin(failureSnapshot.pluginRoot, repairMessage(failure)).then(() => {
+      setRepairing(undefined)
+    }).catch((reason: unknown) => {
+      setRepairing(undefined)
+      setError(t('failed', { reason: reason instanceof Error ? reason.message : String(reason) }))
+    })
+  }
+
+  /** Copy the failure text for a manual repair conversation. */
+  const onCopy = (failure: PluginFailureItem): void => {
+    const text = `${failure.message}\n\n${failure.stack}`
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(failure.pluginId)
+    }).catch(() => {
+      setError(t('failed', { reason: 'clipboard unavailable' }))
+    })
+  }
+
+  /** Leave safe mode and restart so the user patch layers load again. */
+  const onExitSafeMode = (): void => {
+    void setSafeMode(false).then(() => {
+      if (desktopBridge() !== undefined) {
+        restart()
+      } else {
+        setDirty(true)
+      }
+    }).catch((reason: unknown) => {
+      setError(t('failed', { reason: reason instanceof Error ? reason.message : String(reason) }))
+    })
   }
 
   if (!isLoopback) {
@@ -310,10 +390,19 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
   if (view.status === 'error') return <div className={css.state}>{t('failed', { reason: 'load' })}</div>
 
   /** Whether every enablement switch is locked while another mutation runs. */
-  const toggleDisabled = (): boolean => busy !== undefined || toggleBusy !== undefined
+  const safeMode = failureSnapshot?.safeMode ?? false
+  const toggleDisabled = (): boolean => busy !== undefined || toggleBusy !== undefined || safeMode
 
   return (
     <div className={css.section} data-plugin-panel aria-busy={busy !== undefined || toggleBusy !== undefined}>
+      {safeMode && (
+        <div className={css.safeModeBanner} data-safe-mode>
+          <span>{t('safeModeBanner')}</span>
+          <Button variant="primary" disabled={busy !== undefined} onClick={onExitSafeMode}>
+            {t('exitSafeMode')}
+          </Button>
+        </div>
+      )}
       <div className={css.installRow}>
         <input
           className={css.spec}
@@ -360,6 +449,7 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
               {controls.map((control) => {
                 const checked = control.state === 'enabled'
                 const unavailable = control.state === 'unavailable'
+                const uninstalled = control.state === 'uninstalled'
                 return (
                   <li key={control.id} className={css.row} data-preset-plugin={control.id}>
                     <div className={css.meta}>
@@ -374,30 +464,43 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
                       <span className={css.state} data-state={control.state}>
                         {t(CONTROL_STATE_KEYS[control.state])}
                       </span>
-                      <button
-                        className={css.switch}
-                        type="button"
-                        role="switch"
-                        aria-checked={checked}
-                        aria-label={t(checked ? 'disableSwitch' : 'enableSwitch', { name: control.name })}
-                        disabled={unavailable || toggleDisabled()}
-                        onClick={() => { onPresetToggle(control.id, !checked) }}
-                      >
-                        <span aria-hidden="true" />
-                      </button>
-                      <Button
-                        variant="outline"
-                        disabled={busy !== undefined}
-                        onClick={() => { setUninstallTarget({ kind: 'preset', id: control.id, name: control.name }) }}
-                      >
-                        {t('uninstall')}
-                      </Button>
+                      {uninstalled ? (
+                        <Button
+                          variant="primary"
+                          disabled={busy !== undefined || toggleBusy !== undefined}
+                          onClick={() => { onPresetToggle(control.id, true) }}
+                        >
+                          {t('restore')}
+                        </Button>
+                      ) : (
+                        <>
+                          <button
+                            className={css.switch}
+                            type="button"
+                            role="switch"
+                            aria-checked={checked}
+                            aria-label={t(checked ? 'disableSwitch' : 'enableSwitch', { name: control.name })}
+                            disabled={unavailable || toggleDisabled()}
+                            onClick={() => { onPresetToggle(control.id, !checked) }}
+                          >
+                            <span aria-hidden="true" />
+                          </button>
+                          <Button
+                            variant="outline"
+                            disabled={busy !== undefined}
+                            onClick={() => { setUninstallTarget({ kind: 'preset', id: control.id, name: control.name }) }}
+                          >
+                            {t('uninstall')}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </li>
                 )
               })}
               {plugins.map((plugin) => {
                 const enabled = userEnabled(plugin)
+                const failure = failureSnapshot?.items.find(item => item.pluginId === plugin.id)
                 return (
                   <li key={plugin.id} className={css.row} data-user-plugin={plugin.id}>
                     <div className={css.meta}>
@@ -412,6 +515,28 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
                         })()}
                       </div>
                       <div className={css.sub}>{plugin.source.spec}</div>
+                      {failure !== undefined && (
+                        <div className={css.failure} data-plugin-failure={plugin.id}>
+                          <span className={css.badge}>{t('failureBadge')}</span>
+                          <span className={css.failureMessage} title={failure.message}>{failure.message}</span>
+                          <div className={css.failureActions}>
+                            <Button
+                              variant="primary"
+                              disabled={busy !== undefined || repairing !== undefined}
+                              onClick={() => { onRepair(failure) }}
+                            >
+                              {repairing === plugin.id ? t('repairing') : t('repair')}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              disabled={busy !== undefined}
+                              onClick={() => { onCopy(failure) }}
+                            >
+                              {copied === plugin.id ? t('copied') : t('copyError')}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className={css.actions}>
                       <span className={css.state} data-state={enabled ? 'enabled' : 'disabled'}>

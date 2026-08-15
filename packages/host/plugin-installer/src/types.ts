@@ -29,6 +29,8 @@ export interface InstalledPlugin {
   enabled: boolean
   /** Git HEAD commit at install time, when the source is a git repository. */
   commit?: string
+  /** The registry's SRI declaration for the installed tarball, when present. */
+  integrity?: string
 }
 
 /** The durable install-state file (`$DSH_HOME/plugins.json`). */
@@ -78,4 +80,57 @@ export interface InstallProgress {
   readonly stage: InstallStage
   /** Download completion in percent (0–100), absent outside the download phase. */
   readonly percent?: number
+}
+
+/** Trust level of a plugin index source. */
+export type PluginSourceTrust = 'official' | 'community' | 'untrusted'
+
+/** One registered plugin index source. */
+export interface PluginSourceRow {
+  /** Stable source id (unique across sources.yml). */
+  id: string
+  /** Index locator: a hub-catalog JSON URL or a local file path. */
+  locator: string
+  /** Trust level shown beside every entry this source yields. */
+  trust: PluginSourceTrust
+}
+
+/** One searchable plugin entry produced by an index source. */
+export interface PluginCatalogEntry {
+  /** Canonical plugin id (the repository or package name). */
+  id: string
+  /** Install form: a `dsh.bundle` package or a plain cordis plugin. */
+  kind: 'bundle' | 'plugin'
+  /** Install spec (npm package name or git repository). */
+  source: string
+  /** Capability faces derived from the manifest (`skill`/`bundle`/…). */
+  faces: string[]
+  /** Short description from the catalog, when present. */
+  description?: string
+  /** The owning index source id. */
+  sourceId: string
+}
+
+/** One TOFU lock: the canonical install → its resolved reference. */
+export interface PluginLockEntry {
+  /** The canonical install name or spec. */
+  canonical: string
+  /** The installed form at lock time. */
+  kind: 'bundle' | 'plugin'
+  /** The resolved reference (npm spec or git URL) recorded at install. */
+  ref: string
+  /** Content hash of the enumerated entry, when the source provided one. */
+  hash?: string
+  /** ISO timestamp of the recording. */
+  recordedAt: string
+}
+
+/** A cached enumeration snapshot of one index source. */
+export interface EnumerateSnapshot {
+  /** ISO timestamp of the fetch. */
+  fetchedAt: string
+  /** The response ETag for conditional refresh, when the source sent one. */
+  etag?: string
+  /** The transformed catalog entries. */
+  entries: PluginCatalogEntry[]
 }

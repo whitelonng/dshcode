@@ -161,6 +161,50 @@
   font-size: 13px;
 }
 
+.safeModeBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-warning, rgb(217 119 6 / 12%));
+  color: var(--dsw-alias-label-primary, #0f1115);
+  font-size: 13px;
+}
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-danger, rgb(220 38 38 / 8%));
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--dsw-alias-state-error-primary, #dc2626);
+  color: var(--dsw-alias-label-on-danger, #ffffff);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.failureMessage {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary, #61666b);
+  word-break: break-all;
+}
+
+.failureActions {
+  display: flex;
+  gap: 8px;
+}
+
 .progressRow {
   display: flex;
   flex-direction: column;

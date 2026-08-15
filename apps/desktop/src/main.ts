@@ -4,7 +4,18 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell,
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PROFILE_PATCH_FILENAME, resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
 import { loadLayeredEnv } from '@deepseek-ai/dsh-app-boot'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
+import {
+  fallbackModulesDir,
+  pruneBootFailures,
+  readPluginState,
+  readSafeMode,
+  setPluginRowEnabled,
+  setSafeMode,
+  writeBootFailure,
+} from '@deepseek-ai/dsh-host-plugin-installer'
 import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
@@ -23,6 +34,17 @@ import {
   windowCloseDisposition,
   type QuitCoordinator,
 } from './lifecycle.ts'
+import { readBootMarker, writeBootMarker } from './boot-marker.ts'
+import {
+  attributeLoadFailure,
+  clearResolvedFailures,
+  CONSECUTIVE_FAILURE_THRESHOLD,
+  DESKTOP_BOOT_TIMEOUT_MS,
+  failureMessage,
+  recordBootFailures,
+  recoveryDecision,
+  withBootTimeout,
+} from './recovery.ts'
 
 const PRODUCT_NAME = 'DSHCode'
 const APP_ID = 'com.whitelonng.dshcode'
@@ -197,6 +219,116 @@ function requestQuit(code: number): void {
   })
 }
 
+/**
+ * Record a late unhandled plugin-init rejection before the fail-loud exit
+ * (the tree is suspect, so the default hard exit stays). The failure is
+ * attributed to an installed plugin when its name appears in the rejection;
+ * next launch the plugin list shows the badge, and a startup that dies
+ * before `ok` still triggers the recovery dialog through the boot marker.
+ */
+function reportLateRejection(error: unknown): void {
+  const home = resolveDshHome()
+  const { message, stack } = failureMessage(error)
+  try {
+    const [pluginId] = attributeLoadFailure(error, readPluginState(home).plugins)
+    if (pluginId === undefined) return
+    void writeBootFailure(home, {
+      pluginId,
+      kind: 'late-rejection',
+      message,
+      stack,
+      installPath: join(fallbackModulesDir(home), pluginId),
+      at: new Date().toISOString(),
+    }).catch((writeError: unknown) => {
+      console.error(`${PRODUCT_NAME}: failed to record late plugin failure`, writeError)
+    })
+  } catch (attributeError) {
+    console.error(`${PRODUCT_NAME}: failed to attribute late plugin failure`, attributeError)
+  }
+}
+
+/**
+ * Handle a failed desktop boot: record the attributable failures, then show
+ * the recovery dialog offering to disable the blamed plugins and restart,
+ * to start in safe mode (skip the user patch layers), or to exit. Every path
+ * terminates the process — the caller must not continue startup after this.
+ */
+async function handleStartupFailure(
+  error: unknown,
+  context: {
+    home: string
+    profilePatchPath: string
+    lastOkAt: string | undefined
+    bootAttempts: number
+    safeMode: boolean
+  },
+): Promise<void> {
+  const { home, profilePatchPath, lastOkAt, bootAttempts, safeMode } = context
+  const decision = recoveryDecision({ error, installed: readPluginState(home).plugins, lastOkAt })
+
+  // Safe mode failing still means a broken bundle layer or overlay, not a
+  // user plugin; retry or exit, without disabling anything.
+  if (safeMode) {
+    const { response } = await dialog.showMessageBox({
+      type: 'error',
+      title: `${PRODUCT_NAME} 启动失败`,
+      message: '安全模式下仍无法启动',
+      detail: `${decision.message}\n\n安全模式已跳过用户插件配置，问题可能来自内置组件或安装本身。请重试，或退出后检查安装。`,
+      buttons: ['重启应用', '退出'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    })
+    if (response === 0) {
+      app.relaunch()
+      requestQuit(0)
+      return
+    }
+    requestQuit(1)
+    return
+  }
+
+  const attributable = decision.kind === 'attributable'
+  if (attributable) await recordBootFailures(home, decision)
+  const crashLoopHint = bootAttempts >= CONSECUTIVE_FAILURE_THRESHOLD
+    ? '\n\n连续多次启动失败，建议使用安全模式。'
+    : ''
+  const detail = attributable
+    ? `以下插件未能正常加载：${decision.pluginIds.join('、')}\n\n${decision.message}${crashLoopHint}`
+    : `无法确定是哪个插件导致启动失败。${crashLoopHint}\n\n${decision.message}`
+  const safeModeIndex = attributable ? 1 : 0
+  const buttons = attributable ? ['继续（禁用插件并重启）', '安全模式启动', '退出'] : ['安全模式启动', '退出']
+  const { response } = await dialog.showMessageBox({
+    type: 'error',
+    title: `${PRODUCT_NAME} 启动失败`,
+    message: '插件启动失败',
+    detail,
+    buttons,
+    defaultId: crashLoopHint !== '' ? safeModeIndex : 0,
+    cancelId: buttons.length - 1,
+    noLink: true,
+  })
+  if (attributable && response === 0) {
+    for (const pluginId of decision.pluginIds) {
+      try {
+        await setPluginRowEnabled(profilePatchPath, pluginId, false)
+      } catch (disableError) {
+        console.error(`${PRODUCT_NAME}: failed to disable ${pluginId}`, disableError)
+      }
+    }
+    app.relaunch()
+    requestQuit(0)
+    return
+  }
+  if (response === safeModeIndex) {
+    await setSafeMode(home, true)
+    app.relaunch()
+    requestQuit(0)
+    return
+  }
+  requestQuit(1)
+}
+
 async function startDesktop(): Promise<void> {
   app.setName(PRODUCT_NAME)
   app.setAppUserModelId(APP_ID)
@@ -215,12 +347,48 @@ async function startDesktop(): Promise<void> {
     callback(false)
   })
 
-  const running = await runProfile({
-    environment: loadLayeredEnv('dsh'),
-    profile: 'web',
-    patchFiles: [],
-    args: desktopWebArguments(),
-    watchUserPatches: false,
+  const home = resolveDshHome()
+  const profilePatchPath = join(resolveProfileDir('web', home), PROFILE_PATCH_FILENAME)
+  // Boot lifecycle marker: a previous `started` without a following `ok`
+  // means the last launch died during startup, and the attempt counter
+  // drives the safe-mode default of the recovery dialog. Diagnostics must
+  // never block startup, so every marker failure degrades to first-run.
+  const previousMarker = readBootMarker(home)
+  const marker = await writeBootMarker(home, 'started').catch((error: unknown) => {
+    console.error(`${PRODUCT_NAME}: failed to write boot marker`, error)
+    return undefined
+  })
+  await pruneBootFailures(home).catch((error: unknown) => {
+    console.error(`${PRODUCT_NAME}: failed to sweep boot failures`, error)
+  })
+  const safeMode = readSafeMode(home)
+
+  let running: Awaited<ReturnType<typeof runProfile>>
+  try {
+    running = await withBootTimeout(runProfile({
+      environment: loadLayeredEnv('dsh'),
+      profile: 'web',
+      patchFiles: [],
+      args: desktopWebArguments(),
+      watchUserPatches: false,
+      skipUserPatches: safeMode,
+      failLoud: reportLateRejection,
+    }), DESKTOP_BOOT_TIMEOUT_MS)
+  } catch (error) {
+    await handleStartupFailure(error, {
+      home,
+      profilePatchPath,
+      lastOkAt: previousMarker?.state === 'ok' ? previousMarker.at : undefined,
+      bootAttempts: marker?.bootAttempts ?? 1,
+      safeMode,
+    })
+    return
+  }
+  await writeBootMarker(home, 'ok').catch((error: unknown) => {
+    console.error(`${PRODUCT_NAME}: failed to write boot marker`, error)
+  })
+  await clearResolvedFailures(home, profilePatchPath).catch((error: unknown) => {
+    console.error(`${PRODUCT_NAME}: failed to clear resolved boot failures`, error)
   })
   quitCoordinator = createQuitCoordinator(running.shutdown, finishNativeExit)
   applicationUrl = desktopApplicationUrl(running.ctx.webServer.host, running.ctx.webServer.port)

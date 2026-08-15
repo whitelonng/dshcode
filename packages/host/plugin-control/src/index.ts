@@ -184,11 +184,14 @@ export class PluginControlGateway {
     const uninstalled = readUninstalledControls(this.config.profilePatchPath)
     return {
       controls: this.config.controls
-        .filter(control => !uninstalled.has(control.id))
         .map((control): PluginControlItem => {
           const controlled = this.resolveEntries(control.entryIds)
           let state: PluginControlState
-          if (controlled.ambiguous.length > 0) {
+          if (uninstalled.has(control.id)) {
+            // The user removed the product; it stays visible as uninstalled so
+            // the browser can offer a restore action.
+            state = 'uninstalled'
+          } else if (controlled.ambiguous.length > 0) {
             state = 'unavailable'
           } else if (this.desired.has(control.id)) {
             state = this.desired.get(control.id) === true ? 'enabled' : 'disabled'
@@ -251,11 +254,10 @@ export class PluginControlGateway {
 
   /**
    * Remove one preset product from the user's list: its managed rows are
-   * replaced by an `uninstalled` marker so it stays hidden across restarts.
-   * Re-enabling later (or reinstalling through the installer) clears the
-   * marker through the ordinary managed-item rewrite.
+   * replaced by an `uninstalled` marker, and `list` keeps reporting it with
+   * the `uninstalled` state so the browser can offer a restore action.
    * @param request - logical control id to uninstall.
-   * @returns the refreshed snapshot without the removed control.
+   * @returns the refreshed snapshot.
    */
   uninstall(request: { pluginId: string }): Promise<PluginControlSnapshot> {
     return this.enqueue(async () => {
@@ -290,7 +292,7 @@ export class PluginControlGateway {
         return { ok: false, error: { code: 'cancelled', message: 'plugin-control request was cancelled', details: {} } }
       }
       try {
-        const value = await this.uninstall(parsed.data as { pluginId: string })
+        const value = await this.uninstall(parsed.data)
         return { ok: true, value }
       } catch (error) {
         return {

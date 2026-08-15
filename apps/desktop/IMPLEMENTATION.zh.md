@@ -128,7 +128,7 @@ Windows 经隐藏式标题栏 + `titleBarOverlay` 把产品名、菜单按钮与
 - 网关通道 `/plugin-installer`（`authority: 'loopback'`），端点 `list` / `install { spec }` / `update { id }` / `uninstall { id }` / `check-updates`；未知端点 → `bad-request`；zod 校验载荷；变更按实例串行
 - 配置：`{ profilePatchPath, dshHome?, registry? }`（registry 默认 `npm_config_registry`，其次 `https://registry.npmjs.org/`）
 - **npm 路径**（`registry.ts`）：`fetchPackument(name, registry)`（scope 包编码为 `@scope%2Fname`）、`resolveNpmVersion(spec, packument)`（精确 → semver 范围 `maxSatisfying`，排除预发布 → `dist-tags.latest`）、`installNpmPackage(...)` 下载 tarball 并以 `tar.x({ cwd, strip: 1 })` 解压到 `$DSH_HOME/profiles/node_modules/<name>`
-- **git 路径**（`git-source.ts`）：`isGitSpec` 识别 `git+`/`git://`/`github:`/仓库 URL；`installFromGit(url, dir)` 浅克隆到暂存目录、读取包身份、移到最终位置并记录 HEAD commit；缺 git → 类型化错误
+- **git 路径**（`git-source.ts`）：`isGitSpec` 识别 `git+`/`git://`/`github:`/仓库 URL（含 `#ref` 固定引用）；GitHub 仓库经 codeload 源码 tarball 安装、经 GitHub API 解析 commit——无需 `git` 二进制、CDN 速度下载、`GITHUB_TOKEN`/`GH_TOKEN` 可解除 60 次/小时的 API 限流——其他托管浅克隆（GitHub URL 在 tarball 路径失败且本机有 git 时也回退到克隆）；`installFromGit(url, dir)` 暂存到临时目录、读取包身份、移到最终位置并记录 HEAD commit；缺 git → 类型化错误
 - **状态**（`state.ts`）：`$DSH_HOME/plugins.json` = `{ plugins: [{ id, name, version, source: { kind: 'npm' | 'git', spec }, installedAt, commit? }] }`；文件锁内原子写；畸形状态失败即报错
 - **Patch 层**（`patch.ts`）：受管行 `# dsh-plugin-installer: <id>` 注释 + `- id: <name>\n  name: <name>` 在 profile `cordis.patch.yml` 中插入/移除，保留非属主节点、注释与 `!!js` 表达式
 - **更新检测**：npm 比较 `dist-tags.latest` 与已装版本；git 比较远端 HEAD 与记录 commit；来源离线/消失按插件跳过
@@ -190,5 +190,5 @@ Windows 经隐藏式标题栏 + `titleBarOverlay` 把产品名、菜单按钮与
 
 - Windows 托盘/标题栏行为需在原生 Windows 构建上人工核对
 - 上游 `@linxin666/dsh-tool-describe-image` 需在其 client inject 列表补 `"locale"`（此前以 profile 层本地修补维持）
-- 插件 tarball 安装尚无完整性固定；git 来源需要本机 `git` 二进制
+- 插件 tarball 安装尚无完整性固定；非 GitHub 的 git 来源需要本机 `git` 二进制（GitHub 来源经 codeload 下载、无需 git，但受未认证 GitHub API 速率限制）
 - 彻底删除的会话其（content-addressed、共享的）附件字节留待未来的 GC 通道

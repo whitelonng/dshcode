@@ -23,6 +23,11 @@ const SNAPSHOT = {
     source: { kind: 'npm', spec: '@scope/a' }, installedAt: 'x', enabled: true,
   }],
 }
+const FAILURES = {
+  items: [{ pluginId: 'a', kind: 'load-failure', message: 'boom', stack: 'at a', installPath: '/x/a', at: 't' }],
+  pluginRoot: '/home/.dsh/profiles',
+  safeMode: false,
+}
 const INVENTORY = {
   entries: [{ entryId: 'ui-builtin', moduleName: '@deepseek-ai/dsh-client-ui-builtin', enabled: true, fiberPhase: 'active' }],
 }
@@ -49,6 +54,12 @@ async function bench() {
       if (endpoint === 'status') {
         return { ok: true, value: { progress: { kind: 'idle', stage: 'fetch' } } }
       }
+      if (endpoint === 'failures') {
+        return { ok: true, value: FAILURES }
+      }
+      if (endpoint === 'set-safe-mode') {
+        return { ok: true, value: { safeMode: true } }
+      }
       return { ok: true, value: SNAPSHOT }
     })
   class ConnectionService extends Service {
@@ -67,7 +78,19 @@ async function bench() {
   const inventoryList = vi.fn<() => Promise<RemoteResult<typeof INVENTORY>>>()
     .mockResolvedValue({ ok: true, value: INVENTORY })
   ctx.provide('remote.pluginInventory', { list: inventoryList })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, call, inventoryList }
+  const createWorkspace = vi.fn().mockResolvedValue({
+    workspaceId: 'w1', path: '/home/.dsh/profiles', title: 'profiles', sessionIds: [], createdAt: 't', updatedAt: 't',
+  })
+  const renameWorkspace = vi.fn().mockResolvedValue(undefined)
+  const connectWorkspace = vi.fn().mockResolvedValue('s1')
+  ctx.provide('workspaces', { create: createWorkspace, rename: renameWorkspace, connectWorkspace })
+  const prompt = vi.fn().mockResolvedValue({ ok: true, value: { accepted: true } })
+  const openSession = vi.fn()
+  ctx.provide('sessions', {
+    binding: vi.fn().mockReturnValue({ session: { prompt } }),
+    open: openSession,
+  })
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, call, inventoryList, createWorkspace, renameWorkspace, connectWorkspace, openSession, prompt }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -120,6 +143,7 @@ describe('ui-settings-plugin-installer browser plugin', () => {
     expect(b.call).toHaveBeenLastCalledWith('/plugin-installer', 'status', {})
     await expect(injected.inventoryList()).resolves.toEqual(INVENTORY)
     expect(b.inventoryList).toHaveBeenCalledOnce()
+
     await expect(injected.controlsList()).resolves.toEqual([
       { id: 'genui', name: 'dsh-genui', repository: 'https://github.com/omdsh-dev/dsh-genui', state: 'disabled' },
     ])
@@ -141,6 +165,41 @@ describe('ui-settings-plugin-installer browser plugin', () => {
     await expect(injected.install('x')).rejects.toThrow('plugin-installer install failed: internal: boom')
     b.inventoryList.mockResolvedValueOnce({ ok: false, error: { code: 'REMOTE_ERROR', message: 'unavailable' } })
     await expect(injected.inventoryList()).rejects.toThrow('pluginInventory.list failed: REMOTE_ERROR: unavailable')
+    await b.ctx.fiber.dispose()
+  })
+
+  it('serves the recovery faces: failures, safe mode, and the repair conversation', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const injected = (requiredAt(b.slots.entries('settings.plugins.tab'), 0)
+      .inject as unknown as () => PluginInstallerTabInjected)()
+
+    await expect(injected.failures()).resolves.toEqual(FAILURES)
+    expect(b.call).toHaveBeenLastCalledWith('/plugin-installer', 'failures', {})
+    await expect(injected.setSafeMode(true)).resolves.toBeUndefined()
+    expect(b.call).toHaveBeenLastCalledWith('/plugin-installer', 'set-safe-mode', { enabled: true })
+
+    // Repair resolves the plugin root workspace (renaming the fresh default),
+    // connects a blank session there, prompts the seeded message, then opens it.
+    await expect(injected.repairPlugin('/home/.dsh/profiles', 'fix it')).resolves.toBeUndefined()
+    expect(b.createWorkspace).toHaveBeenCalledWith({ path: '/home/.dsh/profiles' })
+    expect(b.renameWorkspace).toHaveBeenCalledWith('w1', 'DSH 插件')
+    expect(b.connectWorkspace).toHaveBeenCalledWith('w1')
+    expect(b.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'fix it' }], 'queue')
+    expect(b.openSession).toHaveBeenCalledWith('s1')
+
+    // A pre-titled workspace keeps its title.
+    b.createWorkspace.mockResolvedValueOnce({
+      workspaceId: 'w2', path: '/home/.dsh/profiles', title: '我的目录', sessionIds: [], createdAt: 't', updatedAt: 't',
+    })
+    await expect(injected.repairPlugin('/home/.dsh/profiles', 'again')).resolves.toBeUndefined()
+    expect(b.renameWorkspace).toHaveBeenCalledTimes(1)
+
+    // A rejected prompt surfaces as a typed error without opening the session.
+    b.prompt.mockResolvedValueOnce({ ok: false, error: { code: 'internal', message: 'prompt rejected', details: {} } })
+    await expect(injected.repairPlugin('/home/.dsh/profiles', 'third')).rejects.toThrow('repair prompt failed: internal: prompt rejected')
+
     await b.ctx.fiber.dispose()
   })
 

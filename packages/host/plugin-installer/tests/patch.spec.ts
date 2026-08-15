@@ -1,10 +1,10 @@
 /** Profile patch-layer row management tests. */
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { insertPluginRow, readPluginRowEnabled, removePluginRow, setPluginRowEnabled } from '../src/patch.ts'
+import { insertPluginRow, readPluginRowEnabled, removePluginRow, setControlRowsEnabled, setPluginRowEnabled } from '../src/patch.ts'
 
 const tempRoots: string[] = []
 afterEach(async () => {
@@ -105,5 +105,83 @@ describe('profile patch rows', () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-plugin-patch-enabled-missing-'))
     tempRoots.push(root)
     expect(readPluginRowEnabled(join(root, 'absent.yml'), 'demo')).toBe(true)
+  })
+
+  it('flips the saved enablement of a plugin-control product group and leaves others alone', async () => {
+    const path = await patchFile(`[
+# dsh-plugin-control: web-ui
+{ insert: [ { id: pet, name: '@linxin666/dsh-pet', disabled: false } ] },
+# dsh-plugin-control: web-ui
+{ insert: [ { id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: false } ] },
+# dsh-plugin-control: genui
+{ insert: [ { id: genui, name: '@omdsh-dev/dsh-genui', disabled: false } ] },
+# dsh-plugin-installer: demo
+{ insert: [ { id: demo, name: demo, disabled: false } ] }
+]
+`)
+    await setControlRowsEnabled(path, 'web-ui', false)
+    let text = await readFile(path, 'utf8')
+    expect(text).toContain("id: pet, name: '@linxin666/dsh-pet', disabled: true")
+    expect(text).toContain("id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: true")
+    // Other products and installer rows stay untouched.
+    expect(text).toContain("id: genui, name: '@omdsh-dev/dsh-genui', disabled: false")
+    expect(text).toContain('id: demo, name: demo, disabled: false')
+
+    await setControlRowsEnabled(path, 'web-ui', true)
+    text = await readFile(path, 'utf8')
+    expect(text).toContain("id: pet, name: '@linxin666/dsh-pet', disabled: false")
+    expect(text).toContain("id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: false")
+  })
+
+  it('tolerates absent product rows and invalid YAML on control-row updates', async () => {
+    const path = await patchFile('[]\n')
+    await setControlRowsEnabled(path, 'ghost', false)
+    expect(await readFile(path, 'utf8')).toBe('[]\n')
+
+    const broken = await patchFile('{ not an array')
+    await expect(setControlRowsEnabled(broken, 'web-ui', false)).rejects.toThrow('invalid YAML')
+  })
+
+  it('tolerates non-map items and fails loud on non-array documents', async () => {
+    const path = await patchFile(`- 42
+`)
+    await insertPluginRow(path, 'demo')
+    expect(await readFile(path, 'utf8')).toContain('# dsh-plugin-installer: demo')
+    await removePluginRow(path, 'demo')
+    expect(await readFile(path, 'utf8')).not.toContain('demo')
+
+    const mapping = await patchFile('key: value\n')
+    await expect(insertPluginRow(mapping, 'demo')).rejects.toThrow('must contain a top-level YAML array')
+  })
+
+  it('leaves the file unchanged when removing an unknown plugin', async () => {
+    const path = await patchFile(`- id: keep
+`)
+    const before = await readFile(path, 'utf8')
+    await removePluginRow(path, 'ghost')
+    expect(await readFile(path, 'utf8')).toBe(before)
+  })
+
+  it('treats marker items without a usable insert row as enabled', async () => {
+    const path = await patchFile(`# dsh-plugin-installer: demo
+- insert:
+    - 42
+# dsh-plugin-installer: other
+- insert: []
+`)
+    // A non-map first row and an empty insert never mounted anything.
+    expect(readPluginRowEnabled(path, 'demo')).toBe(true)
+    expect(readPluginRowEnabled(path, 'other')).toBe(true)
+  })
+
+  it('propagates non-missing read failures unchanged', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-plugin-patch-read-error-'))
+    tempRoots.push(root)
+    // A directory at the patch path is a read failure (EISDIR), not a missing file.
+    const directory = join(root, 'cordis.patch.yml')
+    await mkdir(directory)
+    await expect(removePluginRow(directory, 'demo')).rejects.toThrow('EISDIR')
+    expect(() => readPluginRowEnabled(directory, 'demo')).toThrow('EISDIR')
+    await expect(insertPluginRow(directory, 'demo')).rejects.toThrow('EISDIR')
   })
 })

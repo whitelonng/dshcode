@@ -17,6 +17,7 @@
 
 | 工具包 | 模型可见名称 | 依赖 | 写入／影响 | 随产品发布的别名 | 部署说明 |
 | --- | --- | --- | --- | --- | --- |
+| `@deepseek-ai/dsh-host-plugin-installer` | `plugin_install`、`plugin_search`、`plugin_status`、`plugin_uninstall` | `ctx.tools`、`ctx.connection` | `tool/call`、`tool/result` | - | plugin_* 工具与桌面插件列表共享安装器网关状态。 |
 | `@deepseek-ai/dsh-tool-ask-user` | `ask_user_question` | `ctx.tools`、`ctx.userQuestions` | `tool/call`、`tool/result after a UI/provider answers the question` | - | ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类答案。 |
 | `@deepseek-ai/dsh-tools` | `run_code` | `ctx.tools`、`ctx.codeRuntime (execution time)`、`ctx.systemPrompt` | `tool/call`、`one tool/code-dispatch-start + tool/code-dispatch pair per bridged sub-call`、`tool/result` | - | 在 `mode: code`／`mode: both` 下，它由工具注册表所有，作为可过滤能力层之外的保留传输机制（参见 Code Mode Agent Note）。在 `code` 下，它是注册表对协议格式（wire format）的唯一贡献；其他可见能力在使用已加载运行时语言生成的 SDK 章节中声明。程序通过 binding 调用这些能力，调用按照原生并发约定调度：启动顺序和策略遵循提交顺序，并发安全的函数体最多重叠执行 `maxParallelSubCalls` 个。调用会重新进入完整且受守卫保护的工具流水线，并将每个嵌套执行关联到此外层结果。 |
 | `@deepseek-ai/dsh-plan-mode` | `exit_plan_mode` | `ctx.tools`、`ctx.systemPrompt`、`ctx.userQuestions (execution time, opportunistic)` | `tool/call`、`plan/mode inactive on an approved review`、`tool/result` | - | 规划未激活时，exit_plan_mode 仍保留在面向模型的 schema 中，这样状态转换不会在规划策略变更之外额外造成工具目录变动。其执行路径会拒绝规划模式之外的调用；在规划模式下，它通过用户交互 seam 提交计划（批准／根据反馈继续规划），批准后会在步骤边界记录规划模式已停用。 |
@@ -119,6 +120,93 @@ ask_user_question 会暂停工具调用，直到当前 UI 提供方返回人类�
 
 <a id="deepseek-aidsh-tools"></a>
 
+## `@deepseek-ai/dsh-host-plugin-installer`
+
+### `plugin_install`
+
+安装一个 DSH 插件：来自 npm 包名或 git 仓库。bundle 插件（清单声明 `dsh.bundle`）加入 profile bundle 层栈；普通插件写入 profile patch insert 行。更改在应用重启后生效。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "Install source: an npm package name (bundle or plain plugin) or a git repository."
+    }
+  },
+  "required": [
+    "source"
+  ]
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
+
+### `plugin_search`
+
+在已注册的索引源中搜索可安装的 DSH 插件（缓存目录枚举，TTL 6 小时；默认源为 dsh-external hub catalog）。给定 `source` 时，惰性探测该源——一个索引 JSON 文件/URL（hub catalog 格式：`{"repos": [...]}`）——并记住它。结果携带所属源及其信任级别。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Substring to match against plugin id or description. Empty returns all."
+    },
+    "source": {
+      "type": "string",
+      "description": "A registered source id, or a new index JSON file/URL to probe and remember."
+    },
+    "refresh": {
+      "type": "boolean",
+      "description": "Force re-enumeration, ignoring cached snapshots."
+    }
+  }
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
+
+### `plugin_status`
+
+显示已安装的 DSH 插件：每个插件的 id、版本、安装来源与已保存的启用状态。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Plugin id or package name to inspect."
+    }
+  }
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
+
+### `plugin_uninstall`
+
+按 id（包名）移除一个已安装的 DSH 插件：依赖、profile patch 行与记录的状态条目。更改在应用重启后生效。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Plugin id (npm package name) to remove."
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+Source: [`packages/host/plugin-installer/src/tools.ts`](../packages/host/plugin-installer/src/tools.ts)
 ## `@deepseek-ai/dsh-tools`
 
 ### `run_code`

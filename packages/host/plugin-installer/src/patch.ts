@@ -2,61 +2,20 @@
 
 import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { isMap, isScalar, isSeq, parseDocument, type Document, type ScalarTag, type YAMLMap, type YAMLSeq } from 'yaml'
+import { isMap, isScalar, isSeq, type Document, type YAMLMap } from 'yaml'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { isMissing, openPatchDocument, pushItem, readPatchFile } from './patch-document.ts'
 
 const MARKER_PREFIX = 'dsh-plugin-installer:'
 
-const JS_EXPRESSION_TAG: ScalarTag = {
-  tag: 'tag:yaml.org,2002:js',
-  resolve: value => value,
-}
-
-/** Whether an unknown filesystem failure reports a missing file. */
-function isMissing(error: unknown): boolean {
-  /* v8 ignore next -- node:fs promise rejections are ErrnoException objects, never null or undefined. */
-  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
-}
+/** The marker prefix plugin-control writes for its product rows. */
+const CONTROL_MARKER_PREFIX = 'dsh-plugin-control:'
 
 /** Whether one YAML item carries the installer marker for `pluginId`. */
 function isManagedItem(item: unknown, pluginId: string): boolean {
   if (!isMap(item)) return false
   const expected = `${MARKER_PREFIX} ${pluginId}`
   return (item.commentBefore ?? '').split('\n').some(line => line.trim() === expected)
-}
-
-/** A parsed patch file: the yaml document and its top-level sequence. */
-interface PatchDocument {
-  readonly document: Document
-  readonly root: YAMLSeq
-}
-
-/**
- * Parse a patch file for a read or update, failing loud on invalid YAML and
- * non-array roots.
- * @param text - file content.
- * @param filename - absolute profile `cordis.patch.yml` path (diagnostics only).
- * @param action - 'read' or 'update', used in the error prefix.
- * @returns the parsed document and root sequence.
- */
-function openPatchDocument(text: string, filename: string, action: 'read' | 'update'): PatchDocument {
-  const document = parseDocument(text, {
-    customTags: [JS_EXPRESSION_TAG],
-    prettyErrors: true,
-    uniqueKeys: true,
-  })
-  if (document.errors.length > 0) {
-    const firstError = document.errors[0]
-    if (firstError === undefined) {
-      throw new Error(`plugin-installer: cannot ${action} invalid YAML at ${filename}`)
-    }
-    throw new Error(`plugin-installer: cannot ${action} invalid YAML at ${filename}: ${firstError.message}`)
-  }
-  const root = document.contents
-  if (!isSeq(root)) {
-    throw new Error(`plugin-installer: ${filename} must contain a top-level YAML array`)
-  }
-  return { document, root }
 }
 
 /**
@@ -66,12 +25,12 @@ function openPatchDocument(text: string, filename: string, action: 'read' | 'upd
  * @param item - one top-level patch item carrying the installer marker.
  * @returns the inserted row map, or undefined for a legacy bare row.
  */
-function insertRowOf(item: unknown): YAMLMap<unknown, unknown> | undefined {
+function insertRowOf(item: unknown): YAMLMap | undefined {
   if (!isMap(item)) return undefined
-  const insert = (item as unknown as YAMLMap<unknown, unknown>).get('insert')
+  const insert = item.get('insert')
   if (!isSeq(insert) || insert.items.length === 0) return undefined
   const first = insert.items[0]
-  return isMap(first) ? first as unknown as YAMLMap<unknown, unknown> : undefined
+  return isMap(first) ? first : undefined
 }
 
 /**
@@ -82,28 +41,14 @@ function insertRowOf(item: unknown): YAMLMap<unknown, unknown> | undefined {
  * omits the key (an install mounts the plugin).
  * @returns the marker-carrying top-level item.
  */
-function buildInsertItem(document: Document, pluginId: string, disabled?: boolean): YAMLMap<unknown, unknown> {
+function buildInsertItem(document: Document, pluginId: string, disabled?: boolean): YAMLMap {
   const row: { id: string; name: string; disabled?: boolean } = { id: pluginId, name: pluginId }
   if (disabled !== undefined) row.disabled = disabled
   const item = document.createNode({ insert: [row] })
+  /* v8 ignore next 3 -- createNode always returns a map for a plain object */
   if (!isMap(item)) throw new Error('plugin-installer: failed to build a patch row')
   item.commentBefore = ` ${MARKER_PREFIX} ${pluginId}`
-  return item as unknown as YAMLMap<unknown, unknown>
-}
-
-/** Read one patch file, treating a missing file as an empty layer. */
-async function readPatchFile(filename: string): Promise<string> {
-  try {
-    return await readFile(filename, 'utf8')
-  } catch (error: unknown) {
-    if (!isMissing(error)) throw error
-    return '[]\n'
-  }
-}
-
-/** Push an item into the root sequence, bridging yaml's narrow seq item type. */
-function pushItem(root: YAMLSeq, item: unknown): void {
-  root.items.push(item as never)
+  return item
 }
 
 /**
@@ -199,5 +144,43 @@ export async function setPluginRowEnabled(filename: string, pluginId: string, en
       }
     }
     await writeFileAtomic(filename, document.toString({ lineWidth: 0 }), { mode: 0o600 })
+  })
+}
+
+/**
+ * Flip the saved enablement of every row plugin-control manages for one
+ * product (`# dsh-plugin-control: <id>` marker items, each an insert item
+ * with one row). Used by the installer's conflict rules: when the user
+ * installs a plugin that duplicates a built-in product, the product's rows
+ * are disabled so the two suites do not double-mount. Rows absent from the
+ * patch are left alone (the control's own write path recreates them).
+ * @param filename - absolute profile `cordis.patch.yml` path.
+ * @param controlId - the plugin-control product id.
+ * @param enabled - desired next-start enablement for the product's rows.
+ * @returns resolution after the atomic write settles.
+ */
+export async function setControlRowsEnabled(filename: string, controlId: string, enabled: boolean): Promise<void> {
+  await withFileLock(filename, async () => {
+    const text = await readPatchFile(filename)
+    const { document, root } = openPatchDocument(text, filename, 'update')
+    const expected = `${CONTROL_MARKER_PREFIX} ${controlId}`
+    let touched = false
+    for (const item of root.items) {
+      if (!isMap(item)) continue
+      const marked = (item.commentBefore ?? '').split('\n').some(line => line.trim() === expected)
+      if (!marked) continue
+      touched = true
+      const insert = item.get('insert')
+      if (isSeq(insert)) {
+        for (const row of insert.items) {
+          if (isMap(row)) row.set('disabled', document.createNode(!enabled))
+        }
+      } else {
+        item.set('disabled', document.createNode(!enabled))
+      }
+    }
+    if (touched) {
+      await writeFileAtomic(filename, document.toString({ lineWidth: 0 }), { mode: 0o600 })
+    }
   })
 }
