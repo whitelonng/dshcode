@@ -70,6 +70,7 @@ DeepSeek 请求身份独立于应用归因。凭据解析成功后，每个提�
 - 适配器持有的 `off` 推理强度映射为 `thinking: {type: 'disabled'}`，绝不会以 `reasoning_effort: 'off'` 通过协议发送。
 - 第一个思考模式分片携带 `reasoning_content: ""`，系统会处理它（不会产生多余 reasoning 块）。
 - **推理回传规则**：对携带工具调用的 assistant 轮次，会将 `reasoning_content` 序列化回历史（思考模式 API 必需）；对不含工具调用的轮次，它会被丢弃（不会使用，可节省 token）。
+- **图片块会展平为附件备注**：这条线路仅支持文本，因此图片内容块会序列化为可复制的 `[image attachment …]` 引用（即 `describe_image` 接受的精确 JSON）—— 图片数据绝不会跨线路传输。适配器为每个模型声明 `imagePolicy: 'note'`，因此即使会话携带图片，主机也会准入该路由并允许切换到它。
 - Cache 计量：`cacheReadTokens` ← `prompt_cache_hit_tokens` / `prompt_tokens_details.cached_tokens`；DeepSeek 不报告 cache-write 指标。
 
 ## 错误

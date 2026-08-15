@@ -572,6 +572,11 @@ export class LlmRuntime extends Service {
     return modalities === undefined ? undefined : [...modalities]
   }
 
+  /** Validate adapter-owned image-carriage policy metadata. */
+  private validImagePolicy(model: { imagePolicy?: unknown }): boolean {
+    return model.imagePolicy === undefined || model.imagePolicy === 'note' || model.imagePolicy === 'reject'
+  }
+
   /**
    * Discover models advertised by one registered provider. Catalog membership
    * is advisory and never changes routing or request validation.
@@ -591,6 +596,7 @@ export class LlmRuntime extends Service {
         || typeof model.name !== 'string'
         || model.name.length === 0
         || (model.description !== undefined && typeof model.description !== 'string')
+        || !this.validImagePolicy(model)
         || seen.has(model.id)
       ) {
         throw new LlmError(`adapter returned invalid or duplicate model metadata for provider "${provider}"`, 'INVALID_CATALOG')
@@ -603,6 +609,7 @@ export class LlmRuntime extends Service {
         name: model.name,
         ...model.description === undefined ? {} : { description: model.description },
         ...inputModalities === undefined ? {} : { inputModalities },
+        ...model.imagePolicy === undefined ? {} : { imagePolicy: model.imagePolicy },
       }
     })
   }
@@ -639,6 +646,7 @@ export class LlmRuntime extends Service {
       || typeof resolved.name !== 'string'
       || resolved.name.length === 0
       || (resolved.description !== undefined && typeof resolved.description !== 'string')
+      || !this.validImagePolicy(resolved)
     ) {
       throw new LlmError(
         `adapter returned invalid exact model metadata for provider "${provider}" model "${model}"`,
@@ -669,6 +677,7 @@ export class LlmRuntime extends Service {
       name: resolved.name,
       ...resolved.description === undefined ? {} : { description: resolved.description },
       ...inputModalities === undefined ? {} : { inputModalities },
+      ...resolved.imagePolicy === undefined ? {} : { imagePolicy: resolved.imagePolicy },
       ...context === undefined ? {} : { context: { contextWindow: context.contextWindow } },
       ...defaultMaxTokens === undefined ? {} : { defaultMaxTokens },
     }

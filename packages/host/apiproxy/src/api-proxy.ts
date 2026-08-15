@@ -2296,7 +2296,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               .some(message => contentHasImage(message.content))
             if (pendingImage || messagesHaveImage(found.agent.session.deriveMessages())) {
               const info = await ctx.llm.resolveModelInfo(resolved.provider, resolved.model)
-              if (info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
+              // A text-only route still carries an image-bearing session when
+              // its adapter serializes image blocks into text notes (the
+              // DeepSeek route the describe_image pipeline relies on); only a
+              // route that rejects image content would strand the session.
+              if (info.inputModalities !== undefined
+                && !info.inputModalities.includes('image')
+                && info.imagePolicy !== 'note') {
                 return err(request, {
                   code: 'model-unavailable',
                   message: `Model "${resolved.model}" does not accept image input, but this session already contains images; select an image-capable model.`,

@@ -111,6 +111,9 @@ function modelInfo(provider: string, model: DeepSeekCatalogModel): LlmModelInfo 
     name: model.name ?? model.id,
     ...model.description === undefined ? {} : { description: model.description },
     inputModalities: ['text'],
+    // The serializer flattens image blocks into copyable attachment notes, so
+    // image-bearing sessions run on this text-only wire route.
+    imagePolicy: 'note',
   }
 }
 
@@ -183,11 +186,11 @@ export class DeepSeekAdapter extends LlmAdapter {
       ?? connection.defaultContextWindow
     return Promise.resolve({
       // The chat-completions wire route is text-only regardless of catalog
-      // membership, so the uncatalogued fallback declares the same negative
-      // capability — "unknown" here would let the host accept and persist
-      // images the serializer must then reject.
+      // membership, so the uncatalogued fallback declares the same note policy
+      // — "unknown" here would make the host refuse image-bearing sessions
+      // the serializer flattens into copyable attachment notes.
       ...configured === undefined
-        ? { provider, id: model, name: model, inputModalities: ['text' as const] }
+        ? { provider, id: model, name: model, inputModalities: ['text' as const], imagePolicy: 'note' as const }
         : modelInfo(provider, configured),
       context: { contextWindow },
       defaultMaxTokens: configured?.maxTokens ?? connection.maxTokens,

@@ -299,7 +299,12 @@ export async function installViaPnpm(profileDir: string, spec: string): Promise<
     run = await runPnpm(['add', spec], profileDir)
   }
   if (run.exitCode !== 0) {
-    throw new Error(`plugin-installer: pnpm add failed for ${JSON.stringify(spec)}: ${run.tail}`)
+    const detail = run.tail.includes('ERR_PNPM_WORKSPACE_PKG_NOT_FOUND')
+      ? `${run.tail}\nplugin-installer: the package still declares "workspace:"-protocol dependencies; `
+        + 'a standalone install needs concrete published versions, and its harness peer dependencies marked optional '
+        + 'so pnpm does not auto-install stale published copies over the healed module fallback'
+      : run.tail
+    throw new Error(`plugin-installer: pnpm add failed for ${JSON.stringify(spec)}: ${detail}`)
   }
   const dependencies = readProfileManifest(profileDir).dependencies ?? {}
   const names = Object.keys(dependencies).filter(name => !before.has(name))
@@ -346,6 +351,9 @@ export function profileModuleDir(profileDir: string, packageName: string): strin
  * @param profileDir - the profile directory.
  * @param packageName - the installed package name.
  * @returns the package name, version, and raw manifest.
+ * @throws a labelled diagnostic when the installed directory is a pnpm
+ * placeholder (a git repository whose root has no `package.json`) or its
+ * manifest carries no name.
  */
 export async function readProfileIdentity(profileDir: string, packageName: string): Promise<{
   name: string
@@ -355,6 +363,14 @@ export async function readProfileIdentity(profileDir: string, packageName: strin
   const manifest = JSON.parse(await readFile(join(profileModuleDir(profileDir, packageName), 'package.json'), 'utf8')) as {
     name?: unknown
     version?: unknown
+    _pnpmPlaceholder?: unknown
+  }
+  if (typeof manifest._pnpmPlaceholder === 'string') {
+    throw new Error(
+      `plugin-installer: ${packageName} resolved to a git repository whose root has no package.json `
+      + '(pnpm installed a placeholder manifest); the plugin lives in a subdirectory — reinstall with a '
+      + '"#&path:" selector naming it, e.g. github:owner/repo#&path:packages/<group>/<name>',
+    )
   }
   if (typeof manifest.name !== 'string' || manifest.name === '') {
     throw new Error(`plugin-installer: pnpm-installed package ${packageName} has no valid package.json name`)
