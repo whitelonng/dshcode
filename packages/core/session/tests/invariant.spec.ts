@@ -324,6 +324,37 @@ describe('session-log invariants', () => {
     })).toThrow(/outside any open turn/)
   })
 
+  it('rejects a message/delete inside an open turn', async () => {
+    const { ctx } = await setup()
+    const session = ctx.sessions.create()
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const userSeq = session.events.at(-1)!.seq
+
+    expect(() => session.append('message/delete', { start: userSeq, end: userSeq }, {
+      surfaceOp: { op: 'delete', start: userSeq, end: userSeq },
+      sourceEventSeqs: [userSeq],
+    })).toThrow(/message\/delete appended inside an open turn/)
+  })
+
+  it('accepts a message/delete after the turn closes', async () => {
+    const { ctx } = await setup()
+    const session = ctx.sessions.create()
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const userSeq = session.events.at(-1)!.seq
+    session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+    expect(() => session.append('message/delete', { start: userSeq, end: userSeq }, {
+      surfaceOp: { op: 'delete', start: userSeq, end: userSeq },
+      sourceEventSeqs: [userSeq],
+    })).not.toThrow()
+  })
+
   it('allows not-started repair results and unresolved calls at step end', async () => {
     const repaired = (await setup()).ctx.sessions.create()
     expect(() => {

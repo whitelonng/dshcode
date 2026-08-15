@@ -65,6 +65,7 @@ export const rpcErrorSchema: z.ZodType<RpcError> = z.discriminatedUnion('code', 
   z.object({ code: z.literal('model-discovery-failed'), message: z.string(), details: z.object({ settingsNs: z.string(), baseURL: z.string().optional() }) }),
   z.object({ code: z.literal('title-invalid'), message: z.string(), details: z.object({ sessionId: z.string() }) }),
   z.object({ code: z.literal('fork-unavailable'), message: z.string(), details: z.object({ sessionId: z.string() }) }),
+  z.object({ code: z.literal('delete-unavailable'), message: z.string(), details: z.object({ sessionId: z.string(), seq: z.number() }) }),
   z.object({ code: z.literal('subagent-parent-unavailable'), message: z.string(), details: z.object({ parentSessionId: z.string() }) }),
   z.object({ code: z.literal('subagent-not-found'), message: z.string(), details: z.object({ parentSessionId: z.string(), childSessionId: z.string() }) }),
   z.object({ code: z.literal('subagent-catalog-diagnostic'), message: z.string(), details: z.object({

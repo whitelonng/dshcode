@@ -2308,6 +2308,29 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const appended = logOf(sessionId).at(-1) as SessionEvent
         return ok(request, { title: normalized, seq: appended.seq })
       },
+      deleteMessage: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        const { sessionId, seq } = request.payload
+        const events = logOf(sessionId)
+        const target = events[seq]
+        if (target === undefined || (target.type !== 'user/message' && target.type !== 'assistant/message')) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: 'not a deletable message',
+            details: { sessionId, seq },
+          })
+        }
+        // Fixture simplification: the replay removes just that message, while
+        // the real host expands a user message to its whole turn.
+        append(sessionId, {
+          type: 'message/delete',
+          data: { start: seq, end: seq },
+          surfaceOp: { op: 'delete', start: seq, end: seq },
+          sourceEventSeqs: [seq],
+        })
+        return ok(request, { start: seq, end: seq, deletedSeqs: [seq] })
+      },
       fork: (request) => {
         const { sessionId, atSeq } = request.payload
         const source = summaryOf(sessionId)
@@ -3106,6 +3129,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.models': return this.api.sessions.models(request)
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
+      case 'session.deleteMessage': return this.api.sessions.deleteMessage(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
       case 'session.attachment': return this.api.sessions.attachment(request)

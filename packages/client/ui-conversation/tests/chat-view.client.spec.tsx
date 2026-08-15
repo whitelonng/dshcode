@@ -287,6 +287,7 @@ function makeHarness(init?: Partial<ConversationSnapshot>) {
     inspectCall,
     chatScroll,
     forkAt,
+    deleteAt: vi.fn(() => Promise.resolve(true)),
     // Absent-service default; mention tests override with a real resolver.
     fileMentions: () => undefined,
     // Mirrors the real lookup chain (conversation namespace, then common).

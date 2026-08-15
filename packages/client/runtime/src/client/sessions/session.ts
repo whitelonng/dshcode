@@ -260,6 +260,37 @@ export class Session implements SessionFace {
   }
 
   /**
+   * Delete one user or assistant message from the model-visible transcript.
+   * The Host expands a user message to its whole turn and an assistant
+   * message to itself plus its step's tool results. Rejected while the agent
+   * is running (`agent-busy`) or when `seq` is not a current surface message
+   * (`delete-unavailable`); subagent conversations refuse locally.
+   * @param seq - seq of the message event to delete.
+   * @returns the host-computed removed range.
+   */
+  async deleteMessage(seq: number): Promise<RpcResult<{ start: number; end: number; deletedSeqs: number[] }>> {
+    this.lastAgentError = null
+    let result: RpcResult<{ start: number; end: number; deletedSeqs: number[] }>
+    try {
+      if (this.address === undefined) {
+        result = (await this.api.sessions.deleteMessage({ sessionId: this.sessionId, seq })).result
+      } else {
+        result = {
+          ok: false,
+          error: {
+            code: 'agent-busy',
+            message: 'subagent conversations do not support message deletion',
+            details: { reason: 'subagent-read-only' },
+          },
+        }
+      }
+    } catch (error) {
+      result = transportError(error)
+    }
+    return result
+  }
+
+  /**
    * Resolve one image referenced by this session into browser-consumable bytes.
    * @param attachmentId - opaque id found in the folded session log.
    * @returns the authenticated reference and decoded bytes.

@@ -127,6 +127,19 @@ export const sessionRenameValueSchema = z.object({
   seq: z.number().int().nonnegative(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.rename'>>>
 
+/** session.deleteMessage request payload (the message event seq to delete). */
+export const sessionDeleteMessageRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  seq: z.number().int().nonnegative(),
+}) satisfies z.ZodType<Wire<RequestPayload<'session.deleteMessage'>>>
+
+/** session.deleteMessage response value (the host-computed removed surface range). */
+export const sessionDeleteMessageValueSchema = z.object({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+  deletedSeqs: z.array(z.number().int().nonnegative()),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.deleteMessage'>>>
+
 /** session.fork request payload (atSeq anchors the completed-turn cut). */
 export const sessionForkRequestSchema = z.object({
   sessionId: sessionIdSchema,

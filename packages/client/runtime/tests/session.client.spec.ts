@@ -1014,3 +1014,44 @@ describe('reference stability (the memo contract)', () => {
     expect(session.getSnapshot()).not.toBe(resolved)
   })
 })
+
+describe('deleteMessage', () => {
+  it('passes the target seq through the sessions RPC and echoes the range', async () => {
+    const api = new FakeApiClient()
+    api.onDeleteMessage = payload => Promise.resolve(ok({
+      start: (payload as { seq: number }).seq,
+      end: (payload as { seq: number }).seq + 1,
+      deletedSeqs: [(payload as { seq: number }).seq],
+    }))
+    const { session } = makeSession(api)
+    await session.open()
+    const result = await session.deleteMessage(9)
+    expect(result).toEqual({ ok: true, value: { start: 9, end: 10, deletedSeqs: [9] } })
+    expect(api.callsOf('session.deleteMessage')).toEqual([{ sessionId: SID, seq: 9 }])
+  })
+
+  it('refuses locally for subagent conversations', async () => {
+    const api = new FakeApiClient()
+    const session = new Session(SID, api, fakeRemote(), {
+      address: { parentSessionId: PARENT, childSessionId: SID, mode: 'continuable' },
+      parentAvailable: true,
+    })
+    await session.open()
+    const result = await session.deleteMessage(3)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('agent-busy')
+    expect(api.callsOf('session.deleteMessage')).toEqual([])
+  })
+
+  it('maps a transport crash to a transport error', async () => {
+    const api = new FakeApiClient()
+    api.onDeleteMessage = () => Promise.reject(new Error('carrier died'))
+    const { session } = makeSession(api)
+    await session.open()
+    const result = await session.deleteMessage(3)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('internal')
+  })
+})

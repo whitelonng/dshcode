@@ -1,6 +1,7 @@
 # Agent Note: Lifecycle-bound message feedback sidecar
 
 Status: implemented
+Archived: 2026-08-16
 
 English | [中文](2026-08-10-message-feedback-sidecar.zh.md)
 

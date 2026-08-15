@@ -236,9 +236,15 @@ export function PendingSteeringBubble({ content, loadImage, t }: {
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, loadImage, t,
+  node, loadImage, deleteAt, t, useSession,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
+  const isHuman = (data.source as { kind?: unknown } | undefined)?.kind === 'user'
+  const openTurn = useSession((snapshot) => {
+    const location = node.location
+    if (location.kind !== 'turn' && location.kind !== 'step') return false
+    return snapshot.chat.timeline.turns.get(location.turn.turn)?.status === 'open'
+  })
   return (
     <UserStyleBubble
       content={data.content}
@@ -251,6 +257,8 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           clock="start"
           className={css.actions}
           t={t}
+          onDelete={isHuman ? () => deleteAt(data.seq) : undefined}
+          deleteUnavailable={openTurn}
         />
       )}
     />

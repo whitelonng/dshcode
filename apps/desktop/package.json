@@ -82,7 +82,6 @@
     "@deepseek-ai/dsh-launch-environment": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-llm-retry": "workspace:^",
-    "@deepseek-ai/dsh-message-feedback": "workspace:^",
     "@deepseek-ai/dsh-output-retention": "workspace:^",
     "@deepseek-ai/dsh-permission-presets": "workspace:^",
     "@deepseek-ai/dsh-plan-mode": "workspace:^",
