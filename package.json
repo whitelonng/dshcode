@@ -158,7 +158,7 @@
     "@types/spdx-expression-parse": "^4.0.0",
     "@vitest/coverage-v8": "^4.1.8",
     "@yarnpkg/cli-dist": "4.17.1",
-    "eslint-plugin-sonarjs": "^4.1.0",
+    "eslint-plugin-sonarjs": "^4.2.0",
     "execa": "^10.0.0",
     "fast-check": "^4.8.0",
     "istanbul-lib-report": "^3.0.1",
