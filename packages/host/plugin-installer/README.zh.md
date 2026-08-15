@@ -20,18 +20,15 @@ registry 与 GitHub 请求带硬超时，按慢速、被限流的网络来定（
 
 所有变更串行化；状态文件在锁内原子写入，patch 层编辑保留每个非属主 YAML 节点、注释与 `!!js` 表达式。
 
+pnpm 可用时，网关把安装/更新/卸载委托给 profile workspace 里的 `pnpm add`/`remove`；探测先查 PATH 上的 `pnpm`，再试静态绝对路径（`/opt/homebrew/bin/pnpm`、`/usr/local/bin/pnpm`、`~/Library/pnpm/pnpm`、`~/.local/share/pnpm/pnpm`、`~/.volta/bin/pnpm`、`~/.local/bin/pnpm`、`~/bin/pnpm`），最后逐个试 nvm 与 fnm 版本目录下的 pnpm——macOS 的 GUI 应用不继承 shell PATH，且 spawn 环境会用这些目录补全 PATH，让 pnpm 的 `env node` shebang 也能解析到 node。可选配置 `githubMirror`（http(s) URL 前缀，如 `https://gh-proxy.com/`，加载时校验）只加在 codeload 与 api.github.com URL 前面，服务受限网络；web profile 把分层 `.env` 里的 `DSH_GITHUB_MIRROR` 传给它。`disableControlsOnInstall` 规则（`[{ id, matches }]`）在安装/更新后的包名命中任一 `matches` 子串时，禁用指定 plugin-control 产品的 patch 行——web profile 用它让用户自装的 webui 套件自动关掉内置 web-ui 产品，避免双重挂载。
+
 ## 模型体验
 
 ### Agent 工具
 
-网关注册四个面向模型的工具（`plugin_search` / `plugin_install` / `plugin_uninstall` / `plugin_status`），与浏览器面板读写同一份安装态。它们的名称、描述与 JSON-Schema 参数编入 [tool-catalog.md](../../../docs/tool-catalog.md)，经常规系统提示词工具装配到达模型。
-
 #### 模型看到的内容
 
-- `plugin_search { query?, source?, refresh? }` —— 已注册索引源的目录条目（id、形态、来源、能力面、描述、所属源及其信任级别），每个条目渲染一行文本。
-- `plugin_install { source }` —— 一行安装结果：安装的 id 与版本，以及重启要求。
-- `plugin_uninstall { id }` —— 一行移除结果。
-- `plugin_status { id? }` —— 每个已装插件一行（id@版本、安装来源、禁用标记）。
+网关注册四个面向模型的工具（`plugin_search` / `plugin_install` / `plugin_uninstall` / `plugin_status`），与浏览器面板读写同一份安装态：`plugin_search { query?, source?, refresh? }` 把已注册索引源的目录条目（id、形态、来源、能力面、描述、所属源及其信任级别）渲染为每行一条文本；`plugin_install { source }` 返回一行安装结果（安装的 id 与版本，以及重启要求）；`plugin_uninstall { id }` 返回一行移除结果；`plugin_status { id? }` 每个已装插件返回一行（id@版本、安装来源、禁用标记）。它们的名称、描述与 JSON-Schema 参数编入 [tool-catalog.md](../../../docs/tool-catalog.md)，经常规系统提示词工具装配到达模型。
 
 #### Token 影响
 
@@ -43,7 +40,17 @@ registry 与 GitHub 请求带硬超时，按慢速、被限流的网络来定（
 
 ### 回环网关
 
-`/plugin-installer` RPC 通道本身保持仅回环、模型不可见；网关不发起模型请求，也不注册其他模型可见内容。它经 HTTPS 从配置的 registry、codeload（GitHub 源码 tarball）与 GitHub API 下载包，或 spawn `pnpm`/`git`。pnpm 可用时，网关把安装/更新/卸载委托给 profile workspace 里的 `pnpm add`/`remove`；探测先查 PATH 上的 `pnpm`，再试静态绝对路径（`/opt/homebrew/bin/pnpm`、`/usr/local/bin/pnpm`、`~/Library/pnpm/pnpm`、`~/.local/share/pnpm/pnpm`、`~/.volta/bin/pnpm`、`~/.local/bin/pnpm`、`~/bin/pnpm`），最后逐个试 nvm 与 fnm 版本目录下的 pnpm——macOS 的 GUI 应用不继承 shell PATH，且 spawn 环境会用这些目录补全 PATH，让 pnpm 的 `env node` shebang 也能解析到 node。可选配置 `githubMirror`（http(s) URL 前缀，如 `https://gh-proxy.com/`，加载时校验）只加在 codeload 与 api.github.com URL 前面，服务受限网络；web profile 把分层 `.env` 里的 `DSH_GITHUB_MIRROR` 传给它。`disableControlsOnInstall` 规则（`[{ id, matches }]`）在安装/更新后的包名命中任一 `matches` 子串时，禁用指定 plugin-control 产品的 patch 行——web profile 用它让用户自装的 webui 套件自动关掉内置 web-ui 产品，避免双重挂载。
+#### 模型看到的内容
+
+无：`/plugin-installer` RPC 通道仅回环，不发起模型请求，也不注册其他模型可见内容。下载（配置的 npm registry、codeload、GitHub API）与 `pnpm`/`git` 子进程不产生模型可见输出。
+
+#### Token 影响
+
+当前进程为零；安装流量留在宿主内，从不进入模型请求。
+
+#### KV Cache 影响
+
+无；网关不给任何 provider 请求贡献内容。
 
 ## 已知限制与延期工作
 

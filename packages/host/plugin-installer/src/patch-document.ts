@@ -9,7 +9,11 @@ export const JS_EXPRESSION_TAG: ScalarTag = {
   resolve: value => value,
 }
 
-/** Whether an unknown filesystem failure reports a missing file. */
+/**
+ * Whether an unknown filesystem failure reports a missing file.
+ * @param error - the caught rejection.
+ * @returns true when the error carries an ENOENT code.
+ */
 export function isMissing(error: unknown): boolean {
   /* v8 ignore next -- node:fs promise rejections are ErrnoException objects, never null or undefined. */
   return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT'
@@ -50,7 +54,11 @@ export function openPatchDocument(text: string, filename: string, action: 'read'
   return { document, root }
 }
 
-/** Read one patch file, treating a missing file as an empty layer. */
+/**
+ * Read one patch file, treating a missing file as an empty layer.
+ * @param filename - absolute path of the patch file.
+ * @returns the file text, or an empty `[]` layer when the file is absent.
+ */
 export async function readPatchFile(filename: string): Promise<string> {
   try {
     return await readFile(filename, 'utf8')
@@ -60,7 +68,11 @@ export async function readPatchFile(filename: string): Promise<string> {
   }
 }
 
-/** Push an item into the root sequence (yaml's seq items are a plain array). */
+/**
+ * Push an item into the root sequence (yaml's seq items are a plain array).
+ * @param root - the top-level YAML sequence.
+ * @param item - the YAML node to append.
+ */
 export function pushItem(root: YAMLSeq, item: unknown): void {
   root.items.push(item)
 }

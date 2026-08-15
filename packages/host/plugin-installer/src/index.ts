@@ -149,7 +149,12 @@ export interface Config {
    * disables the named plugin-control product's patch rows, so a user
    * install does not double-mount a built-in suite.
    */
-  disableControlsOnInstall?: Array<{ id: string; matches: string[] }>
+  disableControlsOnInstall?: Array<{
+    /** The plugin-control product id whose patch rows the rule disables. */
+    id: string
+    /** Package-name substrings (case-insensitive) that trigger the rule. */
+    matches: string[]
+  }>
   /** Absolute user patch layer of the running profile. */
   profilePatchPath: string
 }
@@ -690,12 +695,19 @@ export class PluginInstallerGateway {
     return { plugins }
   }
 
-  /** Read the registered index sources. */
+  /**
+   * Read the registered index sources.
+   * @returns the registered source rows.
+   */
   sources(): { sources: PluginSourceRow[] } {
     return { sources: readSources(this.home) }
   }
 
-  /** Register (or replace) one index source. */
+  /**
+   * Register (or replace) one index source.
+   * @param request - the new source (locator, optional id and trust).
+   * @returns the stored source row.
+   */
   async addSource(request: { locator: string; id?: string | undefined; trust?: 'official' | 'community' | 'untrusted' | undefined }): Promise<{ source: PluginSourceRow }> {
     const sources = readSources(this.home)
     const source: PluginSourceRow = {
@@ -707,7 +719,11 @@ export class PluginInstallerGateway {
     return { source }
   }
 
-  /** Remove one index source by id (the default hub can be removed and re-added). */
+  /**
+   * Remove one index source by id (the default hub can be removed and re-added).
+   * @param request - the id of the source to remove.
+   * @returns the remaining source rows.
+   */
   async removeSource(request: { id: string }): Promise<{ sources: PluginSourceRow[] }> {
     const sources = readSources(this.home).filter(source => source.id !== request.id)
     await writeSources(this.home, sources)

@@ -237,7 +237,11 @@ export async function writeProfileManifest(profileDir: string, manifest: Profile
   await writeFileAtomic(join(profileDir, 'package.json'), JSON.stringify(manifest, undefined, 2) + '\n', { mode: 0o600 })
 }
 
-/** The profile's bundle layer list (empty when absent). */
+/**
+ * The profile's bundle layer list (empty when absent).
+ * @param profileDir - the profile directory.
+ * @returns the recorded bundle layer package names.
+ */
 export function readProfileBundles(profileDir: string): string[] {
   return [...(readProfileManifest(profileDir).dsh?.profile?.bundles ?? [])]
 }
@@ -327,12 +331,22 @@ export async function removeViaPnpm(profileDir: string, packageName: string): Pr
   }
 }
 
-/** The installed package dir under the profile's hoisted node_modules. */
+/**
+ * The installed package dir under the profile's hoisted node_modules.
+ * @param profileDir - the profile directory.
+ * @param packageName - the installed package name.
+ * @returns the absolute package directory.
+ */
 export function profileModuleDir(profileDir: string, packageName: string): string {
   return join(profileDir, 'node_modules', packageName)
 }
 
-/** Read the installed package identity from the profile workspace. */
+/**
+ * Read the installed package identity from the profile workspace.
+ * @param profileDir - the profile directory.
+ * @param packageName - the installed package name.
+ * @returns the package name, version, and raw manifest.
+ */
 export async function readProfileIdentity(profileDir: string, packageName: string): Promise<{
   name: string
   version: string
@@ -352,7 +366,11 @@ export async function readProfileIdentity(profileDir: string, packageName: strin
   }
 }
 
-/** The profile directory a patch path lives in (the pnpm workspace root). */
+/**
+ * The profile directory a patch path lives in (the pnpm workspace root).
+ * @param patchPath - absolute path of the profile patch file.
+ * @returns the profile directory.
+ */
 export function profileDirOf(patchPath: string): string {
   return dirname(patchPath)
 }

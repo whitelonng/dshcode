@@ -13,7 +13,9 @@ import type {
 
 /** Discovery domain root under the Harness home. */
 export const DISCOVERY_ROOT = 'plugin-sources'
+/** Sources file name under the discovery root. */
 export const SOURCES_FILE = 'sources.yml'
+/** TOFU lock file name under the discovery root. */
 export const LOCK_FILE = 'lock.yml'
 const CACHE_DIR = 'cache'
 const ENTRIES_FILE = 'entries.json'
@@ -21,24 +23,42 @@ const TRUST_LEVELS = new Set<PluginSourceTrust>(['official', 'community', 'untru
 
 /** The default index source: the dsh-external hub catalog. */
 export const DEFAULT_SOURCE_ID = 'hub'
+/** The default index source locator. */
 export const DEFAULT_SOURCE_LOCATOR = 'https://raw.githubusercontent.com/dsh-external/hub/main/catalog.json'
 
-/** The discovery domain root under a Harness home. */
+/**
+ * The discovery domain root under a Harness home.
+ * @param dshHome - the Harness home.
+ * @returns the absolute discovery root.
+ */
 export function discoveryRoot(dshHome: string): string {
   return join(dshHome, DISCOVERY_ROOT)
 }
 
-/** The sources file path. */
+/**
+ * The sources file path.
+ * @param dshHome - the Harness home.
+ * @returns the absolute sources file path.
+ */
 export function sourcesPath(dshHome: string): string {
   return join(discoveryRoot(dshHome), SOURCES_FILE)
 }
 
-/** The TOFU lock file path. */
+/**
+ * The TOFU lock file path.
+ * @param dshHome - the Harness home.
+ * @returns the absolute lock file path.
+ */
 export function lockPath(dshHome: string): string {
   return join(discoveryRoot(dshHome), LOCK_FILE)
 }
 
-/** The snapshot path of one source. */
+/**
+ * The snapshot path of one source.
+ * @param dshHome - the Harness home.
+ * @param sourceId - the owning source id.
+ * @returns the absolute entries file path.
+ */
 export function cacheEntriesPath(dshHome: string, sourceId: string): string {
   return join(discoveryRoot(dshHome), CACHE_DIR, sourceId, ENTRIES_FILE)
 }
@@ -113,12 +133,22 @@ export async function writeSources(dshHome: string, sources: PluginSourceRow[]):
   })
 }
 
-/** Find one source by id. */
+/**
+ * Find one source by id.
+ * @param sources - the registered sources.
+ * @param id - the source id.
+ * @returns the matching source row, or undefined.
+ */
 export function findSource(sources: PluginSourceRow[], id: string): PluginSourceRow | undefined {
   return sources.find(source => source.id === id)
 }
 
-/** Append or replace one source (by id). */
+/**
+ * Append or replace one source (by id).
+ * @param sources - the registered sources.
+ * @param source - the source row to upsert.
+ * @returns the source list with the row appended or replaced.
+ */
 export function upsertSource(sources: PluginSourceRow[], source: PluginSourceRow): PluginSourceRow[] {
   const rest = sources.filter(existing => existing.id !== source.id)
   return [...rest, source]
@@ -178,18 +208,33 @@ export async function writeLock(dshHome: string, locks: PluginLockEntry[]): Prom
   })
 }
 
-/** Find one lock by canonical. */
+/**
+ * Find one lock by canonical.
+ * @param locks - the recorded locks.
+ * @param canonical - the canonical source spec.
+ * @returns the matching lock entry, or undefined.
+ */
 export function findLock(locks: PluginLockEntry[], canonical: string): PluginLockEntry | undefined {
   return locks.find(lock => lock.canonical === canonical)
 }
 
-/** Append or replace one lock (by canonical). */
+/**
+ * Append or replace one lock (by canonical).
+ * @param locks - the recorded locks.
+ * @param lock - the lock entry to upsert.
+ * @returns the lock list with the entry appended or replaced.
+ */
 export function upsertLock(locks: PluginLockEntry[], lock: PluginLockEntry): PluginLockEntry[] {
   const rest = locks.filter(existing => existing.canonical !== lock.canonical)
   return [...rest, lock]
 }
 
-/** Read one source's enumeration snapshot; null when absent or unreadable. */
+/**
+ * Read one source's enumeration snapshot; null when absent or unreadable.
+ * @param dshHome - the Harness home.
+ * @param sourceId - the owning source id.
+ * @returns the snapshot, or null.
+ */
 export function readSnapshot(dshHome: string, sourceId: string): EnumerateSnapshot | null {
   const text = readText(cacheEntriesPath(dshHome, sourceId))
   if (text === null) return null
@@ -200,14 +245,25 @@ export function readSnapshot(dshHome: string, sourceId: string): EnumerateSnapsh
   return parsed
 }
 
-/** Write one source's enumeration snapshot (derived machine data). */
+/**
+ * Write one source's enumeration snapshot (derived machine data).
+ * @param dshHome - the Harness home.
+ * @param sourceId - the owning source id.
+ * @param snapshot - the snapshot value to persist.
+ */
 export function writeSnapshot(dshHome: string, sourceId: string, snapshot: EnumerateSnapshot): void {
   const path = cacheEntriesPath(dshHome, sourceId)
   mkdirSync(join(path, '..'), { recursive: true })
   writeFileSync(path, JSON.stringify(snapshot, null, 2), 'utf8')
 }
 
-/** Whether a snapshot is younger than the TTL. */
+/**
+ * Whether a snapshot is younger than the TTL.
+ * @param snapshot - the snapshot.
+ * @param ttlMs - the freshness window in milliseconds.
+ * @param now - the current time (test seam).
+ * @returns true when the snapshot fetchedAt is within the window.
+ */
 export function snapshotFresh(snapshot: EnumerateSnapshot, ttlMs: number, now = Date.now()): boolean {
   const fetched = Date.parse(snapshot.fetchedAt)
   if (Number.isNaN(fetched)) return false

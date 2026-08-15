@@ -821,7 +821,7 @@ Source: [`packages/host/plugin-control/src/index.ts:50`](../packages/host/plugin
 
 ## `@deepseek-ai/dsh-host-plugin-installer`
 
-Requires: `connection`
+Requires: `connection` · `tools`
 
 ```ts config-catalog
 /** Plugin-installer gateway configuration owned by the composing profile. */
@@ -830,12 +830,30 @@ export interface Config {
   dshHome?: string
   /** npm registry base; omitted follows `npm_config_registry`, then npmjs. */
   registry?: string
+  /**
+   * Optional GitHub mirror prefix (an http(s) URL, for example
+   * `https://gh-proxy.com/`) prepended to the codeload and api.github.com
+   * URLs on restricted networks. A set non-http(s) value fails loud at load.
+   */
+  githubMirror?: string
+  /**
+   * Conflict rules: after a successful install or update, each rule whose
+   * `matches` substrings match the installed package name (case-insensitive)
+   * disables the named plugin-control product's patch rows, so a user
+   * install does not double-mount a built-in suite.
+   */
+  disableControlsOnInstall?: Array<{
+    /** The plugin-control product id whose patch rows the rule disables. */
+    id: string
+    /** Package-name substrings (case-insensitive) that trigger the rule. */
+    matches: string[]
+  }>
   /** Absolute user patch layer of the running profile. */
   profilePatchPath: string
 }
 ```
 
-Source: [`packages/host/plugin-installer/src/index.ts:51`](../packages/host/plugin-installer/src/index.ts)
+Source: [`packages/host/plugin-installer/src/index.ts:135`](../packages/host/plugin-installer/src/index.ts)
 
 <a id="deepseek-aidsh-host-webserver"></a>
 

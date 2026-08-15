@@ -55,6 +55,16 @@ API key 每次调用解析一次，先匹配者胜：显式 `apiKey` → [凭据
 - 只接受 `http(s)` URL 与本地路径，其他 URL scheme 一律拒绝。
 - 响应体在解析前设有上界（`maxOutputTokens * 8 + 64 KiB`）。
 
+## 常见问题
+
+**它是干什么的？** 注册面向模型的 `describe_image` 工具：一张图进去，配置的视觉模型的描述文本出来。
+
+**支持哪些视觉模型？** 任何 OpenAI 兼容端点——Qwen-VL、GLM-4V、GPT-4o，或本地 Ollama 端点。
+
+**图片会进入对话或会话日志吗？** 不会——只有返回的描述文本跨入对话。
+
+**API Key 怎么配置？** 内联 `apiKey` → 凭据缝（`apiKeyEnv`，默认 `VISION_API_KEY`）→ 启动环境；密钥从不写入日志。
+
 ## Model Experience
 
 ### Tool schema
@@ -84,20 +94,6 @@ schema 与描述不变时前缀稳定；插件生命周期或改变描述的配�
 #### KV Cache effect
 
 仅追加；新可见内容接在可复用的请求前缀之后，不会使已有 KV-cache 条目失效。
-
-## 常见问题
-
-**它是干什么的？**
-注册面向模型的 `describe_image` 工具：一张图进去，配置的视觉模型的描述文本出来。
-
-**支持哪些视觉模型？**
-任何 OpenAI 兼容端点——Qwen-VL、GLM-4V、GPT-4o，或本地 Ollama 端点。
-
-**图片会进入对话或会话日志吗？**
-不会——只有返回的描述文本跨入对话。
-
-**API Key 怎么配置？**
-内联 `apiKey` → 凭据缝（`apiKeyEnv`，默认 `VISION_API_KEY`）→ 启动环境；密钥从不写入日志。
 
 ## Known Limitations and Deferred Work
 

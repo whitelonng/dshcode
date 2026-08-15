@@ -8,7 +8,11 @@ import { readSnapshot, snapshotFresh, writeSnapshot } from './sources.ts'
 /** Index snapshot freshness window. */
 export const INDEX_TTL_MS = 6 * 60 * 60 * 1000 // 6h
 
-/** Parse a github repository URL into owner/repo. */
+/**
+ * Parse a github repository URL into owner/repo.
+ * @param url - the repository URL.
+ * @returns the owner/repo pair, or null for non-GitHub or malformed URLs.
+ */
 export function parseGithubUrl(url: string): { owner: string; repo: string } | null {
   const prefix = 'https://github.com/'
   const trimmed = url.trim()
@@ -31,7 +35,12 @@ export interface FetchLike {
   }>
 }
 
-/** Runtime fetch adapted to the test surface. */
+/**
+ * Runtime fetch adapted to the test surface.
+ * @param url - the request URL.
+ * @param init - optional request headers.
+ * @returns the reduced response surface (ok/status/etag/json).
+ */
 export const defaultFetch: FetchLike = async (url, init) => {
   const response = await fetch(url, init)
   return {
