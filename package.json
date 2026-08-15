@@ -165,7 +165,7 @@
     "js-yaml": "^4.2.0",
     "jscpd": "^5.0.12",
     "jsdom": "29.1.1",
-    "knip": "^6.26.0",
+    "knip": "^6.27.0",
     "lefthook": "^2.1.10",
     "lightningcss": "^1.32.0",
     "mdast-util-from-markdown": "^2.0.3",
