@@ -55,6 +55,16 @@ Every field is also editable live from the Web GUI's Settings → Plugins → "I
 - Only `http(s)` URLs and local paths are accepted; other URL schemes are rejected.
 - The response body is bounded (`maxOutputTokens * 8 + 64 KiB`) before parsing.
 
+## FAQ
+
+**What does it do?** Registers the model-facing `describe_image` tool: one image in, the configured vision model's description text out.
+
+**Which vision models work?** Any OpenAI-compatible endpoint — Qwen-VL, GLM-4V, GPT-4o, or a local Ollama endpoint.
+
+**Does the image reach the conversation or the session log?** No — only the returned description text crosses into the conversation.
+
+**How is the API key configured?** Inline `apiKey` → credential seam (`apiKeyEnv`, default `VISION_API_KEY`) → launch environment; the key is never logged.
+
 ## Model Experience
 
 ### Tool schema
@@ -84,20 +94,6 @@ Data-dependent results are resent until compaction; the tool itself adds no pers
 #### KV Cache effect
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
-
-## FAQ
-
-**What does it do?**
-Registers the model-facing `describe_image` tool: one image in, the configured vision model's description text out.
-
-**Which vision models work?**
-Any OpenAI-compatible endpoint — Qwen-VL, GLM-4V, GPT-4o, or a local Ollama endpoint.
-
-**Does the image reach the conversation or the session log?**
-No — only the returned description text crosses into the conversation.
-
-**How is the API key configured?**
-Inline `apiKey` → credential seam (`apiKeyEnv`, default `VISION_API_KEY`) → launch environment; the key is never logged.
 
 ## Known Limitations and Deferred Work
 

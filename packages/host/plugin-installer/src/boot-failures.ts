@@ -82,7 +82,11 @@ export function safeModePath(home: string): string {
   return join(home, SAFE_MODE_FILENAME)
 }
 
-/** Whether the safe-mode marker exists. */
+/**
+ * Whether the safe-mode marker exists.
+ * @param home - the Harness home.
+ * @returns true when the marker file is present.
+ */
 export function readSafeMode(home: string): boolean {
   return existsSync(safeModePath(home))
 }

@@ -20,18 +20,15 @@ Registry and GitHub requests carry hard timeouts sized for slow, rate-limited ne
 
 All mutations are serialized; the state file is written atomically under a lock, and patch-layer edits preserve every unowned YAML node, comment, and `!!js` expression.
 
+When pnpm is available the gateway delegates install/update/uninstall to `pnpm add`/`remove` in the profile workspace; the probe checks `pnpm` on PATH, then static absolute paths (`/opt/homebrew/bin/pnpm`, `/usr/local/bin/pnpm`, `~/Library/pnpm/pnpm`, `~/.local/share/pnpm/pnpm`, `~/.volta/bin/pnpm`, `~/.local/bin/pnpm`, `~/bin/pnpm`), then every node version under the nvm and fnm directories — GUI apps on macOS do not inherit the shell PATH, and the spawn environment augments PATH with those directories so pnpm's `env node` shebang resolves too. The optional `githubMirror` config (an http(s) URL prefix, for example `https://gh-proxy.com/`, validated at load) is prepended to the codeload and api.github.com URLs for restricted networks; the web profile passes `DSH_GITHUB_MIRROR` from the layered `.env` through it. The `disableControlsOnInstall` rules (`[{ id, matches }]`) disable a named plugin-control product's patch rows after an install or update whose package name contains any `matches` substring — the web profile uses it so a user-installed webui suite turns the built-in web-ui product off instead of double-mounting.
+
 ## Model Experience
 
 ### Agent tools
 
-The gateway registers four model-facing tools (`plugin_search` / `plugin_install` / `plugin_uninstall` / `plugin_status`) that read and write the same install state as the browser panel. Their names, descriptions, and JSON-Schema parameters are catalogued in [tool-catalog.md](../../../docs/tool-catalog.md) and reach the model through the ordinary system-prompt tool assembly.
-
 #### What the model sees
 
-- `plugin_search { query?, source?, refresh? }` — catalog entries from the registered index sources (id, kind, source, capability faces, description, owning source and its trust level), rendered as one text line per entry.
-- `plugin_install { source }` — one install result line: the installed id and version plus the restart requirement.
-- `plugin_uninstall { id }` — one removal-result line.
-- `plugin_status { id? }` — one line per installed plugin (id@version, install source, and a disabled marker).
+The gateway registers four model-facing tools (`plugin_search` / `plugin_install` / `plugin_uninstall` / `plugin_status`) that read and write the same install state as the browser panel: `plugin_search { query?, source?, refresh? }` renders catalog entries from the registered index sources as one text line per entry (id, kind, source, capability faces, description, owning source and its trust level); `plugin_install { source }` returns one install result line (the installed id and version plus the restart requirement); `plugin_uninstall { id }` returns one removal-result line; `plugin_status { id? }` returns one line per installed plugin (id@version, install source, and a disabled marker). Their names, descriptions, and JSON-Schema parameters are catalogued in [tool-catalog.md](../../../docs/tool-catalog.md) and reach the model through the ordinary system-prompt tool assembly.
 
 #### Token effect
 
@@ -43,7 +40,17 @@ None beyond the shared tool-catalog assembly every model request already carries
 
 ### Loopback gateway
 
-The `/plugin-installer` RPC channel itself stays loopback-only and model-invisible; the gateway performs no model requests and registers no other model-facing content. It downloads packages over HTTPS from the configured registry, codeload (GitHub source tarballs), and the GitHub API, or spawns `pnpm`/`git`. When pnpm is available the gateway delegates install/update/uninstall to `pnpm add`/`remove` in the profile workspace; the probe checks `pnpm` on PATH, then static absolute paths (`/opt/homebrew/bin/pnpm`, `/usr/local/bin/pnpm`, `~/Library/pnpm/pnpm`, `~/.local/share/pnpm/pnpm`, `~/.volta/bin/pnpm`, `~/.local/bin/pnpm`, `~/bin/pnpm`), then every node version under the nvm and fnm directories — GUI apps on macOS do not inherit the shell PATH, and the spawn environment augments PATH with those directories so pnpm's `env node` shebang resolves too. The optional `githubMirror` config (an http(s) URL prefix, for example `https://gh-proxy.com/`, validated at load) is prepended to the codeload and api.github.com URLs for restricted networks; the web profile passes `DSH_GITHUB_MIRROR` from the layered `.env` through it. The `disableControlsOnInstall` rules (`[{ id, matches }]`) disable a named plugin-control product's patch rows after an install or update whose package name contains any `matches` substring — the web profile uses it so a user-installed webui suite turns the built-in web-ui product off instead of double-mounting.
+#### What the model sees
+
+Nothing: the `/plugin-installer` RPC channel is loopback-only, performs no model requests, and registers no other model-facing content. Downloads (configured npm registry, codeload, GitHub API) and the `pnpm`/`git` subprocesses never produce model-visible output.
+
+#### Token effect
+
+None in the current process; install traffic stays in the host and never reaches a model request.
+
+#### KV Cache effect
+
+None; the gateway contributes nothing to any provider request.
 
 ## Known Limitations and Deferred Work
 
