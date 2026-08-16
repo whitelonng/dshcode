@@ -26,6 +26,7 @@ import {
   desktopIpcSenderIsApplication,
   desktopLaunchArguments,
   desktopWebArguments,
+  DESKTOP_FRAME_ARG,
   DESKTOP_RESTART_CHANNEL,
   DESKTOP_NOTIFICATION_CHANNEL,
   DESKTOP_NOTIFICATION_CLICK_CHANNEL,
@@ -149,7 +150,10 @@ async function createMainWindow(rawUrl: string): Promise<void> {
   // product name and menu button in a drag region, while titleBarOverlay
   // keeps native minimize/maximize/close buttons on the same row. The
   // preload bridge (CJS; sandboxed preloads cannot load ESM) carries the
-  // frame mode and product name to the renderer.
+  // product name and application version on every platform (the UI shows the
+  // version); only Windows additionally receives the custom-frame argument —
+  // a native-frame platform must never see `--dsh-frame=custom`, or the
+  // renderer would draw the Windows chrome over the system title bar.
   const customFrame = process.platform === 'win32'
   const window = new BrowserWindow({
     title: PRODUCT_NAME,
@@ -180,7 +184,9 @@ async function createMainWindow(rawUrl: string): Promise<void> {
       webviewTag: false,
       navigateOnDragDrop: false,
       preload: join(mainDir, 'preload.cjs'),
-      additionalArguments: customFrame ? desktopLaunchArguments(PRODUCT_NAME) : [],
+      additionalArguments: customFrame
+        ? [DESKTOP_FRAME_ARG, ...desktopLaunchArguments(PRODUCT_NAME, app.getVersion())]
+        : desktopLaunchArguments(PRODUCT_NAME, app.getVersion()),
     },
   })
   mainWindow = window

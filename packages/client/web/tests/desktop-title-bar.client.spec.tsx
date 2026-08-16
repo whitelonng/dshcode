@@ -22,7 +22,7 @@ describe('DesktopTitleBar', () => {
   })
 
   it('renders the children without the title bar on a native frame', () => {
-    window.dshDesktop = { frame: 'native', productName: 'DSHCode', showMenu: () => {}, restart: () => {} }
+    window.dshDesktop = { frame: 'native', productName: 'DSHCode', appVersion: '', showMenu: () => {}, restart: () => {} }
     render(<DesktopTitleBar><div data-testid="frame" /></DesktopTitleBar>)
     expect(screen.getByTestId('frame')).toBeTruthy()
     expect(screen.queryByText('DSHCode')).toBeNull()
@@ -30,7 +30,7 @@ describe('DesktopTitleBar', () => {
 
   it('renders the product name above the children and wires the menu button on a custom frame', () => {
     const showMenu = vi.fn()
-    window.dshDesktop = { frame: 'custom', productName: 'DSHCode', showMenu, restart: () => {} }
+    window.dshDesktop = { frame: 'custom', productName: 'DSHCode', appVersion: '', showMenu, restart: () => {} }
     render(<DesktopTitleBar><div data-testid="frame" /></DesktopTitleBar>)
     expect(screen.getByText('DSHCode')).toBeTruthy()
     expect(screen.getByTestId('frame')).toBeTruthy()

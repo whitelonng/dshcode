@@ -10,6 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
 import { DesktopTitleBar } from './DesktopTitleBar.tsx'
 import { DocumentTitle } from './DocumentTitle.tsx'
+import { VersionCaption } from './VersionCaption.tsx'
 // Type-only: pulls the runtime's SlotMap declaration merge (the 'root' key) into this program.
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 
@@ -42,6 +43,7 @@ export function buildRenderApp(deps: AssemblyDeps): () => ReactNode {
       <DesktopTitleBar>
         {ctx.slots.renderSlot('root', {})}
       </DesktopTitleBar>
+      <VersionCaption />
     </>
   )
 }

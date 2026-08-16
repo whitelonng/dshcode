@@ -1015,7 +1015,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'abstract delete(id: SessionId): Promise<void>',
-        description: 'Durably delete one persisted session: drop any in-memory state and remove the stored artifact (log file or rows). Resolves once the artifact, if any, is gone; the next list must no longer include the id. Refusing deletion of a live session is the caller\'s responsibility.',
+        description: 'Durably delete one persisted session: drop any in-memory state and remove the stored artifact (log file or rows). Resolves once the artifact, if any, is gone; the next list must no longer include the id, and a successful deletion emits `session/deleted`. Refusing deletion of a live session is the caller\'s responsibility.',
         parameters: [{ name: 'id', description: 'persisted session id to delete.' }],
       },
       {
@@ -2404,6 +2404,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'Creation announcement during session publication.',
     description: 'Creation announcement during session publication. A synchronous throw vetoes and rolls back with a paired disposal; detach requested during dispatch is deferred. A returned-promise rejection is logged but cannot retroactively veto this synchronous boundary. Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only sessions entered through that agent\'s context.',
     parameters: [{ name: 'session', description: 'the session just entered and announced.' }],
+  },
+  {
+    name: 'session/deleted',
+    mode: 'emit',
+    signature: '\'session/deleted\'(sessionId: SessionId): void',
+    summary: 'One persisted session was permanently deleted: the backend artifact is gone and the next SessionPersistence.list no longer includes the id.',
+    description: 'One persisted session was permanently deleted: the backend artifact is gone and the next SessionPersistence.list no longer includes the id. Emitted once per successful SessionPersistence.delete, after the backend acknowledges the removal. The host stream converts it into `host/session-deleted` so every connected client evicts its cached list mirror; content-search indexes reconcile on their next list observation. No later listing or reconnect baseline mentions the id.',
+    parameters: [{ name: 'sessionId', description: 'the deleted session id.' }],
   },
   {
     name: 'session/disposed',
@@ -4463,7 +4471,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WebBootGraph',
-    declaration: 'export interface WebBootGraph {\n    rev: string;\n    entries: WebBootEntry[];\n}',
+    declaration: 'export interface WebBootGraph {\n    rev: string;\n    version: string;\n    entries: WebBootEntry[];\n}',
   },
   {
     name: 'WebFetchBody',

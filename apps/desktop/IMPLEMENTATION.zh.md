@@ -17,8 +17,8 @@
 - `windowCloseDisposition(quitArmed: boolean): 'hide' | 'close'`
 - `buildTrayMenu({ show, quit })` → `[显示主界面, 分隔线, 退出]`（产品文案中文）
 - `trayIconFile(platform)` → darwin 用 `trayTemplate.png`，其余用 `tray.png`
-- `desktopLaunchArguments(productName)` → `['--dsh-frame=custom', '--dsh-product-name=<编码>']`
-- `desktopBridgePayload(argv)` → `{ frame: 'custom' | 'native', productName }`
+- `desktopLaunchArguments(productName, appVersion)` → `['--dsh-product-name=<编码>', '--dsh-app-version=<编码>']`（所有平台都传；仅 Windows 由调用方额外追加 `--dsh-frame=custom`）
+- `desktopBridgePayload(argv)` → `{ frame: 'custom' | 'native', productName, appVersion }`
 - `desktopIpcSenderIsApplication(senderUrl, origin)` → IPC 发送方源校验
 - `buildWindowMenu({ hide, restart, quit })` → `[隐藏到托盘, 分隔线, 重启应用, 分隔线, 退出]`
 - 常量：`DESKTOP_SHOW_MENU_CHANNEL = 'desktop:show-menu'`、`DESKTOP_RESTART_CHANNEL = 'desktop:restart'`
@@ -48,7 +48,7 @@ Windows 经隐藏式标题栏 + `titleBarOverlay` 把产品名、菜单按钮与
 **窗口选项（main.ts，仅 Windows）：**
 
 - `titleBarStyle: 'hidden'`，`titleBarOverlay: { color: '#ffffff', symbolColor: '#0f1115', height: 38 }`
-- `webPreferences.preload: join(__dirname, 'preload.cjs')`，`additionalArguments: desktopLaunchArguments(PRODUCT_NAME)`
+- `webPreferences.preload: join(__dirname, 'preload.cjs')`，`additionalArguments: desktopLaunchArguments(PRODUCT_NAME, app.getVersion())`，仅 Windows 自定义边框额外追加 `--dsh-frame=custom`（渲染层版本角标在所有平台读取应用版本；只有 Windows 绘制自己的标题栏行）
 
 **`apps/desktop/src/preload.ts`（沙箱 CommonJS；沙箱 preload 无法加载 ESM）：**
 

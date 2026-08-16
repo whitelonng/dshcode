@@ -99,15 +99,23 @@ describe('desktop tray and close-to-tray policy', () => {
 })
 
 describe('desktop preload bridge policy', () => {
-  it('round-trips the custom-frame launch arguments with an encoded product name', () => {
-    const args = desktopLaunchArguments('DSHCode')
-    expect(args[0]).toBe('--dsh-frame=custom')
-    expect(desktopBridgePayload(args, 'win32')).toEqual({ frame: 'custom', productName: 'DSHCode' })
+  it('round-trips the launch arguments with an encoded product name and version', () => {
+    const args = desktopLaunchArguments('DSHCode', '1.0.0')
+    expect(args).toEqual(['--dsh-product-name=DSHCode', '--dsh-app-version=1.0.0'])
+    expect(desktopBridgePayload(args, 'darwin'))
+      .toEqual({ frame: 'native', productName: 'DSHCode', appVersion: '1.0.0' })
   })
 
-  it('defaults to a native frame and an empty product name without the arguments', () => {
-    expect(desktopBridgePayload([], 'darwin')).toEqual({ frame: 'native', productName: '' })
-    expect(desktopBridgePayload(['--some-other=flag'], 'linux')).toEqual({ frame: 'native', productName: '' })
+  it('reports the custom frame only when the caller appends the frame argument', () => {
+    const args = ['--dsh-frame=custom', ...desktopLaunchArguments('DSHCode', '1.0.0')]
+    expect(desktopBridgePayload(args, 'win32'))
+      .toEqual({ frame: 'custom', productName: 'DSHCode', appVersion: '1.0.0' })
+  })
+
+  it('defaults to a native frame and empty product name and version without the arguments', () => {
+    expect(desktopBridgePayload([], 'darwin')).toEqual({ frame: 'native', productName: '', appVersion: '' })
+    expect(desktopBridgePayload(['--some-other=flag'], 'linux'))
+      .toEqual({ frame: 'native', productName: '', appVersion: '' })
   })
 
   it('accepts only application-origin IPC senders', () => {
