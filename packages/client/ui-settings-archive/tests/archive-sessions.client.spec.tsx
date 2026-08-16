@@ -15,7 +15,7 @@ afterEach(cleanup)
 const t = (key: string, params?: { time?: string; reason?: string; count?: string; title?: string }): string => {
   const copy: Record<string, string> = {
     loading: '正在加载归档…',
-    empty: '没有归档的对话。在侧边栏删除的会话会先归档到这里。',
+    empty: '没有归档的对话。在侧边栏归档的会话会显示在这里，可在此恢复或彻底删除。',
     loadError: '加载归档失败，请重试。',
     untitled: '未命名会话',
     restore: '恢复',
@@ -130,7 +130,7 @@ describe('ArchiveSessionsSection', () => {
 
   it('renders the empty state and the load-error state', async () => {
     const empty = mount({ list: vi.fn().mockResolvedValue([]) })
-    expect(await empty.findByText('没有归档的对话。在侧边栏删除的会话会先归档到这里。')).toBeTruthy()
+    expect(await empty.findByText('没有归档的对话。在侧边栏归档的会话会显示在这里，可在此恢复或彻底删除。')).toBeTruthy()
     cleanup()
 
     const failed = mount({ list: vi.fn().mockRejectedValue(new Error('down')) })

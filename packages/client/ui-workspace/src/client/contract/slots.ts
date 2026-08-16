@@ -123,10 +123,10 @@ export type WorkspaceBrowserInjected = DirectoryPickingInjected & {
   insertWorkspaceBefore: (workspaceId: WorkspaceId, beforeWorkspaceId?: WorkspaceId) => Promise<void>
   /**
    * Archive a Session into the registry-global set: hidden from grouping
-   * surfaces, log and accounting slot retained. This is the row menu's
-   * archive-first Delete implementation — the Archived sessions settings
-   * page restores or permanently deletes afterwards. Archiving the current
-   * session clears the selection into the New Session view state.
+   * surfaces, log and accounting slot retained. The Archived sessions
+   * settings page lists the set and restores or permanently deletes members.
+   * Archiving the current session clears the selection into the New Session
+   * view state.
    */
   archiveSession: (sessionId: SessionId) => Promise<void>
   /**

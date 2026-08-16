@@ -127,9 +127,12 @@ export interface WorkspaceApi {
   /**
    * Permanently deletes one archived session: its session log is removed
    * from persistence and its workspace accounting and archive-set entries
-   * are dropped. Refuses a session that is not archived (`not-archived`) or
-   * still live (`session-active`). Irreversible; UI must confirm first.
-   * Returns the full updated set.
+   * are dropped. A live session whose lifecycle this gateway owns is
+   * disposed first (stop, unregister, session removal) — the explicit
+   * confirmation stands in for a separate close gesture; a live session the
+   * gateway does not own (subagents) refuses with `session-active`, and a
+   * session that is not archived refuses with `not-archived`. Irreversible;
+   * UI must confirm first. Returns the full updated set.
    */
   deleteSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>

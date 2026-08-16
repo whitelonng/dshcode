@@ -3,7 +3,7 @@
 export const zh = {
   nav: '归档会话',
   loading: '正在加载归档…',
-  empty: '没有归档的对话。在侧边栏删除的会话会先归档到这里。',
+  empty: '没有归档的对话。在侧边栏归档的会话会显示在这里，可在此恢复或彻底删除。',
   loadError: '加载归档失败，请重试。',
   retry: '重试',
   untitled: '未命名会话',
@@ -31,7 +31,7 @@ export const zh = {
 export const en = {
   nav: 'Archived sessions',
   loading: 'Loading archived sessions…',
-  empty: 'No archived sessions. Sessions deleted from the sidebar are archived here first.',
+  empty: 'No archived sessions. Sessions archived from the sidebar are listed here, where you can restore or permanently delete them.',
   loadError: 'Failed to load archived sessions. Please retry.',
   retry: 'Retry',
   untitled: 'Untitled session',

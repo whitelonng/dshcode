@@ -1234,6 +1234,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
+  /**
+   * Lifecycle disposers for every Session this gateway created or resumed
+   * (the factory's owned handle — stopping the loop, unregistering the agent,
+   * removing the session). A permanent delete disposes the live session
+   * through this before removing its log; sessions created outside the
+   * gateway (subagents, other subsystems) have no entry here and keep the
+   * `session-active` refusal.
+   */
+  const sessionDisposals = new Map<SessionId, () => Promise<void>>()
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
   let workspaceCreationChain = Promise.resolve()
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
@@ -1763,11 +1772,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // session's history was produced under that composition, and
           // rebuilding it differently would replay tool calls the model can no
           // longer make.
-          return (await ctx.agents.resume({
+          const resumed = await ctx.agents.resume({
             resumeSessionId: sessionId,
             agentOptions: agentOptions(),
             setup: (await composeAgent(storedPreset)).setup,
-          })).agent
+          })
+          sessionDisposals.set(sessionId, () => resumed.dispose())
+          return resumed.agent
         }
 
         try {
@@ -1776,7 +1787,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
         const composition = await composeAgent(presetId)
-        return (await ctx.agents.create({
+        const created = await ctx.agents.create({
           sessionId,
           agentOptions: agentOptions(),
           meta: {
@@ -1784,7 +1795,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset },
           },
           setup: composition.setup,
-        })).agent
+        })
+        sessionDisposals.set(sessionId, () => created.dispose())
+        return created.agent
       })().catch((error: unknown) => {
         // Another Host entry path may have published the same identity while
         // this operation crossed an asynchronous persistence/filesystem step.
@@ -3188,12 +3201,22 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { sessionId },
           })
         }
+        // A live session the gateway owns is disposed first — the explicit
+        // confirmation stands in for a separate close gesture, and the
+        // session-deleted frame below evicts its row in every connected tab.
+        // Sessions created outside the gateway (subagents) have no disposal
+        // entry and keep the session-active refusal.
         if (ctx.sessions.get(sessionId) !== undefined) {
-          return err(request, {
-            code: 'session-active',
-            message: `session '${sessionId}' is still active; close it before deleting`,
-            details: { sessionId },
-          })
+          const dispose = sessionDisposals.get(sessionId)
+          if (dispose === undefined) {
+            return err(request, {
+              code: 'session-active',
+              message: `session '${sessionId}' is still active and is not owned by this gateway; close it before deleting`,
+              details: { sessionId },
+            })
+          }
+          await dispose()
+          sessionDisposals.delete(sessionId)
         }
         // The log deletion is the irreversible step; workspace accounting is
         // dropped only after the durable delete settles. Attachment bytes
