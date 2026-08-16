@@ -171,6 +171,12 @@ export const DESKTOP_SHOW_MENU_CHANNEL = 'desktop:show-menu'
 /** IPC channel the renderer invokes to restart the application in place. */
 export const DESKTOP_RESTART_CHANNEL = 'desktop:restart'
 
+/** IPC channel the renderer invokes to surface one native OS notification. */
+export const DESKTOP_NOTIFICATION_CHANNEL = 'desktop:notification'
+
+/** IPC channel the main process pushes a clicked notification's request id back to the renderer. */
+export const DESKTOP_NOTIFICATION_CLICK_CHANNEL = 'desktop:notification-click'
+
 /** What the renderer learns about the desktop window frame. */
 export interface DesktopBridgePayload {
   /** 'custom' when the window renders its own title-bar row (Windows). */

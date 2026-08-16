@@ -240,6 +240,12 @@
     - id: ui-settings-plugin-installer
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-installer'
 
+    # System notifications: the browser Notification API (Electron desktop
+    # routes through the shell's native notifications) for approval waits and
+    # task completion, plus its Notifications settings section.
+    - id: ui-notifications
+      name: '@deepseek-ai/dsh-client-ui-notifications'
+
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
 

@@ -1,6 +1,6 @@
 /** Electron main process for the no-CLI DSHCode desktop application. */
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, session, shell, Tray } from 'electron'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,6 +27,8 @@ import {
   desktopLaunchArguments,
   desktopWebArguments,
   DESKTOP_RESTART_CHANNEL,
+  DESKTOP_NOTIFICATION_CHANNEL,
+  DESKTOP_NOTIFICATION_CLICK_CHANNEL,
   DESKTOP_SHOW_MENU_CHANNEL,
   ensureMainModuleArgument,
   navigationDisposition,
@@ -420,6 +422,26 @@ async function startDesktop(): Promise<void> {
     quitArmed = true
     app.relaunch()
     requestQuit(0)
+  })
+  // Native OS notifications: the renderer's notification sink detects this
+  // bridge and routes every notification through the main process. A click
+  // shows the window (close-to-tray may have hidden it) and echoes the
+  // request id back so the renderer opens the notification's target session.
+  ipcMain.handle(DESKTOP_NOTIFICATION_CHANNEL, (event, request: { id: string; title: string; body?: string }) => {
+    if (applicationUrl === undefined) return
+    if (!desktopIpcSenderIsApplication(event.senderFrame?.url, new URL(applicationUrl).origin)) return
+    if (!Notification.isSupported()) return
+    const notification = new Notification({
+      title: request.title,
+      ...(request.body === undefined ? {} : { body: request.body }),
+    })
+    notification.on('click', () => {
+      showMainWindow()
+      if (mainWindow !== undefined && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(DESKTOP_NOTIFICATION_CLICK_CHANNEL, request.id)
+      }
+    })
+    notification.show()
   })
   await createMainWindow(applicationUrl)
 }
