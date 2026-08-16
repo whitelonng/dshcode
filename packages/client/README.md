@@ -42,6 +42,7 @@ The browser side of the dsh web GUI: shell boot, browser-host communication, sha
 | [`ui-settings-general/`](ui-settings-general/README.md) | Provides the general settings section. |
 | [`ui-settings-models/`](ui-settings-models/README.md) | Provides model-provider configuration and DeepSeek onboarding. |
 | [`ui-settings-plugin-installer/`](ui-settings-plugin-installer/README.md) | Contributes the merged Plugins list tab (user plugins, preset products, read-only built-ins). |
+| [`ui-notifications/`](ui-notifications/README.md) | Raises OS notifications for approval waits and task completion, with a Notifications settings section. |
 
 Each child reference owns its contract and detailed behavior. The [slot system standard](../../.agents/notes/implemented/architecture/2026-07-22-slot-type-chain-implementation.md) and [web client architecture note](../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md) own the cross-package composition and loading decisions.
 

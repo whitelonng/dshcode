@@ -64,6 +64,7 @@
     "@deepseek-ai/dsh-client-ui-jobs": "workspace:^",
     "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
     "@deepseek-ai/dsh-client-ui-model-selection": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-notifications": "workspace:^",
     "@deepseek-ai/dsh-client-ui-permission-presets": "workspace:^",
     "@deepseek-ai/dsh-client-ui-plan": "workspace:^",
     "@deepseek-ai/dsh-client-ui-settings": "workspace:^",

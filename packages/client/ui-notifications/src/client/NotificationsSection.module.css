@@ -1,0 +1,105 @@
+/* Notifications settings section: heading, toggle rows with hairline
+ * separators, and the permission status line. Tokens only; no literal colors. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 16px 0;
+}
+
+.heading {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
+  color: var(--dsw-alias-label-primary);
+  margin: 0 0 4px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.desc {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Switch (role="switch" button): a 44x24 track with a sliding thumb. */
+.switch {
+  flex: none;
+  width: 44px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--dsw-alias-border-l2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 0.15s ease;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--dsw-alias-brand-primary);
+}
+
+.thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-1);
+  transition: transform 0.15s ease;
+}
+
+.switch[aria-checked='true'] .thumb {
+  transform: translateX(20px);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.statusText {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.statusAction {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-brand-primary);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
