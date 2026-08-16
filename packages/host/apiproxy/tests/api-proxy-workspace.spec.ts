@@ -625,8 +625,8 @@ describe('Host Workspace increments', () => {
     abort.abort()
   })
 
-  it('refuses deleting a session that is not archived or still active', async () => {
-    const { api, root } = await harness()
+  it('refuses deleting a non-archived session and disposes an owned live session before deleting', async () => {
+    const { api, ctx, root } = await harness()
     const workspace = expectOk(await api.workspace.create(request({ path: stageDir(root, 'delete-guard') }))).workspace
 
     const activeId = SessionId('active-session')
@@ -638,11 +638,12 @@ describe('Host Workspace increments', () => {
     })
 
     expectOk(await api.workspace.archiveSession(request({ sessionId: activeId })))
+    // The gateway owns this session's lifecycle, so the permanent delete
+    // disposes it (stop/unregister/session removal) instead of refusing.
     const live = await api.workspace.deleteSession(request({ sessionId: activeId }))
-    expect(live.result).toMatchObject({
-      ok: false,
-      error: { code: 'session-active', details: { sessionId: activeId } },
-    })
+    expect(live.result).toMatchObject({ ok: true, value: { archivedSessionIds: [] } })
+    expect(ctx.agents.get(activeId)).toBeUndefined()
+    expect(expectOk(await api.workspace.list(request({}))).archivedSessionIds).toEqual([])
 
     const missing = await api.workspace.deleteSession(request({ sessionId: SessionId('session-ghost') }))
     expect(missing.result).toMatchObject({

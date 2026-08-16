@@ -5,7 +5,7 @@
 Web 设置中的归档会话页面。一个 section（`settings.section`，id `archive`）列出每个注册表级归档会话及其折叠标题与创建时间。搜索框按标题或会话 id 过滤行；每行带选择复选框与全选开关，选中后出现批量工具栏（恢复所选立即执行——恢复非破坏性；删除所选需要显式确认弹窗，随后逐行调用 `workspace.deleteSession`——不可逆）。单行操作：
 
 - **恢复** —— 通过 `workspace.restoreSession` 把会话移出归档集合；会话在其原 workspace 位置重新出现。
-- **彻底删除** —— 需要显式确认弹窗，然后调用 `workspace.deleteSession`；宿主从持久化中移除会话日志，并清除其 workspace 记账与归档集合条目，其 `host/session-deleted` 帧让每个已连接的客户端把该会话从列表镜像中驱逐（否则过期摘要会在 Ungrouped 下重新出现）。不可逆。仍在任一客户端打开的会话会以 `session-active` 拒绝，页面渲染为提示用户先关闭该对话的文案。
+- **彻底删除** —— 需要显式确认弹窗，然后调用 `workspace.deleteSession`；宿主从持久化中移除会话日志，并清除其 workspace 记账与归档集合条目，其 `host/session-deleted` 帧让每个已连接的客户端把该会话从列表镜像中驱逐（否则过期摘要会在 Ungrouped 下重新出现）。生命周期由网关持有的活会话会先被销毁——确认弹窗即代替单独的关闭手势。不可逆。
 
 线面（`list` / `restore` / `remove`）由 `apply` 注入，走共享的 `/api` fetch 载体（`workspace.listArchived` / `workspace.restoreSession` / `workspace.deleteSession`），响应在 `protocol.ts` 中于客户端边界校验；RPC 失败以携带宿主错误码的 `ArchiveActionError` 拒绝，供区块把已知错误码映射为可操作的文案。
 
