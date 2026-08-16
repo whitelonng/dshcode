@@ -298,8 +298,9 @@ abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>
 /**
  * Durably delete one persisted session: drop any in-memory state and remove
  * the stored artifact (log file or rows). Resolves once the artifact, if
- * any, is gone; the next {@link list} must no longer include the id.
- * Refusing deletion of a live session is the caller's responsibility.
+ * any, is gone; the next {@link list} must no longer include the id, and a
+ * successful deletion emits `session/deleted`. Refusing deletion of a live
+ * session is the caller's responsibility.
  * @param id - persisted session id to delete.
  */
 abstract delete(id: SessionId): Promise<void>
@@ -390,5 +391,5 @@ abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot
 
 Types: [SessionEvent](session.md) · [SessionId](core.md)
 
-Source: [`packages/session/session-persistence/src/index.ts:84`](../../packages/session/session-persistence/src/index.ts)
+Source: [`packages/session/session-persistence/src/index.ts:98`](../../packages/session/session-persistence/src/index.ts)
 <!-- END GENERATED cordis-surface -->

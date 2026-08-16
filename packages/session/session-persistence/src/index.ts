@@ -72,7 +72,6 @@ declare module '@deepseek-ai/cordis' {
      * No later listing or reconnect baseline mentions the id.
      * @param sessionId - the deleted session id.
      * @mode emit
-     * @dshScopeScan unsupported
      */
     'session/deleted'(sessionId: SessionId): void
   }
