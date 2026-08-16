@@ -22,6 +22,7 @@ import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
 import { applyCapabilityToggle, capabilityChecks, type CapabilityToggle } from './model-capabilities.ts'
 import { ReasoningLevelCheckboxes } from './ReasoningLevelCheckboxes.tsx'
 import {
+  DEFAULT_UNDECLARED_EFFORTS,
   formatReasoningEfforts,
   INVALID_EFFORTS,
   parseReasoningEfforts,
@@ -217,6 +218,14 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   /** What the reasoning-efforts field shows: the buffer while typing, else the stored declaration. */
   const effortsText = (model: ModelDraft, index: number): string =>
     editing.get(effortsKey(index)) ?? formatReasoningEfforts(model.reasoningEfforts as ReasoningEffortsValue | undefined)
+
+  /**
+   * What the checkbox group shows: the stored declaration, or the
+   * off/low/max default offer while nothing is declared (display-only — the
+   * draft stays `undefined` until a level is toggled).
+   */
+  const offeredEfforts = (model: ModelDraft): ReasoningEffortsValue =>
+    model.reasoningEfforts as ReasoningEffortsValue | undefined ?? DEFAULT_UNDECLARED_EFFORTS
 
   /**
    * Replace a row's declaration from the checkbox group. The change clears
@@ -485,7 +494,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
                   </div>
                 </div>
                 <ReasoningLevelCheckboxes
-                  value={model.reasoningEfforts as ReasoningEffortsValue | undefined}
+                  value={offeredEfforts(model)}
                   levels={THINKING_LEVELS}
                   suggested={suggestedReasoningLevels(probe.api)}
                   index={index}

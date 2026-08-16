@@ -18,6 +18,16 @@ export type ReasoningEffortsValue = false | Partial<Record<ReasoningLevel, strin
 /** Sentinel the editor stores while its text is unreadable (like NaN for counts). */
 export const INVALID_EFFORTS = 'invalid'
 
+/**
+ * The levels the editor shows pre-checked for a model that declares none:
+ * `off`, `low`, and `max`, spelled with the wire defaults. Mirrors the
+ * adapter's default offer for a hand-declared model without a declaration
+ * (`packages/llm/llm-pi-ai`), so the checked state shown is the effective
+ * behavior. Display-only: the stored value stays `undefined` until the user
+ * toggles a level.
+ */
+export const DEFAULT_UNDECLARED_EFFORTS: ReasoningEffortsValue = { off: null, low: 'low', max: 'max' }
+
 /** Parse one text field into a declaration. */
 export type ReasoningEffortsParse =
   | { readonly ok: true; readonly value: ReasoningEffortsValue | undefined }
