@@ -31,7 +31,14 @@ extraResources:
     to: app/node_modules/@linxin666
 mac:
   category: public.app-category.developer-tools
-  identity: null
+  # Signing identity is auto-discovered from the keychain (Apple Development /
+  # Developer ID Application / Apple Distribution). A valid signature is
+  # REQUIRED for macOS notifications: UNUserNotificationCenter silently drops
+  # every notification from an ad-hoc (linker-signed) app and never shows the
+  # permission prompt. Builds without any signing certificate skip signing
+  # with a warning (notifications unavailable, build still succeeds);
+  # set CSC_NAME to force a specific identity, or CSC_LINK/CSC_KEY_PASSWORD
+  # for CI signing from a .p12.
   icon: build/icon.svg
   hardenedRuntime: true
   target:
