@@ -8,8 +8,8 @@ Preview packages are not code-signed or notarized; macOS Gatekeeper and Windows 
 
 ## Links
 
-- [README (English)](README.md): features, screenshots, download, and FAQ
-- [README (中文)](README.zh.md): 功能特性、截图、下载与常见问题
+- [README (English)](README.zh.md): features, screenshots, download, and FAQ
+- [README (中文)](README.md): 功能特性、截图、下载与常见问题
 - [GitHub Releases](https://github.com/whitelonng/dshcode/releases): installable packages for macOS Apple Silicon, macOS Intel, and Windows x64
 - [Web UI guide](docs/user/guide/index.md): product walkthrough
 - [Development guide](docs/development.md): contributor setup
