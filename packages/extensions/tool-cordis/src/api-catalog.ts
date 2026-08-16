@@ -3282,6 +3282,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface LlmFailure {\n    readonly message: string;\n    readonly code: string;\n    readonly status?: number;\n    readonly providerRetryAfterMs?: number;\n    readonly requestId?: ProviderRequestId;\n}',
   },
   {
+    name: 'LlmModelCapability',
+    declaration: 'export type LlmModelCapability = LlmModelCapabilityMap[keyof LlmModelCapabilityMap];',
+  },
+  {
+    name: 'LlmModelCapabilityMap',
+    declaration: 'export interface LlmModelCapabilityMap {\n    \'image-understanding\': \'image-understanding\';\n}',
+  },
+  {
     name: 'LlmModelContext',
     declaration: 'export interface LlmModelContext {\n    contextWindow: number;\n}',
   },
@@ -3291,7 +3299,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmModelInfo',
-    declaration: 'export interface LlmModelInfo {\n    provider: string;\n    id: string;\n    name: string;\n    description?: string;\n    inputModalities?: readonly ModelModality[];\n    imagePolicy?: \'note\' | \'reject\';\n}',
+    declaration: 'export interface LlmModelInfo {\n    provider: string;\n    id: string;\n    name: string;\n    description?: string;\n    inputModalities?: readonly ModelModality[];\n    outputModalities?: readonly ModelModality[];\n    capabilities?: readonly LlmModelCapability[];\n    imagePolicy?: \'note\' | \'reject\';\n}',
   },
   {
     name: 'LlmModelReasoningInfo',

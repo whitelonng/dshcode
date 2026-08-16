@@ -23,6 +23,7 @@ import { resolveRetryPolicy, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { ResolvedRetryPolicy, RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { MODALITIES, resolveRouteModels, SUPPORTED_THINKING_FORMATS, THINKING_LEVELS } from './catalog.ts'
 import type {
+  ModelCapabilityInfo,
   PiAiCompatProfile,
   PiAiModality,
   PiAiModelOverride,
@@ -53,8 +54,10 @@ export const DEFAULT_MAX_TOKENS = 32_768
 export const DEFAULT_INPUT: readonly PiAiModality[] = ['text']
 
 export type {
+  ModelCapabilityInfo,
   PiAiCompatProfile,
   PiAiModality,
+  PiAiModelCapabilities,
   PiAiModelOverride,
   PiAiModelProfile,
   PiAiReasoningEfforts,
@@ -166,6 +169,12 @@ export interface ResolvedPiAiProviderProfile
    * own, so a catalog capability must not appear here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /**
+   * Resolved capability metadata for the materialized models, by model id
+   * (output modalities and image understanding). pi-ai's `Model` type cannot
+   * carry these, so the adapter reads them from here when it describes a model.
+   */
+  modelCapabilities: ReadonlyMap<string, ModelCapabilityInfo>
 }
 
 /** Plugin configuration: the provider routes this instance owns. */
@@ -214,6 +223,15 @@ const modelFields = {
   // materializes `[]` for an absent array, and resolution reads that as "no
   // answer here" so the catalog entry below still applies.
   input: z.array(z.union(MODALITIES)),
+  // Output modalities (image generation) ride the same vocabulary; absent or
+  // empty resolves to text-only output.
+  output: z.array(z.union(MODALITIES)),
+  // Capability claims beyond modality lists; only `imageUnderstanding` exists
+  // today, and the object stays open so a future capability adds a key
+  // without a breaking schema change.
+  capabilities: z.object({
+    imageUnderstanding: z.boolean(),
+  }),
   // The union, not a bare dict: schemastery materializes an absent dict as
   // `{}`, and absent must stay distinguishable — it means "inherit the
   // installed catalog's capability", while `false` disables reasoning.
@@ -358,6 +376,7 @@ export function resolveProfiles(
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog.configuredMaxTokens,
+      modelCapabilities: catalog.modelCapabilities,
       piProvider: buildProvider({
         provider,
         displayName,

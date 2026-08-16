@@ -352,6 +352,12 @@ async function buildModelCatalog(ctx: Context): Promise<{
           id: model.id,
           name: model.name,
           ...model.description === undefined ? {} : { description: model.description },
+          // Capability metadata the model selector's badges render; resolved
+          // metadata rides through because listModels is advisory and the
+          // exact-model result is the authoritative capability source.
+          ...resolved.inputModalities === undefined ? {} : { inputModalities: [...resolved.inputModalities] },
+          ...resolved.outputModalities === undefined ? {} : { outputModalities: [...resolved.outputModalities] },
+          ...resolved.capabilities === undefined ? {} : { capabilities: [...resolved.capabilities] },
           ...reasoning === undefined ? {} : { reasoning },
         }
       }))

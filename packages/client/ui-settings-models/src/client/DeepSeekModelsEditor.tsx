@@ -11,14 +11,18 @@ import {
   IconChevronDownOutline14, IconChevronRightOutline14, IconPlusOutline16, IconTrashOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { en } from './locales.ts'
-import { validReasoningEfforts } from './reasoning-efforts.ts'
+import { ReasoningLevelCheckboxes } from './ReasoningLevelCheckboxes.tsx'
+import { validReasoningEfforts, type ReasoningEffortsValue, type ReasoningLevel } from './reasoning-efforts.ts'
 import styles from './ModelsSection.module.css'
 
 /** One catalog entry kept structurally open so hidden or future fields survive an edit. */
 export type DeepSeekModelDraft = Record<string, unknown>
 
 /** The catalog fields this editor writes. */
-type CatalogField = 'id' | 'name' | 'contextWindow' | 'maxTokens'
+type CatalogField = 'id' | 'name' | 'contextWindow' | 'maxTokens' | 'reasoningEfforts'
+
+/** The reasoning levels the direct DeepSeek wire route can dispatch. */
+const DEEPSEEK_REASONING_LEVELS: readonly ReasoningLevel[] = ['off', 'high', 'max']
 
 /** The two token counts edited as K/M-suffixed text behind a row's disclosure. */
 type CapacityField = 'contextWindow' | 'maxTokens'
@@ -347,6 +351,17 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
                     <div className={styles['modelAdvanced']}>
                       {capacityField(model, index, 'contextWindow', props.defaultContextWindow)}
                       {capacityField(model, index, 'maxTokens', props.defaultMaxTokens)}
+                      {/* The direct DeepSeek wire offers exactly off/high/max;
+                          capability checkboxes stay absent because the wire is
+                          text-only with a note policy the adapter hardcodes. */}
+                      <ReasoningLevelCheckboxes
+                        value={model['reasoningEfforts'] as ReasoningEffortsValue | undefined}
+                        levels={DEEPSEEK_REASONING_LEVELS}
+                        index={index}
+                        disabled={props.disabled}
+                        onChange={(value) => { update(index, 'reasoningEfforts', value) }}
+                        t={props.t}
+                      />
                     </div>
                   )
                   : null}

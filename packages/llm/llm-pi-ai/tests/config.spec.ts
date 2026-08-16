@@ -64,3 +64,17 @@ describe('modality schema boundary', () => {
     expect(absent.providers['acme-gateway']?.defaultInput).toEqual(['text'])
   })
 })
+
+describe('capability schema boundary', () => {
+  it('accepts declared output modalities and image understanding, and empty declarations', () => {
+    expect(configWith({ output: ['text', 'image'] })).not.toThrow()
+    expect(configWith({ output: [] })).not.toThrow()
+    expect(configWith({ capabilities: { imageUnderstanding: true } })).not.toThrow()
+    expect(configWith({ capabilities: {} })).not.toThrow()
+  })
+
+  it('rejects an unknown output modality and a non-boolean capability value', () => {
+    expect(configWith({ output: ['audio'] })).toThrow(/expected/)
+    expect(configWith({ capabilities: { imageUnderstanding: 'yes' } })).toThrow(/expected/)
+  })
+})

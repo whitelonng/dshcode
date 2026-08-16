@@ -288,6 +288,62 @@ describe('hand-declared providers', () => {
     })).toThrow(/defaultInput must name at least one modality/)
   })
 
+  it('resolves declared output modalities and image understanding into the capability side table', () => {
+    const resolved = resolveProfiles({
+      'gateway': {
+        api: 'openai-completions',
+        baseURL: 'https://gateway.test',
+        models: [
+          { id: 'plain' },
+          { id: 'drawer', output: ['text', 'image'] },
+          { id: 'seer', capabilities: { imageUnderstanding: true } },
+          { id: 'both', output: ['image'], capabilities: { imageUnderstanding: true } },
+        ],
+      },
+    })
+    const profile = resolved.get('gateway')
+    if (profile === undefined) throw new Error('fixture route must resolve')
+    expect([...profile.modelCapabilities.entries()]).toEqual([
+      ['drawer', { output: ['text', 'image'] }],
+      ['seer', { imageUnderstanding: true }],
+      ['both', { output: ['image'], imageUnderstanding: true }],
+    ])
+    // Nothing declared resolves to no facts — the text-only floor is the
+    // absence, so a catalog-served route is untouched.
+    expect(profile.modelCapabilities.has('plain')).toBe(false)
+    const catalogServed = resolveProfiles({ deepseek: {} }).get('deepseek')
+    expect([...catalogServed!.modelCapabilities.entries()]).toEqual([])
+  })
+
+  it('carries declared output modalities and image understanding to the seam metadata', async () => {
+    const dir = await home()
+    const ctx = await bootWithSettings(dir, {})
+    await ctx.settings.update(settingsNamespace('llm-pi-ai'), {
+      providers: {
+        'capable-gateway': {
+          api: 'openai-completions',
+          baseURL: 'https://capable.test/v1',
+          models: [
+            { id: 'plain' },
+            { id: 'drawer', output: ['text', 'image'] },
+            { id: 'seer', capabilities: { imageUnderstanding: true } },
+          ],
+        },
+      },
+    })
+
+    const listed = await ctx.llm.listModels('capable-gateway')
+    const byId = Object.fromEntries(listed.map(model => [model.id, model]))
+    // A model with no declaration carries neither field; image understanding
+    // is a separate claim from image input, so `seer` stays text-input.
+    expect(byId['plain']).not.toHaveProperty('outputModalities')
+    expect(byId['plain']).not.toHaveProperty('capabilities')
+    expect(byId['drawer']).toMatchObject({ outputModalities: ['text', 'image'] })
+    expect(byId['seer']).toMatchObject({ capabilities: ['image-understanding'], inputModalities: ['text'] })
+    expect((await ctx.llm.resolveModelInfo('capable-gateway', 'drawer')).outputModalities).toEqual(['text', 'image'])
+    expect((await ctx.llm.resolveModelInfo('capable-gateway', 'seer')).capabilities).toEqual(['image-understanding'])
+  })
+
   it('rejects a model the route cannot identify', () => {
     const declare = (model: LlmPiAi.PiAiModelProfile): (() => unknown) =>
       () => resolveProfiles({ 'acme-gateway': { api: 'openai-completions', baseURL: 'https://acme.test', models: [model] } })

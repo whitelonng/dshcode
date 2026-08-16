@@ -18,7 +18,9 @@ pi-ai profile 的 `models` 列表在卡片上编辑：每行一个模型，显�
 
 **添加自定义 provider** 声明 pi-ai 不内置的路由。它是独立卡片：路由 id 在此选定，settings 地址此前不存在——一次 `settings.mutate` 在 `providers.<route>` 设置整个 profile。无法默认的门槛拦住创建按钮——唯一 **Provider ID**、端点、协议与至少一个唯一标识模型。id 必须以小写字母开头，因为它也是派生凭据引用的干。容量不设门槛。协议选择从命名空间自身 schema 读出，不会与适配器接受的漂移。profile 写入成功但密钥写入失败时，provider 已存在：卡片落定描述字段，单独重试凭据，并报告已创建的 provider。
 
-**推理等级声明** 让手工声明的第三方模型在作曲器的模型选择器中提供思考等级。每个模型行的展开区带一个文本输入，拼写声明（`high: high, max: ultra`——pi-ai 等级名加端点期望的线上拼写，逗号分隔；`off` 可单独出现），外加「禁用推理」复选框（`false`）。声明写入适配器读取的同一 `providers.<route>.models[].reasoningEfforts`；不可读文本停靠为无效哨兵，共享模型校验在任何写入前拒绝。留空则把模型的推理能力交给已安装 catalog（或保持缺失）。
+**推理等级声明** 让手工声明的第三方模型在作曲器的模型选择器中提供思考等级。每个模型行的展开区带一组复选框拼写声明——pi-ai 编辑器列出全部 pi-ai 等级（`off` 至 `max`），DeepSeek 编辑器列出直接 DeepSeek 协议可分派的三个——外加「禁用推理」复选框（`false`）。勾选一个等级即以既有线上拼写加入，或在新勾选时用协议默认拼写（等级名本身；`off` 保持为空——「支持、不发送」）；取消则移除该等级，取消最后一个等级即得 `false`。pi-ai 组旁还会显示协议族提示（例如 OpenAI-completions 建议 `minimal` 至 `high`），仅供参考。声明写入适配器读取的同一 `providers.<route>.models[].reasoningEfforts`。「高级」折叠保留原文本输入（`high: high, max: ultra`——「等级: 拼写」对，逗号分隔），自定义线上拼写的部署不会丢失；不可读文本停靠为无效哨兵，共享模型校验在任何写入前拒绝。留空则把模型的推理能力交给已安装 catalog（或保持缺失）。
+
+**能力复选框**（仅 pi-ai 模型行）声明模型选择器加徽标的三种主张：**图片输入**切换条目 `input` 中的 `image`（以 `text` 为下限），**生图**切换新 `output` 数组中的 `image`，**识图**切换 `capabilities.imageUnderstanding`——并且，因为能理解图片内容的模型必然要收到图片，同时让 `input` 保留 `image`。生图保持独立：会画图的模型不必接受图片。取消生图或识图会整体删除对应字段；直接 DeepSeek 编辑器不渲染能力复选框，因为其协议线只支持文本、图片走 note 策略且由适配器硬编码。
 
 ## 模型体验
 
@@ -30,7 +32,7 @@ pi-ai profile 的 `models` 列表在卡片上编辑：每行一个模型，显�
 
 ## 已知限制与暂缓事项
 
-- **卡片只编辑 API key 与精选折叠字段**——手写编辑器以 mockup 布局换取 schema 泛型字段覆盖（[Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md)）。两个家族暴露 `baseURL` 与模型 `id`/`name`/`contextWindow`/`maxTokens`；手工声明的 pi-ai 路由还暴露 `displayName` 与 `api`。重试策略、超时、DeepSeek 模型描述等高级字段留在 `settings.yaml`；编辑器不显示的既有模型字段被保留。
+- **卡片只编辑 API key 与精选折叠字段**——手写编辑器以 mockup 布局换取 schema 泛型字段覆盖（[Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md)）。两个家族暴露 `baseURL` 与模型 `id`/`name`/`contextWindow`/`maxTokens`；pi-ai 行还暴露能力复选框（`input`/`output`/`capabilities`）与推理等级复选框，DeepSeek 行暴露 `off`/`high`/`max` 等级组，手工声明的 pi-ai 路由还暴露 `displayName` 与 `api`。重试策略、超时、DeepSeek 模型描述等高级字段留在 `settings.yaml`；编辑器不显示的既有模型字段被保留。
 - **凭据清理刻意收窄**——删除行仅在引用恰为页面派生的 `<ROUTE>_API_KEY` 目标时移除已配置、可写凭据。自定义引用、环境凭据与不可识别目标被保留。
 - **只有 pi-ai 路由可手工声明**——自定义 provider 卡片写入 `llm-pi-ai`。
 - **询问覆盖 OpenAI 兼容端点**——适配器只读该模型列表响应格式，其他协议的网关报告无法询问，其模型手工录入。
