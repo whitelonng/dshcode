@@ -327,6 +327,41 @@ describe('host frame routing', () => {
     expect(session.getSnapshot().removed).toBe(true)
     expect(manager.get(S1)).toBe(session) // resident-instance rule survives removal
   })
+
+  it('evicts a permanently deleted session even when it is a durable subagent row', async () => {
+    const api = new FakeApiClient()
+    api.onList = () => Promise.resolve(ok({
+      items: [summary(S1), summary(S2, { origin: 'subagent' })] as never[],
+    }))
+    const manager = new SessionManager(api, fakeRemote())
+    await manager.refreshList()
+
+    // session-removed keeps a durable subagent row (only idles it)…
+    manager.handleHostEnvelope({ rpcId: 'rm' as never, payload: { type: 'host/session-removed', sessionId: S2 } })
+    expect(manager.getListSnapshot().items.map(i => i.sessionId)).toEqual([S1, S2])
+
+    // …but session-deleted evicts it outright: the log is gone for good.
+    manager.handleHostEnvelope({ rpcId: 'del-sub' as never, payload: { type: 'host/session-deleted', sessionId: S2 } })
+    expect(manager.getListSnapshot().items.map(i => i.sessionId)).toEqual([S1])
+
+    const session = manager.get(S1)
+    manager.handleHostEnvelope({ rpcId: 'del' as never, payload: { type: 'host/session-deleted', sessionId: S1 } })
+    expect(manager.getListSnapshot().items).toHaveLength(0)
+    expect(session.getSnapshot().removed).toBe(true)
+  })
+
+  it('clears the selection when the selected session is permanently deleted', async () => {
+    const api = new FakeApiClient()
+    api.onList = () => Promise.resolve(ok({ items: [summary(S1), summary(S2, { updatedAt: 200 })] as never[] }))
+    const manager = new SessionManager(api, fakeRemote())
+    await manager.refreshList()
+    manager.select(S1)
+    expect(manager.getListSnapshot().current).toBe(S1)
+
+    manager.handleHostEnvelope({ rpcId: 'del' as never, payload: { type: 'host/session-deleted', sessionId: S1 } })
+    expect(manager.getListSnapshot().current).toBeUndefined()
+    expect(manager.getListSnapshot().items.map(i => i.sessionId)).toEqual([S2])
+  })
 })
 
 describe('subagent catalogs', () => {

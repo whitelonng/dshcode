@@ -3868,6 +3868,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ctx.on('session/disposed', (session: Session) => {
             queue.push(frame({ type: 'host/session-removed', sessionId: session.id }))
           }),
+          ctx.on('session/deleted', (sessionId: SessionId) => {
+            queue.push(frame({ type: 'host/session-deleted', sessionId }))
+          }),
           ctx.on('agent/status', ({ agent, status }: { agent: Agent; status: AgentStatus }) => {
             queue.push(frame({ type: 'host/session-status', sessionId: agent.id, running: status === 'running' }))
           }),

@@ -262,6 +262,30 @@ runPersistenceContract('memory', async () => {
   }
 })
 
+describe('deletion announcement', () => {
+  it('emits session/deleted after every settled delete so cached mirrors converge', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(MemoryPersistence)
+    const deleted: SessionId[] = []
+    const off = ctx.on('session/deleted', (id) => { deleted.push(id) })
+    try {
+      const m = meta('announce-me', '/work')
+      await ctx.sessionPersistence.create(m)
+      await ctx.sessionPersistence.append(m.id, oneTurnLog())
+      await ctx.sessionPersistence.delete(m.id)
+      expect(deleted).toEqual([m.id])
+      // An idempotent repeat still announces: a mirror that only learns from
+      // this signal must converge even when the artifact was already gone.
+      await ctx.sessionPersistence.delete(m.id)
+      expect(deleted).toEqual([m.id, m.id])
+    } finally {
+      off()
+      await fiber.dispose()
+    }
+  })
+})
+
 describe('the inherited readRaw default', () => {
   it('rejects unsupported reads distinctly from absence and honors an aborted signal', async () => {
     const ctx = new Context()

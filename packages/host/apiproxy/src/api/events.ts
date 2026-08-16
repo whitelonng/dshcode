@@ -114,6 +114,11 @@ export type MuxFrame =
  * constantly true — clients flip it on the session's first
  * `host/session-status(running:true)` (a blank session never runs), and a
  * reconnecting client takes `session.list`'s summary.blank as authoritative.
+ * session-removed fires when a live session leaves the store (its log
+ * remains); session-deleted fires when `workspace.deleteSession` permanently
+ * removes a persisted session — log and workspace accounting alike — and a
+ * client evicts its list summary exactly like session-removed, with no later
+ * baseline able to bring the session back.
  * agent-error is the only outlet for live failures with no turn position;
  * workspace-changed pushes the full new snapshot after every durable
  * workspace mutation (create/attach/order change — the client upserts, while
@@ -135,6 +140,7 @@ export type HostFrame =
     agentPreset?: string
   }
   | { type: 'host/session-removed'; sessionId: SessionId }
+  | { type: 'host/session-deleted'; sessionId: SessionId }
   | { type: 'host/session-status'; sessionId: SessionId; running: boolean }
   | { type: 'host/agent-error'; sessionId: SessionId; message: string }
   | { type: 'host/workspace-changed'; workspace: WorkspaceView }

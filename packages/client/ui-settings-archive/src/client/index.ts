@@ -6,7 +6,7 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { ArchiveSessionsSection, type ArchiveSessionsSectionInjected } from './ArchiveSessionsSection.tsx'
 import { en, zh, type ArchiveLocaleKey } from './locales.ts'
-import { parseArchivedSessionList } from './protocol.ts'
+import { ArchiveActionError, parseArchivedSessionList } from './protocol.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -32,7 +32,10 @@ export function apply(ctx: ClientContext): void {
   const call = async (endpoint: string, payload: unknown): Promise<unknown> => {
     const result = await connection.rpc.call(CHANNEL, endpoint, payload)
     if (!result.ok) {
-      throw new Error(`workspace ${endpoint} failed: ${result.error.code}: ${result.error.message}`)
+      throw new ArchiveActionError(
+        result.error.code,
+        `workspace ${endpoint} failed: ${result.error.code}: ${result.error.message}`,
+      )
     }
     return result.value
   }

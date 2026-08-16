@@ -726,7 +726,9 @@ export class PersistenceCoordinator<TornMarker = unknown> {
    * invalidate any prepared read, and remove the backend artifact. Resolves
    * once the artifact (if any) is gone — an id with no stored log still
    * resolves after its state is dropped. The next backend {@link list}
-   * observation must no longer include the id.
+   * observation must no longer include the id; the successful removal emits
+   * `session/deleted` (the host stream fans it out as `host/session-deleted`)
+   * so cached client list mirrors evict a session no future listing mentions.
    * @param id - persisted session id to delete.
    */
   async delete(id: SessionId): Promise<void> {
@@ -737,6 +739,7 @@ export class PersistenceCoordinator<TornMarker = unknown> {
         throw new Error(`session-persistence backend "${this.backend.name}" does not support deleting sessions`)
       }
       await this.backend.deleteStored(id)
+      this.ctx.emit('session/deleted', id)
     })
   }
 

@@ -81,7 +81,8 @@ async function harness(
   const persisted = new Map(extras.persisted?.map(header => [header.id, header]) ?? [])
   ctx.provide('sessionPersistence', {
     list: () => Promise.resolve([...persisted.values()]),
-    delete: async (id: SessionId) => { persisted.delete(id) },
+    // Mirrors the coordinator contract: a successful delete emits session/deleted.
+    delete: async (id: SessionId) => { persisted.delete(id); ctx.emit('session/deleted', id) },
   } as never)
   await ctx.plugin(WorkspaceRegistry)
 
@@ -604,9 +605,24 @@ describe('Host Workspace increments', () => {
     })
     expectOk(await api.workspace.archiveSession(request({ sessionId })))
 
+    const abort = new AbortController()
+    const stream: AsyncIterator<RpcRequest<HostFrame>> =
+      api.events.host(request({}), abort.signal)[Symbol.asyncIterator]()
+    const firstFrame = nextHostFrame(stream)
+
     const deleted = expectOk(await api.workspace.deleteSession(request({ sessionId })))
     expect(deleted.archivedSessionIds).toEqual([])
     expect(expectOk(await api.workspace.list(request({}))).archivedSessionIds).toEqual([])
+
+    // The deletion announces itself so every connected client evicts its
+    // cached list row: the log-delete frame lands, then the archive-set frame.
+    expect(await firstFrame).toMatchObject({
+      payload: { type: 'host/session-deleted', sessionId },
+    })
+    expect(await nextHostFrame(stream)).toMatchObject({
+      payload: { type: 'host/archived-sessions-changed', archivedSessionIds: [] },
+    })
+    abort.abort()
   })
 
   it('refuses deleting a session that is not archived or still active', async () => {

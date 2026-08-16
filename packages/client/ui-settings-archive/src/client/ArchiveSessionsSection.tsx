@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, IconSearchOutline16, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ArchivedSessionItem } from './protocol.ts'
+import { ArchiveActionError } from './protocol.ts'
 import css from './ArchiveSessionsSection.module.css'
 
 /** Registration-side wire face used by the section. */
@@ -96,6 +97,18 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
     setView({ status: 'ready', items })
   }
 
+  // A live session cannot be permanently deleted: map the Host's
+  // `session-active` rejection to copy that names the remedy; every other
+  // failure interpolates the raw reason.
+  const failureMessage = (kind: 'restore' | 'delete', reason: unknown): string => {
+    if (kind === 'delete' && reason instanceof ArchiveActionError && reason.code === 'session-active') {
+      return t('deleteFailedActive')
+    }
+    return t(kind === 'restore' ? 'restoreFailed' : 'deleteFailed', {
+      reason: reason instanceof Error ? reason.message : String(reason),
+    })
+  }
+
   const toggle = (sessionId: string): void => {
     setSelected((current) => {
       const next = new Set(current)
@@ -128,9 +141,7 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
       setPending(undefined)
       await reload()
     } catch (reason) {
-      setError(t(action.kind === 'restore' ? 'restoreFailed' : 'deleteFailed', {
-        reason: reason instanceof Error ? reason.message : String(reason),
-      }))
+      setError(failureMessage(action.kind, reason))
     } finally {
       setBusy(false)
     }
@@ -148,9 +159,7 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
       setSelected(new Set())
       await reload()
     } catch (reason) {
-      setError(t(target.kind === 'restore' ? 'restoreFailed' : 'deleteFailed', {
-        reason: reason instanceof Error ? reason.message : String(reason),
-      }))
+      setError(failureMessage(target.kind, reason))
     } finally {
       setBusy(false)
     }

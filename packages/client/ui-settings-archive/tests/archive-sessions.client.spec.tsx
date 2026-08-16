@@ -8,13 +8,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ArchiveSessionsSection, type ArchiveSessionsSectionProps } from '../src/client/ArchiveSessionsSection.tsx'
+import { ArchiveActionError } from '../src/client/protocol.ts'
 
 afterEach(cleanup)
 
 const t = (key: string, params?: { time?: string; reason?: string; count?: string; title?: string }): string => {
   const copy: Record<string, string> = {
     loading: '正在加载归档…',
-    empty: '没有归档的对话。删除工作区中的会话会先归档到这里。',
+    empty: '没有归档的对话。在侧边栏删除的会话会先归档到这里。',
     loadError: '加载归档失败，请重试。',
     untitled: '未命名会话',
     restore: '恢复',
@@ -26,6 +27,7 @@ const t = (key: string, params?: { time?: string; reason?: string; count?: strin
     created: '创建于 {time}',
     restoreFailed: '恢复失败：{reason}',
     deleteFailed: '删除失败：{reason}',
+    deleteFailedActive: '删除失败：该会话仍在打开中。请先关闭该会话，再回来彻底删除。',
     search: '搜索归档会话',
     selectAll: '全选',
     selected: '已选 {count} 项',
@@ -115,9 +117,20 @@ describe('ArchiveSessionsSection', () => {
     expect(screen.getByText('归档对话')).toBeTruthy()
   })
 
+  it('maps a session-active rejection to the close-the-session remedy', async () => {
+    const { remove } = mount()
+    await screen.findByText('归档对话')
+    act(() => { screen.getAllByText('彻底删除')[0]!.click() })
+    remove.mockRejectedValueOnce(new ArchiveActionError('session-active', 'still active'))
+    await screen.findByText('确认删除')
+    act(() => { screen.getByText('确认删除').click() })
+    expect(await screen.findByText('删除失败：该会话仍在打开中。请先关闭该会话，再回来彻底删除。')).toBeTruthy()
+    expect(screen.getByText('归档对话')).toBeTruthy()
+  })
+
   it('renders the empty state and the load-error state', async () => {
     const empty = mount({ list: vi.fn().mockResolvedValue([]) })
-    expect(await empty.findByText('没有归档的对话。删除工作区中的会话会先归档到这里。')).toBeTruthy()
+    expect(await empty.findByText('没有归档的对话。在侧边栏删除的会话会先归档到这里。')).toBeTruthy()
     cleanup()
 
     const failed = mount({ list: vi.fn().mockRejectedValue(new Error('down')) })
