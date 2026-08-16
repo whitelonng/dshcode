@@ -1357,3 +1357,76 @@ describe('ChatView', () => {
     expect(failedView.container.querySelector('[data-state="error"]')).not.toBeNull()
   })
 })
+
+describe('turn-tail deletion targeting', () => {
+  const turnTailNode = (finalNode: AssistantMessageNode): ChatNodeViewProps<'turn-tail'>['node'] => ({
+    key: 'fixture:turn-tail:1',
+    id: '1',
+    target: 'chat',
+    kind: 'turn-tail',
+    anchorSeq: 99,
+    location: { kind: 'turn', turn: { turn: 1, start: undefined, end: undefined, status: 'closed', steps: [], data: new Map() } },
+    visibility: 'visible',
+    data: {
+      turn: 1,
+      seq: 99,
+      time: 99_000,
+      closing: {
+        status: finalNode.interrupted === true ? 'interrupted' : 'settled',
+        turn: 1,
+        step: 1,
+        blocks: finalNode.blocks,
+        time: 98_000,
+        finalNode,
+      },
+      branchUnavailable: false,
+    },
+  }) as unknown as ChatNodeViewProps<'turn-tail'>['node']
+
+  const asTailProps = (props: unknown): React.ComponentProps<typeof TurnTailNodeView> =>
+    props as React.ComponentProps<typeof TurnTailNodeView>
+
+  const tailProps = (
+    node: ChatNodeViewProps<'turn-tail'>['node'],
+    deleteAt: (seq: number) => Promise<boolean>,
+  ) => {
+    const snapshot = {
+      chat: {
+        locations: { getTurn: () => [node.key] },
+        timeline: { turns: new Map() },
+      },
+    }
+    return {
+      node,
+      t: makeTranslate(zh, commonZh),
+      openFile: vi.fn(),
+      forkAt: vi.fn(),
+      deleteAt,
+      renderSlot: (() => null) as never,
+      renderSlotChain: (() => null) as never,
+      useSession: ((selector: (snap: unknown) => unknown) => selector(snapshot)) as never,
+    }
+  }
+
+  it('anchors an interruption-frozen closing node at its turn/end seq', () => {
+    const partial: AssistantMessageNode = {
+      kind: 'assistant', seq: 98.1, time: 98_000, turn: 1, step: 1,
+      blocks: [{ kind: 'text', text: 'stopped partial' }], interrupted: true,
+    }
+    const deleteAt = vi.fn(() => Promise.resolve(true))
+    const view = render(<TurnTailNodeView {...asTailProps(tailProps(turnTailNode(partial), deleteAt))} />)
+    fireEvent.click(view.getByRole('button', { name: '删除' }))
+    expect(deleteAt).toHaveBeenCalledWith(99)
+  })
+
+  it('keeps the durable message seq for a settled closing node', () => {
+    const settled: AssistantMessageNode = {
+      kind: 'assistant', seq: 97, time: 97_000, turn: 1, step: 1,
+      blocks: [{ kind: 'text', text: 'done' }], messageId: 'msg-1' as never,
+    }
+    const deleteAt = vi.fn(() => Promise.resolve(true))
+    const view = render(<TurnTailNodeView {...asTailProps(tailProps(turnTailNode(settled), deleteAt))} />)
+    fireEvent.click(view.getByRole('button', { name: '删除' }))
+    expect(deleteAt).toHaveBeenCalledWith(97)
+  })
+})

@@ -191,6 +191,57 @@ describe('sessions.deleteMessage', () => {
     await ctx.fiber.dispose()
   })
 
+  it('deletes a stopped turn from its turn/end anchor, citing every turn event', async () => {
+    const ctx = await composed()
+    const proxy = api(ctx)
+    const session = liveSession(ctx, 'delete-interrupted')
+    session.append('turn/start', { turn: 1 })
+    const user = session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'stopped prompt' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'part' } })
+    const closing = session.events.at(-1)!
+    session.append('turn/end', { turn: 1, reason: { kind: 'interrupted' } })
+    const turnEndSeq = session.events.at(-1)!.seq
+
+    const response = await proxy.sessions.deleteMessage(request({
+      sessionId: session.id, seq: turnEndSeq,
+    }))
+    expect(response.result.ok).toBe(true)
+    if (!response.result.ok) return
+    // The surface range is the turn's only surface node (its user message);
+    // the provenance cites every event so the transcript fold can hide the
+    // stopped partial chunks and boundaries as well.
+    expect(response.result.value).toEqual({ start: user.seq, end: user.seq, deletedSeqs: [user.seq] })
+    expect(session.deriveMessages()).toHaveLength(0)
+    const deletion = session.events.at(-1)!
+    expect(deletion.type).toBe('message/delete')
+    const cited = (deletion as { sourceEventSeqs?: number[] }).sourceEventSeqs ?? []
+    expect(cited).toEqual([
+      session.events.findIndex(event => event.type === 'turn/start'),
+      user.seq, closing.seq, turnEndSeq,
+    ])
+    await ctx.fiber.dispose()
+  })
+
+  it('refuses a turn/end anchor whose turn left nothing on the surface', async () => {
+    const ctx = await composed()
+    const proxy = api(ctx)
+    const session = liveSession(ctx, 'delete-empty-turn')
+    session.append('turn/start', { turn: 1 })
+    session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+    const turnEndSeq = session.events.at(-1)!.seq
+
+    const response = await proxy.sessions.deleteMessage(request({
+      sessionId: session.id, seq: turnEndSeq,
+    }))
+    expect(response.result.ok).toBe(false)
+    if (response.result.ok) return
+    expect(response.result.error.code).toBe('delete-unavailable')
+    await ctx.fiber.dispose()
+  })
+
   it('records the deletion with fold metadata the surface accepts', async () => {
     const ctx = await composed()
     const proxy = api(ctx)

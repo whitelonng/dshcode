@@ -34,6 +34,10 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const assistantActions = messageId === undefined
     ? null
     : renderSlot('conversation.chat.assistant-actions', { messageId })
+  // A synthetic closing node (interrupted partial) cannot address a durable
+  // message; deleting it anchors the whole turn through its turn/end seq and
+  // the host folds the entire interrupted turn off the surface.
+  const deleteTarget = messageId === undefined ? data.seq : closing.finalNode.seq
   return (
     <div className={css.root} data-turn-tail={data.turn} data-time-hover-root>
       {tail}
@@ -46,7 +50,7 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
         clock="end"
         onBranch={() => { forkAt(closing.finalNode.seq) }}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}
-        onDelete={() => deleteAt(closing.finalNode.seq)}
+        onDelete={() => deleteAt(deleteTarget)}
         deleteUnavailable={anyOpenTurn}
         className={css.actions}
         extraActions={assistantActions}

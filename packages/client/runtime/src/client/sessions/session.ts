@@ -261,11 +261,13 @@ export class Session implements SessionFace {
 
   /**
    * Delete one user or assistant message from the model-visible transcript.
-   * The Host expands a user message to its whole turn and an assistant
-   * message to itself plus its step's tool results. Rejected while the agent
-   * is running (`agent-busy`) or when `seq` is not a current surface message
+   * The Host expands a user message to its whole turn, an assistant message
+   * to itself plus its step's tool results, and a turn/end anchor to its
+   * whole turn (the interrupted-answer path). Rejected while the agent is
+   * running (`agent-busy`) or when `seq` is not a deletable event
    * (`delete-unavailable`); subagent conversations refuse locally.
-   * @param seq - seq of the message event to delete.
+   * @param seq - seq of the message event, or of the turn/end event anchoring
+   *   a whole stopped turn.
    * @returns the host-computed removed range.
    */
   async deleteMessage(seq: number): Promise<RpcResult<{ start: number; end: number; deletedSeqs: number[] }>> {
