@@ -4,7 +4,7 @@
 
 一个函数插件，通过 agent loop（智能体循环）在已关闭步骤上触发的 `agent/request-error` waterfall（瀑布式事件）应用确切提供方重试策略。它不包装 `ctx.llm.stream()`：每次适配器调用仍是一次提供方尝试，每次重试都会开启新的编号轮次。
 
-每个提供方适配器都拥有可选的嵌套 `retryPolicy`；路由在 `ctx.llm` 上注册时会捕获该策略，任何到达该注册最终适配器边界的调用都会携带它。如果之后释放或替换路由，进行中的失败仍会保留当时为其提供服务的策略；在选中任何最终适配器前发生的失败没有提供方策略，会继续委托。省略策略时使用 normal mode：为 `EMPTY_RESPONSE`、`RATE_LIMIT`、`SERVER`、`TIMEOUT` 和 `TRANSPORT` 重试两次，并采用从 500 ms 到 10 秒的有界指数退避与 10% jitter。`EMPTY_RESPONSE` 是适配器对未产生任何持久内容的退化提供方完成所作的分类，因此可安全重复。normal 策略可以更改其有限预算、符合条件的 code 和退避配置。always mode 会先请求下游恢复，再无次数上限地重试每个模型请求失败；成功、取消或插件 dispose（资源释放）会在活跃的委托恢复完全停稳后终止它。
+每个提供方适配器都拥有可选的嵌套 `retryPolicy`；路由在 `ctx.llm` 上注册时会捕获该策略，任何到达该注册最终适配器边界的调用都会携带它。如果之后释放或替换路由，进行中的失败仍会保留当时为其提供服务的策略；在选中任何最终适配器前发生的失败没有提供方策略，会继续委托。省略策略时使用 normal mode：为 `EMPTY_RESPONSE`、`RATE_LIMIT`、`SERVER`、`TIMEOUT` 和 `TRANSPORT` 重试五次，并采用从 500 ms 到 10 秒的有界指数退避与 10% jitter。`EMPTY_RESPONSE` 是适配器对未产生任何持久内容的退化提供方完成所作的分类，因此可安全重复。normal 策略可以更改其有限预算、符合条件的 code 和退避配置。always mode 会先请求下游恢复，再无次数上限地重试每个模型请求失败；成功、取消或插件 dispose（资源释放）会在活跃的委托恢复完全停稳后终止它。
 
 两种 mode 都使用带对称 jitter 的有界指数退避。有效 `providerRetryAfterMs` 不超过 `maxDelayMs` 时会替换本地退避，并且不加 jitter。超出上限的提供方延迟会使 normal mode 继续委托；always mode 则改用已配置的本地退避，避免该指令终止重试。
 
