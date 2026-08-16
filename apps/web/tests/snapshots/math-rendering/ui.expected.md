@@ -10,6 +10,10 @@
 - text: Render this mathematical proof. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - heading "Math rendering" [level=2]
 - paragraph:
   - text: Inline dollar
@@ -33,9 +37,7 @@
 - paragraph: MATH_RENDERING_DONE
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

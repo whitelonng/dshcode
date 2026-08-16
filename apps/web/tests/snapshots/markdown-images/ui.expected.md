@@ -10,6 +10,10 @@
 - text: Show the Markdown image policy. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - heading "Markdown images" [level=2]
 - paragraph:
   - img "Remote test image"
@@ -17,9 +21,7 @@
 - paragraph: REMOTE_IMAGE_DONE
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

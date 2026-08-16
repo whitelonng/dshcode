@@ -13,6 +13,9 @@
 - button "Copy":
   - img
 - tooltip "Copy"
+- button "Delete" [disabled]:
+  - img
+- text: Agent is running; stop the turn to delete
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
