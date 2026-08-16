@@ -322,6 +322,21 @@ interface ModelReasoning {
 }
 
 /**
+ * The thinking-level map a hand-declared model defaults to when its profile
+ * declares no `reasoningEfforts`: `off` (absent — supported, send nothing),
+ * `low` (absent — the level name is the wire fallback), and `max` are the
+ * offered span, the set most OpenAI-compatible gateways serve; every other
+ * level is pinned unsupported.
+ */
+const DEFAULT_UNDECLARED_THINKING_LEVEL_MAP: ThinkingLevelMap = {
+  minimal: null,
+  medium: null,
+  high: null,
+  xhigh: null,
+  max: 'max',
+}
+
+/**
  * Resolve one model's reasoning capability from its declared efforts.
  *
  * A declared dict translates to pi-ai's `thinkingLevelMap` with every level
@@ -345,12 +360,16 @@ function resolveModelReasoning(
 ): ModelReasoning {
   const efforts = entry.reasoningEfforts
   if (efforts === undefined) {
-    // Reasoning rides the installed entry or is absent: a bare capability flag
-    // would make pi-ai advertise effort levels with no `thinkingLevelMap` to
-    // spell them, and no listing endpoint reports a model's reasoning
-    // protocol. The entry's map (when any) arrives through the `...base`
-    // spread in the model literal.
-    return { reasoning: base?.reasoning ?? false }
+    // A redeclared catalog model keeps its installed entry's capability: a
+    // bare capability flag would make pi-ai advertise effort levels with no
+    // `thinkingLevelMap` to spell them, and no listing endpoint reports a
+    // model's reasoning protocol. The entry's map (when any) arrives through
+    // the `...base` spread in the model literal.
+    if (base !== undefined) return { reasoning: base.reasoning }
+    // A hand-declared model with no catalog knowledge defaults to the
+    // off/low/max offer — the picker offers these instead of nothing, and the
+    // profile can still declare a different set (or `false`) explicitly.
+    return { reasoning: true, thinkingLevelMap: { ...DEFAULT_UNDECLARED_THINKING_LEVEL_MAP } }
   }
   // The installed entry's map may ride along through `...base`; pi-ai never
   // reads it on a non-reasoning model, so stripping it is not worth a field

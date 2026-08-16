@@ -112,16 +112,19 @@ describe('hand-declared providers', () => {
     })
   })
 
-  it('offers no reasoning control it could not honour', async () => {
+  it('defaults a hand-declared model to the off/low/max reasoning offer', async () => {
     const server = await mockServer([])
     const ctx = await harness(gateway(`${server.url}/v1`))
 
-    // pi-ai reports a model with no reasoning metadata as supporting the single
-    // level `off`, but `off` is translated to *omitting* the reasoning option —
-    // byte-for-byte the same request as naming no effort — so a provider whose
-    // own default is to think would keep thinking with `off` selected. The
-    // capability is reported unavailable instead of offering that control.
-    expect((await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning).toBeUndefined()
+    // A hand-declared model without a reasoningEfforts declaration defaults
+    // to the off/low/max offer. pi-ai reports a model with no reasoning
+    // metadata as supporting the single level `off`, but `off` is translated
+    // to *omitting* the reasoning option — byte-for-byte the same request as
+    // naming no effort — so the default offer is the smallest honest set: the
+    // two thinking levels most OpenAI-compatible gateways serve, plus `off`.
+    const reasoning = (await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning
+    expect(reasoning?.efforts.map(e => e.id)).toEqual(['off', 'low', 'max'])
+    expect(reasoning?.defaultEffort).toBeUndefined()
 
     // A catalog route is unaffected: its models carry the metadata that makes
     // `off` actually disable thinking.
@@ -687,6 +690,24 @@ describe('per-model reasoning efforts', () => {
   it('offers exactly the declared keys: leaving off out makes thinking mandatory', () => {
     const model = modelOf(declared([{ id: 'm', reasoningEfforts: { high: 'high' } }]))
     expect(getSupportedThinkingLevels(model)).toEqual(['high'])
+  })
+
+  it('defaults a hand-declared model with no declaration to off/low/max', () => {
+    const model = modelOf(declared([{ id: 'acme-plain' }]))
+
+    expect(model.reasoning).toBe(true)
+    // `off` and `low` stay absent from the map — supported with pi-ai's
+    // default dispatch (send nothing / send the level name) — while `max`,
+    // which pi-ai would otherwise pin unsupported, carries its own name as
+    // the wire spelling; every other level is pinned null.
+    expect(model.thinkingLevelMap).toEqual({
+      minimal: null,
+      medium: null,
+      high: null,
+      xhigh: null,
+      max: 'max',
+    })
+    expect(getSupportedThinkingLevels(model)).toEqual(['off', 'low', 'max'])
   })
 
   it('narrows a catalog model’s levels in place', () => {

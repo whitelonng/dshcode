@@ -1474,17 +1474,22 @@ describe('model capability and reasoning-level checkboxes', () => {
     expandRow(1)
   }
 
-  it('checks a reasoning level with the protocol default spelling and collapses to false', () => {
+  it('pre-checks the off/low/max default offer and toggles levels on top of it', () => {
     const onChange = vi.fn()
     mountPiAiEditor(onChange)
+    // A model that declares no levels shows the default offer pre-checked…
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 off`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 low`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 max`).checked).toBe(true)
+    // …adding a level extends it with the protocol default spelling…
     fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
     expect(onChange).toHaveBeenLastCalledWith([
-      { id: 'third-party', reasoningEfforts: { high: 'high' } },
+      { id: 'third-party', reasoningEfforts: { off: null, low: 'low', max: 'max', high: 'high' } },
     ])
-    // Unchecking the last level is the adapter's spelling of disabled.
+    // …and removing it returns to the default offer.
     fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
     expect(onChange).toHaveBeenLastCalledWith([
-      { id: 'third-party', reasoningEfforts: false },
+      { id: 'third-party', reasoningEfforts: { off: null, low: 'low', max: 'max' } },
     ])
   })
 
