@@ -7,7 +7,6 @@ import { SlotRegistry, createSnapshotStore, type ISessions, type SessionId, type
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { SettingsScopeBinder } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-notifications/client'
 import type { NotificationsSectionInjected } from '../src/client/NotificationsSection.tsx'
 import { NotificationsSection } from '../src/client/NotificationsSection.tsx'
@@ -19,7 +18,7 @@ import { NOTIFICATIONS_APPROVALS_FIELD, NOTIFICATIONS_COMPLETIONS_FIELD, NOTIFIC
 // the shipped Chinese copy and a granted browser permission.
 usePinnedBrowserLanguages('zh-CN')
 
-const SLOT = 'settings.section'
+const SLOT = 'settings.general.item'
 
 function sessionsDouble() {
   const list = createSnapshotStore<SessionListState>({
@@ -134,8 +133,7 @@ describe('ui-notifications apply', () => {
     await b.ctx.plugin({ inject: [...inject], apply }).await()
 
     const entry = b.ctx.get('slots')!.entries(SLOT).find(e => e.component === NotificationsSection)!
-    expect(entry.options).toMatchObject({ id: 'notifications', order: 20 })
-    expect(resolveSlotLabel(entry.options.label)).toBe('通知')
+    expect(entry.options).toMatchObject({ id: 'notifications', order: 30 })
     expect(entry.locale).toBe(NS)
 
     const { instance } = faceOf(b.ctx.get('slots') as SlotRegistry)
@@ -222,6 +220,6 @@ describe('ui-notifications apply', () => {
     await fiber.dispose()
     expect(b.ctx.get('slots')!.entries(SLOT)).toHaveLength(0)
     // Locale disposal: translation falls back to the bare key.
-    expect(b.locale.bind(NS)('section.nav')).toBe('section.nav')
+    expect(b.locale.bind(NS)('row.title')).toBe('row.title')
   })
 })

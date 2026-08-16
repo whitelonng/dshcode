@@ -1,8 +1,8 @@
 /**
- * Notifications settings section: the two preference toggles plus the
- * environment permission status row. The toggles write through the injected
+ * General-settings notifications row: the two preference toggles plus the
+ * environment permission status. The toggles write through the injected
  * callbacks (which persist through the settings scope and request web
- * permission on enable); the permission row reflects the sink state and
+ * permission on enable); the permission line reflects the sink state and
  * offers a request/retry action unless the environment cannot notify.
  */
 import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,16 +17,16 @@ export interface NotificationsSectionInjected {
   setApprovals: (enabled: boolean) => void
   /** Persist the completion toggle (requests permission on enable). */
   setCompletions: (enabled: boolean) => void
-  /** Ask for notification permission (the settings page's request/retry). */
+  /** Ask for notification permission (the settings row's request/retry). */
   requestPermission: () => void
 }
 
 /** Full component props: runtime share + store share + locale seat + injected face. */
 export type NotificationsSectionProps =
-  PropsRuntime<'settings.section'> & PropsStore<ReturnType<typeof createNotificationsSectionStore>>
+  PropsRuntime<'settings.general.item'> & PropsStore<ReturnType<typeof createNotificationsSectionStore>>
   & PropsLocale<'settings.notifications'> & NotificationsSectionInjected
 
-/** Permission status line: label, accent, and action for the current state. */
+/** Permission status line: label and optional action for the current state. */
 function permissionLine(
   permission: NotificationPermissionState,
   t: (key: NotificationsKey) => string,
@@ -42,9 +42,9 @@ function permissionLine(
 }
 
 /**
- * Render the notifications section.
+ * Render the notifications row inside the General settings section.
  * @param props - composed slot props.
- * @returns the section element tree.
+ * @returns the row element tree.
  */
 export function NotificationsSection({
   t, useStore, setApprovals, setCompletions, requestPermission,
@@ -52,14 +52,28 @@ export function NotificationsSection({
   const { approvals, completions, permission } = useStore(s => s)
   const line = permissionLine(permission, t, requestPermission)
   return (
-    <div className={css.section}>
-      <h2 className={css.heading}>{t('section.nav')}</h2>
-      <div className={css.rows}>
-        <label className={css.row}>
-          <span className={css.copy}>
-            <span className={css.label}>{t('approvals.label')}</span>
-            <span className={css.desc}>{t('approvals.desc')}</span>
-          </span>
+    <div className={css.row}>
+      <div className={css.rowText}>
+        <span className={css.title}>{t('row.title')}</span>
+        <span className={css.desc}>{t('row.desc')}</span>
+        <span className={css.statusText}>
+          {line.text}
+          {line.action !== undefined
+            ? (
+              <button
+                type="button"
+                className={css.statusAction}
+                onClick={() => { line.action?.() }}
+              >
+                {line.label}
+              </button>
+            )
+            : null}
+        </span>
+      </div>
+      <div className={css.switches}>
+        <span className={css.switchRow}>
+          <span className={css.switchLabel}>{t('approvals.label')}</span>
           <button
             type="button"
             role="switch"
@@ -70,12 +84,9 @@ export function NotificationsSection({
           >
             <span className={css.thumb} />
           </button>
-        </label>
-        <label className={css.row}>
-          <span className={css.copy}>
-            <span className={css.label}>{t('completions.label')}</span>
-            <span className={css.desc}>{t('completions.desc')}</span>
-          </span>
+        </span>
+        <span className={css.switchRow}>
+          <span className={css.switchLabel}>{t('completions.label')}</span>
           <button
             type="button"
             role="switch"
@@ -86,21 +97,7 @@ export function NotificationsSection({
           >
             <span className={css.thumb} />
           </button>
-        </label>
-      </div>
-      <div className={css.statusRow}>
-        <span className={css.statusText}>{line.text}</span>
-        {line.action !== undefined
-          ? (
-            <button
-              type="button"
-              className={css.statusAction}
-              onClick={() => { line.action?.() }}
-            >
-              {line.label}
-            </button>
-          )
-          : null}
+        </span>
       </div>
     </div>
   )

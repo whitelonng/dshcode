@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Web system-notification feature owner: raises OS notification-bar alerts for two kinds of events — a session waiting for approval, and a finished session or background job — and owns the Notifications settings section that toggles them.
+Web system-notification feature owner: raises OS notification-bar alerts for two kinds of events — a session waiting for approval, and a finished session or background job — and owns the General-settings notifications row that toggles them.
 
 The event wiring reads the object layer only, never the DOM. A [`NotificationsService`](src/client/notifications-service.ts) subscribes to the `sessions.list` snapshot store (the same authoritative feed the sidebar renders) and folds three edges into notifications: a session's `pendingInteraction` flipping to `'approval'`, a session's `running` flipping to false, and a background job leaving `running`/`stopping` in the `jobsBySession` mirror. Choosing the list snapshot means sessions that were never instantiated still raise notifications — the manager tracks their interaction status list-wide — and one subscription carries approvals, session state, and jobs together. Approvals always notify (a blocked task deserves a ping even while the page is visible); completions notify only while `document.visibilityState === 'hidden'`, because the in-app completion dot already covers the visible case.
 
@@ -10,7 +10,7 @@ A 5-second dedup window keyed by `(kind, id)` — the session id for approvals a
 
 The platform seam is a [`NotificationSink`](src/client/notification-sink.ts): the standard Web Notification API in a browser, or the Electron preload bridge (main-process native notifications) inside the desktop shell, feature-detected with the bridge preferred. Environments with neither surface report `unsupported` and silently skip. The two toggles persist in the `notifications` settings namespace (`approvals`, `completions`, both default true) through the regular settings scope; enabling a toggle requests web permission on first use, and a denied prompt leaves the toggle on with the settings page showing the state and a retry action. The node half registers the namespace schema when the settings service is composed.
 
-The settings section registers `settings.section` (id `notifications`) and mirrors the preference scope plus the permission state through its own store; the section and the notification copy share the package's `settings.notifications` locale namespace.
+The settings row registers `settings.general.item` (id `notifications`) inside the General section and mirrors the preference scope plus the permission state through its own store; the row and the notification copy share the package's `settings.notifications` locale namespace.
 
 ## Model Experience
 

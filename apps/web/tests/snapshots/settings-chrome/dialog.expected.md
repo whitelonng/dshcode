@@ -10,9 +10,6 @@
     - button "插件":
       - img
       - text: 插件
-    - button "通知":
-      - img
-      - text: 通知
     - button "Agent 预设":
       - img
       - text: Agent 预设
@@ -49,3 +46,9 @@
   - button "排队发送":
     - text: 排队发送
     - img
+  - text: 系统通知 授权等待与任务完成的系统级提醒 系统通知权限已被拒绝
+  - button "重试"
+  - text: 授权通知
+  - switch "授权通知" [checked]
+  - text: 任务完成通知
+  - switch "任务完成通知" [checked]

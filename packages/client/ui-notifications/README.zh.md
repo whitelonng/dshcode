@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Web 系统通知特性的归属方：为两类事件弹出操作系统通知栏通知——会话等待授权、以及会话或后台任务完成——并拥有负责开关两者的“通知”设置分区。
+Web 系统通知特性的归属方：为两类事件弹出操作系统通知栏通知——会话等待授权、以及会话或后台任务完成——并在“通用”设置里拥有负责开关两者的通知行。
 
 事件接线只读对象层，从不扫描 DOM。[`NotificationsService`](src/client/notifications-service.ts) 订阅 `sessions.list` 快照 store（侧边栏渲染所用的同一权威数据源），把三种边沿折叠成通知：会话的 `pendingInteraction` 翻转为 `'approval'`、会话的 `running` 翻转为 false、以及 `jobsBySession` 镜像里后台任务离开 `running`/`stopping`。选择列表快照意味着从未实例化的会话也能弹通知——manager 在整个列表范围内跟踪它们的交互状态——而且一次订阅同时携带授权、会话状态与任务。授权总是通知（即使页面可见，被阻塞的任务也值得提醒）；完成通知只在 `document.visibilityState === 'hidden'` 时发，因为站内完成圆点已经覆盖了可见场景。
 
@@ -10,7 +10,7 @@ Web 系统通知特性的归属方：为两类事件弹出操作系统通知栏�
 
 平台接缝是 [`NotificationSink`](src/client/notification-sink.ts)：浏览器用标准 Web Notification API，桌面壳内用 Electron preload 桥（主进程原生通知），特性检测优先走桥。两种表面都不存在的环境报告 `unsupported` 并静默跳过。两个开关通过常规设置作用域持久化在 `notifications` 设置命名空间（`approvals`、`completions`，默认均开启）；开启开关时首次使用会请求 Web 权限，被拒绝后开关保持开启，设置页展示状态并提供重试操作。node 半区在组合提供设置服务时注册命名空间 schema。
 
-设置分区注册 `settings.section`（id 为 `notifications`），通过自己的 store 镜像偏好作用域与权限状态；分区与通知文案共用本包的 `settings.notifications` locale 命名空间。
+设置行注册 `settings.general.item`（id 为 `notifications`），进入「通用」分区，通过自己的 store 镜像偏好作用域与权限状态；设置行与通知文案共用本包的 `settings.notifications` locale 命名空间。
 
 ## 模型体验
 
