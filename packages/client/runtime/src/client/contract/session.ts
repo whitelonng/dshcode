@@ -83,8 +83,10 @@ export interface ISession {
    * Delete one user or assistant message from the transcript and the
    * model-visible history; the host expands the target seq to its surface
    * range (a user message's whole turn, an assistant message plus its step's
-   * tool results).
-   * @param seq - seq of the message event to delete.
+   * tool results, a turn/end anchor's whole turn — the interrupted-answer
+   * path).
+   * @param seq - seq of the message event to delete, or of the turn/end event
+   *   anchoring a whole stopped turn.
    * @returns the host-computed removed range, or the business error
    * (`agent-busy` while running, `delete-unavailable` for a non-message seq).
    */

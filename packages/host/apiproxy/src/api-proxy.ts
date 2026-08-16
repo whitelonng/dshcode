@@ -124,7 +124,8 @@ const DEFAULT_MAX_MESSAGES = 50
  * is deferred work.
  */
 const WEB_SETTINGS_NAMESPACES = [
-  'agent-loop', 'shell', 'locale', 'permission', 'ui-conversation', 'ui-theme', 'web-search-deepseek', 'describe-image',
+  'agent-loop', 'shell', 'locale', 'permission', 'ui-conversation', 'ui-theme', 'web-search-deepseek',
+  'describe-image',
 ] as const
 
 /** Provider work budget: at most 100 calls and 2,000 inspected hits. */
@@ -553,6 +554,67 @@ function deleteSurfaceEndOf(nodes: readonly number[], events: readonly SessionEv
     end = node
   }
   return end
+}
+
+/**
+ * Resolve the inclusive surface range of one whole turn, for deleting a
+ * stopped (interrupted) turn from its `turn/end` anchor. An interrupted turn
+ * leaves no durable assistant message — its partial renders from chunks — so
+ * the client targets the turn/end event and everything the turn put on the
+ * surface goes away together. The caller has verified `seq` is a `turn/end`
+ * event.
+ * @param nodes - current surface node seqs in model-visible order.
+ * @param events - the session log.
+ * @param seq - seq of the turn/end event anchoring the turn.
+ * @returns the inclusive surface range of the turn, or `undefined` when the
+ *   turn left nothing on the surface.
+ */
+function deleteSurfaceTurnRangeOf(
+  nodes: readonly number[],
+  events: readonly SessionEvent[],
+  seq: number,
+): { start: number; end: number } | undefined {
+  const target = events[seq]
+  if (target === undefined || target.type !== 'turn/end') {
+    throw new Error(`deleteSurfaceTurnRangeOf: event ${seq} is not a turn/end`)
+  }
+  const startIdx = events.findIndex(event => event.type === 'turn/start' && event.data.turn === target.data.turn)
+  if (startIdx === -1 || startIdx > seq) {
+    throw new Error(`deleteSurfaceTurnRangeOf: no turn/start precedes the turn/end at ${seq}`)
+  }
+  // Turns are contiguous, so the closed seq range between the turn's own
+  // boundaries is exactly its surface span (user messages carry no turn
+  // field, so membership resolves by position rather than payload).
+  let start: number | undefined
+  let end: number | undefined
+  for (const node of nodes) {
+    if (node < startIdx || node > seq) continue
+    start ??= node
+    end = node
+  }
+  return start === undefined || end === undefined ? undefined : { start, end }
+}
+
+/**
+ * Every event seq of one whole turn, from its `turn/start` through the
+ * `turn/end` anchor (turns are contiguous, so the closed range is exact).
+ * Used as the deletion provenance for whole-turn deletes: the surface op
+ * removes the model-visible nodes, and these citations let the transcript
+ * fold hide the turn's chunks and boundaries too.
+ * @param events - seq-indexed session log.
+ * @param turnEndSeq - seq of the turn/end event anchoring the turn.
+ * @returns the turn's event seqs in ascending order.
+ */
+function turnEventSeqs(events: readonly SessionEvent[], turnEndSeq: number): number[] {
+  const target = events[turnEndSeq]
+  if (target === undefined || target.type !== 'turn/end') {
+    throw new Error(`turnEventSeqs: event ${turnEndSeq} is not a turn/end`)
+  }
+  const startIdx = events.findIndex(event => event.type === 'turn/start' && event.data.turn === target.data.turn)
+  if (startIdx === -1 || startIdx > turnEndSeq) {
+    throw new Error(`turnEventSeqs: no turn/start precedes the turn/end at ${turnEndSeq}`)
+  }
+  return events.slice(startIdx, turnEndSeq + 1).map(event => event.seq)
 }
 
 /** Advance the Session-list hint projection by one committed event. */
@@ -2420,7 +2482,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const session = found.agent.session
         const events = session.events
         const target = events[seq]
-        if (target === undefined || (target.type !== 'user/message' && target.type !== 'assistant/message')) {
+        if (target === undefined
+          || (target.type !== 'user/message' && target.type !== 'assistant/message' && target.type !== 'turn/end')) {
           return err(request, {
             code: 'delete-unavailable',
             message: `event ${String(seq)} is not a deletable message`,
@@ -2428,7 +2491,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         const nodes = session.surface.nodes
-        if (!nodes.includes(seq)) {
+        // A turn/end anchor deletes its whole turn (the interrupted-answer
+        // path); everything else must address a current surface node.
+        if (target.type !== 'turn/end' && !nodes.includes(seq)) {
           return err(request, {
             code: 'delete-unavailable',
             message: `event ${String(seq)} is not a current conversation message (already shadowed by compaction or an earlier edit)`,
@@ -2444,13 +2509,33 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { reason: 'turn-open' },
           })
         }
-        const start = seq
-        const end = deleteSurfaceEndOf(nodes, events, start)
+        const range = target.type === 'turn/end'
+          ? deleteSurfaceTurnRangeOf(nodes, events, seq)
+          : {
+            start: seq,
+            end: deleteSurfaceEndOf(nodes, events, seq),
+          }
+        if (range === undefined) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: target.type === 'turn/end'
+              ? `turn ${String(target.data.turn)} left nothing on the surface to delete`
+              : 'the targeted message left nothing on the surface to delete',
+            details: { sessionId, seq },
+          })
+        }
+        const { start, end } = range
         const shadowedSeqs = [...nodes.slice(nodes.indexOf(start), nodes.indexOf(end) + 1)]
+        // A whole-turn deletion also cites every non-surface event between the
+        // turn's boundaries (chunks, boundaries) so the transcript fold hides
+        // the stopped partial answer, not just the model-visible nodes.
+        const sourceEventSeqs = target.type === 'turn/end'
+          ? turnEventSeqs(events, seq)
+          : shadowedSeqs
         try {
           session.append('message/delete', { start, end }, {
             surfaceOp: { op: 'delete', start, end },
-            sourceEventSeqs: shadowedSeqs,
+            sourceEventSeqs,
           })
         } catch (error: unknown) {
           return err(request, {

@@ -58,6 +58,9 @@ export function foldTranscript(entries: readonly ConversationEventInput[]): Conv
   for (const { event } of entries) {
     if (event.type === 'message/delete') {
       for (let seq = event.data.start; seq <= event.data.end; seq += 1) hidden.add(seq)
+      // Whole-turn deletions cite the turn's non-surface events (chunks,
+      // boundaries) so a stopped partial answer hides with its turn.
+      for (const seq of event.sourceEventSeqs ?? []) hidden.add(seq)
       continue
     }
     if (event.type === 'user/message' && event.surfaceOp !== 'append'

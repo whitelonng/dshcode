@@ -720,7 +720,7 @@ export interface ChatViewInjected {
   }
   /** Fork through the completed turn ending at the eligible message `seq`, then open the child. */
   forkAt: (seq: number) => void
-  /** Delete the message at `seq`; resolves false when the host refused. */
+  /** Delete the message at `seq` (or the whole turn when `seq` anchors its turn/end); resolves false when the host refused. */
   deleteAt: (seq: number) => Promise<boolean>
   /** Edit the last user message at `seq` with `text` and regenerate; resolves false on refusal. */
   editAt: (seq: number, text: string) => Promise<boolean>

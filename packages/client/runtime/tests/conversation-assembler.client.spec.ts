@@ -1125,6 +1125,18 @@ describe('foldTranscript', () => {
     ])
   })
 
+  it('hides a whole-turn deletion\'s cited non-surface events (stopped partials)', () => {
+    // A stopped turn's surface range may cover only its user message; the
+    // provenance cites chunks and boundaries so the partial answer and the
+    // turn brackets hide with it.
+    const wholeTurnDelete = input({
+      ...at(12, 'message/delete', { start: 1, end: 1 }),
+      sourceEventSeqs: [0, 1, 2, 3, 4, 5],
+    } as never)
+    const visible = foldTranscript([...window, wholeTurnDelete])
+    expect(visible.map(entry => entry.event.seq)).toEqual([6, 7, 8, 9, 10, 11])
+  })
+
   it('hides the shadowed range of a human edit-replace and keeps the replacement', () => {
     const visible = foldTranscript([...window, edit(12, [1, 3])])
     // Turn 1's prompt and answer are shadowed; the edited message (12) stays
