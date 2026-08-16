@@ -344,6 +344,35 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('rides declared capability metadata through to the catalog groups', async () => {
+    const { ctx, sessionId } = await harness()
+    ctx.llm.registerAdapter(['capable'], new class extends CatalogAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({
+          provider, id: model, name: model,
+          inputModalities: ['text', 'image'],
+          outputModalities: ['text', 'image'],
+          capabilities: ['image-understanding'],
+        })
+      }
+    }('Capable', [{ provider: 'capable', id: 'seer', name: 'Seer' }]))
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    const catalog = expectValue(await api.sessions.models(request({ sessionId })))
+    const group = catalog.groups.find(candidate => candidate.id === 'capable')
+    expect(group?.models[0]).toEqual({
+      id: 'seer',
+      name: 'Seer',
+      inputModalities: ['text', 'image'],
+      outputModalities: ['text', 'image'],
+      capabilities: ['image-understanding'],
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('accepts an advisory-unlisted model, rejects an unavailable provider, and switches only after the next assembly', async () => {
     const { ctx, agent, sessionId } = await harness()
     const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' })

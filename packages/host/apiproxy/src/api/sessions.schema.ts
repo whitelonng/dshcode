@@ -184,6 +184,9 @@ export const modelCatalogModelSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
+  inputModalities: z.array(z.string()).optional(),
+  outputModalities: z.array(z.string()).optional(),
+  capabilities: z.array(z.string()).optional(),
   reasoning: modelReasoningSchema.optional(),
 }) satisfies z.ZodType<Wire<ModelCatalogModel>>
 

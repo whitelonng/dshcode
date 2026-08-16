@@ -33,6 +33,13 @@ The package root exposes the Cordis plugin contract and `DeepSeekAdapter`; wire 
       - id: private-reasoner
         description: Company-hosted reasoning model
         contextWindow: 512000
+        # Per-model reasoning override: offered levels are the keys; wire
+        # spellings are fixed by this route (off = empty, high/max = the
+        # reasoning_effort literals), so only the level set is meaningful.
+        reasoningEfforts:
+          off:
+          high: high
+          max: max
 ```
 
 The plugin registers the single provider route `deepseek-official` together with its resolved `retryPolicy`. A request selects it with `provider: deepseek-official`; its `model` is passed through as the wire `model` string, so changing DeepSeek models does not require lifecycle-time registration. Omitting `models` advertises `deepseek-v4-flash` as `DeepSeek-V4-Flash` and `deepseek-v4-pro` as `DeepSeek-V4-Pro`, each with a 1,000,000-token context window; an explicit list replaces those defaults, while `models: []` advertises none. Catalog entries are exposed through `ctx.llm.listModels('deepseek-official')` for clients such as ACP editors and the Web selector, but remain advisory: unlisted model ids still pass through unchanged. An omitted entry name defaults to its id.
@@ -42,6 +49,8 @@ The plugin registers the single provider route `deepseek-official` together with
 `maxTokens` is the adapter-configured output cap for conversation requests and defaults to 256,000. A catalog entry may carry its own `maxTokens`, which wins for that model; an entry without one, and any unlisted pass-through id, resolve to the profile value, so adding a per-model cap changes one model rather than the route. Exact-model resolution exposes the winner as `defaultMaxTokens`; `LlmRuntime` materializes that value into `GenerateOptions.maxTokens` before the agent loop writes `request/header`, so the wire request remains reconstructable. An explicit request or `AgentOptions.maxTokens` value wins and is serialized as `max_tokens`. The adapter does not clamp this request budget against `contextWindow`; deployments with a smaller context or provider output limit must configure a compatible `maxTokens`.
 
 The same exact-model result exposes ordered `off`, `high`, and `max` efforts under `reasoning` for every pass-through model when deployment policy permits thinking. `reasoningEffort` selects the deployment default and falls back to `high` when omitted. `agent/request` can replace it on each conversation step; the resolved value is logged in `request/header`. `high` and `max` enable thinking and serialize as the official top-level `reasoning_effort`; adapter-owned `off` instead serializes `thinking.type: disabled` and omits `reasoning_effort`. An unsupported value fails with `UNSUPPORTED_REASONING_EFFORT` before network I/O.
+
+A catalog entry may declare per-model `reasoningEfforts` when its offering differs from the route default: the map's keys are the offered levels (`off`/`high`/`max`; a level absent from the map is not offered), the wire spellings are fixed by this route — `off` uses the empty spelling, `high`/`max` must spell the `reasoning_effort` literals — and `false` declares a non-reasoning model. The default for a declaring model is the route `reasoningEffort` when it is among the offered levels, otherwise the strongest offered thinking level, otherwise `off`. Absent keeps the route-level behavior for that model.
 
 `thinking: disabled` is a deployment lock that publishes only `off` with `off` as its default. Omitting `reasoningEffort` or configuring it as `off` is valid; configuring `high` or `max` fails plugin loading, and a direct per-request attempt to enable thinking fails before network I/O. A request with `GenerateOptions.purpose: 'session-title'` also forces thinking disabled and omits the already-resolved effort, reserving its bounded output for visible title text without changing conversation or compaction defaults.
 

@@ -13,6 +13,7 @@ import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/Mo
 import { pathOps } from '../src/client/ProviderEditor.tsx'
 import {
   DeepSeekModelsEditor, formatCapacity, modelDrafts, parseCapacity, validateDeepSeekModels,
+  type DeepSeekModelDraft,
 } from '../src/client/DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from '../src/client/apiKey.ts'
 import { deriveKeyRef, ModelsSettingsStore } from '../src/client/store.ts'
@@ -1448,5 +1449,123 @@ describe('model reasoning-effort declaration editing', () => {
     mountEditor(() => {})
     expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`).value)
       .toBe('high: high')
+  })
+})
+
+describe('model capability and reasoning-level checkboxes', () => {
+  /** Render the pi-ai editor with real local state so checkbox toggles round-trip. */
+  function mountPiAiEditor(onChange: (models: unknown[]) => void, probeApi?: string) {
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'third-party' },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai', ...probeApi === undefined ? {} : { api: probeApi } }}
+          api={{ llm: { discoverModels: vi.fn() } } as never}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    expandRow(1)
+  }
+
+  it('checks a reasoning level with the protocol default spelling and collapses to false', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: { high: 'high' } },
+    ])
+    // Unchecking the last level is the adapter's spelling of disabled.
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: false },
+    ])
+  })
+
+  it('keeps the raw-text declaration behind the advanced disclosure and re-derives it', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    // A custom wire spelling typed into the advanced field lands in the map…
+    const raw = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`)
+    fireEvent.change(raw, { target: { value: 'high: ultra' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: { high: 'ultra' } },
+    ])
+    // …the checkbox group reads it as a checked level…
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 high`).checked).toBe(true)
+    // …and unchecking it clears the text buffer back to the derived value.
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party', reasoningEfforts: false }])
+  })
+
+  it('shows the protocol family suggestion as an advisory hint', () => {
+    mountPiAiEditor(() => {}, 'openai-completions')
+    expect(screen.getByText(`${en.reasoningLevelsSuggestion}minimal, low, medium, high`)).toBeTruthy()
+  })
+
+  it('toggles image input and generation independently', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    fireEvent.click(screen.getByLabelText(`${en.modelImageGeneration} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', output: ['text', 'image'] },
+    ])
+    fireEvent.click(screen.getByLabelText(`${en.modelImageInput} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', output: ['text', 'image'], input: ['text', 'image'] },
+    ])
+  })
+
+  it('implies image input at the storage level when understanding is checked', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    fireEvent.click(screen.getByLabelText(`${en.modelImageUnderstanding} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', input: ['text', 'image'], capabilities: { imageUnderstanding: true } },
+    ])
+    // Unchecking understanding keeps image input while the derived image-input
+    // box is still on; unchecking that box restores text.
+    fireEvent.click(screen.getByLabelText(`${en.modelImageUnderstanding} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', input: ['text', 'image'] },
+    ])
+    fireEvent.click(screen.getByLabelText(`${en.modelImageInput} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party', input: ['text'] }])
+  })
+
+  it('writes per-model reasoningEfforts from the DeepSeek three-level group', () => {
+    const onChange = vi.fn()
+    function Mount() {
+      const [models, setModels] = useState<readonly DeepSeekModelDraft[]>([{ id: 'deepseek-v4-flash' }])
+      return (
+        <DeepSeekModelsEditor
+          models={models}
+          overridden
+          defaultContextWindow={undefined}
+          defaultMaxTokens={undefined}
+          t={t}
+          disabled={false}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          onReset={vi.fn()}
+        />
+      )
+    }
+    render(<Mount />)
+    expandRow(1)
+    // Only the levels this wire route dispatches are offered.
+    expect(screen.queryByLabelText(`${en.modelReasoningLevels} 1 minimal`)).toBeNull()
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 max`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'deepseek-v4-flash', reasoningEfforts: { max: 'max' } },
+    ])
+    // The capability checkboxes stay off this editor: the direct wire route is
+    // text-only with a note policy the adapter hardcodes.
+    expect(screen.queryByLabelText(`${en.modelImageInput} 1`)).toBeNull()
   })
 })

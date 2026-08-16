@@ -954,12 +954,24 @@ export interface DeepSeekCatalogModel {
   contextWindow?: number
   /** Per-request output cap for this model; omission falls back to the profile's {@link DeepSeekConnectionOptions.maxTokens}. */
   maxTokens?: number
+  /**
+   * Per-model reasoning override, when this model's offering differs from the
+   * route default. `false` declares a non-reasoning model; a map declares the
+   * offered levels (its keys) with their wire spellings, which for this wire
+   * route are fixed — `off` uses the empty spelling (thinking disabled), and
+   * `high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
+   * `reasoningEffort` for this model.
+   */
+  reasoningEfforts?: false | Partial<Record<DeepSeekReasoningLevel, string | null>>
 }
+
+/** One reasoning level the direct DeepSeek wire route can dispatch. */
+export type DeepSeekReasoningLevel = 'off' | 'high' | 'max'
 ```
 
 Depends on: [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
 
-Source: [`packages/llm/llm-deepseek/src/index.ts:62`](../packages/llm/llm-deepseek/src/index.ts)
+Source: [`packages/llm/llm-deepseek/src/index.ts:67`](../packages/llm/llm-deepseek/src/index.ts)
 
 <a id="deepseek-aidsh-llm-pi-ai"></a>
 
@@ -1085,6 +1097,24 @@ export interface PiAiModelProfile {
    */
   input?: PiAiModality[]
   /**
+   * Output modalities this model can produce; `image` declares image
+   * generation. Absent — or empty — means text-only output, the floor every
+   * chat-completions model carries. This adapter's text seam never invokes
+   * image generation, so the field is advisory metadata: it is what model
+   * selectors and capability surfaces display, not a request path.
+   */
+  output?: PiAiModality[]
+  /**
+   * Capability claims a modality list cannot express. `imageUnderstanding`
+   * means the model can reason about image content, which is a stronger claim
+   * than merely accepting image input (the latter is `input` containing
+   * `image`). A model declaring understanding is expected to also declare
+   * image input, but nothing here forces the combination: the two answers are
+   * independent, and a gateway that accepts images without understanding them
+   * is a legitimate configuration.
+   */
+  capabilities?: PiAiModelCapabilities
+  /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
    * entry's capability (a hand-declared model has none and does not reason);
    * `false` declares a non-reasoning model, which is how a profile strips
@@ -1124,6 +1154,12 @@ export interface PiAiCompatProfile {
 /** One request modality a pi-ai model may accept. */
 export type PiAiModality = Model<Api>['input'][number]
 
+/** Capability claims an entry may declare beyond its modality lists. */
+export interface PiAiModelCapabilities {
+  /** Whether the model can reason about image content, beyond accepting image input. */
+  imageUnderstanding?: boolean
+}
+
 /**
  * Selectable reasoning efforts for one model: each key is a level the model
  * offers (and selectors show), and its value is the wire spelling dispatch
@@ -1149,7 +1185,7 @@ type WithheldThinkingFormat = 'chat-template' | 'qwen-chat-template'
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:172`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:181`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 

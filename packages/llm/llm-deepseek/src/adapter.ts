@@ -26,6 +26,9 @@ import { parseSse } from './sse.ts'
 import { translate } from './translate.ts'
 import type { WireError } from './types.ts'
 
+/** One reasoning level the direct DeepSeek wire route can dispatch. */
+export type DeepSeekReasoningLevel = 'off' | 'high' | 'max'
+
 /** One optional model entry advertised by the direct-fetch adapter. */
 export interface DeepSeekCatalogModel {
   /** Wire model id accepted by the configured endpoint. */
@@ -38,6 +41,15 @@ export interface DeepSeekCatalogModel {
   contextWindow?: number
   /** Per-request output cap for this model; omission falls back to the profile's {@link DeepSeekConnectionOptions.maxTokens}. */
   maxTokens?: number
+  /**
+   * Per-model reasoning override, when this model's offering differs from the
+   * route default. `false` declares a non-reasoning model; a map declares the
+   * offered levels (its keys) with their wire spellings, which for this wire
+   * route are fixed — `off` uses the empty spelling (thinking disabled), and
+   * `high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
+   * `reasoningEffort` for this model.
+   */
+  reasoningEfforts?: false | Partial<Record<DeepSeekReasoningLevel, string | null>>
 }
 
 /**
@@ -103,6 +115,72 @@ const REASONING_EFFORTS = [
 const OFF_ONLY_REASONING_EFFORTS = [
   { id: OFF_REASONING_EFFORT, name: 'Off' },
 ] as const
+
+/** DeepSeek reasoning levels in display order. */
+const REASONING_LEVELS = ['off', 'high', 'max'] as const
+
+/** The selectable-reasoning metadata one model reports, per-model first. */
+function reasoningForModel(
+  connection: DeepSeekConnectionOptions,
+  configured: DeepSeekCatalogModel | undefined,
+): Pick<LlmResolvedModelInfo, 'reasoning'> {
+  // Deployment-wide thinking policy wins over any per-model declaration:
+  // resolveAdapterOptions already refuses a route-level non-off effort beside
+  // it, and a model-level one cannot silently re-enable thinking.
+  if (connection.defaults.thinking === 'disabled') {
+    return {
+      reasoning: {
+        efforts: OFF_ONLY_REASONING_EFFORTS,
+        defaultEffort: OFF_REASONING_EFFORT,
+      },
+    }
+  }
+  const declared = configured?.reasoningEfforts
+  if (declared === undefined) {
+    return {
+      reasoning: {
+        efforts: REASONING_EFFORTS,
+        defaultEffort: connection.defaults.reasoningEffort === 'off'
+          ? OFF_REASONING_EFFORT
+          : connection.defaults.reasoningEffort === 'max'
+            ? MAX_REASONING_EFFORT
+            : HIGH_REASONING_EFFORT,
+      },
+    }
+  }
+  if (declared === false) {
+    return {
+      reasoning: {
+        efforts: OFF_ONLY_REASONING_EFFORTS,
+        defaultEffort: OFF_REASONING_EFFORT,
+      },
+    }
+  }
+  // The map's keys are the offered levels; the route default applies when it
+  // is among them, otherwise the strongest offered thinking level, otherwise
+  // `off` (only reachable for `false`, which is handled above).
+  const offered = REASONING_LEVELS.filter(level => declared[level] !== undefined)
+  const efforts = offered.map(level => ({
+    id: ReasoningEffortId(level),
+    name: level === 'off' ? 'Off' : level === 'high' ? 'High' : 'Max',
+  }))
+  const routeDefault = connection.defaults.reasoningEffort
+  const defaultEffort = routeDefault !== undefined && offered.includes(routeDefault)
+    ? routeDefault
+    : offered.includes('max')
+      ? 'max' as const
+      : offered.includes('high')
+        ? 'high' as const
+        : offered.includes('off')
+          ? 'off' as const
+          : undefined
+  return {
+    reasoning: {
+      efforts,
+      ...defaultEffort === undefined ? {} : { defaultEffort: ReasoningEffortId(defaultEffort) },
+    },
+  }
+}
 
 function modelInfo(provider: string, model: DeepSeekCatalogModel): LlmModelInfo {
   return {
@@ -194,23 +272,7 @@ export class DeepSeekAdapter extends LlmAdapter {
         : modelInfo(provider, configured),
       context: { contextWindow },
       defaultMaxTokens: configured?.maxTokens ?? connection.maxTokens,
-      ...connection.defaults.thinking === 'disabled'
-        ? {
-          reasoning: {
-            efforts: OFF_ONLY_REASONING_EFFORTS,
-            defaultEffort: OFF_REASONING_EFFORT,
-          },
-        }
-        : {
-          reasoning: {
-            efforts: REASONING_EFFORTS,
-            defaultEffort: connection.defaults.reasoningEffort === 'off'
-              ? OFF_REASONING_EFFORT
-              : connection.defaults.reasoningEffort === 'max'
-                ? MAX_REASONING_EFFORT
-                : HIGH_REASONING_EFFORT,
-          },
-        },
+      ...reasoningForModel(connection, configured),
     })
   }
 

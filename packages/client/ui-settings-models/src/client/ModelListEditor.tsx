@@ -19,10 +19,14 @@ import type { ReactNode } from 'react'
 import type { DiscoveredModelView, IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
+import { applyCapabilityToggle, capabilityChecks, type CapabilityToggle } from './model-capabilities.ts'
+import { ReasoningLevelCheckboxes } from './ReasoningLevelCheckboxes.tsx'
 import {
   formatReasoningEfforts,
   INVALID_EFFORTS,
   parseReasoningEfforts,
+  suggestedReasoningLevels,
+  THINKING_LEVELS,
   type ReasoningEffortsValue,
 } from './reasoning-efforts.ts'
 import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
@@ -122,6 +126,13 @@ function IconTrash(): ReactNode {
 /** The two token counts edited as K/M-suffixed text behind a row's disclosure. */
 type CapacityField = 'contextWindow' | 'maxTokens'
 
+/** The three capability checkboxes, in display order. */
+const CAPABILITY_OPTIONS: readonly { toggle: CapabilityToggle; label: keyof typeof en }[] = [
+  { toggle: 'imageInput', label: 'modelImageInput' },
+  { toggle: 'imageGeneration', label: 'modelImageGeneration' },
+  { toggle: 'imageUnderstanding', label: 'modelImageUnderstanding' },
+]
+
 /**
  * What an empty capacity field is worth, shown as its placeholder so a row left
  * blank does not read as a model with no capacity at all.
@@ -206,6 +217,25 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   /** What the reasoning-efforts field shows: the buffer while typing, else the stored declaration. */
   const effortsText = (model: ModelDraft, index: number): string =>
     editing.get(effortsKey(index)) ?? formatReasoningEfforts(model.reasoningEfforts as ReasoningEffortsValue | undefined)
+
+  /**
+   * Replace a row's declaration from the checkbox group. The change clears
+   * the raw-text buffer so the advanced field re-derives from the stored
+   * value instead of echoing keystrokes that no longer apply.
+   */
+  const editReasoningLevels = (index: number, value: ReasoningEffortsValue | undefined): void => {
+    setEditing((current) => {
+      const next = new Map(current)
+      next.delete(effortsKey(index))
+      return next
+    })
+    patch(index, { reasoningEfforts: value })
+  }
+
+  /** Apply one capability checkbox toggle to a row. */
+  const toggleCapability = (index: number, toggle: CapabilityToggle, checked: boolean): void => {
+    patch(index, applyCapabilityToggle(models[index] as ModelDraft, toggle, checked))
+  }
 
   /** Drop one row's entries and shift the rows after it down, in one pass. */
   const reindexOnRemove = (
@@ -437,39 +467,49 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
                     onChange={(event) => { editCapacity(index, 'maxTokens', event.target.value) }}
                   />
                 </label>
-                <label className={styles['modelField']}>
-                  <span className={styles['modelFieldLabel']}>{t('modelReasoningEfforts')}</span>
-                  <input
-                    className={styles['input']}
-                    type="text"
-                    value={effortsText(model, index)}
-                    placeholder={t('modelReasoningEffortsHint')}
-                    aria-label={`${t('modelReasoningEfforts')} ${index + 1}`}
-                    disabled={disabled || model.reasoningEfforts === false}
-                    onChange={(event) => { editEfforts(index, event.target.value) }}
-                  />
-                </label>
-                <label className={styles['modelFieldCheck']}>
-                  <input
-                    type="checkbox"
-                    checked={model.reasoningEfforts === false}
-                    disabled={disabled}
-                    aria-label={`${t('modelReasoningOff')} ${index + 1}`}
-                    onChange={(event) => {
-                      if (event.target.checked) {
-                        setEditing((current) => {
-                          const next = new Map(current)
-                          next.delete(effortsKey(index))
-                          return next
-                        })
-                        patch(index, { reasoningEfforts: false })
-                      } else {
-                        patch(index, { reasoningEfforts: undefined })
-                      }
-                    }}
-                  />
-                  <span>{t('modelReasoningOff')}</span>
-                </label>
+                <div className={styles['modelCheckGroup']}>
+                  <span className={styles['modelFieldLabel']}>{t('modelCapabilities')}</span>
+                  <div className={styles['modelCheckRow']}>
+                    {CAPABILITY_OPTIONS.map(option => (
+                      <label className={styles['modelFieldCheck']} key={option.toggle}>
+                        <input
+                          type="checkbox"
+                          checked={capabilityChecks(model)[option.toggle]}
+                          disabled={disabled}
+                          aria-label={`${t(option.label)} ${index + 1}`}
+                          onChange={(event) => { toggleCapability(index, option.toggle, event.target.checked) }}
+                        />
+                        <span>{t(option.label)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <ReasoningLevelCheckboxes
+                  value={model.reasoningEfforts as ReasoningEffortsValue | undefined}
+                  levels={THINKING_LEVELS}
+                  suggested={suggestedReasoningLevels(probe.api)}
+                  index={index}
+                  disabled={disabled}
+                  onChange={(value) => { editReasoningLevels(index, value) }}
+                  t={t}
+                />
+                <details className={styles['modelAdvancedDetails']}>
+                  <summary className={styles['customizedSummary']}>
+                    {t('modelReasoningEffortsAdvanced')}
+                  </summary>
+                  <label className={styles['modelField']}>
+                    <span className={styles['modelFieldLabel']}>{t('modelReasoningEfforts')}</span>
+                    <input
+                      className={styles['input']}
+                      type="text"
+                      value={effortsText(model, index)}
+                      placeholder={t('modelReasoningEffortsHint')}
+                      aria-label={`${t('modelReasoningEfforts')} ${index + 1}`}
+                      disabled={disabled || model.reasoningEfforts === false}
+                      onChange={(event) => { editEfforts(index, event.target.value) }}
+                    />
+                  </label>
+                </details>
               </div>
             )
             : null}

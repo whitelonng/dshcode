@@ -124,6 +124,12 @@ export interface ModelCatalogModel {
   name: string
   /** Optional provider-supplied description. */
   description?: string
+  /** Accepted request modalities (`image` = multimodal input); absent when the adapter does not declare any. */
+  inputModalities?: string[]
+  /** Response modalities (`image` = image generation); absent means text-only output. */
+  outputModalities?: string[]
+  /** Declared capabilities beyond modalities (e.g. `image-understanding`); absent means none declared. */
+  capabilities?: string[]
   /** Exact-route reasoning metadata when the adapter exposes it. */
   reasoning?: ModelReasoning
 }

@@ -564,6 +564,10 @@ describe('LlmRuntime', () => {
     [{ provider: 'route', id: 'model', name: 'Model', description: 1 }, 'non-string description'],
     [{ provider: 'route', id: 'model', name: 'Model', imagePolicy: 'native' }, 'unknown image policy'],
     [{ provider: 'route', id: 'model', name: 'Model', imagePolicy: 1 }, 'non-string image policy'],
+    [{ provider: 'route', id: 'model', name: 'Model', outputModalities: ['audio'] }, 'unknown output modality'],
+    [{ provider: 'route', id: 'model', name: 'Model', outputModalities: 'image' }, 'non-array output modalities'],
+    [{ provider: 'route', id: 'model', name: 'Model', capabilities: ['read-minds'] }, 'unknown capability'],
+    [{ provider: 'route', id: 'model', name: 'Model', capabilities: 'image-understanding' }, 'non-array capabilities'],
   ] as const)('rejects invalid exact model metadata (%s: %s)', async (metadata, _label) => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
@@ -599,6 +603,52 @@ describe('LlmRuntime', () => {
       inputModalities: ['text', 'image'],
       imagePolicy: 'note',
     })
+  })
+
+  it('preserves detached output-modality and capability metadata through both metadata paths', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    const source: LlmModelInfo = {
+      provider: 'route', id: 'model', name: 'Model',
+      inputModalities: ['text', 'image'],
+      outputModalities: ['text', 'image'],
+      capabilities: ['image-understanding'],
+    }
+    const adapter = new class extends ScriptedAdapter {
+      override listModels(): Promise<readonly LlmModelInfo[]> {
+        return Promise.resolve([{
+          provider: source.provider,
+          id: source.id,
+          name: source.name,
+          inputModalities: [...(source.inputModalities ?? [])],
+          outputModalities: [...(source.outputModalities ?? [])],
+          capabilities: [...(source.capabilities ?? [])],
+        }])
+      }
+
+      override resolveModel(_provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({ ...source, id: model })
+      }
+    }(SCRIPT)
+    ctx.llm.registerAdapter(['route'], adapter)
+
+    const listed = await ctx.llm.listModels('route')
+    expect(listed).toEqual([{
+      provider: 'route', id: 'model', name: 'Model',
+      inputModalities: ['text', 'image'],
+      outputModalities: ['text', 'image'],
+      capabilities: ['image-understanding'],
+    }])
+    // The registry detaches: mutating what one consumer read must not leak
+    // into a later read, and an adapter-side change must not rewrite one.
+    ;(listed[0]!.inputModalities as string[]).push('audio')
+    expect((await ctx.llm.listModels('route'))[0]).toMatchObject({ inputModalities: ['text', 'image'] })
+    await expect(ctx.llm.resolveModelInfo('route', 'model')).resolves.toMatchObject({
+      outputModalities: ['text', 'image'],
+      capabilities: ['image-understanding'],
+    })
+    source.outputModalities = ['image']
+    expect((await ctx.llm.listModels('route'))[0]).toMatchObject({ outputModalities: ['image'] })
   })
 
   it('resolves detached model context independently of advisory catalog membership', async () => {

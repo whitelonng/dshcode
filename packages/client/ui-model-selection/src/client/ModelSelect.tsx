@@ -308,6 +308,23 @@ export function ModelSelect(
                               {model.description !== undefined && (
                                 <span className={css.description}>{model.description}</span>
                               )}
+                              {/* Declared capability badges; the absence of a
+                                  field is not a badge, so only declared claims
+                                  render. */}
+                              {(model.inputModalities?.includes('image') === true
+                                || model.outputModalities?.includes('image') === true
+                                || model.capabilities?.includes('image-understanding') === true)
+                                ? (
+                                  <span className={css.badges}>
+                                    {model.inputModalities?.includes('image') === true
+                                      && <span className={css.badge}>{t('badge.imageInput')}</span>}
+                                    {model.outputModalities?.includes('image') === true
+                                      && <span className={css.badge}>{t('badge.imageGeneration')}</span>}
+                                    {model.capabilities?.includes('image-understanding') === true
+                                      && <span className={css.badge}>{t('badge.imageUnderstanding')}</span>}
+                                  </span>
+                                )
+                                : null}
                             </span>
                             <span className={css.check}>
                               {selected ? <IconCheckOutline16 /> : null}

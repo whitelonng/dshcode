@@ -158,6 +158,19 @@ export interface ModelModalityMap {
 export type ModelModality = ModelModalityMap[keyof ModelModalityMap]
 
 /**
+ * Merge-extensible provider model capability vocabulary. A capability is a
+ * claim a modality list cannot express: `image-understanding` means the model
+ * can reason about image content, which is a stronger claim than merely
+ * accepting image input.
+ */
+export interface LlmModelCapabilityMap {
+  'image-understanding': 'image-understanding'
+}
+
+/** Any declared provider model capability. */
+export type LlmModelCapability = LlmModelCapabilityMap[keyof LlmModelCapabilityMap]
+
+/**
  * One provider route an adapter plugin can activate through configuration,
  * whether or not the route is currently registered. Configuration surfaces
  * merge this directory with `listProviders()` to offer every configurable
@@ -241,6 +254,18 @@ export interface LlmModelInfo {
   description?: string
   /** Accepted request modalities; absent means unknown, while an explicit omission is negative capability. */
   inputModalities?: readonly ModelModality[]
+  /**
+   * Response modalities this model can produce; `image` means image
+   * generation. Absent means text-only output, which is the floor every
+   * chat-completions model carries.
+   */
+  outputModalities?: readonly ModelModality[]
+  /**
+   * Declared capabilities a modality list cannot express, e.g.
+   * `image-understanding` (the model reasons about image content, a stronger
+   * claim than accepting image input). Absent means none declared.
+   */
+  capabilities?: readonly LlmModelCapability[]
   /**
    * How the adapter carries image content blocks on this route when the
    * endpoint does not accept image input natively (see {@link inputModalities}).

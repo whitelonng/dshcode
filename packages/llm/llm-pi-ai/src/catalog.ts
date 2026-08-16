@@ -52,11 +52,13 @@ export const MODALITIES = Object.keys(MODALITY_GATE) as readonly PiAiModality[]
  * and empty mean the same thing — `[]` describes a model that accepts nothing
  * and could serve no request — which is what makes an entry naming a catalog
  * model without declaring modalities keep the catalog's, since the config
- * schema materializes `[]` for an absent array.
+ * schema materializes `[]` for an absent array. The same rule applies to the
+ * entry's output list, which pi-ai's text-seam `Model` type does not carry at
+ * all: empty means no declaration, so the text-only floor applies.
  * @param configured - the list a `models` or `modelOverrides` entry supplied.
  * @returns the declared modalities, or `undefined` to ask the next level.
  */
-function declaredInput(configured: readonly PiAiModality[] | undefined): Model<Api>['input'] | undefined {
+function declaredModalities(configured: readonly PiAiModality[] | undefined): Model<Api>['input'] | undefined {
   return configured === undefined || configured.length === 0 ? undefined : [...configured]
 }
 
@@ -226,6 +228,24 @@ export interface PiAiModelProfile {
    */
   input?: PiAiModality[]
   /**
+   * Output modalities this model can produce; `image` declares image
+   * generation. Absent — or empty — means text-only output, the floor every
+   * chat-completions model carries. This adapter's text seam never invokes
+   * image generation, so the field is advisory metadata: it is what model
+   * selectors and capability surfaces display, not a request path.
+   */
+  output?: PiAiModality[]
+  /**
+   * Capability claims a modality list cannot express. `imageUnderstanding`
+   * means the model can reason about image content, which is a stronger claim
+   * than merely accepting image input (the latter is `input` containing
+   * `image`). A model declaring understanding is expected to also declare
+   * image input, but nothing here forces the combination: the two answers are
+   * independent, and a gateway that accepts images without understanding them
+   * is a legitimate configuration.
+   */
+  capabilities?: PiAiModelCapabilities
+  /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
    * entry's capability (a hand-declared model has none and does not reason);
    * `false` declares a non-reasoning model, which is how a profile strips
@@ -235,6 +255,12 @@ export interface PiAiModelProfile {
   reasoningEfforts?: false | PiAiReasoningEfforts
   /** Reasoning-dispatch switches for this model, winning over the route's. */
   compat?: PiAiCompatProfile
+}
+
+/** Capability claims an entry may declare beyond its modality lists. */
+export interface PiAiModelCapabilities {
+  /** Whether the model can reason about image content, beyond accepting image input. */
+  imageUnderstanding?: boolean
 }
 
 /**
@@ -433,6 +459,38 @@ export interface RouteCatalog {
    * picked, so only an explicit configuration lands here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /**
+   * Resolved capability metadata pi-ai's text-seam `Model` type does not
+   * carry, by model id. Empty for a route serving the installed catalog
+   * unchanged: catalog entries cannot declare the fields and inherit nothing.
+   */
+  modelCapabilities: ReadonlyMap<string, ModelCapabilityInfo>
+}
+
+/** Capability metadata resolved from one entry, exposed to the harness seam. */
+export interface ModelCapabilityInfo {
+  /** Output modalities the entry declares; absent means text-only output. */
+  output?: readonly PiAiModality[]
+  /** Whether the entry declares image understanding. */
+  imageUnderstanding?: boolean
+}
+
+/**
+ * Resolve the capability metadata an entry declares. Nothing inherits these
+ * fields — pi-ai's text-seam `Model` has no output and the installed catalog
+ * declares no capabilities — so the result is absent exactly when the entry
+ * declared nothing, which is what keeps a catalog-served route untouched.
+ * @param entry - the configured model entry.
+ * @returns the resolved capability facts, or nothing when none declared.
+ */
+function resolveModelCapabilities(entry: PiAiModelProfile): ModelCapabilityInfo | undefined {
+  const output = declaredModalities(entry.output)
+  const imageUnderstanding = entry.capabilities?.imageUnderstanding === true
+  if (output === undefined && !imageUnderstanding) return undefined
+  return {
+    ...output === undefined ? {} : { output },
+    ...imageUnderstanding ? { imageUnderstanding: true } : {},
+  }
 }
 
 /**
@@ -489,6 +547,7 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
     || request.compat?.supportsReasoningEffort !== undefined
   const seen = new Set<string>()
   const configuredMaxTokens = new Map<string, number>()
+  const modelCapabilities = new Map<string, ModelCapabilityInfo>()
   const models = entries.map((entry) => {
     if (entry.id.length === 0) invalid(provider, 'has a model with an empty id')
     if (seen.has(entry.id)) invalid(provider, `lists model "${entry.id}" more than once`)
@@ -518,6 +577,11 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
     // Only a value the profile named is a deployment choice; the catalog's is
     // the model's capability and stays out of request defaults.
     if (entry.maxTokens !== undefined) configuredMaxTokens.set(entry.id, entry.maxTokens)
+    // Capability metadata rides the side table because pi-ai's `Model` cannot
+    // carry it; nothing inherits it, so a catalog model without an entry-level
+    // declaration resolves to no facts (the text-only floor).
+    const capabilities = resolveModelCapabilities(entry)
+    if (capabilities !== undefined) modelCapabilities.set(entry.id, capabilities)
     return {
       // The installed entry lays the floor, and the fields below override it.
       // Enumerating instead would silently drop every `Model` field this
@@ -530,7 +594,7 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
       api,
       provider,
       baseUrl,
-      input: declaredInput(entry.input) ?? base?.input ?? [...request.defaultInput],
+      input: declaredModalities(entry.input) ?? base?.input ?? [...request.defaultInput],
       cost: base?.cost ?? NO_COST,
       contextWindow,
       maxTokens,
@@ -542,5 +606,5 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
     invalid(provider, 'sets compat reasoning switches, but no model on the route speaks openai-completions;'
       + ' thinkingFormat and supportsReasoningEffort exist only on that protocol')
   }
-  return { models, configuredMaxTokens }
+  return { models, configuredMaxTokens, modelCapabilities }
 }

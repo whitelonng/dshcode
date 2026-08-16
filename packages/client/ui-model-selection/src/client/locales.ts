@@ -27,6 +27,9 @@ export const zh = {
   'empty.models': '没有可用的模型。',
   'blocked.composer': '当前模型不可用，请先选择模型',
   'empty.efforts': '当前模型未提供推理等级。',
+  'badge.imageInput': '图片输入',
+  'badge.imageGeneration': '生图',
+  'badge.imageUnderstanding': '识图',
 } satisfies Record<string, string>
 
 /** The model namespace key union. */
@@ -51,4 +54,7 @@ export const en = {
   'empty.models': 'No models available.',
   'blocked.composer': 'This model is unavailable — select one to continue',
   'empty.efforts': 'This model provides no reasoning effort levels.',
+  'badge.imageInput': 'Image input',
+  'badge.imageGeneration': 'Image generation',
+  'badge.imageUnderstanding': 'Image understanding',
 } satisfies Record<ModelKey, string>

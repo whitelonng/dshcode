@@ -167,6 +167,52 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
   })
 
+  it('renders capability badges for models that declare them', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups: [{
+        id: 'capable',
+        name: 'Capable',
+        models: [
+          {
+            id: 'seer',
+            name: 'Seer',
+            inputModalities: ['text', 'image'],
+            capabilities: ['image-understanding'],
+          },
+          {
+            id: 'drawer',
+            name: 'Drawer',
+            outputModalities: ['text', 'image'],
+          },
+          { id: 'plain', name: 'Plain', inputModalities: ['text'] },
+        ],
+      }],
+      current: { provider: 'capable', model: 'seer' },
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    // Declared claims badge; text-only input is not a claim.
+    expect(screen.getByRole('menuitemradio', { name: /Seer/ }).textContent)
+      .toContain('图片输入')
+    expect(screen.getByRole('menuitemradio', { name: /Seer/ }).textContent)
+      .toContain('识图')
+    expect(screen.getByRole('menuitemradio', { name: /Drawer/ }).textContent)
+      .toContain('生图')
+    expect(screen.getByRole('menuitemradio', { name: /Drawer/ }).textContent)
+      .not.toContain('图片输入')
+    expect(screen.getByRole('menuitemradio', { name: /Plain/ }).textContent)
+      .not.toContain('生图')
+  })
+
   it('renders no Agent-bound control for an addressed subagent session', () => {
     const load = vi.fn()
     render(<ModelSelect
