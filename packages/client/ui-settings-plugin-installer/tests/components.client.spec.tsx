@@ -468,7 +468,7 @@ describe('PluginInstallerTab', () => {
 
   it('offers the desktop restart action when the bridge is present', async () => {
     const restart = vi.fn()
-    window.dshDesktop = { restart, frame: 'custom', productName: 'DSHCode', showMenu: () => {} }
+    window.dshDesktop = { restart, frame: 'custom', productName: 'DSHCode', appVersion: '', showMenu: () => {} }
     const { install, list } = mount()
     await screen.findAllByText('@scope/a')
     const input = screen.getByPlaceholderText('npm 包名（如 @scope/name）或 git 仓库 URL')
@@ -561,7 +561,7 @@ describe('PluginInstallerTab', () => {
 
   it('shows the safe-mode banner, locks switches, and restores normal mode through the bridge', async () => {
     const restart = vi.fn()
-    window.dshDesktop = { restart, frame: 'custom', productName: 'DSHCode', showMenu: () => {} }
+    window.dshDesktop = { restart, frame: 'custom', productName: 'DSHCode', appVersion: '', showMenu: () => {} }
     const { setSafeMode } = mount({
       failures: vi.fn().mockResolvedValue({ items: [], pluginRoot: '/p', safeMode: true }),
     })

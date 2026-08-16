@@ -17,8 +17,8 @@ The main process owns one `Tray`; closing the window hides to the tray unless a 
 - `windowCloseDisposition(quitArmed: boolean): 'hide' | 'close'`
 - `buildTrayMenu({ show, quit })` → `[显示主界面, separator, 退出]` (labels in Chinese, product copy convention)
 - `trayIconFile(platform)` → `tray16.png` on darwin, `tray.png` elsewhere
-- `desktopLaunchArguments(productName)` → `['--dsh-frame=custom', '--dsh-product-name=<encoded>']`
-- `desktopBridgePayload(argv)` → `{ frame: 'custom' | 'native', productName }`
+- `desktopLaunchArguments(productName, appVersion)` → `['--dsh-product-name=<encoded>', '--dsh-app-version=<encoded>']` (every platform; the caller appends `--dsh-frame=custom` on Windows only)
+- `desktopBridgePayload(argv)` → `{ frame: 'custom' | 'native', productName, appVersion }`
 - `desktopIpcSenderIsApplication(senderUrl, origin)` → origin check for IPC handlers
 - `buildWindowMenu({ hide, restart, quit })` → `[隐藏到托盘, sep, 重启应用, sep, 退出]`
 - Constants: `DESKTOP_SHOW_MENU_CHANNEL = 'desktop:show-menu'`, `DESKTOP_RESTART_CHANNEL = 'desktop:restart'`
@@ -48,7 +48,7 @@ Windows renders the product name, a menu button, and native window controls on o
 **Window options (main.ts, Windows only):**
 
 - `titleBarStyle: 'hidden'`, `titleBarOverlay: { color: '#ffffff', symbolColor: '#0f1115', height: 38 }`
-- `webPreferences.preload: join(mainDir, 'preload.cjs')`, `additionalArguments: desktopLaunchArguments(PRODUCT_NAME)`
+- `webPreferences.preload: join(mainDir, 'preload.cjs')`, `additionalArguments: desktopLaunchArguments(PRODUCT_NAME, app.getVersion())` with `--dsh-frame=custom` appended only on the Windows custom frame (the renderer's version caption reads the app version on every platform; only Windows draws its own title-bar row)
 
 **`apps/desktop/src/preload.ts` (sandboxed CommonJS; sandboxed preloads cannot load ESM):**
 

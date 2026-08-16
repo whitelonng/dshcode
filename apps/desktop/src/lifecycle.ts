@@ -165,6 +165,9 @@ export const DESKTOP_FRAME_ARG = '--dsh-frame=custom'
 /** Launch-argument prefix carrying the URL-encoded product name. */
 export const DESKTOP_PRODUCT_ARG_PREFIX = '--dsh-product-name='
 
+/** Launch-argument prefix carrying the packaged application version. */
+export const DESKTOP_VERSION_ARG_PREFIX = '--dsh-app-version='
+
 /** IPC channel the renderer menu button invokes to pop the window menu. */
 export const DESKTOP_SHOW_MENU_CHANNEL = 'desktop:show-menu'
 
@@ -183,28 +186,38 @@ export interface DesktopBridgePayload {
   readonly frame: 'custom' | 'native'
   /** The application product name shown in the title-bar row. */
   readonly productName: string
+  /** The packaged application version ('' when the launch carries no version argument). */
+  readonly appVersion: string
 }
 
 /**
- * Build the preload launch arguments carrying the window frame mode and the
- * product name (URL-encoded because the renderer receives them verbatim).
+ * Build the preload launch arguments carrying the product name and the
+ * application version (URL-encoded because the renderer receives them
+ * verbatim). Passed on every platform; the custom-frame argument is
+ * platform-owned and the caller appends it separately (Windows only).
  * @param productName - the application product name.
- * @returns the `additionalArguments` for the main window.
+ * @param appVersion - the packaged application version.
+ * @returns the `additionalArguments` shared by every platform.
  */
-export function desktopLaunchArguments(productName: string): string[] {
-  return [DESKTOP_FRAME_ARG, `${DESKTOP_PRODUCT_ARG_PREFIX}${encodeURIComponent(productName)}`]
+export function desktopLaunchArguments(productName: string, appVersion: string): string[] {
+  return [
+    `${DESKTOP_PRODUCT_ARG_PREFIX}${encodeURIComponent(productName)}`,
+    `${DESKTOP_VERSION_ARG_PREFIX}${encodeURIComponent(appVersion)}`,
+  ]
 }
 
 /**
  * Parse the preload bridge payload from the renderer process arguments.
  * @param argv - the renderer `process.argv` (includes `additionalArguments`).
- * @returns the bridge payload; an absent product name yields an empty string.
+ * @returns the bridge payload; an absent product name or version yields an empty string.
  */
 export function desktopBridgePayload(argv: readonly string[], _platform: NodeJS.Platform): DesktopBridgePayload {
   const productArg = argv.find(arg => arg.startsWith(DESKTOP_PRODUCT_ARG_PREFIX))
+  const versionArg = argv.find(arg => arg.startsWith(DESKTOP_VERSION_ARG_PREFIX))
   return {
     frame: argv.includes(DESKTOP_FRAME_ARG) ? 'custom' : 'native',
     productName: productArg === undefined ? '' : decodeURIComponent(productArg.slice(DESKTOP_PRODUCT_ARG_PREFIX.length)),
+    appVersion: versionArg === undefined ? '' : decodeURIComponent(versionArg.slice(DESKTOP_VERSION_ARG_PREFIX.length)),
   }
 }
 

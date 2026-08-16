@@ -16,6 +16,8 @@ export interface DesktopBridge {
   readonly frame: 'custom' | 'native'
   /** The application product name shown in the title-bar row. */
   readonly productName: string
+  /** The packaged application version ('' when the launch carries no version argument). */
+  readonly appVersion: string
   /** Pop the native window menu (hide to tray / restart / quit). */
   showMenu: () => void
   /** Restart the whole application in place (applies profile and patch changes). */
