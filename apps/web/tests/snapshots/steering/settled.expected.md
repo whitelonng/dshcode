@@ -12,6 +12,10 @@
 - text: Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -27,6 +31,8 @@
 - text: "Interjection: include the word BANANA in your final reply. {{clock}}"
 - button "Copy":
   - img
+- button "Delete":
+  - img
 - button "Think The user selected \"Yes\" and wants me to include the word \"BANANA\" in my final reply. Let me acknowledge their answer.":
   - img
   - img
@@ -34,9 +40,7 @@
 - paragraph: Great, let's move forward. BANANA!
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

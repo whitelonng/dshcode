@@ -13,6 +13,8 @@
 - text: "plan Plan mode on. Use /plan off to leave. Plan a small change: add a --greeting flag to a CLI. Do not read or write any files. Call exit_plan_mode with a short plan of at most five bullet points. Once the plan is approved, reply with the single word DONE and stop. {{clock}}"
 - button "Copy":
   - img
+- button "Delete":
+  - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -36,9 +38,7 @@
 - paragraph: DONE
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

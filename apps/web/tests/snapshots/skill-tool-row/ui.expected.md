@@ -10,6 +10,10 @@
 - text: Load the snapshot-skill skill with the skill tool, then reply DONE. {{date}} {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -34,9 +38,7 @@
 - paragraph: DONE
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img
