@@ -28,7 +28,7 @@
   "dependencies": {
     "@deepseek-ai/dsh-client-web": "workspace:^",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@deepseek-ai/cordis-plugin-group": "workspace:^",
@@ -40,7 +40,7 @@
     "@deepseek-ai/dsh-pwsh-local": "workspace:^",
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
-    "@types/react-dom": "~18.3.0",
+    "@types/react-dom": "~19.2.3",
     "@vitejs/plugin-react": "^4.0.0",
     "playwright": "^1.49.0",
     "typescript": "^6.0.3",
