@@ -12,7 +12,7 @@ The Host already runs a completion-reminder machine (`SessionManager.completedNo
 
 ## Decision
 
-A new client plugin, [`@deepseek-ai/dsh-client-ui-notifications`](../../../../packages/client/ui-notifications/README.md), turns object-layer edges into OS notifications, with a Notifications settings section and a settings-namespace preference pair.
+A new client plugin, [`@deepseek-ai/dsh-client-ui-notifications`](../../../../packages/client/ui-notifications/README.md), turns object-layer edges into OS notifications, with a General-settings notifications row and a settings-namespace preference pair.
 
 ### Data plane: one snapshot subscription
 

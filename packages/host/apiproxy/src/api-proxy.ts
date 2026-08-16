@@ -125,7 +125,7 @@ const DEFAULT_MAX_MESSAGES = 50
  */
 const WEB_SETTINGS_NAMESPACES = [
   'agent-loop', 'shell', 'locale', 'permission', 'ui-conversation', 'ui-theme', 'web-search-deepseek',
-  'describe-image',
+  'describe-image', 'notifications',
 ] as const
 
 /** Provider work budget: at most 100 calls and 2,000 inspected hits. */

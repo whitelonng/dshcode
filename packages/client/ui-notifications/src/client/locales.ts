@@ -5,7 +5,8 @@ export const NS = 'settings.notifications'
 
 /** Key union for the notifications dictionary. */
 export type NotificationsKey =
-  | 'section.nav'
+  | 'row.title'
+  | 'row.desc'
   | 'approvals.label'
   | 'approvals.desc'
   | 'completions.label'
@@ -25,7 +26,8 @@ export type NotificationsKey =
 
 /** Simplified Chinese copy (product default). */
 export const zh: Record<NotificationsKey, string> = {
-  'section.nav': '通知',
+  'row.title': '系统通知',
+  'row.desc': '授权等待与任务完成的系统级提醒',
   'approvals.label': '授权通知',
   'approvals.desc': '会话等待授权时弹出系统通知',
   'completions.label': '任务完成通知',
@@ -46,7 +48,8 @@ export const zh: Record<NotificationsKey, string> = {
 
 /** English copy. */
 export const en: Record<NotificationsKey, string> = {
-  'section.nav': 'Notifications',
+  'row.title': 'System notifications',
+  'row.desc': 'System-level alerts for approval waits and task completion',
   'approvals.label': 'Approval notifications',
   'approvals.desc': 'Show a system notification when a session is waiting for approval',
   'completions.label': 'Task completion notifications',

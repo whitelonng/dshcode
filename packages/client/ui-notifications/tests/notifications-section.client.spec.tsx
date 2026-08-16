@@ -38,7 +38,6 @@ function bench(state: Partial<NotificationsSectionState> = {}) {
     setApprovals,
     setCompletions,
     requestPermission,
-    close: vi.fn(),
     useSessions: (() => undefined) as never,
     useWorkspaces: (() => undefined) as never,
   }
@@ -46,10 +45,10 @@ function bench(state: Partial<NotificationsSectionState> = {}) {
 }
 
 describe('NotificationsSection toggles', () => {
-  it('renders the heading and both toggles from the store state', () => {
+  it('renders the row title and both toggles from the store state', () => {
     const { props } = bench({ approvals: true, completions: false })
     render(<NotificationsSection {...props} />)
-    expect(screen.getByText('通知')).toBeTruthy()
+    expect(screen.getByText('系统通知')).toBeTruthy()
     const switches = screen.getAllByRole('switch')
     expect(switches).toHaveLength(2)
     expect(switches[0]!.getAttribute('aria-checked')).toBe('true')

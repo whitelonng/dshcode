@@ -1,9 +1,9 @@
 /**
  * System-notification plugin, browser half: the notification service
  * (sessions-list edge observer + platform sink + preference scope) and the
- * Notifications settings section. The service attaches unconditionally so
+ * General-settings notifications row. The service attaches unconditionally so
  * notifications fire whether or not the user ever opened the settings page;
- * the section mirrors service permission and durable preferences through its
+ * the row mirrors service permission and durable preferences through its
  * store. Export discipline: packages/client/AGENTS.md.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
@@ -36,14 +36,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /**
  * Required services (cordis fiber inject). The target slot is declared by
- * ui-settings' apply, whose activation order relative to this one is NOT
- * constrained; registration depends on it through `slots.inject()`.
+ * ui-settings-general's apply, whose activation order relative to this one is
+ * NOT constrained; registration depends on it through `slots.inject()`.
  */
 export const inject = ['slots', 'locale', 'sessions', 'settingsScope']
 
 /**
  * Wire the notification service to the sessions list and register the
- * settings section once its slot declaration is on the ledger.
+ * General-settings row once its slot declaration is on the ledger.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -92,11 +92,10 @@ export function apply(ctx: ClientContext): void {
       requestPermission: () => { void service.requestPermission() },
     }
   }
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
     id: 'notifications',
-    order: 20,
-    label: () => t('section.nav'),
+    order: 30,
     locale: NS,
     store,
     inject: injected,

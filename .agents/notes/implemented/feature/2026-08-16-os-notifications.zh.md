@@ -12,7 +12,7 @@ Web 客户端只在页面内部呈现阻塞中的授权与已完成的工作：�
 
 ## 决策
 
-新增客户端插件 [`@deepseek-ai/dsh-client-ui-notifications`](../../../../packages/client/ui-notifications/README.md)，把对象层边沿变成操作系统通知，并带一个「通知」设置分区与一个设置命名空间偏好对。
+新增客户端插件 [`@deepseek-ai/dsh-client-ui-notifications`](../../../../packages/client/ui-notifications/README.md)，把对象层边沿变成操作系统通知，并在「通用」设置里带一行通知开关与一个设置命名空间偏好对。
 
 ### 数据面：一次快照订阅
 

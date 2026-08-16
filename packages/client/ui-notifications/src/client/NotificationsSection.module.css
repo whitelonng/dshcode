@@ -1,52 +1,74 @@
-/* Notifications settings section: heading, toggle rows with hairline
- * separators, and the permission status line. Tokens only; no literal colors. */
-
-.section {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  padding: 16px 0;
-}
-
-.heading {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 26px;
-  color: var(--dsw-alias-label-primary);
-  margin: 0 0 4px;
-}
-
-.rows {
-  display: flex;
-  flex-direction: column;
-}
+/* General-settings notifications row: title/description with the permission
+ * status, and the two preference switches on the right. Tokens only; no
+ * literal colors. */
 
 .row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  align-items: flex-start;
+  gap: 8px;
   padding: 16px 0;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
 }
 
-.copy {
+.rowText {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  padding-right: 24px;
 }
 
-.label {
+.title {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 22px;
   color: var(--dsw-alias-label-primary);
 }
 
 .desc {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.statusText {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.statusAction {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-brand-primary);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.switches {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.switchLabel {
   font-size: 13px;
   line-height: 20px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Switch (role="switch" button): a 44x24 track with a sliding thumb. */
@@ -79,27 +101,4 @@
 
 .switch[aria-checked='true'] .thumb {
   transform: translateX(20px);
-}
-
-.statusRow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-top: 16px;
-}
-
-.statusText {
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.statusAction {
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-brand-primary);
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
 }
