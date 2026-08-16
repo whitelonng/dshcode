@@ -3,7 +3,7 @@
 export const zh = {
   nav: '归档会话',
   loading: '正在加载归档…',
-  empty: '没有归档的对话。删除工作区中的会话会先归档到这里。',
+  empty: '没有归档的对话。在侧边栏删除的会话会先归档到这里。',
   loadError: '加载归档失败，请重试。',
   retry: '重试',
   untitled: '未命名会话',
@@ -15,6 +15,7 @@ export const zh = {
   deleteConfirm: '确认删除',
   cancel: '取消',
   deleteFailed: '删除失败：{reason}',
+  deleteFailedActive: '删除失败：该会话仍在打开中。请先关闭该会话，再回来彻底删除。',
   created: '创建于 {time}',
   search: '搜索归档会话',
   selectAll: '全选',
@@ -30,7 +31,7 @@ export const zh = {
 export const en = {
   nav: 'Archived sessions',
   loading: 'Loading archived sessions…',
-  empty: 'No archived sessions. Deleting a conversation in the workspace archives it here first.',
+  empty: 'No archived sessions. Sessions deleted from the sidebar are archived here first.',
   loadError: 'Failed to load archived sessions. Please retry.',
   retry: 'Retry',
   untitled: 'Untitled session',
@@ -42,6 +43,7 @@ export const en = {
   deleteConfirm: 'Delete',
   cancel: 'Cancel',
   deleteFailed: 'Delete failed: {reason}',
+  deleteFailedActive: 'Delete failed: the session is still open. Close it first, then delete it permanently.',
   created: 'Created {time}',
   search: 'Search archived sessions',
   selectAll: 'Select all',

@@ -239,8 +239,8 @@ type SessionTreeProps = Pick<
   onDeleteRequest: (workspaceId: WorkspaceId, currentTitle: string) => void
   /** Open the browser-owned session rename dialog. */
   onSessionRename: (sessionId: SessionNode['id'], currentTitle: string) => void
-  /** Archive a session (row menu action; the row disappears on the state echo). */
-  onSessionArchive: (sessionId: SessionNode['id']) => void
+  /** Delete a session (row menu action; the row disappears on the state echo). */
+  onSessionDelete: (sessionId: SessionNode['id']) => void
   /** Session order behavior: fixed after edits, or additionally promoted by user activity. */
   orderBy: SessionOrderBy
 }
@@ -248,7 +248,7 @@ type SessionTreeProps = Pick<
 /** The scrolling session tree; unmounting drops the sessions subscription and expand-all state. */
 function SessionTree({
   useSessions, startSession, open, forkSession, workspaces, archivedSessionIds,
-  onRenameRequest, onDeleteRequest, onSessionRename, onSessionArchive,
+  onRenameRequest, onDeleteRequest, onSessionRename, onSessionDelete,
   insertWorkspaceBefore, insertSessionBefore, orderBy,
   groupExpansion, setGroupExpanded,
   sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
@@ -515,7 +515,7 @@ function SessionTree({
                     onOpen={open}
                     onRename={onSessionRename}
                     onFork={forkSession}
-                    onArchive={onSessionArchive}
+                    onDelete={onSessionDelete}
                     drag={dragProps}
                     t={t}
                   />
@@ -544,7 +544,7 @@ function SessionTree({
 
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
-  useSessions, open, forkSession, onSessionRename, onSessionArchive, archivedSessionIds,
+  useSessions, open, forkSession, onSessionRename, onSessionDelete, archivedSessionIds,
   orderBy, sessionOrderByAccount, sessionUpdatedAtByAccount, syncSessionOrderAccount, setSessionOrder, t,
 }: Pick<
   SessionTreeProps,
@@ -552,7 +552,7 @@ function FlatList({
   | 'open'
   | 'forkSession'
   | 'onSessionRename'
-  | 'onSessionArchive'
+  | 'onSessionDelete'
   | 'archivedSessionIds'
   | 'orderBy'
   | 'sessionOrderByAccount'
@@ -631,7 +631,7 @@ function FlatList({
               onOpen={open}
               onRename={onSessionRename}
               onFork={forkSession}
-              onArchive={onSessionArchive}
+              onDelete={onSessionDelete}
               flat
               drag={{
                 start: () => {
@@ -927,13 +927,15 @@ export function WorkspaceBrowser({
     setSessionRenameError(null)
   }
 
-  // Archive is dialog-free: not destructive (the log and the accounting slot
-  // remain), so the menu action commits directly; the row disappears when the
-  // archive-set echo lands. Failures are non-fatal console diagnostics, the
-  // same posture as reorder rejections.
-  const onSessionArchive = (sessionId: SessionNode['id']) => {
+  // Session delete is archive-first and dialog-free: the gesture itself
+  // destroys nothing (the log and the accounting slot remain, and the
+  // Archived sessions settings page restores or permanently deletes), so the
+  // menu action commits directly; the row disappears when the archive-set
+  // echo lands. Failures are non-fatal console diagnostics, the same posture
+  // as reorder rejections.
+  const onSessionDelete = (sessionId: SessionNode['id']) => {
     archiveSession(sessionId).catch((reason: unknown) => {
-      console.warn('session archive rejected:', reason)
+      console.warn('session delete rejected:', reason)
     })
   }
 
@@ -1123,7 +1125,7 @@ export function WorkspaceBrowser({
             ? (
               <FlatList
                 useSessions={useSessions} open={open} forkSession={forkSession}
-                onSessionRename={onSessionRename} onSessionArchive={onSessionArchive}
+                onSessionRename={onSessionRename} onSessionDelete={onSessionDelete}
                 archivedSessionIds={archivedSessionIds}
                 orderBy={orderBy}
                 sessionOrderByAccount={sessionOrderByAccount}
@@ -1137,7 +1139,7 @@ export function WorkspaceBrowser({
               <SessionTree
                 useSessions={useSessions}
                 onSessionRename={onSessionRename}
-                onSessionArchive={onSessionArchive}
+                onSessionDelete={onSessionDelete}
                 forkSession={forkSession}
                 workspaces={workspaces}
                 groupExpansion={groupExpansion}

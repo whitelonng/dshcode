@@ -10,6 +10,22 @@ export interface ArchivedSessionItem {
   createdAt?: number
 }
 
+/**
+ * A restore/delete RPC failed with a structured Host business code. The page
+ * maps known codes to actionable copy (`session-active` tells the user to
+ * close the conversation first); unknown codes fall back to the raw message.
+ */
+export class ArchiveActionError extends Error {
+  /**
+   * @param code - Host RPC error code (`not-archived`, `session-active`, …).
+   * @param message - wire error message for the unknown-code fallback copy.
+   */
+  constructor(readonly code: string, message: string) {
+    super(message)
+    this.name = 'ArchiveActionError'
+  }
+}
+
 /** Whether a decoded value is a non-array object. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

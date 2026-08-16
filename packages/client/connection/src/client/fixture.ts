@@ -2767,6 +2767,18 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         }
         archivedSessionIds.splice(archivedSessionIds.indexOf(sessionId), 1)
         emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        // Mirror the real host: the permanent delete drops the workspace
+        // accounting and the listing row, then announces the deletion so
+        // every connected client evicts its cached summary.
+        for (const workspace of workspaces) {
+          if (!workspace.sessionIds.includes(sessionId)) continue
+          workspace.sessionIds = workspace.sessionIds.filter(id => id !== sessionId)
+          workspace.updatedAt = new Date().toISOString()
+          emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
+        }
+        const listed = sessions.findIndex(summary => summary.sessionId === sessionId)
+        if (listed !== -1) sessions.splice(listed, 1)
+        emitHost({ type: 'host/session-deleted', sessionId })
         return ok(request, { archivedSessionIds: [...archivedSessionIds] })
       },
       listArchived: (request) => {

@@ -78,7 +78,11 @@ describe('ui-settings-archive browser plugin', () => {
       ok: false,
       error: { code: 'not-archived', message: 'not archived', details: { sessionId: 's-archived' as never } },
     })
-    await expect(injected.remove('s-archived')).rejects.toThrow('workspace workspace.deleteSession failed: not-archived: not archived')
+    const failure = injected.remove('s-archived')
+    await expect(failure).rejects.toThrow('workspace workspace.deleteSession failed: not-archived: not archived')
+    // The rejection carries the structured Host code so the section can map
+    // known failures (session-active) to actionable copy.
+    await expect(failure).rejects.toMatchObject({ name: 'ArchiveActionError', code: 'not-archived' })
     b.call.mockResolvedValueOnce({ ok: true, value: { items: [{ invalid: true }] } })
     await expect(injected.list()).rejects.toThrow('must carry a sessionId')
     await b.ctx.fiber.dispose()
