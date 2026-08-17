@@ -157,13 +157,13 @@ export async function* translate(payloads: AsyncIterable<string>): AsyncGenerato
           yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
         }
         // Only stamp id/name from the first delta that carries a non-empty
-        // string value. Two failure modes to guard against
+        // string value. Two failure modes this guards against
         // (deepseek-ai/deepseek-harness#725; hy3 & longcat-2.0 gateways
         // exhibit both):
-        //   1. Continuation deltas sometimes re-emit the field with an
-        //      empty string, which a naive `block.name = call.function.name`
-        //      overwrites the established tool name with `""`, leading
-        //      to `unknown tool ""`.
+        //   1. Continuation deltas sometimes re-emit the field as an
+        //      empty string; a naive `block.name = call.function.name`
+        //      then overwrites the established tool name with `""`,
+        //      leading to `unknown tool ""`.
         //   2. Some gateways (hy3, longcat-2.0) emit `null` for id/name
         //      in their continuations; `null !== undefined` lets the
         //      naive check through, and string concat coerces it to
