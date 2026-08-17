@@ -6,7 +6,7 @@
 
 ## 配置模型
 
-打开**设置 → 模型**，输入 DeepSeek API 密钥并保存。模型路由会立即可用，不需要重启服务器。
+打开**设置 → 模型**，输入 [DeepSeek API 密钥](https://platform.deepseek.com/)并保存。模型路由会立即可用，不需要重启服务器。
 
 [模型配置指南](./providers.md)介绍其他提供方和自定义 OpenAI 兼容端点。
 
@@ -20,7 +20,7 @@
 
 > Summarize this repository and identify its main packages.
 
-agent 可以读取和编辑工作区文件、运行命令、委派工作并维护计划。当操作在当前权限策略下需要审批时，Web UI 会先询问你。
+Agent（智能体）可以读取和编辑工作区文件、运行命令、委派工作并维护计划。如果根据当前权限策略，某项操作需要审批，Web UI 会先询问你。
 
 ## 继续使用
 

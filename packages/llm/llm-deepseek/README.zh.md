@@ -17,7 +17,7 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
     apiKeyEnv: DEEPSEEK_API_KEY  # default; resolved per request via ctx.credentials, then the environment
     baseURL: https://api.deepseek.com # optional; $DEEPSEEK_BASE_URL then the public API when omitted
     thinking: enabled        # optional; provider default is enabled
-    reasoningEffort: high    # optional; off | high | max — omitted ⇒ high
+    reasoningEffort: high    # optional; off | low | high | max — omitted ⇒ high
     maxTokens: 256000        # optional positive per-request output cap; this is the default
     streamIdleTimeoutMs: 300000 # optional; positive finite Node timer delay; five-minute default
     retryPolicy:             # optional; omission uses bounded normal defaults
@@ -33,13 +33,6 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
       - id: private-reasoner
         description: Company-hosted reasoning model
         contextWindow: 512000
-        # Per-model reasoning override: offered levels are the keys; wire
-        # spellings are fixed by this route (off = empty, high/max = the
-        # reasoning_effort literals), so only the level set is meaningful.
-        reasoningEfforts:
-          off:
-          high: high
-          max: max
 ```
 
 该插件注册唯一提供方路由 `deepseek-official`，同时注册解析后的 `retryPolicy`。请求使用 `provider: deepseek-official` 选择该路由；其 `model` 会作为协议 `model` 字符串原样传递，因此更改 DeepSeek 模型不需要生命周期时注册。省略 `models` 会公布 `deepseek-v4-flash`（名称为 `DeepSeek-V4-Flash`）和 `deepseek-v4-pro`（名称为 `DeepSeek-V4-Pro`），两者的上下文窗口均为 1,000,000 token；显式列表会替换这些默认值，`models: []` 则不公布任何模型。Catalog 配置项通过 `ctx.llm.listModels('deepseek-official')` 公开给 ACP（Agent Client Protocol）编辑器和 Web 选择器等客户端，但仍只提供建议：未列出模型 id 仍原样传递。省略配置项 name 默认为其 id。
@@ -48,11 +41,9 @@ harness LLM（大语言模型）seam 的 DeepSeek chat-completions 适配器：�
 
 `maxTokens` 是适配器为对话请求配置的输出上限，默认值为 256,000。Catalog 配置项可以自带 `maxTokens`，它对该模型胜出；不含该上限的配置项以及任何未列出原样传递 id 都解析为 profile 值，因此新增按模型的上限只改变一个模型，而非整条路由。确切模型解析会将胜出值公开为 `defaultMaxTokens`；`LlmRuntime` 会在 agent loop（智能体循环）写入 `request/header` 前，将该值填入 `GenerateOptions.maxTokens`，从而仍可根据持久记录重建协议请求。显式的请求值或 `AgentOptions.maxTokens` 值优先，并会序列化为 `max_tokens`。适配器不会根据 `contextWindow` 自动调低该请求预算；上下文或提供方输出上限较小的部署必须配置与其相容的 `maxTokens`。
 
-同一确切模型结果会在部署策略允许思考时，为每个原样传递模型在 `reasoning` 下公开有序的 `off`、`high` 和 `max` 推理（reasoning）强度。`reasoningEffort` 选择部署默认值，省略时回退为 `high`。`agent/request` 可以在每个会话步骤替换它；解析后的值会记录在 `request/header`。`high` 和 `max` 会启用思考，并序列化为官方顶层 `reasoning_effort`；适配器持有的 `off` 则序列化为 `thinking.type: disabled`，且省略 `reasoning_effort`。不支持的值会在网络 I/O 前以 `UNSUPPORTED_REASONING_EFFORT` 失败。
+同一确切模型结果会在部署策略允许思考时，为每个原样传递模型在 `reasoning` 下公开有序的 `off`、`low`、`high` 和 `max` 推理（reasoning）强度。`reasoningEffort` 选择部署默认值，省略时回退为 `high`。`agent/request` 可以在每个会话步骤替换它；解析后的值会记录在 `request/header`。`low`、`high` 和 `max` 会启用思考，并以同名值序列化为官方顶层 `reasoning_effort`；适配器持有的 `off` 则序列化为 `thinking.type: disabled`，且省略 `reasoning_effort`。不支持的值会在网络 I/O 前以 `UNSUPPORTED_REASONING_EFFORT` 失败。
 
-Catalog 配置项在该模型的档位与路由默认值不一致时，可以声明按模型的 `reasoningEfforts`：map 的键即所提供的档位（`off`/`high`/`max`；不在 map 中的档位不提供），拼写由这条路由固定——`off` 用空拼写，`high`/`max` 必须拼写 `reasoning_effort` 字面量——`false` 则声明一个不推理的模型。声明模型的默认档位是：当路由 `reasoningEffort` 在所提供档位之中时取它，否则取所提供的最强思考档位，再否则 `off`。缺席则保持该模型的路由级行为。
-
-`thinking: disabled` 是部署锁定：它只公布 `off`，并以 `off` 为默认值。省略 `reasoningEffort` 或将其配置为 `off` 均有效；配置 `high` 或 `max` 会使插件加载失败，直接按请求启用思考也会在网络 I/O 前失败。携带 `GenerateOptions.purpose: 'session-title'` 的请求也会强制禁用思考并省略已解析的推理强度，将有界输出保留给可见标题文本，不改变会话或压缩（compaction）默认值。
+`thinking: disabled` 是部署锁定：它只公布 `off`，并以 `off` 为默认值。省略 `reasoningEffort` 或将其配置为 `off` 均有效；配置 `low`、`high` 或 `max` 会使插件加载失败，直接按请求启用思考也会在网络 I/O 前失败。携带 `GenerateOptions.purpose: 'session-title'` 的请求也会强制禁用思考并省略已解析的推理强度，将有界输出保留给可见标题文本，不改变会话或压缩（compaction）默认值。
 
 `streamIdleTimeoutMs` 会限制每次未完成提供方读取，包括初始 `fetch`，但不计入消费方在分片间花费的时间。DeepSeek SSE 注释会作为传输活动使尚未完成的读取重新布防，但绝不会成为 `StreamChunk` 值或会话日志事件。同一个稳定的 abort 信号会在整个调用期间传递给请求与 body reader；过期会停止传输并抛出 `LlmError('TIMEOUT')`，较早的调用方 abort 则抛出 `LlmError('ABORTED')`。适配器每次 `stream()` 调用恰好发起一次提供方请求；它把已配置策略注册为提供方元数据，再由 `dsh-llm-retry` 在持久化的 agent（智能体）步骤边界单独执行该策略。
 
@@ -79,7 +70,6 @@ DeepSeek 请求身份独立于应用归因。凭据解析成功后，每个提�
 - 适配器持有的 `off` 推理强度映射为 `thinking: {type: 'disabled'}`，绝不会以 `reasoning_effort: 'off'` 通过协议发送。
 - 第一个思考模式分片携带 `reasoning_content: ""`，系统会处理它（不会产生多余 reasoning 块）。
 - **推理回传规则**：对携带工具调用的 assistant 轮次，会将 `reasoning_content` 序列化回历史（思考模式 API 必需）；对不含工具调用的轮次，它会被丢弃（不会使用，可节省 token）。
-- **图片块会展平为附件备注**：这条线路仅支持文本，因此图片内容块会序列化为可复制的 `[image attachment …]` 引用（即 `describe_image` 接受的精确 JSON）—— 图片数据绝不会跨线路传输。适配器为每个模型声明 `imagePolicy: 'note'`，因此即使会话携带图片，主机也会准入该路由并允许切换到它。
 - Cache 计量：`cacheReadTokens` ← `prompt_cache_hit_tokens` / `prompt_tokens_details.cached_tokens`；DeepSeek 不报告 cache-write 指标。
 
 ## 错误

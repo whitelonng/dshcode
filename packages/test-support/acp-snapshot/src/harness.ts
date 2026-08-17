@@ -25,6 +25,7 @@ import { vi } from 'vitest'
 import {
   ClientSideConnection,
   PROTOCOL_VERSION,
+  type ContentBlock as AcpContentBlock,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionNotification,
@@ -69,6 +70,7 @@ export type InputStep =
   | { op: 'newSession' }
   | { op: 'newSessionExpectError'; additionalDirectories?: string[] }
   | { op: 'prompt'; text: string }
+  | { op: 'promptContent'; content: AcpContentBlock[] }
   | { op: 'promptAndWaitForAgentMessage'; text: string; waitForText: string }
   | { op: 'promptExpectError'; text: string }
   | {
@@ -420,6 +422,12 @@ async function runStep(
       const sessionId = getSessionId()
       if (sessionId === undefined) throw new Error('snapshot-harness: prompt before newSession')
       await client.prompt({ sessionId, prompt: [{ type: 'text', text: step.text }] })
+      return
+    }
+    case 'promptContent': {
+      const sessionId = getSessionId()
+      if (sessionId === undefined) throw new Error('snapshot-harness: promptContent before newSession')
+      await client.prompt({ sessionId, prompt: step.content })
       return
     }
     case 'promptAndWaitForAgentMessage': {

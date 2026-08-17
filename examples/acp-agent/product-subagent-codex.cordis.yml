@@ -1,4 +1,4 @@
-# Add the native Codex product provider and its preset-shaped foreground tool to
+# Add the native Codex product provider and its preset-shaped one-shot tool to
 # the real ACP composition. The model is told not to call it; the scenario pins
 # the assembled request schema without starting Codex.
 - id: base
@@ -14,5 +14,5 @@
             config:
               provider: codex
               toolName: subagent_codex
-              enableRunInBackground: false
+              backgroundMode: one-shot
               maxDepth: provider-managed

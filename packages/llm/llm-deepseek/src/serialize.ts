@@ -16,18 +16,18 @@ import type { WireMessage, WireRequest, WireTool } from './types.ts'
 /** Adapter-level request defaults (from plugin config). */
 export interface RequestDefaults {
   thinking?: 'enabled' | 'disabled' | undefined
-  reasoningEffort?: 'off' | 'high' | 'max' | undefined
+  reasoningEffort?: 'off' | 'low' | 'high' | 'max' | undefined
 }
 
 interface ResolvedThinking {
   thinking?: 'enabled' | 'disabled'
-  reasoningEffort?: 'high' | 'max'
+  reasoningEffort?: 'low' | 'high' | 'max'
 }
 
 /** Validate the adapter-owned effort before resolving its DeepSeek wire fields. */
-function reasoningEffort(effort: NonNullable<GenerateOptions['reasoningEffort']>): 'off' | 'high' | 'max' {
-  if (effort === 'off' || effort === 'high' || effort === 'max') {
-    return effort as 'off' | 'high' | 'max'
+function reasoningEffort(effort: NonNullable<GenerateOptions['reasoningEffort']>): 'off' | 'low' | 'high' | 'max' {
+  if (effort === 'off' || effort === 'low' || effort === 'high' || effort === 'max') {
+    return effort as 'off' | 'low' | 'high' | 'max'
   }
   throw new LlmError(
     `DeepSeek does not support reasoning effort "${effort}"`,
@@ -48,7 +48,7 @@ function resolveThinking(options: GenerateOptions, defaults: RequestDefaults): R
     )
   }
   if (effort === 'off') return { thinking: 'disabled' }
-  if (effort === 'high' || effort === 'max') {
+  if (effort === 'low' || effort === 'high' || effort === 'max') {
     return { thinking: 'enabled', reasoningEffort: effort }
   }
   return defaults.thinking === undefined ? {} : { thinking: defaults.thinking }

@@ -17,7 +17,7 @@ The package root exposes the Cordis plugin contract and `DeepSeekAdapter`; wire 
     apiKeyEnv: DEEPSEEK_API_KEY  # default; resolved per request via ctx.credentials, then the environment
     baseURL: https://api.deepseek.com # optional; $DEEPSEEK_BASE_URL then the public API when omitted
     thinking: enabled        # optional; provider default is enabled
-    reasoningEffort: high    # optional; off | high | max — omitted ⇒ high
+    reasoningEffort: high    # optional; off | low | high | max — omitted ⇒ high
     maxTokens: 256000        # optional positive per-request output cap; this is the default
     streamIdleTimeoutMs: 300000 # optional; positive finite Node timer delay; five-minute default
     retryPolicy:             # optional; omission uses bounded normal defaults
@@ -33,13 +33,6 @@ The package root exposes the Cordis plugin contract and `DeepSeekAdapter`; wire 
       - id: private-reasoner
         description: Company-hosted reasoning model
         contextWindow: 512000
-        # Per-model reasoning override: offered levels are the keys; wire
-        # spellings are fixed by this route (off = empty, high/max = the
-        # reasoning_effort literals), so only the level set is meaningful.
-        reasoningEfforts:
-          off:
-          high: high
-          max: max
 ```
 
 The plugin registers the single provider route `deepseek-official` together with its resolved `retryPolicy`. A request selects it with `provider: deepseek-official`; its `model` is passed through as the wire `model` string, so changing DeepSeek models does not require lifecycle-time registration. Omitting `models` advertises `deepseek-v4-flash` as `DeepSeek-V4-Flash` and `deepseek-v4-pro` as `DeepSeek-V4-Pro`, each with a 1,000,000-token context window; an explicit list replaces those defaults, while `models: []` advertises none. Catalog entries are exposed through `ctx.llm.listModels('deepseek-official')` for clients such as ACP editors and the Web selector, but remain advisory: unlisted model ids still pass through unchanged. An omitted entry name defaults to its id.
@@ -48,11 +41,9 @@ The plugin registers the single provider route `deepseek-official` together with
 
 `maxTokens` is the adapter-configured output cap for conversation requests and defaults to 256,000. A catalog entry may carry its own `maxTokens`, which wins for that model; an entry without one, and any unlisted pass-through id, resolve to the profile value, so adding a per-model cap changes one model rather than the route. Exact-model resolution exposes the winner as `defaultMaxTokens`; `LlmRuntime` materializes that value into `GenerateOptions.maxTokens` before the agent loop writes `request/header`, so the wire request remains reconstructable. An explicit request or `AgentOptions.maxTokens` value wins and is serialized as `max_tokens`. The adapter does not clamp this request budget against `contextWindow`; deployments with a smaller context or provider output limit must configure a compatible `maxTokens`.
 
-The same exact-model result exposes ordered `off`, `high`, and `max` efforts under `reasoning` for every pass-through model when deployment policy permits thinking. `reasoningEffort` selects the deployment default and falls back to `high` when omitted. `agent/request` can replace it on each conversation step; the resolved value is logged in `request/header`. `high` and `max` enable thinking and serialize as the official top-level `reasoning_effort`; adapter-owned `off` instead serializes `thinking.type: disabled` and omits `reasoning_effort`. An unsupported value fails with `UNSUPPORTED_REASONING_EFFORT` before network I/O.
+The same exact-model result exposes ordered `off`, `low`, `high`, and `max` efforts under `reasoning` for every pass-through model when deployment policy permits thinking. `reasoningEffort` selects the deployment default and falls back to `high` when omitted. `agent/request` can replace it on each conversation step; the resolved value is logged in `request/header`. `low`, `high`, and `max` enable thinking and serialize as the same official top-level `reasoning_effort` value; adapter-owned `off` instead serializes `thinking.type: disabled` and omits `reasoning_effort`. An unsupported value fails with `UNSUPPORTED_REASONING_EFFORT` before network I/O.
 
-A catalog entry may declare per-model `reasoningEfforts` when its offering differs from the route default: the map's keys are the offered levels (`off`/`high`/`max`; a level absent from the map is not offered), the wire spellings are fixed by this route — `off` uses the empty spelling, `high`/`max` must spell the `reasoning_effort` literals — and `false` declares a non-reasoning model. The default for a declaring model is the route `reasoningEffort` when it is among the offered levels, otherwise the strongest offered thinking level, otherwise `off`. Absent keeps the route-level behavior for that model.
-
-`thinking: disabled` is a deployment lock that publishes only `off` with `off` as its default. Omitting `reasoningEffort` or configuring it as `off` is valid; configuring `high` or `max` fails plugin loading, and a direct per-request attempt to enable thinking fails before network I/O. A request with `GenerateOptions.purpose: 'session-title'` also forces thinking disabled and omits the already-resolved effort, reserving its bounded output for visible title text without changing conversation or compaction defaults.
+`thinking: disabled` is a deployment lock that publishes only `off` with `off` as its default. Omitting `reasoningEffort` or configuring it as `off` is valid; configuring `low`, `high`, or `max` fails plugin loading, and a direct per-request attempt to enable thinking fails before network I/O. A request with `GenerateOptions.purpose: 'session-title'` also forces thinking disabled and omits the already-resolved effort, reserving its bounded output for visible title text without changing conversation or compaction defaults.
 
 `streamIdleTimeoutMs` bounds each outstanding provider read, including the initial `fetch`, without counting time the consumer spends between chunks. DeepSeek SSE comments rearm an outstanding read as transport activity but never become `StreamChunk` values or session-log events. One stable abort signal reaches the request and body reader for the whole call; expiry stops the transport and throws `LlmError('TIMEOUT')`, while an earlier caller abort throws `LlmError('ABORTED')`. The adapter makes exactly one provider request per `stream()` call; it registers the configured policy as provider metadata, and `dsh-llm-retry` separately executes it at durable agent-step boundaries.
 
@@ -79,7 +70,6 @@ DeepSeek request identity is separate from app attribution. After credential res
 - The adapter-owned `off` effort maps to `thinking: {type: 'disabled'}` and never crosses the wire as `reasoning_effort: 'off'`.
 - The first thinking-mode chunk carries `reasoning_content: ""` — handled (no spurious reasoning block).
 - **Reasoning passback rule**: on assistant turns that carried tool calls, `reasoning_content` is serialized back in history (required by the API in thinking mode); on tool-call-free turns it is dropped (ignored anyway — saves tokens).
-- **Image blocks flatten into attachment notes**: this wire route is text-only, so an image content block serializes into the copyable `[image attachment …]` reference (the exact JSON `describe_image` accepts) — image data never crosses the wire. The adapter advertises `imagePolicy: 'note'` for every model, so the host admits and switches to this route even when a session carries images.
 - Cache accounting: `cacheReadTokens` ← `prompt_cache_hit_tokens` / `prompt_tokens_details.cached_tokens`; DeepSeek reports no cache-write metric.
 
 ## Errors

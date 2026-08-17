@@ -128,4 +128,4 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Fork a live session | `ctx.sessions.fork(source, boundary?, childSessionId?)` |
 | Scope a registration to one agent | use that agent's `agent.ctx` |
 
-The [extension cookbook](cookbook/extension-cookbook.md) maps features to capabilities and indexes the step-by-step guides for [packages](cookbook/adding-a-package.md), [tools](cookbook/adding-a-tool.md), [LLM adapters](cookbook/adding-an-llm-adapter.md), and [Chat nodes](cookbook/adding-a-conversation-node.md).
+The [extension cookbook](cookbook/extension-cookbook.md) maps features to capabilities and indexes the step-by-step guides for [packages](cookbook/adding-a-package.md), [tools](cookbook/adding-a-tool.md), [LLM adapters](cookbook/adding-an-llm-adapter.md), [Chat nodes](cookbook/adding-a-conversation-node.md), and [settings cards](cookbook/adding-a-settings-card.md).

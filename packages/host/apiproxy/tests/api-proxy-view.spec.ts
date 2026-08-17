@@ -7,7 +7,7 @@
  * turn/end cleared it.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -283,6 +283,45 @@ describe('mux live view computation', () => {
     expect(summaryIndex).toBeGreaterThan(-1)
     expect(page[summaryIndex + 1]?.seq).toBe(summary.seq + 1)
     expect(page.map(event => event.seq)).toEqual(page.map((_event, index) => third.seq + index))
+  })
+
+  it('paginates a message with many provenance sources without variadic argument expansion', async () => {
+    const { ctx } = await harness()
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    const session = ctx.sessions.create()
+    ctx.agents.register({ id: session.id, session, status: 'idle', ctx } as Agent)
+    session.append('turn/start', { turn: 1 })
+    const sources = Array.from({ length: 128 }, (_unused, index) => session.append('assistant/chunk', {
+      turn: 1,
+      step: 1,
+      chunk: { type: 'text-delta', index, text: 'x' },
+    }).seq)
+    const message = session.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createMessage({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'x'.repeat(sources.length) }],
+        source: { kind: 'model', provider: 'p', model: 'm' },
+      }),
+    }, { surfaceOp: 'append', sourceEventSeqs: sources })
+
+    const scalarMin = Math.min
+    const min = vi.spyOn(Math, 'min').mockImplementation((...values) => {
+      if (values.length > 2) throw new RangeError('variadic minimum rejected by regression harness')
+      return scalarMin(...values)
+    })
+    try {
+      const response = await api.sessions.history({
+        rpcId: RpcId('t-hist-large-provenance'),
+        payload: { sessionId: session.id, maxMessages: 1 },
+      })
+      if (!response.result.ok) throw new Error('unreachable')
+      expect(response.result.value.events.map(entry => entry.event.seq)).toEqual([...sources, message.seq])
+      expect(response.result.value.hasMore).toBe(true)
+    } finally {
+      min.mockRestore()
+    }
   })
 
   it('drops a disposed session from the live open-call table (result after dispose gets no view)', async () => {

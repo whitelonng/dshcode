@@ -11,6 +11,7 @@ import { existsSync, statSync } from 'node:fs'
 import { chmod, copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
+import { resolveLinuxNodePtyAddon } from './build-exe-for-python-sdk-native-pty.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -409,8 +410,8 @@ class SingleExeBuild {
   }
 
   /**
-   * Put the target node-pty addon in the staged closure. Linux npm installs
-   * build it from source, but legacy deploy omits that side-effect directory.
+   * Put the target node-pty addon in the staged closure. The release workflow
+   * provides a manylinux build; ordinary installs use node-pty's target prebuild.
    * @param target - the pkg target whose native addon is being staged.
    */
   private async prepareNativePty(target: Target): Promise<void> {
@@ -418,8 +419,16 @@ class SingleExeBuild {
     if (this.cli.dryRun) console.log(`build-exe-for-python-sdk: [dry-run] rm -rf ${stagedBuild}`)
     else await rm(stagedBuild, { recursive: true, force: true })
     if (target.platform !== 'linux') return
-    const source = join(root, 'packages', 'subprocess', 'subprocess-local', 'node_modules', 'node-pty', 'build', 'Release', 'pty.node')
+    const packageDirectory = join(
+      root,
+      'packages',
+      'subprocess',
+      'subprocess-local',
+      'node_modules',
+      'node-pty',
+    )
     const destination = join(stagedBuild, 'Release', 'pty.node')
+    const source = resolveLinuxNodePtyAddon(packageDirectory, target.arch)
     if (this.cli.dryRun) {
       console.log(`build-exe-for-python-sdk: [dry-run] cp ${source} ${destination}`)
       return

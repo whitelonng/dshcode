@@ -249,6 +249,9 @@ function ciSharedStaticGates(): Gate[] {
     pnpmScript('dsh-package-licenses', 'verify-dsh-package-licenses', { label: 'DSH package licenses' }),
     pnpmScript('package-invariants', 'verify-package-invariants', { label: 'package invariants' }),
     pnpmScript('cordis-config', 'verify-cordis-config', { label: 'Cordis config' }),
+    pnpmScript('optional-dependency-imports', 'verify-optional-dependency-imports', {
+      label: 'optional dependency imports',
+    }),
     pnpmScript('issue-management', 'test:issue-management', { label: 'Issue management policy' }),
   ]
 }
@@ -482,6 +485,9 @@ function lintGate(options: { needs?: string[] } = {}): Gate {
 // small share. A budget of 1 gives each gate 1 worker; lanes that need a
 // strict total of one (the serial reference jobs) also set
 // DSH_GATE_CONCURRENCY=1, which keeps the gates from overlapping at all.
+// DSH_COVERAGE_TEST_TIMEOUT_MS raises Vitest's per-test and expect.poll
+// defaults together for instrumented lanes whose scheduling overhead exceeds
+// those defaults. Explicit fixture timeouts remain authoritative.
 function coverageWorkerArgs(): { instrumented: string[]; exempt: string[] } {
   const [flag] = positiveIntArg('DSH_COVERAGE_MAX_WORKERS', '--maxWorkers')
   if (flag === undefined) return { instrumented: [], exempt: [] }
@@ -494,14 +500,23 @@ function coverageWorkerArgs(): { instrumented: string[]; exempt: string[] } {
   }
 }
 
+function coverageTimeoutArgs(): string[] {
+  return [
+    ...positiveIntArg('DSH_COVERAGE_TEST_TIMEOUT_MS', '--testTimeout'),
+    ...positiveIntArg('DSH_COVERAGE_TEST_TIMEOUT_MS', '--expect.poll.timeout'),
+  ]
+}
+
 function coverageGates(): Gate[] {
   const workers = coverageWorkerArgs()
+  const timeouts = coverageTimeoutArgs()
   return [
     pnpmExec('coverage', [
       'vitest',
       'run',
       '--coverage',
       ...workers.instrumented,
+      ...timeouts,
     ], {
       label: 'test:coverage',
       env: { [COVERAGE_EXEMPT_ENV]: '1' },
@@ -511,6 +526,7 @@ function coverageGates(): Gate[] {
       'run',
       ...coverageExemptHeavySuites.map(suite => suite.filter),
       ...workers.exempt,
+      ...timeouts,
     ], {
       label: 'test:coverage-exempt-heavy',
     }),
@@ -564,6 +580,9 @@ function hygieneLeafGates(options: { artifactNeeds?: string[] } = {}): Gate[] {
     pnpmScript('node-next-types', 'verify-node-next-types', {
       label: 'node-next types',
       ...artifactOptions,
+    }),
+    pnpmScript('optional-dependency-imports', 'verify-optional-dependency-imports', {
+      label: 'optional dependency imports',
     }),
   ]
 }

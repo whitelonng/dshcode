@@ -141,13 +141,13 @@ describe('DeepSeekAdapter against a mock server', () => {
     expect(server.headers[0]?.['x-deepseek-harness-compact']).toBe('1')
   })
 
-  it('switches dynamically from the configured high default through off to max', async () => {
+  it('switches dynamically from the configured low default through off to max', async () => {
     const server = await mockServer([
       { kind: 'sse', events: textEvents },
       { kind: 'sse', events: textEvents },
       { kind: 'sse', events: textEvents },
     ])
-    const ctx = await harness(server.url, { thinking: 'enabled', reasoningEffort: 'high' })
+    const ctx = await harness(server.url, { thinking: 'enabled', reasoningEffort: 'low' })
 
     await assemble(ctx,{
       model: 'deepseek-v4-flash',
@@ -174,7 +174,7 @@ describe('DeepSeekAdapter against a mock server', () => {
     })
     expect(server.requests[0]).toMatchObject({
       thinking: { type: 'enabled' },
-      reasoning_effort: 'high',
+      reasoning_effort: 'low',
     })
     expect(server.requests[1]).toMatchObject({
       thinking: { type: 'disabled' },
@@ -671,6 +671,7 @@ describe('plugin registration and config', () => {
         reasoning: {
           efforts: [
             { id: ReasoningEffortId('off'), name: 'Off' },
+            { id: ReasoningEffortId('low'), name: 'Low' },
             { id: ReasoningEffortId('high'), name: 'High' },
             { id: ReasoningEffortId('max'), name: 'Max' },
           ],
@@ -679,7 +680,7 @@ describe('plugin registration and config', () => {
       })
   })
 
-  it.each(['off', 'max'] as const)('uses the configured %s reasoning default', async (effort) => {
+  it.each(['off', 'low', 'max'] as const)('uses the configured %s reasoning default', async (effort) => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(LlmDeepSeek, {
@@ -691,6 +692,7 @@ describe('plugin registration and config', () => {
         reasoning: {
           efforts: [
             { id: ReasoningEffortId('off'), name: 'Off' },
+            { id: ReasoningEffortId('low'), name: 'Low' },
             { id: ReasoningEffortId('high'), name: 'High' },
             { id: ReasoningEffortId('max'), name: 'Max' },
           ],
@@ -788,7 +790,7 @@ describe('plugin registration and config', () => {
       })
   })
 
-  it.each(['high', 'max'] as const)(
+  it.each(['low', 'high', 'max'] as const)(
     'rejects configured reasoning effort %s when thinking is disabled',
     async (reasoningEffort) => {
       const ctx = new Context()
@@ -802,7 +804,7 @@ describe('plugin registration and config', () => {
     },
   )
 
-  it.each(['high', 'max'] as const)(
+  it.each(['low', 'high', 'max'] as const)(
     'rejects disabled-thinking effort %s at the resolver boundary',
     (reasoningEffort) => {
       expect(() => resolveAdapterOptions({ thinking: 'disabled', reasoningEffort }))

@@ -10,11 +10,11 @@ Ordinary pull-request CI runs the complete Python SDK pytest suite against fake 
 
 ## Decision
 
-Every pull request has a required `python-runtime` job in [CI](../../../../.github/workflows/ci.yml). It calls the shared [single-executable builder](../../../../.github/workflows/build-exe-for-python-sdk.yml) for `node24-linux-x64` without a path filter and participates in `all checks passed`. The called workflow builds the real executable, runs all keyless Python full-turn and direct-binary scenarios including the committed executable snapshot, builds the SDK and runtime wheels, installs them into a clean virtual environment, checks the executable and native addon's GLIBC requirements, and runs the installed wheels in a manylinux 2.28 container.
+Every pull request has a required `python-runtime` job in [CI](../../../../.github/workflows/ci.yml). It calls the shared [single-executable builder](../../../../.github/workflows/build-exe-for-python-sdk.yml) for `node24-linux-x64` without a path filter and participates in `all checks passed`. The called workflow builds the real executable, runs all keyless Python full-turn and direct-binary scenarios including both committed snapshots, builds the SDK and runtime wheels, installs them into a clean virtual environment, checks the executable and native addon's GLIBC requirements, and runs the installed wheels in a manylinux 2.28 container.
 
 The required job and the [Python publication workflow](../process/2026-08-11-python-publication-workflow.md) use the same builder. Its concurrency key includes the caller workflow, so required CI and an explicit full release validation for the same ref do not cancel each other. The complete linux-x64, linux-arm64, and macos-arm64 matrix remains a release validation because platform-independent runtime, SDK, and snapshot behavior needs one merge-blocking native carrier, while architecture-specific executable, addon, wheel-tag, and deployment-target behavior still needs all release targets before publication.
 
-The executable snapshot normalizes opaque session, message, subagent, and workflow-run identifiers before comparison. A newly persisted workflow event therefore changes the reviewed expected output without making a random run identifier part of that output.
+The advanced executable snapshot normalizes opaque session, message, subagent, and workflow-run identifiers before comparison. A newly persisted workflow event therefore changes the reviewed expected output without making a random run identifier part of that output. The minimal scenario's [model-visible snapshot](2026-08-13-python-minimal-model-visible-snapshot.md) covers the assembled system prompt, tool schemas, and message list that this one tokenizes.
 
 ## Alternatives considered
 

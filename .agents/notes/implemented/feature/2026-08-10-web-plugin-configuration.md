@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-08-10-web-plugin-configuration.zh.md)
 
+> The three sections, the layering, and the staged-save form remain current. The Host allowlist and the unkeyed card list are superseded by the [plugin-owned settings surface](../architecture/2026-08-12-plugin-owned-settings-surface.md): every registered namespace is served, and cards are keyed on the namespace they edit.
+
 ## Problem
 
 Everything a plugin can be configured with lived in `cordis.yml`. A user who wanted a longer shell timeout, a different search endpoint, or fewer parallel tool calls had to find the composition file, know its shape, and restart — while the Models page had shown for months that a settings namespace can be edited from the browser and take effect immediately.

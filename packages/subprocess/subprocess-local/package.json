@@ -42,7 +42,7 @@
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "node-pty": "^1.1.0"
+    "node-pty": "1.2.0-beta.15"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",

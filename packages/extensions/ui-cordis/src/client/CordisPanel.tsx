@@ -1,10 +1,10 @@
 /** Frame-wide dynamic Plugin inventory, approvals, versions, and lifecycle actions. */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import {
   IconCheckOutline16, IconCloseOutline16, IconCordisPluginOutline14, IconPlayOutline16,
-  IconStopFill16, IconTrashOutline16, Tooltip,
+  IconStopFill16, IconTrashOutline16, Tooltip, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -119,6 +119,25 @@ export function CordisPanel({
   const [pending, setPending] = useState<ReadonlySet<CordisDynamicPluginId>>(new Set())
   const [actionErrors, setActionErrors] = useState<ReadonlyMap<CordisDynamicPluginId, string>>(new Map())
   const visibleRequests = useRef<Set<ApprovalRequestId>>(new Set())
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [anchor, setAnchor] = useState<{ left: number; bottom: number }>()
+
+  // The panel is position: fixed (the sidebar clips overflow), so it hugs the
+  // trigger through a measured offset instead of document flow.
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = (): void => {
+      const rect = rootRef.current?.getBoundingClientRect()
+      if (rect !== undefined) {
+        setAnchor({ left: rect.left, bottom: window.innerHeight - rect.top + 8 })
+      }
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => { window.removeEventListener('resize', place) }
+  }, [open])
+
+  useDismissOnOutsidePointer(rootRef, open, setOpen)
 
   useEffect(() => {
     const now = new Set<ApprovalRequestId>()
@@ -420,9 +439,9 @@ export function CordisPanel({
   }
 
   return (
-    <div className={wide ? css.layer : `${css.layer} ${css.rail}`}>
-      {open && (
-        <section className={css.panel} data-cordis-panel aria-label={t('panel.title')}>
+    <div ref={rootRef} className={wide ? css.layer : `${css.layer} ${css.rail}`}>
+      {open && anchor !== undefined && (
+        <section className={css.panel} style={anchor} data-cordis-panel aria-label={t('panel.title')}>
           <header className={css.header}>
             <span className={css.title}>{t('panel.title')}</span>
           </header>
@@ -458,7 +477,7 @@ export function CordisPanel({
           aria-expanded={open}
           onClick={() => { setOpen(value => !value) }}
         >
-          <IconCordisPluginOutline14 />
+          <IconCordisPluginOutline14 size={wide ? 16 : 18} />
           {wide && (
             <>
               <span className={css.badgeLabel}>{t('panel.trigger')}</span>

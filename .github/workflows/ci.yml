@@ -452,9 +452,12 @@ jobs:
           && fromJSON('["self-hosted", "dsh-win-ci", "windows"]')
           || 'dsh-windows-2025-16core' }}
     name: windows node 24 / native complete
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       DSH_COVERAGE_MAX_WORKERS: '2'
+      # Instrumented process and polling fixtures can exceed Vitest's defaults
+      # under the complete lane's concurrent gate load.
+      DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'
       DSH_GATE_CONCURRENCY: '2'
       DSH_PUBLINT_CONCURRENCY: '8'
     steps:
@@ -659,7 +662,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     name: serial / windows (self-hosted standby)
     runs-on: [self-hosted, dsh-win-ci, windows]
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v6
 

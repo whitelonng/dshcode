@@ -1,4 +1,4 @@
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -41,33 +41,98 @@ describe('ACP prompt lifecycle', () => {
     await vi.waitFor(() => { expect(messageText(harness!)).toBe('cut off') })
   })
 
-  it('renders an assistant image as an explicit attachment placeholder', async () => {
-    const attachmentId = `sha256:${'a'.repeat(64)}` as never
-    harness = await makeBridgeHarness({
-      script: [[
-        { type: 'block-start', index: 0, blockType: 'image' },
-        {
-          type: 'block-end',
-          index: 0,
-          block: {
-            type: 'image',
-            attachment: {
-              attachmentId,
-              mediaType: 'image/png',
-              bytes: 1,
-              width: 1,
-              height: 1,
-            },
-          },
+  it('delivers a committed assistant image as verified ACP base64', async () => {
+    const script: StreamChunk[][] = []
+    harness = await makeBridgeHarness({ script })
+    const ref = await harness.attachments!.saveImage({ data: Uint8Array.of(1), mediaType: 'image/png' })
+    script.push([
+      { type: 'block-start', index: 0, blockType: 'image' },
+      {
+        type: 'block-end',
+        index: 0,
+        block: {
+          type: 'image',
+          attachment: ref,
         },
-        { type: 'finish', reason: { kind: 'stop' } },
-      ]],
-    })
+      },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ])
     const sessionId = await newSession(harness)
     await harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'show it' }] })
-    await vi.waitFor(() => {
-      expect(messageText(harness!)).toBe(`[image attachment ${String(attachmentId)}]`)
+    expect(harness.updates).toContainEqual({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'image', data: 'AQ==', mimeType: 'image/png' },
     })
+  })
+
+  it('preserves committed text/image/text order on the ACP wire', async () => {
+    const script: StreamChunk[][] = []
+    harness = await makeBridgeHarness({ script })
+    const ref = await harness.attachments!.saveImage({ data: Uint8Array.of(2), mediaType: 'image/jpeg' })
+    script.push([
+      { type: 'block-start', index: 0, blockType: 'text' },
+      { type: 'block-end', index: 0, block: { type: 'text', text: 'before' } },
+      { type: 'block-start', index: 1, blockType: 'image' },
+      { type: 'block-end', index: 1, block: { type: 'image', attachment: ref } },
+      { type: 'block-start', index: 2, blockType: 'text' },
+      { type: 'block-end', index: 2, block: { type: 'text', text: 'after' } },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ])
+    const sessionId = await newSession(harness)
+
+    await harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'show it' }] })
+
+    expect(harness.updates).toEqual([
+      { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'before' } },
+      { sessionUpdate: 'agent_message_chunk', content: { type: 'image', data: 'Ag==', mimeType: 'image/jpeg' } },
+      { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'after' } },
+    ])
+  })
+
+  it('does not settle a prompt before ordered output delivery drains', async () => {
+    const script: StreamChunk[][] = []
+    harness = await makeBridgeHarness({ script })
+    const ref = await harness.attachments!.saveImage({ data: Uint8Array.of(3), mediaType: 'image/png' })
+    script.push([
+      { type: 'block-start', index: 0, blockType: 'image' },
+      { type: 'block-end', index: 0, block: { type: 'image', attachment: ref } },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ])
+    const readStarted = Promise.withResolvers<undefined>()
+    const delivery = Promise.withResolvers<undefined>()
+    harness.attachments!.beforeRead = () => {
+      readStarted.resolve(undefined)
+      return delivery.promise
+    }
+    const sessionId = await newSession(harness)
+    let settled = false
+
+    const prompt = harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'go' }] })
+      .finally(() => { settled = true })
+    await readStarted.promise
+    expect(settled).toBe(false)
+    delivery.resolve(undefined)
+    await expect(prompt).resolves.toEqual({ stopReason: 'end_turn' })
+  })
+
+  it('fails prompt delivery when a committed image attachment is missing', async () => {
+    const missing = {
+      attachmentId: `sha256:${'a'.repeat(64)}` as never,
+      mediaType: 'image/png' as const,
+      bytes: 1,
+      width: 1,
+      height: 1,
+    }
+    harness = await makeBridgeHarness({ script: [[
+      { type: 'block-start', index: 0, blockType: 'image' },
+      { type: 'block-end', index: 0, block: { type: 'image', attachment: missing } },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ]] })
+    const sessionId = await newSession(harness)
+
+    await expect(harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'show it' }] }))
+      .rejects.toThrow(/assistant output delivery failed/)
+    expect(harness.updates).toEqual([])
   })
 
   it('rejects a failed turn and never publishes its partial chunks', async () => {
@@ -192,6 +257,148 @@ describe('ACP prompt lifecycle', () => {
       .rejects.toThrow(/already in flight/)
     await harness.client.cancel({ sessionId })
     await expect(first).resolves.toEqual({ stopReason: 'cancelled' })
+  })
+
+  it('reserves the prompt slot during image admission and cancels without a late followup', async () => {
+    harness = await makeBridgeHarness({ imageCapable: true, script: [] })
+    const validationStarted = Promise.withResolvers<undefined>()
+    const releaseValidation = Promise.withResolvers<undefined>()
+    harness.attachments!.beforeValidate = () => {
+      validationStarted.resolve(undefined)
+      return releaseValidation.promise
+    }
+    const sessionId = await newSession(harness)
+    let settled = false
+    const first = harness.client.prompt({
+      sessionId,
+      prompt: [{ type: 'image', data: 'AQ==', mimeType: 'image/png' }],
+    }).finally(() => { settled = true })
+    await validationStarted.promise
+
+    await expect(harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'second' }] }))
+      .rejects.toThrow(/already in flight/)
+    await harness.client.cancel({ sessionId })
+    expect(settled).toBe(false)
+    releaseValidation.resolve(undefined)
+
+    await expect(first).resolves.toEqual({ stopReason: 'cancelled' })
+    expect(harness.adapter.requests).toEqual([])
+    const events = harness.ctx.agents.get(SessionId(sessionId))?.session.events ?? []
+    expect(events.some(event => event.type === 'user/message' || event.type === 'turn/start')).toBe(false)
+  })
+
+  it('does not cancel unrelated Agent work while its prompt is still in admission', async () => {
+    harness = await makeBridgeHarness({ imageCapable: true, script: ['hang'] })
+    const validationStarted = Promise.withResolvers<undefined>()
+    const releaseValidation = Promise.withResolvers<undefined>()
+    harness.attachments!.beforeValidate = () => {
+      validationStarted.resolve(undefined)
+      return releaseValidation.promise
+    }
+    const sessionId = await newSession(harness)
+    const agent = harness.ctx.agents.get(SessionId(sessionId))!
+    agent.followup(createUserMessage({
+      content: [{ type: 'text', text: 'unrelated work' }],
+      source: { kind: 'plugin', plugin: 'test' },
+    }))
+    await vi.waitFor(() => { expect(harness!.adapter.requests).toHaveLength(1) })
+
+    const prompt = harness.client.prompt({
+      sessionId,
+      prompt: [{ type: 'image', data: 'AQ==', mimeType: 'image/png' }],
+    })
+    await validationStarted.promise
+    await harness.client.cancel({ sessionId })
+
+    expect(harness.adapter.requests[0]?.signal?.aborted).toBe(false)
+    releaseValidation.resolve(undefined)
+    await expect(prompt).resolves.toEqual({ stopReason: 'cancelled' })
+    expect(agent.status).toBe('running')
+    agent.cancel({ kind: 'hook', reason: 'test cleanup' })
+    await agent.whenIdle()
+  })
+
+  it('does not attribute an unrelated Agent failure during prompt admission', async () => {
+    harness = await makeBridgeHarness({ imageCapable: true, script: [textResponse('answer')] })
+    const validationStarted = Promise.withResolvers<undefined>()
+    const releaseValidation = Promise.withResolvers<undefined>()
+    harness.attachments!.beforeValidate = () => {
+      validationStarted.resolve(undefined)
+      return releaseValidation.promise
+    }
+    let failUnrelatedWork = true
+    harness.ctx.on('agent/pre-step', (_payload, next) => {
+      if (!failUnrelatedWork) return next()
+      failUnrelatedWork = false
+      throw new Error('unrelated pre-step failure')
+    })
+    const sessionId = await newSession(harness)
+    const agent = harness.ctx.agents.get(SessionId(sessionId))!
+    const prompt = harness.client.prompt({
+      sessionId,
+      prompt: [{ type: 'image', data: 'AQ==', mimeType: 'image/png' }],
+    })
+    await validationStarted.promise
+
+    agent.followup(createUserMessage({
+      content: [{ type: 'text', text: 'unrelated work' }],
+      source: { kind: 'plugin', plugin: 'test' },
+    }))
+    await agent.whenIdle()
+    releaseValidation.resolve(undefined)
+
+    await expect(prompt).resolves.toEqual({ stopReason: 'end_turn' })
+    expect(messageText(harness)).toBe('answer')
+  })
+
+  it('does not queue admitted content into an agent retired during storage', async () => {
+    harness = await makeBridgeHarness({ imageCapable: true, script: [] })
+    const validationStarted = Promise.withResolvers<undefined>()
+    const releaseValidation = Promise.withResolvers<undefined>()
+    harness.attachments!.beforeValidate = () => {
+      validationStarted.resolve(undefined)
+      return releaseValidation.promise
+    }
+    const sessionId = await newSession(harness)
+    const prompt = harness.client.prompt({
+      sessionId,
+      prompt: [{ type: 'image', data: 'AQ==', mimeType: 'image/png' }],
+    })
+    await validationStarted.promise
+
+    await harness.loopFiber.dispose()
+    releaseValidation.resolve(undefined)
+
+    await expect(prompt).rejects.toThrow(/disposed outside the bridge/)
+    expect(harness.attachments!.saved).toHaveLength(1)
+    expect(harness.adapter.requests).toEqual([])
+  })
+
+  it('honors cancellation in the admission-to-followup handoff gap', async () => {
+    harness = await makeBridgeHarness({ imageCapable: true, script: [] })
+    const sessionId = await newSession(harness)
+    const saveImages = harness.attachments!.saveImages.bind(harness.attachments!)
+    vi.spyOn(harness.attachments!, 'saveImages').mockImplementationOnce(async (inputs) => {
+      const refs = await saveImages(inputs)
+      queueMicrotask(() => { void harness!.client.cancel({ sessionId }) })
+      return refs
+    })
+
+    await expect(harness.client.prompt({
+      sessionId,
+      prompt: [{ type: 'image', data: 'AQ==', mimeType: 'image/png' }],
+    })).resolves.toEqual({ stopReason: 'cancelled' })
+    expect(harness.adapter.requests).toEqual([])
+  })
+
+  it('wraps an unexpected same-process followup failure and frees the prompt slot', async () => {
+    harness = await makeBridgeHarness({ script: [] })
+    const sessionId = await newSession(harness)
+    const agent = harness.ctx.agents.get(SessionId(sessionId))!
+    vi.spyOn(agent, 'followup').mockImplementationOnce(() => { throw new Error('synthetic followup failure') })
+
+    await expect(harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'go' }] }))
+      .rejects.toThrow(/prompt was not queued: synthetic followup failure/)
   })
 
   it('cancels a running turn and records the aborted outcome', async () => {

@@ -1192,15 +1192,29 @@ describe('agent loop', () => {
       { type: 'block-end', index: 0, block: { type: 'text', text: 'partial text' } },
       { type: 'block-start', index: 1, blockType: 'tool-call' },
       { type: 'tool-call-delta', index: 1, id: callId, name: 'echo', argumentsDelta: '{"text"' },
-      { type: 'finish', reason: { kind: 'max-tokens' } },
-    ]])
+      {
+        type: 'finish',
+        reason: { kind: 'max-tokens' },
+        replayState: { response: { responseId: 'resp-1' }, blocks: ['text-meta', 'tool-meta'] },
+      },
+    ], textResponse('continued')])
     const ctx = await harness(adapter)
     const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
 
     send(agent, 'go')
     await waitForIdle(ctx, agent)
+    send(agent, 'continue')
+    await waitForIdle(ctx, agent)
 
     expect(agent.session.events.some(e => e.type === 'tool/call')).toBe(false)
+    // The follow-up request replays the truncated message with its replay
+    // metadata pruned in step with the dropped tool call.
+    expect(adapter.requests[1]?.messages[1]?.source).toEqual({
+      kind: 'model',
+      provider: 'mock',
+      model: 'mock',
+      replayState: { response: { responseId: 'resp-1' }, blocks: ['text-meta'] },
+    })
     expect(agent.session.deriveMessages()).toEqual([
       {
         id: expect.any(String) as unknown,
@@ -1212,6 +1226,23 @@ describe('agent loop', () => {
         id: expect.any(String) as unknown,
         role: 'assistant',
         content: [{ type: 'text', text: 'partial text' }],
+        source: {
+          kind: 'model',
+          provider: 'mock',
+          model: 'mock',
+          replayState: { response: { responseId: 'resp-1' }, blocks: ['text-meta'] },
+        },
+      },
+      {
+        id: expect.any(String) as unknown,
+        role: 'user',
+        content: [{ type: 'text', text: 'continue' }],
+        source: { kind: 'user' },
+      },
+      {
+        id: expect.any(String) as unknown,
+        role: 'assistant',
+        content: [{ type: 'text', text: 'continued' }],
         source: { kind: 'model', provider: 'mock', model: 'mock' },
       },
     ])

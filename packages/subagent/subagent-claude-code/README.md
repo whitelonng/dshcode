@@ -31,7 +31,9 @@ The provider advertises no optional start-time capabilities and reports `inherit
 
 Production resolves `claude` from the subprocess execution world's credential-scrubbed `PATH`, with explicit `env` entries applied, and passes the resulting path to the SDK as `pathToClaudeCodeExecutable`. On Windows, a resolved `.cmd` or `.bat` path is carried as a quoted, per-spawn environment value that `cmd.exe /v:off` expands once, so valid path metacharacters remain data. The pinned SDK's fixed flags then occupy cmd's command tail and contain no cmd metacharacters; they are not ordinary Windows argv. Native settings and authentication remain authoritative. The plugin does not install another CLI, select a model, create a product home, log in, or probe an account. Credential-shaped ambient variables are removed before the explicit `env` overlay is applied, so an API key or token intended for the child must be supplied there. Non-credential endpoint variables such as `ANTHROPIC_BASE_URL`, along with ordinary ambient values such as `PATH` and `HOME`, remain inherited unless overridden.
 
-Shipped profiles load this provider once on the host and start no Claude process until a tool call. Full Agent Presets carry the tool row below with `disabled: true`; copy a preset and remove that field to expose `subagent_claude_code` only to agents composed from the copy. A custom host composition can still use both rows directly.
+Production `dsh` does not install or mount this optional provider. A Profile that opts in must install `@deepseek-ai/dsh-subagent-claude-code` and mount it once on the host plane; loading the provider starts no Claude process until a tool call. Full Agent Presets carry a matching product tool row with `disabled: true`; copy a preset and remove that field to expose `subagent_claude_code` only to agents composed from the copy. Its `one-shot` policy keeps omitted or `false` `run_in_background` calls in the foreground, while explicit `true` returns a parent-owned Job id for `job_output` or `job_kill`. The base host and full presets already provide the generic Job registry and controls.
+
+The standalone composition below shows the complete explicit capability. A Profile based on `@deepseek-ai/dsh-base` keeps its existing Job rows, adds the product provider row, and enables the preset tool row instead of mounting duplicate Job services.
 
 ```yaml
 - id: subagent-claude-code
@@ -40,13 +42,18 @@ Shipped profiles load this provider once on the host and start no Claude process
     env:
       ANTHROPIC_API_KEY: !!js process.env.ANTHROPIC_API_KEY
 
+- id: jobs
+  name: '@deepseek-ai/dsh-jobs-local'
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
 - id: tool-subagent-claude-code
   name: '@deepseek-ai/dsh-tool-subagent'
-  disabled: true
   config:
     provider: claude-code
     toolName: subagent_claude_code
-    enableRunInBackground: false
+    backgroundMode: one-shot
     maxDepth: provider-managed
 ```
 
@@ -72,19 +79,19 @@ The child pays for an independent Claude Code context and query. Child tokens do
 
 Independent of the parent request cache. Reuse depends only on Claude Code's own model, instructions, tools, native settings, and fresh query.
 
-### Parent tool result, indirectly
+### Parent scheduling and results, indirectly
 
 #### What the model sees
 
-Through `dsh-tool-subagent`, the parent sees only the strict final Claude Code answer or the consumer's exact error for a non-completed result. Claude Code reasoning, tool activity, intermediate messages, stderr, workspace diffs, usage, and product ids are not copied into the parent Session.
+Through `dsh-tool-subagent`, a foreground call gives the parent the strict final Claude Code answer or the consumer's exact error for a non-completed result. A background call first returns a Job id; the generic job controls later deliver a completion notice, expose the final answer and status through `job_output`, and let `job_kill` request cancellation. Claude Code reasoning, tool activity, intermediate messages, stderr, workspace diffs, usage, and product ids are not copied into the parent Session.
 
 #### Token effect
 
-Parent input grows only by the final answer or error retained in the tool result. This provider adds no parent tool schema by itself.
+Foreground input grows by the retained final answer or error. Background input also includes the start acknowledgement, completion notice, and any `job_output`, `job_kill`, or later status results; child tokens still do not enter the parent context. This provider adds no parent tool schema by itself.
 
 #### KV Cache effect
 
-Append-only: the new tool result follows the reusable parent request prefix.
+Append-only: foreground adds one result after the reusable parent prefix, while background appends the Job acknowledgement, notice, and later control or collection results. Background scheduling can add a notice-driven turn, but none of these messages rewrites the earlier prefix.
 
 ## Known Limitations and Deferred Work
 
@@ -93,6 +100,6 @@ Append-only: the new tool result follows the reusable parent request prefix.
 - **Product installation and account state remain native** — a missing or incompatible `claude`, configuration error, or authentication failure is surfaced as a startup or run error; the plugin provides no installer or login flow.
 - **The SDK platform CLI remains in the install closure** — production ignores it in favor of the host `claude`, but the current SDK optional dependency is still installed and supplies the keyless compatibility fixture. Removing that payload belongs to the separate product installation-closure follow-up.
 - **No human interaction path** — `AskUserQuestion` is disabled and other interactive callbacks are absent, so tasks requiring new approval or input fail instead of suspending.
-- **Final text only** — reasoning, intermediate messages, tool traffic, usage, stderr, and workspace diffs remain product-local.
+- **Product payload is final text only** — reasoning, intermediate messages, tool traffic, usage, stderr, and workspace diffs remain product-local; generic Job ids, notices, and status come from the shared job runtime.
 - **No optional shared capabilities** — output schemas, child personas, tool filtering, and harness depth enforcement are rejected by the shared service for this provider.
 - **No wall-clock timeout or side-effect rollback** — the caller cancels long work, and files or external systems changed before cancellation are not restored.
