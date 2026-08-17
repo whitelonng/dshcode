@@ -68,6 +68,8 @@
           - text: 思考程度
           - checkbox "思考程度 2 off"
           - text: "off"
+          - checkbox "思考程度 2 low"
+          - text: low
           - checkbox "思考程度 2 high"
           - text: high
           - checkbox "思考程度 2 max"
