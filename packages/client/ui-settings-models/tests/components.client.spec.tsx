@@ -1544,7 +1544,7 @@ describe('model capability and reasoning-level checkboxes', () => {
     expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party', input: ['text'] }])
   })
 
-  it('writes per-model reasoningEfforts from the DeepSeek three-level group', () => {
+  it('writes per-model reasoningEfforts from the DeepSeek four-level group', () => {
     const onChange = vi.fn()
     function Mount() {
       const [models, setModels] = useState<readonly DeepSeekModelDraft[]>([{ id: 'deepseek-v4-flash' }])
@@ -1565,9 +1565,13 @@ describe('model capability and reasoning-level checkboxes', () => {
     expandRow(1)
     // Only the levels this wire route dispatches are offered.
     expect(screen.queryByLabelText(`${en.modelReasoningLevels} 1 minimal`)).toBeNull()
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 low`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'deepseek-v4-flash', reasoningEfforts: { low: 'low' } },
+    ])
     fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 max`))
     expect(onChange).toHaveBeenLastCalledWith([
-      { id: 'deepseek-v4-flash', reasoningEfforts: { max: 'max' } },
+      { id: 'deepseek-v4-flash', reasoningEfforts: { low: 'low', max: 'max' } },
     ])
     // The capability checkboxes stay off this editor: the direct wire route is
     // text-only with a note policy the adapter hardcodes.
