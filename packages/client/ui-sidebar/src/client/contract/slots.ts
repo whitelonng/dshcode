@@ -33,13 +33,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * package's 'sidebar' entry; each action receives only the column state.
      */
     'sidebar.footer.action': { kind: 'list'; scope: 'root'; owner: SidebarFooterActionOwnerProps }
-    /**
-     * The remote-control seat in the sidebar foot, its own row above the
-     * settings trigger. Declared by this package's 'sidebar' entry; the
-     * mobile remote plugin registers its pairing trigger here. The sidebar
-     * passes only its column state.
-     */
-    'sidebar.remote': { kind: 'single'; scope: 'root'; owner: SidebarRemoteOwnerProps }
   }
 }
 
@@ -69,12 +62,6 @@ export interface SidebarFooterActionOwnerProps {
   wide: boolean
 }
 
-/** Owner share of the remote-control seat above Settings at the sidebar foot. */
-export interface SidebarRemoteOwnerProps {
-  /** Whether the sidebar renders wide content (false = 56px rail). */
-  wide: boolean
-}
-
 /**
  * Registrant-private injected share (arrives via the register inject
  * factory). The shell keeps only its own controls: starting a Session from
@@ -98,5 +85,5 @@ export type SidebarRootInjected = {
  */
 export type SidebarRootComponentProps =
   PropsRuntime<'sidebar'>
-  & PropsRenderSlots<'sidebar.workspaces' | 'sidebar.settings' | 'sidebar.footer.action' | 'sidebar.remote'>
+  & PropsRenderSlots<'sidebar.workspaces' | 'sidebar.settings' | 'sidebar.footer.action'>
   & SidebarRootInjected & PropsLocale<'sidebar'>

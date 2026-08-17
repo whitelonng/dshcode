@@ -178,14 +178,10 @@ export function SidebarRoot({
         })}
       </div>
 
-      {/* Footer actions stack above Settings in both sidebar widths; the
-          remote-control seat gets its own row between them. */}
+      {/* Footer actions stack above Settings in both sidebar widths. */}
       <div className={css.footArea}>
         <div className={css.footerActions}>
           {renderSlot('sidebar.footer.action', { wide })}
-        </div>
-        <div className={css.remoteArea}>
-          {renderSlot('sidebar.remote', { wide })}
         </div>
         <div className={css.settingsArea}>
           {renderSlot('sidebar.settings', { wide })}
