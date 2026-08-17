@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-host-plugin-control",
   "description": "Loopback-only persistent enablement controls for configured profile plugins",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publishConfig": {
     "access": "public"
   },

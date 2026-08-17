@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-describe-image",
   "description": "Model-facing describe_image tool: asks a vision-language model at an OpenAI-compatible endpoint to describe an image file or URL",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publishConfig": {
     "access": "public"
   },

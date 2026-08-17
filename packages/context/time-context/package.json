@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-time-context",
   "description": "Opt-in durable per-step context with the current time and elapsed time",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publishConfig": {
     "access": "public"
   },

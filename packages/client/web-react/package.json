@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-web-react",
   "description": "Shell-side React glue: createSlotRenderer, SessionProvider, bindSnapshotSelector (uSES bridge), useInvoke",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publishConfig": {
     "access": "public"
   },

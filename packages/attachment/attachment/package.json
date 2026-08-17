@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-attachment",
   "description": "Durable immutable attachment storage seam for the DeepSeek Harness",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publishConfig": {
     "access": "public"
   },

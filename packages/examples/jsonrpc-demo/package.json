@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-sdk-jsonrpc-demo",
   "description": "Bin that boots an external Cordis config for the stdio JSON-RPC SDK runtime",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publishConfig": {
     "access": "public"
   },
