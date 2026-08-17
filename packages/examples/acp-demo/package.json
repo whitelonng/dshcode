@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-acp-demo",
   "description": "ACP automation server app: agent spine + JSONL persistence + ACP transport, with a JSON-RPC stdio bin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publishConfig": {
     "access": "public"
   },
