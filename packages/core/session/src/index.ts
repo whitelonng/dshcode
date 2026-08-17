@@ -334,9 +334,14 @@ function assertMessageEventShape(event: Record<string, unknown>, subject: string
     return
   }
   if (type !== 'tool/result') return
+  // Tolerate an empty callId so legacy session logs written before the
+  // deepseek-ai/deepseek-harness#725 SSE overwrite fix can still be
+  // loaded: the bug stamped `name=""`/`callId=""` events; rejecting them
+  // here would brick the file forever. Callers should still treat empty
+  // ids as 'unknown tool' downstream so the orchestration layer surfaces
+  // the failure rather than swallowing it.
   if (sourceRecord['kind'] !== 'tool'
-    || typeof sourceRecord['callId'] !== 'string'
-    || sourceRecord['callId'] === '') {
+    || typeof sourceRecord['callId'] !== 'string') {
     throw new Error(`${subject} message must have tool source`)
   }
   const content = messageRecord['content'] as unknown[]
