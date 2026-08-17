@@ -306,6 +306,45 @@ describe('PendingQuestion domain face', () => {
     expect(question.key).toBe('q:rk')
     expect(question.questions).toBe(wait('rk').carrier.payload.questions)
   })
+
+  it('collapses the card to the header strip and expands it back', () => {
+    const { carrier } = wait()
+    render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} />)
+    // Expanded: the option list is visible.
+    expect(screen.getByRole('radiogroup')).toBeTruthy()
+    // Collapse: options leave the tree; the title and minimize toggle stay.
+    fireEvent.click(screen.getByLabelText(zh['nav.minimize']))
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.getByText('选择候选人类型')).toBeTruthy()
+    // Expand: the options return (the toggle label flips while collapsed).
+    fireEvent.click(screen.getByLabelText(zh['nav.maximize']))
+    expect(screen.getByRole('radiogroup')).toBeTruthy()
+    // Expanded again: the toggle reports expanded and the option list is back.
+    expect(screen.getByLabelText(zh['nav.minimize']).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('keeps the collapse toggle out of the cancel path and preserves drafts across collapse', () => {
+    const { carrier, respond } = wait()
+    render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} />)
+    fireEvent.click(screen.getByRole('radio', { name: /工程落地型/ }))
+    // Single-select auto-advances to the second question; collapse and expand
+    // must not lose either the picked option or the current position.
+    fireEvent.click(screen.getByLabelText(zh['nav.minimize']))
+    fireEvent.click(screen.getByLabelText(zh['nav.maximize']))
+    const custom = screen.getByPlaceholderText(zh['custom.placeholder'])
+    fireEvent.change(custom, { target: { value: '要能独立排查线上问题' } })
+    // Re-expanding must not steal focus back into the textarea: it was
+    // autofocused on first presentation, so focus stays on the expand toggle.
+    expect(document.activeElement).not.toBe(custom)
+    fireEvent.click(screen.getByLabelText('下一题'))
+    fireEvent.click(screen.getByRole('checkbox', { name: '系统设计' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    expect(respond).toHaveBeenCalledWith(answeredEnvelope('question-1', [
+      { id: 'profile', selected: ['工程落地型 (Recommended)'] },
+      { id: 'detail', custom: '要能独立排查线上问题', selected: [] },
+      { id: 'signals', selected: ['系统设计'] },
+    ]))
+  })
 })
 
 describe('parseRecommendedLabel', () => {

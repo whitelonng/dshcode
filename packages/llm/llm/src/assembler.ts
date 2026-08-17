@@ -10,7 +10,7 @@ import { CallId } from './brand.ts'
 import { assertNever } from './never.ts'
 import { createMessage } from './message.ts'
 import type { Message, MessageSource } from './message.ts'
-import type { ContentBlock, FinishReason, StreamChunk, TokenUsage } from './types.ts'
+import type { ContentBlock, FinishReason, ReplayEnvelope, StreamChunk, TokenUsage } from './types.ts'
 
 interface PartialBlock {
   blockType: string
@@ -38,7 +38,7 @@ export class BlockAssembler {
   private order: number[] = []
   private _usage: TokenUsage | undefined
   private _finish: FinishReason | undefined
-  private _replayState: unknown = undefined
+  private _replayState: ReplayEnvelope | undefined
 
   /**
    * Feed one chunk into the assembly state.
@@ -126,16 +126,35 @@ export class BlockAssembler {
   }
 
   /**
+   * The one shared keep/drop decision over all seen blocks: max-token
+   * truncation drops tool calls that cannot be executed safely. Emitted blocks
+   * and replay metadata both derive from this result, so they cannot disagree.
+   */
+  private assembled(): { blocks: ContentBlock[]; replay: ReplayEnvelope | undefined } {
+    const all = this.order.map(index => this.assemble(this.mustGet(index), index))
+    const kept = this.finish.kind === 'max-tokens'
+      ? all.map(block => block.type !== 'tool-call')
+      : undefined
+    const blocks = kept === undefined ? all : all.filter((_, position) => kept[position])
+    const envelope = this._replayState
+    if (envelope?.blocks === undefined) return { blocks, replay: envelope }
+    if (envelope.blocks.length !== all.length) return { blocks, replay: undefined }
+    return {
+      blocks,
+      replay: kept === undefined || blocks.length === all.length
+        ? envelope
+        : { response: envelope.response, blocks: envelope.blocks.filter((_, position) => kept[position]) },
+    }
+  }
+
+  /**
    * Assemble all blocks seen so far, in stream order.
    * @returns one block per seen index, except that max-token truncation drops
    *   tool calls that cannot be executed safely; an open block assembles from
    *   its accumulated deltas (an unknown block type never closed by `block-end` throws).
    */
   blocks(): ContentBlock[] {
-    const blocks = this.order.map(index => this.assemble(this.mustGet(index), index))
-    return this.finish.kind === 'max-tokens'
-      ? blocks.filter(block => block.type !== 'tool-call')
-      : blocks
+    return this.assembled().blocks
   }
 
   /** Usage from the `usage` chunk; undefined until one arrives. */
@@ -148,9 +167,13 @@ export class BlockAssembler {
     return this._finish ?? { kind: 'stop' }
   }
 
-  /** Adapter-private replay state from the terminal finish chunk, if any. */
-  get replayState(): unknown {
-    return this._replayState
+  /**
+   * Replay metadata from the terminal finish chunk, if any, with per-block
+   * entries pruned in step with {@link blocks}. Undefined when the envelope's
+   * entries do not align with the emitted blocks.
+   */
+  get replayState(): ReplayEnvelope | undefined {
+    return this.assembled().replay
   }
 
   /**

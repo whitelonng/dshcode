@@ -15,7 +15,6 @@ import { basename, extname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentError, AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, ToolExecution } from '@deepseek-ai/dsh-tools'
@@ -208,12 +207,6 @@ export function applyReadImageTool(ctx: Context): void {
           height: ref.height,
           ...ref.name === undefined ? {} : { name: ref.name },
         },
-      }
-      if (exec.parent !== undefined) {
-        exec.deferContext(createUserMessage({
-          content: imageReadContent(value),
-          source: { kind: 'plugin', plugin: 'tool-fs' },
-        }))
       }
       return value
     },

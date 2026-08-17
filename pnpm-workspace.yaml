@@ -102,4 +102,4 @@ minimumReleaseAgeExclude:
 
 patchedDependencies:
   '@linxin666/dsh-client-ui-skin-center@0.1.2': patches/@linxin666__dsh-client-ui-skin-center@0.1.2.patch
-  node-pty@1.1.0: patches/node-pty@1.1.0.patch
+  node-pty@1.2.0-beta.15: patches/node-pty@1.2.0-beta.15.patch

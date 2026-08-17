@@ -159,6 +159,29 @@ type ContextFormed =
 
 ```ts type-equiv
 /**
+ * Adapter-private lossless-JSON state for replaying a successful response,
+ * carried by a terminal `finish` chunk and stored on the assembled assistant
+ * message's model source. Both halves stay opaque to the harness; only the
+ * split is shared vocabulary, so assembly can keep stored metadata aligned
+ * with stored content without reading either half.
+ */
+interface ReplayEnvelope {
+  /** Response-level adapter-private metadata (ids, native stop reason). */
+  response: unknown
+  /**
+   * Per-block adapter-private metadata, one entry per emitted block in
+   * first-seen stream order. When assembly drops a block it drops the entry at
+   * the same position; entries whose length does not match the emitted block
+   * count discard the whole envelope. An adapter whose metadata is independent
+   * of block structure omits this field and the envelope passes through
+   * assembly unchanged.
+   */
+  blocks?: readonly unknown[]
+}
+```
+
+```ts type-equiv
+/**
  * Raw streaming protocol emitted by adapters.
  * Block indexes correlate interleaved deltas, and `block-end` carries the
  * assembled block. Adapters emit usage before the terminal finish and nothing
@@ -176,8 +199,8 @@ type StreamChunk =
   | {
     type: 'finish'
     reason: FinishReason
-    /** Adapter-private lossless-JSON state for replaying a successful response. */
-    replayState?: unknown
+    /** Replay metadata for a successful response; see {@link ReplayEnvelope}. */
+    replayState?: ReplayEnvelope
   }
 ```
 
@@ -215,7 +238,7 @@ interface LlmFailure {
 - **上下文溢出只有一个规范 code。** 两个 DeepSeek 适配器都通过 `isContextWindowExceededError()` 对提供方的显式细节分类并暴露 `CONTEXT_WINDOW_EXCEEDED`，无论失败以抛出的 HTTP `LlmError` 还是带内 finish error 到达。消费方按 code 路由，绝不依赖提供方文本。
 - **空 completion 是可重试错误，而不是静默的成功结果。** 两个适配器都把没有携带任何内容块的终止性 `stop` 结束映射为携带规范 `EMPTY_RESPONSE` code 的 `finish {kind:'error'}`，`dsh-llm-retry` 默认会重试它；详见[空模型响应可重试](../../.agents/notes/implemented/bug-fix/2026-07-24-empty-model-response-is-retryable.md)。
 - **每个提供方 HTTP 请求都携带应用归属头。** 适配器发送 `attributionHeaders()`（见下文）作为 `User-Agent` 基线，并通过协议级测试加以证明。
-- **回放状态归适配器所有。** 成功的 `finish` 可以携带重建提供方原生响应所需的无损 JSON 状态。循环会将其与组装后的 assistant 消息一起存储。后续请求中，仅当历史提供方与目标提供方当前注册到完全相同的适配器实例时，`LlmRuntime` 才会传递该状态。该适配器负责校验状态并拥有所有跨模型或跨提供方转换；其他适配器只会收到提供方无关的内容以及提供方／模型字段，不会收到私有状态。
+- **回放状态归适配器所有；其切分是共享词汇。** 成功的 `finish` 可以携带一个 `ReplayEnvelope`：不透明的响应级元数据，加上与发射块序列对齐的可选逐块条目。对齐关系是 harness 的词汇——组装丢弃某个块时，同一位置的条目一并丢弃，因此存储的元数据始终描述存储的内容。循环把裁剪后的数据与组装后的 assistant 消息一起存储。后续请求中，仅当历史提供方与目标提供方当前注册到完全相同的适配器实例时，`LlmRuntime` 才会传递该状态。该适配器负责校验状态并拥有所有跨模型或跨提供方转换；其他适配器只会收到提供方无关的内容以及提供方／模型字段，不会收到私有状态。持久化内容保持权威：读取适配器无法使用的已存状态只会把这一条消息降级为提供方无关转换并带出诊断，而不是让请求失败。
 
 ## `ResolvedRetryPolicy`
 
@@ -273,6 +296,8 @@ interface TokenUsage {
 
 `BlockAssembler`（[`packages/llm/llm/src/assembler.ts`](../../packages/llm/llm/src/assembler.ts)）是唯一的共享实现，负责把 `StreamChunk` 流折叠回 `ContentBlock`、usage、结束原因与回放状态。循环在记录原始分片的同时，把同一批分片送入 assembler，再将组装后的 assistant 内容连同生成它的提供方和模型一起存储。需要组装结果、又不想重新实现 fold 的消费方使用它。
 
+内容与元数据共用同一次保留/丢弃决定：`max-tokens` 结束会丢弃每个工具调用，因为被截断的调用不能安全执行，而同一决定会在每个被丢弃的位置裁剪回放数据的逐块条目。无论组装移除什么，`blocks()` 与 `replayState` 都不可能不一致。
+
 ```ts public-api
 /**
  * Incrementally assembles raw {@link StreamChunk}s into complete
@@ -302,8 +327,12 @@ declare class BlockAssembler {
   get usage(): TokenUsage | undefined;
   /** Finish reason from the `finish` chunk; `{kind: 'stop'}` when the stream ended without one. */
   get finish(): FinishReason;
-  /** Adapter-private replay state from the terminal finish chunk, if any. */
-  get replayState(): unknown;
+  /**
+   * Replay metadata from the terminal finish chunk, if any, with per-block
+   * entries pruned in step with {@link blocks}. Undefined when the envelope's
+   * entries do not align with the emitted blocks.
+   */
+  get replayState(): ReplayEnvelope | undefined;
   /**
    * The assembled assistant message.
    * @param source - producer attribution for the assembled message.

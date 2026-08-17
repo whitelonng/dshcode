@@ -39,6 +39,40 @@ export function attempt(command: string, args: readonly string[], options: RunOp
 }
 
 /**
+ * Run a command, capture its output, and echo it once the command exits.
+ *
+ * A step that both shows what a command said and classifies its own failure
+ * needs both halves: the output has to reach the workflow log, and the caller has
+ * to read it to decide whether a failure is worth retrying.
+ *
+ * This is not live progress. `spawnSync` returns only after the child exits, so
+ * nothing appears while the command runs, and the two streams are echoed one
+ * after the other — all of stdout, then all of stderr — which loses their
+ * interleaving. For an npm publish that matters in one visible way: `npm notice`
+ * lines go to stderr while the `+ name@version` confirmation goes to stdout, so
+ * the log shows the confirmation first. Live progress would need an
+ * asynchronous spawn with data listeners.
+ * @param command - executable name.
+ * @param args - command arguments.
+ * @param options - working directory and environment.
+ * @returns The exit status and captured streams.
+ */
+export function attemptEchoed(command: string, args: readonly string[], options: RunOptions = {}): CommandResult {
+  const result = spawnSync(command, [...args], {
+    cwd: options.cwd,
+    env: options.env,
+    encoding: 'utf8',
+    // 'inherit' would leave nothing to capture, so the streams are piped and
+    // echoed instead.
+    stdio: ['inherit', 'pipe', 'pipe'],
+  })
+  if (result.error !== undefined) throw result.error
+  if (result.stdout !== '') process.stdout.write(result.stdout)
+  if (result.stderr !== '') process.stderr.write(result.stderr)
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+/**
  * Run a command, capture its standard output, and fail on a non-zero exit.
  * @param command - executable name.
  * @param args - command arguments.

@@ -15,7 +15,7 @@ const configPath = join(fixtureDir, 'cordis.yml')
 const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
 
 describe('Codex provider public Loader composition', () => {
-  it('loads the opt-in package and foreground tool without starting Codex', async () => {
+  it('loads the opt-in package, one-shot task tool, and job controls without starting Codex', async () => {
     const { stdout, stderr } = await runLoaderSmoke({
       label: 'subagent-codex Loader composition',
       tempDirPrefix: 'dsh-subagent-codex-loader-',
@@ -44,9 +44,10 @@ describe('Codex provider public Loader composition', () => {
       },
       tool: {
         name: 'subagent_codex',
-        parameterNames: ['description', 'prompt'],
+        parameterNames: ['description', 'prompt', 'run_in_background'],
         required: ['description', 'prompt'],
       },
+      jobTools: ['job_kill', 'job_list', 'job_output'],
       starts: 0,
     })
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)

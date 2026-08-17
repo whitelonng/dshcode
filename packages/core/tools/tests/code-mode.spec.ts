@@ -1087,6 +1087,73 @@ describe('the run_code dispatch bridge', () => {
     ])
   })
 
+  it('defers image-bearing final sub-call content onto the outer run_code result', async () => {
+    const { ctx, runtime } = await setup({ mode: 'code' })
+    ctx.tools.register(defineContentToolFixture({
+      name: 'image_result',
+      description: 'Return one durable image.',
+      parameters: {},
+      execute: () => Promise.resolve([
+        { type: 'text', text: 'image result' },
+        {
+          type: 'image',
+          attachment: {
+            attachmentId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as never,
+            mediaType: 'image/png', bytes: 1, width: 1, height: 1,
+          },
+        },
+      ]),
+    }))
+    runtime.behavior = async (request) => {
+      await request.bindings[0]!.functions.image_result!({})
+      return { logs: [], value: 'done' }
+    }
+
+    const result = await runCode(ctx, 'program')
+
+    expect(result.additionalContexts).toMatchObject([{
+      role: 'user',
+      source: { kind: 'plugin', plugin: 'tools-code-mode' },
+      content: [
+        { type: 'text', text: 'image result' },
+        { type: 'image', attachment: { mediaType: 'image/png', bytes: 1, width: 1, height: 1 } },
+      ],
+    }])
+  })
+
+  it('does not defer images removed by a nested post-execute decision', async () => {
+    for (const decision of ['block', 'replace'] as const) {
+      const { ctx, runtime } = await setup({ mode: 'code' })
+      ctx.tools.register(defineContentToolFixture({
+        name: 'image_result',
+        description: 'Return one durable image.',
+        parameters: {},
+        execute: () => Promise.resolve([{
+          type: 'image',
+          attachment: {
+            attachmentId: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as never,
+            mediaType: 'image/png', bytes: 1, width: 1, height: 1,
+          },
+        }]),
+      }))
+      ctx.on('tools/post-execute', (exec, _result, next): Promise<PostToolDecision> => {
+        if (exec.name !== 'image_result') return next()
+        return Promise.resolve(decision === 'block'
+          ? { kind: 'block', feedback: [{ type: 'text', text: 'blocked' }] }
+          : { kind: 'accept', content: [{ type: 'text', text: 'replaced' }] })
+      })
+      runtime.behavior = async (request) => {
+        await request.bindings[0]!.functions.image_result!({}).catch(() => undefined)
+        return { logs: [], value: 'done' }
+      }
+
+      const result = await runCode(ctx, 'program')
+
+      expect(result.additionalContexts).toBeUndefined()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('keeps sub-call contexts when run_code fails after the nested dispatch', async () => {
     const { ctx, runtime } = await setup({ mode: 'both' })
     registerEcho(ctx)

@@ -1,6 +1,7 @@
 /** In-memory ACP transport fixture over the real agent factory and loop. */
 
 import { Context } from '@deepseek-ai/cordis'
+import { createHash } from 'node:crypto'
 import {
   ClientSideConnection,
   ndJsonStream,
@@ -11,7 +12,9 @@ import {
   type SessionNotification,
   type Stream,
 } from '@agentclientprotocol/sdk'
-import { type GenerateOptions, LlmAdapter, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import AttachmentStore, { AttachmentError, AttachmentId } from '@deepseek-ai/dsh-attachment'
+import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
+import { type GenerateOptions, LlmAdapter, type LlmResolvedModelInfo, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as AcpPlugin from '../src/index.ts'
@@ -21,7 +24,10 @@ import type { AcpConfig } from '../src/index.ts'
 class MockAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
 
-  constructor(private readonly script: (StreamChunk[] | 'hang')[]) {
+  constructor(
+    private readonly script: (StreamChunk[] | 'hang')[],
+    private readonly imageCapable: boolean,
+  ) {
     super()
   }
 
@@ -31,7 +37,21 @@ class MockAdapter extends LlmAdapter {
   }
 
   override listModels(provider: string) {
-    return Promise.resolve(provider === 'mock' ? [{ provider: 'mock', id: 'mock', name: 'Mock' }] : [])
+    return Promise.resolve(provider === 'mock' ? [{
+      provider: 'mock',
+      id: 'mock',
+      name: 'Mock',
+      inputModalities: this.imageCapable ? ['text', 'image'] as const : ['text'] as const,
+    }] : [])
+  }
+
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({
+      provider,
+      id: model,
+      name: model,
+      inputModalities: this.imageCapable ? ['text', 'image'] : ['text'],
+    })
   }
 
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
@@ -54,6 +74,49 @@ class MockAdapter extends LlmAdapter {
       if (options.signal?.aborted) throw new Error('aborted')
       yield chunk
     }
+  }
+}
+
+const IMAGE_LIMITS: ImageAttachmentLimits = {
+  maxImageBytes: 1024,
+  maxImagesPerMessage: 4,
+  maxMessageImageBytes: 2048,
+  maxImagePixels: 1024,
+  mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+}
+
+/** In-memory durable store for ACP wire-order and lifecycle tests. */
+class MemoryAttachmentStore extends AttachmentStore {
+  readonly imageLimits = IMAGE_LIMITS
+  readonly saved: SaveImageAttachment[] = []
+  readonly objects = new Map<string, StoredImageAttachment>()
+  beforeValidate: (() => Promise<void>) | undefined
+  beforeRead: (() => Promise<void>) | undefined
+
+  async validateImage(input: SaveImageAttachment): Promise<void> {
+    await this.beforeValidate?.()
+    if (input.data.byteLength === 0) throw new AttachmentError('Image is empty.', 'INVALID_IMAGE')
+  }
+
+  saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef> {
+    this.saved.push(input)
+    const digest = createHash('sha256').update(input.data).digest('hex')
+    const ref: ImageAttachmentRef = {
+      attachmentId: AttachmentId(`sha256:${digest}`),
+      mediaType: input.mediaType,
+      bytes: input.data.byteLength,
+      width: 1,
+      height: 1,
+    }
+    this.objects.set(ref.attachmentId, { ref, data: Uint8Array.from(input.data) })
+    return Promise.resolve(ref)
+  }
+
+  async readImage(ref: ImageAttachmentRef): Promise<StoredImageAttachment> {
+    await this.beforeRead?.()
+    const stored = this.objects.get(ref.attachmentId)
+    if (stored === undefined) throw new AttachmentError('Attachment object is missing.', 'ATTACHMENT_NOT_FOUND')
+    return { ref: stored.ref, data: Uint8Array.from(stored.data) }
   }
 }
 
@@ -93,6 +156,7 @@ export interface BridgeHarness {
   ctx: Context
   client: ClientSideConnection
   adapter: MockAdapter
+  attachments: MemoryAttachmentStore | undefined
   updates: CapturedUpdate[]
   sessionUpdates: { sessionId: string; update: CapturedUpdate }[]
   permissionRequests: RequestPermissionRequest[]
@@ -113,10 +177,13 @@ export async function makeBridgeHarness(options: {
   script?: (StreamChunk[] | 'hang')[]
   config?: AcpConfigOverrides
   persona?: string
+  imageCapable?: boolean
+  attachments?: boolean
 } = {}): Promise<BridgeHarness> {
-  const adapter = new MockAdapter(options.script ?? [])
+  const adapter = new MockAdapter(options.script ?? [], options.imageCapable === true)
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx, { systemPrompt: { persona: options.persona ?? '' } })
+  if (options.attachments !== false) await ctx.plugin(MemoryAttachmentStore)
   const loopFiber = await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
 
@@ -135,6 +202,7 @@ export async function makeBridgeHarness(options: {
   const harness: BridgeHarness = {
     ctx,
     adapter,
+    attachments: ctx.get('attachments') as MemoryAttachmentStore | undefined,
     updates,
     sessionUpdates,
     permissionRequests,

@@ -1,5 +1,5 @@
-# Add both native product providers and the same independent foreground tool
-# rows an Agent Preset may contribute. Loading the composition starts neither
+# Add both native product providers and the same independent one-shot tool rows
+# an Agent Preset may contribute. Loading the composition starts neither
 # product; the scenario pins both model-visible schemas.
 - id: base
   name: '@deepseek-ai/cordis-plugin-include'
@@ -16,12 +16,12 @@
             config:
               provider: codex
               toolName: subagent_codex
-              enableRunInBackground: false
+              backgroundMode: one-shot
               maxDepth: provider-managed
           - id: tool-subagent-claude-code
             name: '@deepseek-ai/dsh-tool-subagent'
             config:
               provider: claude-code
               toolName: subagent_claude_code
-              enableRunInBackground: false
+              backgroundMode: one-shot
               maxDepth: provider-managed

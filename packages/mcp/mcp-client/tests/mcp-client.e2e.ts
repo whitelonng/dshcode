@@ -19,9 +19,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
+import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { CallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { apply } from '@deepseek-ai/dsh-mcp-client/src/index.ts'
 import { publicToolName } from '@deepseek-ai/dsh-mcp-client/src/tools.ts'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
@@ -41,6 +43,33 @@ async function mountRegistry(): Promise<Context> {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   return ctx
+}
+
+/** Exact-route adapter used to prove real MCP image admission without an API key. */
+class ImageAdapter extends LlmAdapter {
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({ provider, id: model, name: model, inputModalities: ['text', 'image'] })
+  }
+
+  stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
+    throw new Error('MCP image e2e never streams')
+  }
+}
+
+async function mountImageRegistry(dshHome: string): Promise<Context> {
+  const ctx = await mountRegistry()
+  await ctx.plugin(LocalAttachmentStore, { dshHome })
+  await ctx.plugin(LlmRuntime)
+  ctx.llm.registerAdapter(['visual'], new ImageAdapter())
+  return ctx
+}
+
+/** Calling-agent stand-in pinned to the keyless image-capable route. */
+function imageAgent(): object {
+  return {
+    options: { provider: 'visual', model: 'vision' },
+    session: { requestHeader: () => undefined },
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -66,6 +95,7 @@ function nextCallId(): CallId {
 
 describe('fixture server — controlled scenarios', () => {
   let ctx: Context
+  let home: string
 
   const fixtureConfig: Config = {
     transport: 'stdio',
@@ -79,13 +109,15 @@ describe('fixture server — controlled scenarios', () => {
   }
 
   beforeAll(async () => {
-    ctx = await mountRegistry()
+    home = await mkdtemp(join(tmpdir(), 'mcp-image-e2e-'))
+    ctx = await mountImageRegistry(home)
     await apply(ctx, fixtureConfig)
   }, 30_000)
 
   afterAll(async () => {
     if (ctx) await ctx.fiber.dispose()
     await sleep(200)
+    await rm(home, { recursive: true, force: true })
   })
 
   it('discovers all fixture tools under the server namespace', () => {
@@ -141,16 +173,23 @@ describe('fixture server — controlled scenarios', () => {
     expect(result.content[0]).toMatchObject({ type: 'text' })
   })
 
-  it('executes image() → image placeholder', async () => {
+  it('executes image() → ordered durable image content', async () => {
     const result = await ctx.tools.execute({
-      signal: testToolSignal,
+      signal: testToolSignal, agent: imageAgent() as never,
       callId: nextCallId(), name: 'mcp__fixture__image', arguments: {},
     })
     expect(result.isError).toBe(false)
-    const text = textOf(result.content[0])
-    expect(text).toContain('Here is an image:')
-    expect(text).toContain('[image: image/png, content discarded]')
-    expect(text).toContain('End of image.')
+    expect(result.content).toHaveLength(3)
+    expect(result.content[0]).toEqual({ type: 'text', text: 'Here is an image:' })
+    expect(result.content[2]).toEqual({ type: 'text', text: 'End of image.' })
+    const image = result.content[1]
+    if (image?.type !== 'image') throw new Error(`expected an image block, got ${JSON.stringify(image)}`)
+    expect(image.attachment).toMatchObject({ mediaType: 'image/png', width: 1, height: 1 })
+    const stored = await ctx.attachments.readImage(image.attachment)
+    expect(stored.data.byteLength).toBe(image.attachment.bytes)
+    if (result.isError) throw new Error('expected MCP image success')
+    expect(JSON.stringify(result.value)).toContain('iVBORw0KGgo')
+    expect(JSON.stringify(result.content)).not.toContain('iVBORw0KGgo')
   })
 })
 
@@ -334,13 +373,14 @@ describe('server-everything — official test server', () => {
     expect(textOf(result.content[0])).toContain('10')
   })
 
-  it('executes get-tiny-image → image placeholder', async () => {
+  it('executes get-tiny-image → explicit refusal without a durable route', async () => {
     const result = await ctx.tools.execute({
       signal: testToolSignal,
       callId: nextCallId(), name: 'mcp__everything__get-tiny-image', arguments: {},
     })
     expect(result.isError).toBe(false)
-    expect(textOf(result.content[0])).toContain('[image: image/png, content discarded]')
+    expect(result.content.map(block => block.type === 'text' ? block.text : '').join('\n'))
+      .toContain('[image unavailable: image/png; no attachment store is mounted;')
   })
 })
 

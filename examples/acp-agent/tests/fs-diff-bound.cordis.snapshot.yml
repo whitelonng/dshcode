@@ -41,6 +41,6 @@
                     - id: deepseek-v4-flash
                       contextWindow: 1000000
                       defaultMaxTokens: 256000
-                      reasoningEfforts: ['off', 'high', 'max']
+                      reasoningEfforts: ['off', 'low', 'high', 'max']
                       defaultReasoningEffort: max
                     - id: deepseek-v4-pro

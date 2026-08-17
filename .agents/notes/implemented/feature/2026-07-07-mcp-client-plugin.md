@@ -141,11 +141,11 @@ Tools are never silently skipped; which tools are available never depends on plu
 A unified `execute` handler for all tools from one MCP server:
 
 1. Resolve `rawName` (the executor closes over it) and call `client.callTool({ name: rawName, arguments }, { signal: exec.signal })` with the configured timeout — the public name is never sent to the server.
-2. Map the result:
-   - Multiple `text` content blocks → join with `'\n'` into a single `TextBlock` (required: `flattenText` uses `join('')` without separator, so multiple blocks would lose inter-block boundaries).
-   - `image` content blocks → discard with a `ctx.logger.warn` (the harness has no image content block type; [drop-image Agent Note](../simplification/2026-07-04-drop-image-content-block.md)).
-   - `isError: true` → map to the harness `isError` result path (`{ content: [...], isError: true }`).
-3. Cancellation: `exec.signal` (from the agent loop's cancel) is passed through to the MCP SDK's `callTool`, which sends `$/cancelRequest` to the server.
+2. Preserve canonical success as `{ content: JsonValue[], structuredContent? }`; complete MCP JSON blocks remain the programmatic/Code Mode value. `isError: true` throws before any image persistence so the registry owns the failure path.
+3. Prepare a separate ordered Native projection. Text runs join with `'\n'`; resource links preserve name and URI as text; audio, embedded resources, malformed blocks, and unknown types become explicit diagnostics. If any image exists, the bridge strictly decodes the complete batch, resolves the calling agent's latest exact route, requires an attachment store plus explicit model image input, and delegates all-member validation and ordered persistence to `AttachmentStore.saveImages()`. Any decode, capability, or storage refusal renders every image as diagnostic text and returns no partial references.
+4. Keep `output.render` synchronous and pure. The executor stages its richer projection in a generation-local `WeakMap` keyed by the exact execution; `finalizeContent` installs it only when the registry's post-execute result still has the original canonical value and fallback content. A policy block, value replacement, or content replacement remains authoritative, and a re-sync cannot let an older generation consume new execution state.
+5. Code Mode receives the untouched canonical value. Its generic dispatch bridge defers a successful final content sequence containing an image through the outer `run_code` result, so MCP requires no private parent-token special case.
+6. Cancellation: `exec.signal` (from the agent loop's cancel) is passed through to the MCP SDK's `callTool`, exact-model lookup, and the pre-storage gate.
 
 ### Subprocess environment (stdio transport)
 
@@ -189,13 +189,25 @@ Rejected. The remote name is untrusted, non-unique across deployments, and chang
 
 Rejected. `flattenText()` in the DeepSeek serializer uses `join('')` (no separator) when flattening `ContentBlock[]` to wire format. Multiple text blocks would silently lose inter-block boundaries — a correctness bug. All existing tools return a single TextBlock; the MCP bridge follows suit.
 
+### Replace the canonical MCP result with core `ContentBlock[]`
+
+Rejected. Programmatic callers need protocol-complete MCP blocks and `structuredContent`, while Native consumers need durable core images rather than base64. One canonical protocol value plus a separate projection preserves both contracts.
+
+### Add a generic RichContent service or perform I/O in `output.render`
+
+Rejected. Core already owns the role-neutral content vocabulary, and a second service would duplicate its logging and ordering contracts. `output.render` is pure, synchronous, and replayable, so attachment I/O belongs in async execution with an exact finalization handoff.
+
+### Let each image-returning tool special-case Code Mode parents
+
+Rejected. That couples leaf tools to composite-tool internals and misses future rich tools. The generic Code Mode bridge observes the final post-policy content and forwards image-bearing results uniformly.
+
 ## Testing
 
 Coverage is named per tier; each behavior lives at the cheapest tier that can express it.
 
-- **Unit** (`tests/mcp-client.spec.ts`, `tests/apply.spec.ts`, mocked MCP SDK): the `publicToolName` algorithm (clean, normalize, truncate-and-hash, determinism, distinct-identity separation), raw-vs-public wire discipline, cross-server and native-tool coexistence, duplicate-`serverName` load failure and reservation release, invalid-tool-list rejection, generation swap/rollback, failed-re-sync retention, result mapping, cancellation, config schema validation. 100% per-file coverage gates the package.
-- **E2E** (`tests/mcp-client.e2e.ts`, keyless): the real MCP protocol against the in-repo fixture server, `@modelcontextprotocol/server-everything`, and `@modelcontextprotocol/server-filesystem` over stdio, and against an in-process `StreamableHTTPServerTransport` server over Streamable HTTP — discovery under the namespace, dotted-name normalization end to end, execution round-trips, duplicate-`serverName` rejection, disposal.
-- **Snapshot**: deliberately none. MCP tools introduce no new presentation shape — they register as raw `ToolDefinition`s and UI consumers use the generic-card fallback already pinned by their presentation suites. Adding an MCP server to a runnable snapshot composition would mutate its pinned system-prompt fixture and make every replay depend on spawning an external MCP server process for no new behavior. If a later change gives MCP tools their own render intent, that change names its snapshot coverage then.
+- **Unit** (`tests/mcp-client.spec.ts`, `tests/apply.spec.ts`, mocked MCP SDK): the `publicToolName` algorithm (clean, normalize, truncate-and-hash, determinism, distinct-identity separation), raw-vs-public wire discipline, cross-server and native-tool coexistence, duplicate-`serverName` load failure and reservation release, invalid-tool-list rejection, generation swap/rollback, failed-re-sync retention, lossless canonical results, mixed rich ordering, atomic malformed batches, exact capability/store refusal, explicit non-image diagnostics, post-execute policy precedence, cancellation, and config schema validation. 100% per-file coverage gates the package.
+- **E2E** (`tests/mcp-client.e2e.ts`, keyless): the real MCP protocol against the in-repo fixture server, `@modelcontextprotocol/server-everything`, and `@modelcontextprotocol/server-filesystem` over stdio, and against an in-process `StreamableHTTPServerTransport` server over Streamable HTTP — discovery under the namespace, dotted-name normalization end to end, execution round-trips, durable image save/read with base64 retained only in the canonical value, explicit refusal without an image route, duplicate-`serverName` rejection, and disposal.
+- **Snapshot**: the assembled ACP example owns the transport-visible inline-image transcript and the Code Mode image-forwarding transcript; package E2E owns the real MCP wire because the runnable snapshot must stay keyless and deterministic rather than spawning third-party server packages. MCP tool cards still use the generic-card fallback and require no package-specific UI snapshot.
 
 ## Consequences
 
@@ -206,3 +218,4 @@ Coverage is named per tier; each behavior lives at the cheapest tier that can ex
 - **Tool schema quality**: MCP servers may expose poorly-described tools (vague descriptions, incomplete JSON schemas). The harness passes them through as-is — garbage-in-garbage-out; that is the server author's responsibility, not the bridge's.
 - **Stdio process management**: a misbehaving MCP server that ignores signals could wedge dispose. The Cordis fiber disposal has bounded quiescence; a stuck transport eventually times out at the framework level.
 - Crash recovery is automatic within the [reconnect budget](2026-08-06-mcp-client-auto-reconnect.md); manual reload remains the path after exhaustion or with `reconnect.enabled: false`.
+- Image payloads can enter model context only through the shared durable attachment store and an exact positive route capability. Audio and embedded-resource payloads remain execution-local with explicit diagnostics.

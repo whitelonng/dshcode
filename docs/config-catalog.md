@@ -29,7 +29,7 @@ export interface AcpConfig {
 
 Depends on: `Stream` (`@agentclientprotocol/sdk`)
 
-Source: [`packages/acp/acp/src/index.ts:70`](../packages/acp/acp/src/index.ts)
+Source: [`packages/acp/acp/src/index.ts:71`](../packages/acp/acp/src/index.ts)
 
 <a id="deepseek-aidsh-acp-demo"></a>
 
@@ -929,7 +929,7 @@ export interface Config {
   /** Deployment thinking policy; `disabled` limits every conversation request to `off`. */
   thinking?: 'enabled' | 'disabled'
   /** Default thinking effort (default `high`); `off` disables thinking per request. */
-  reasoningEffort?: 'off' | 'high' | 'max'
+  reasoningEffort?: 'off' | 'low' | 'high' | 'max'
   /** Default per-request output cap (default 256,000); a model's own cap and explicit request values win. */
   maxTokens?: number
   /** Positive context capacity used when the selected model has no exact value (default 1,000,000). */
@@ -959,14 +959,14 @@ export interface DeepSeekCatalogModel {
    * route default. `false` declares a non-reasoning model; a map declares the
    * offered levels (its keys) with their wire spellings, which for this wire
    * route are fixed — `off` uses the empty spelling (thinking disabled), and
-   * `high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
+   * `low`/`high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
    * `reasoningEffort` for this model.
    */
   reasoningEfforts?: false | Partial<Record<DeepSeekReasoningLevel, string | null>>
 }
 
 /** One reasoning level the direct DeepSeek wire route can dispatch. */
-export type DeepSeekReasoningLevel = 'off' | 'high' | 'max'
+export type DeepSeekReasoningLevel = 'off' | 'low' | 'high' | 'max'
 ```
 
 Depends on: [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
@@ -2460,7 +2460,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/shell/tool-bash-persistent/src/index.ts:405`](../packages/shell/tool-bash-persistent/src/index.ts)
+Source: [`packages/shell/tool-bash-persistent/src/index.ts:400`](../packages/shell/tool-bash-persistent/src/index.ts)
 
 <a id="deepseek-aidsh-tool-describe-image"></a>
 

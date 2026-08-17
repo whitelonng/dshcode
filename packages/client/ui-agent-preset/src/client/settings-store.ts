@@ -216,7 +216,7 @@ export class AgentPresetSettingsController {
       // The roster says what may be chosen; `settings.describe` says whether
       // this browser may write the choice down. A non-loopback browser reaches
       // neither method, so a refused describe leaves the row read-only rather
-      // than offering a control whose write answers `settings-not-exposed`.
+      // than offering a control whose write the Host would refuse.
       const described = await this.api.settings.describe({})
       this.set({
         status: 'ready',

@@ -25,6 +25,7 @@ import type { AgentLoopCardState } from '../src/client/agent-loop-card-controlle
 import type { BashCardState } from '../src/client/bash-card-controller.ts'
 import type { CardFieldState, CardShell } from '../src/client/card-form.ts'
 import type { DescribeImageCardState } from '../src/client/describe-image-card-controller.ts'
+import type { ConfigurablePluginsTabState } from '../src/client/tab-store.ts'
 import type { WebSearchCardState } from '../src/client/web-search-card-controller.ts'
 import { en } from '../src/client/locales.ts'
 
@@ -62,11 +63,20 @@ function renderSection(rows: readonly PluginsSettingsTabEntry[]) {
   render(<PluginsSettingsSection {...props} />)
 }
 
-function renderConfigurable(cardCount: number, cards = 'cards') {
+/**
+ * Render the tab over the namespaces it was told to dispatch, with `cards`
+ * standing in for the slot ledger: a key it names renders that text, and one
+ * it does not renders nothing, exactly as an unclaimed key does.
+ */
+function renderConfigurable(namespaces: string[], cards: Record<string, string> = {}, loaded = true) {
+  const store = createSnapshotStore<ConfigurablePluginsTabState>({ loaded, namespaces })
   const props = {
     t,
-    cardCount,
-    renderSlot: () => <li>{cards}</li>,
+    useConfigurablePlugins: bindSnapshotSelector(store),
+    renderSlot: (_name: string, _owner: object, opts?: { entryKey?: string }) => {
+      const card = opts?.entryKey === undefined ? undefined : cards[opts.entryKey]
+      return card === undefined ? null : <li>{card}</li>
+    },
   } as unknown as ConfigurablePluginsTabProps
   render(<ConfigurablePluginsTab {...props} />)
 }
@@ -156,16 +166,24 @@ describe('PluginsSettingsSection', () => {
 
 describe('ConfigurablePluginsTab', () => {
   it('says so when no plugin contributed a card', () => {
-    renderConfigurable(0)
+    renderConfigurable([], { bash: 'shell' })
 
     expect(screen.getByText(en.empty)).toBeTruthy()
-    expect(screen.queryByText('cards')).toBeNull()
+    expect(screen.queryByText('shell')).toBeNull()
   })
 
-  it('renders the card list once a plugin contributed one', () => {
-    renderConfigurable(1)
+  it('withholds the empty line until the Host has answered once', () => {
+    // An unanswered read is not the statement that this deployment configures
+    // no plugin; saying it anyway would flash a wrong answer on every open.
+    renderConfigurable([], { bash: 'shell' }, false)
 
-    expect(screen.getByText('cards')).toBeTruthy()
+    expect(screen.queryByText(en.empty)).toBeNull()
+  })
+
+  it('dispatches one card per namespace, keyed by it', () => {
+    renderConfigurable(['bash', 'agent-loop'], { bash: 'shell', 'agent-loop': 'loop' })
+
+    expect(screen.getAllByRole('listitem').map(item => item.textContent)).toEqual(['shell', 'loop'])
     expect(screen.queryByText(en.empty)).toBeNull()
   })
 })

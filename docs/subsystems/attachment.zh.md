@@ -95,6 +95,16 @@ Immutable binary attachment service. Implementations validate bytes before publi
 abstract validateImage(input: SaveImageAttachment): Promise<void>
 
 /**
+ * Validate one ordered image batch before committing any member.
+ * Validation failures start no writes; storage failures return no partial
+ * references, although already published content-addressed objects may stay
+ * unreachable until a future retention policy collects them.
+ * @param inputs - encoded images in their owning message order.
+ * @returns durable references in the exact input order.
+ */
+async saveImages(inputs: readonly SaveImageAttachment[]): Promise<readonly ImageAttachmentRef[]>
+
+/**
  * Validate and durably commit one image before its owning session event is appended.
  * @param input - encoded bytes, declared media type, and optional display name.
  * @returns a durable content-addressed reference.
@@ -111,5 +121,5 @@ abstract saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef>
 abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>
 ```
 
-Source: [`packages/attachment/attachment/src/index.ts:29`](../../packages/attachment/attachment/src/index.ts)
+Source: [`packages/attachment/attachment/src/index.ts:31`](../../packages/attachment/attachment/src/index.ts)
 <!-- END GENERATED cordis-surface -->

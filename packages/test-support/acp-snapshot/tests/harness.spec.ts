@@ -407,6 +407,24 @@ describe('runScenario', () => {
     expect((JSON.parse(sessionLine) as { cwd?: string }).cwd).toBe(result.cwd)
   })
 
+  it('drives a structured prompt-content step without flattening its wire blocks', { timeout: 20_000 }, async () => {
+    const { fixtureFile } = await scenario({})
+    const result = await runScenario(
+      {
+        steps: [...boot, {
+          op: 'promptContent',
+          content: [
+            { type: 'text', text: 'before' },
+            { type: 'image', data: 'AQ==', mimeType: 'image/png' },
+            { type: 'text', text: 'after' },
+          ],
+        }],
+      },
+      { agent: AGENT, mode: 'replay', fixtureFile },
+    )
+    expect(result.rawStdout).toContain('"stopReason":"end_turn"')
+  })
+
   it('forwards override/child fixture paths into the child env and captures stderr', { timeout: 20_000 }, async () => {
     const { dir, fixtureFile } = await scenario({ echoEnv: true, stderrNote: 'fake bin booted' })
     const childFiles = [join(dir, 'session.1.jsonl'), join(dir, 'session.2.jsonl')]
@@ -1097,6 +1115,7 @@ describe('runScenario', () => {
 
   it.each([
     [{ op: 'prompt', text: 'x' }, /prompt before newSession/],
+    [{ op: 'promptContent', content: [{ type: 'text', text: 'x' }] }, /promptContent before newSession/],
     [{ op: 'promptAndWaitForAgentMessage', text: 'x', waitForText: 'later' }, /promptAndWaitForAgentMessage before newSession/],
     [{ op: 'promptExpectError', text: 'x' }, /promptExpectError before newSession/],
     [{ op: 'promptAndCancel', text: 'x' }, /promptAndCancel before newSession/],

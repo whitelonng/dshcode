@@ -128,6 +128,16 @@ async function bootWeb(
 const toolNames = (ctx: Context, agent?: Agent): string[] =>
   ctx.tools.schemas(agent).map(schema => schema.name).sort()
 
+function toolParameterNames(ctx: Context, agent: Agent, toolName: string): string[] {
+  const schema = ctx.tools.schemas(agent).find(tool => tool.name === toolName)
+  if (schema === undefined) throw new Error(`missing tool schema ${toolName}`)
+  const properties = schema.parameters.properties
+  if (typeof properties !== 'object' || properties === null || Array.isArray(properties)) {
+    throw new Error(`${toolName} has invalid parameter properties`)
+  }
+  return Object.keys(properties).sort()
+}
+
 function enablePresetTool(composition: string, id: string): string {
   const row = `    - id: ${id}\n`
   const start = composition.indexOf(row)
@@ -489,6 +499,12 @@ describe('product subagent rows in user presets', () => {
         const tools = toolNames(productCtx, handle.agent)
         expect(tools.filter(name => name === 'subagent_codex' || name === 'subagent_claude_code'))
           .toEqual(productTools)
+        expect(tools).toEqual(expect.arrayContaining(['job_kill', 'job_list', 'job_output']))
+        for (const productTool of productTools) {
+          expect(toolParameterNames(productCtx, handle.agent, productTool)).toEqual([
+            'description', 'prompt', 'run_in_background',
+          ])
+        }
       } finally {
         await handle.dispose()
       }
