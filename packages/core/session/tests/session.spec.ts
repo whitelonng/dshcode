@@ -302,6 +302,29 @@ describe('Session', () => {
     }
   })
 
+  it('loads a tool/result with an empty callId written by the legacy SSE stamping bug', () => {
+    // deepseek-ai/deepseek-harness#725: buggy builds stamped `callId: ""`
+    // into tool/result events. The load-time shape check tolerates the
+    // empty id so those session files stay readable; the tool executor
+    // still surfaces the empty id as `unknown tool` at runtime.
+    const legacyTool = {
+      id: 'tool',
+      role: 'user',
+      content: [{
+        type: 'tool-result',
+        toolCallId: '',
+        content: [{ type: 'text', text: 'result' }],
+      }],
+      source: { kind: 'tool', callId: '' },
+    }
+    const event = {
+      type: 'tool/result', seq: 0, time: 1, surfaceOp: 'append',
+      data: { turn: 1, step: 1, message: legacyTool },
+    } as unknown as SessionEvent
+    expect(Session.create(SessionId('legacy-empty-callid'), [event]).events.slice(0, 1))
+      .toEqual([event])
+  })
+
   it('snapshots message events without validating plugin-owned block details', () => {
     const boundary = snapshotSessionEvent({
       type: 'turn/start',

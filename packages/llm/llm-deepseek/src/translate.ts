@@ -156,8 +156,22 @@ export async function* translate(payloads: AsyncIterable<string>): AsyncGenerato
           toolBlocks.set(call.index, block)
           yield { type: 'block-start', index: block.index, blockType: 'tool-call' }
         }
-        if (call.id !== undefined) block.callId = call.id
-        if (call.function?.name !== undefined) block.name = call.function.name
+        // Only stamp id/name from the first delta that carries a non-empty
+        // string value. Two failure modes this guards against
+        // (deepseek-ai/deepseek-harness#725; hy3 & longcat-2.0 gateways
+        // exhibit both):
+        //   1. Continuation deltas sometimes re-emit the field as an
+        //      empty string; a naive `block.name = call.function.name`
+        //      then overwrites the established tool name with `""`,
+        //      leading to `unknown tool ""`.
+        //   2. Some gateways (hy3, longcat-2.0) emit `null` for id/name
+        //      in their continuations; `null !== undefined` lets the
+        //      naive check through, and string concat coerces it to
+        //      `"Globnull"`, a destructive tool id.
+        const callId = call.id
+        if (typeof callId === 'string' && callId.length > 0) block.callId = callId
+        const callName = call.function?.name
+        if (typeof callName === 'string' && callName.length > 0) block.name = callName
         const fragment = call.function?.arguments ?? ''
         block.text += fragment
         yield {
