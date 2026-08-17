@@ -118,6 +118,85 @@ describe('BlockAssembler', () => {
   })
 })
 
+describe('BlockAssembler replay metadata', () => {
+  const response = { responseId: 'resp-1' }
+
+  it('prunes per-block replay entries with the tool calls a max-tokens finish drops', () => {
+    const assembler = new BlockAssembler()
+    assembler.push({ type: 'block-end', index: 0, block: { type: 'text', text: 'lead' } })
+    assembler.push({
+      type: 'block-end',
+      index: 1,
+      block: { type: 'tool-call', id: CallId('c1'), name: 'echo', arguments: '{"text":' },
+    })
+    assembler.push({ type: 'block-end', index: 2, block: { type: 'reasoning', text: 'tail' } })
+    assembler.push({
+      type: 'finish',
+      reason: { kind: 'max-tokens' },
+      replayState: { response, blocks: ['meta-0', 'meta-1', 'meta-2'] },
+    })
+
+    expect(assembler.blocks()).toEqual([
+      { type: 'text', text: 'lead' },
+      { type: 'reasoning', text: 'tail' },
+    ])
+    expect(assembler.replayState).toEqual({ response, blocks: ['meta-0', 'meta-2'] })
+  })
+
+  it('omits replay metadata whose per-block entries misalign with the emitted blocks', () => {
+    const assembler = new BlockAssembler()
+    assembler.push({ type: 'block-end', index: 0, block: { type: 'text', text: 'one' } })
+    assembler.push({ type: 'block-end', index: 1, block: { type: 'text', text: 'two' } })
+    assembler.push({
+      type: 'finish',
+      reason: { kind: 'stop' },
+      replayState: { response, blocks: ['meta-0'] },
+    })
+
+    expect(assembler.blocks()).toHaveLength(2)
+    expect(assembler.replayState).toBeUndefined()
+  })
+
+  it('passes replay metadata through unchanged when assembly drops nothing', () => {
+    const replayState = { response, blocks: ['meta-0', 'meta-1'] }
+    const assembler = new BlockAssembler()
+    assembler.push({ type: 'block-end', index: 0, block: { type: 'text', text: 'partial' } })
+    assembler.push({
+      type: 'block-end',
+      index: 1,
+      block: { type: 'tool-call', id: CallId('c1'), name: 'echo', arguments: '{}' },
+    })
+    assembler.push({ type: 'finish', reason: { kind: 'tool-calls' }, replayState })
+
+    expect(assembler.replayState).toBe(replayState)
+  })
+
+  it('keeps a max-tokens replay state with no per-block entries across a tool-call drop', () => {
+    const replayState = { response }
+    const assembler = new BlockAssembler()
+    assembler.push({ type: 'block-end', index: 0, block: { type: 'text', text: 'partial' } })
+    assembler.push({
+      type: 'block-end',
+      index: 1,
+      block: { type: 'tool-call', id: CallId('c1'), name: 'echo', arguments: '{"text":' },
+    })
+    assembler.push({ type: 'finish', reason: { kind: 'max-tokens' }, replayState })
+
+    expect(assembler.blocks()).toEqual([{ type: 'text', text: 'partial' }])
+    expect(assembler.replayState).toBe(replayState)
+  })
+
+  it('keeps a text-only max-tokens response and its replay metadata intact', () => {
+    const replayState = { response, blocks: ['meta-0'] }
+    const assembler = new BlockAssembler()
+    assembler.push({ type: 'block-end', index: 0, block: { type: 'text', text: 'partial' } })
+    assembler.push({ type: 'finish', reason: { kind: 'max-tokens' }, replayState })
+
+    expect(assembler.blocks()).toEqual([{ type: 'text', text: 'partial' }])
+    expect(assembler.replayState).toBe(replayState)
+  })
+})
+
 describe('assertNever', () => {
   it('throws with diagnostics when a value escapes a closed union at runtime', async () => {
     const { assertNever } = await import('@deepseek-ai/dsh-llm')

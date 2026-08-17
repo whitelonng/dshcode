@@ -62,7 +62,7 @@ function inboxText(message: UserMessage): string {
 describe('assistant replay provider and model fields', () => {
   it('records adapter replay state with the assembled assistant content', async () => {
     const response = textResponse('unchanged')
-    const replayState = { private: 'state' }
+    const replayState = { response: { private: 'state' }, blocks: ['block-meta'] }
     response[response.length - 1] = { type: 'finish', reason: { kind: 'stop' }, replayState }
     const adapter = new MockAdapter([response])
     const ctx = await harness(adapter)

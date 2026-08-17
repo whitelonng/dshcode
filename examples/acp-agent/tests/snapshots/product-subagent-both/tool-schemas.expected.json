@@ -308,7 +308,7 @@
     },
     {
       "name": "subagent_claude_code",
-      "description": "Delegate a self-contained task to a subagent (a separate agent that works in its own context) to offload focused, independent work — research, a scoped implementation, an analysis — so it does not consume this conversation's context. The subagent returns its result, not its intermediate steps. Give it a complete, standalone prompt: it does not see this conversation. This call waits for the subagent and returns its result.",
+      "description": "Delegate a self-contained task to a subagent (a separate agent that works in its own context) to offload focused, independent work — research, a scoped implementation, an analysis — so it does not consume this conversation's context. The subagent returns its result, not its intermediate steps. Give it a complete, standalone prompt: it does not see this conversation. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -319,6 +319,10 @@
           "prompt": {
             "type": "string",
             "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs."
+          },
+          "run_in_background": {
+            "type": "boolean",
+            "description": "Whether to run as a background job and return its id. Defaults to false; collect with job_output or stop with job_kill."
           }
         },
         "required": [
@@ -329,7 +333,7 @@
     },
     {
       "name": "subagent_codex",
-      "description": "Delegate a self-contained task to a subagent (a separate agent that works in its own context) to offload focused, independent work — research, a scoped implementation, an analysis — so it does not consume this conversation's context. The subagent returns its result, not its intermediate steps. Give it a complete, standalone prompt: it does not see this conversation. This call waits for the subagent and returns its result.",
+      "description": "Delegate a self-contained task to a subagent (a separate agent that works in its own context) to offload focused, independent work — research, a scoped implementation, an analysis — so it does not consume this conversation's context. The subagent returns its result, not its intermediate steps. Give it a complete, standalone prompt: it does not see this conversation. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -340,6 +344,10 @@
           "prompt": {
             "type": "string",
             "description": "The complete, self-contained task for the subagent. It does not share this conversation's context, so include everything it needs."
+          },
+          "run_in_background": {
+            "type": "boolean",
+            "description": "Whether to run as a background job and return its id. Defaults to false; collect with job_output or stop with job_kill."
           }
         },
         "required": [

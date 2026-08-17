@@ -25,5 +25,5 @@
             config:
               provider: codex
               toolName: subagent_codex
-              enableRunInBackground: false
+              backgroundMode: one-shot
               maxDepth: provider-managed

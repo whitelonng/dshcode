@@ -37,7 +37,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetStandardName: 'Standard mode',
   presetStandardDescription:
     'Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.',
-  presetCodeName: 'Code mode',
+  presetCodeName: 'PTC mode',
   presetCodeDescription:
     'All Standard mode capabilities, with tools exposed through the Code Mode SDK so the model can combine multi-step operations in one TypeScript program.',
   presetMinimalName: 'Minimal mode',

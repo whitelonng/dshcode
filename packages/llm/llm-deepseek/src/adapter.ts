@@ -27,7 +27,7 @@ import { translate } from './translate.ts'
 import type { WireError } from './types.ts'
 
 /** One reasoning level the direct DeepSeek wire route can dispatch. */
-export type DeepSeekReasoningLevel = 'off' | 'high' | 'max'
+export type DeepSeekReasoningLevel = 'off' | 'low' | 'high' | 'max'
 
 /** One optional model entry advertised by the direct-fetch adapter. */
 export interface DeepSeekCatalogModel {
@@ -46,7 +46,7 @@ export interface DeepSeekCatalogModel {
    * route default. `false` declares a non-reasoning model; a map declares the
    * offered levels (its keys) with their wire spellings, which for this wire
    * route are fixed — `off` uses the empty spelling (thinking disabled), and
-   * `high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
+   * `low`/`high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
    * `reasoningEffort` for this model.
    */
   reasoningEfforts?: false | Partial<Record<DeepSeekReasoningLevel, string | null>>
@@ -105,10 +105,12 @@ export const DEFAULT_CONTEXT_WINDOW = 1_000_000
 export const DEFAULT_MAX_TOKENS = 256_000
 const STREAM_IDLE_TIMEOUT_CODE = 'LLM_STREAM_IDLE_TIMEOUT'
 const OFF_REASONING_EFFORT = ReasoningEffortId('off')
+const LOW_REASONING_EFFORT = ReasoningEffortId('low')
 const HIGH_REASONING_EFFORT = ReasoningEffortId('high')
 const MAX_REASONING_EFFORT = ReasoningEffortId('max')
 const REASONING_EFFORTS = [
   { id: OFF_REASONING_EFFORT, name: 'Off' },
+  { id: LOW_REASONING_EFFORT, name: 'Low' },
   { id: HIGH_REASONING_EFFORT, name: 'High' },
   { id: MAX_REASONING_EFFORT, name: 'Max' },
 ] as const
@@ -117,7 +119,7 @@ const OFF_ONLY_REASONING_EFFORTS = [
 ] as const
 
 /** DeepSeek reasoning levels in display order. */
-const REASONING_LEVELS = ['off', 'high', 'max'] as const
+const REASONING_LEVELS = ['off', 'low', 'high', 'max'] as const
 
 /** The selectable-reasoning metadata one model reports, per-model first. */
 function reasoningForModel(
@@ -142,9 +144,11 @@ function reasoningForModel(
         efforts: REASONING_EFFORTS,
         defaultEffort: connection.defaults.reasoningEffort === 'off'
           ? OFF_REASONING_EFFORT
-          : connection.defaults.reasoningEffort === 'max'
-            ? MAX_REASONING_EFFORT
-            : HIGH_REASONING_EFFORT,
+          : connection.defaults.reasoningEffort === 'low'
+            ? LOW_REASONING_EFFORT
+            : connection.defaults.reasoningEffort === 'max'
+              ? MAX_REASONING_EFFORT
+              : HIGH_REASONING_EFFORT,
       },
     }
   }
@@ -162,7 +166,7 @@ function reasoningForModel(
   const offered = REASONING_LEVELS.filter(level => declared[level] !== undefined)
   const efforts = offered.map(level => ({
     id: ReasoningEffortId(level),
-    name: level === 'off' ? 'Off' : level === 'high' ? 'High' : 'Max',
+    name: level === 'off' ? 'Off' : level === 'low' ? 'Low' : level === 'high' ? 'High' : 'Max',
   }))
   const routeDefault = connection.defaults.reasoningEffort
   const defaultEffort = routeDefault !== undefined && offered.includes(routeDefault)
@@ -171,9 +175,11 @@ function reasoningForModel(
       ? 'max' as const
       : offered.includes('high')
         ? 'high' as const
-        : offered.includes('off')
-          ? 'off' as const
-          : undefined
+        : offered.includes('low')
+          ? 'low' as const
+          : offered.includes('off')
+            ? 'off' as const
+            : undefined
   return {
     reasoning: {
       efforts,

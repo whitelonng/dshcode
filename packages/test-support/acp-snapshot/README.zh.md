@@ -61,7 +61,7 @@ defineAcpSnapshotSuite({
 
 示例还发布 `cordis.snapshot.yml` 回放 overlay，位于 `cordis.yml` 旁边（bin 在 `DSH_SNAPSHOT=replay` 下交换它们，见[单源回放配置 Agent Note](../../../.agents/notes/archived/testing/2026-07-04-single-source-acp-replay-config.md)）；回放 fixture 由 [`dsh-llm-replay`](../llm-replay/README.md) 提供，本包通过为子进程设置的 `DSH_SNAPSHOT_*` env var 指向它。`pnpm run test:snapshot:record` 调用在线 LLM（大语言模型），并重写已记录场景的模型 fixture；`pnpm run test:snapshot:refresh` 保持无密钥，运行回放 overlay，并从已提交模型脚本重写 stdout、可比较会话日志预期输出，以及各 pin 自有的提示词与工具 schema 伴随文件。Fixture 角色、录制/回放/刷新语义和场景表字段记录在 `Scenario` 以及[快照 Agent Note](../../../.agents/notes/implemented/testing/2026-06-19-acp-snapshot-tests.md) 中。
 
-约束：`suite.ts` 与 `harness.ts` 导入 vitest（harness 通过 `vi.waitFor` 轮询其持久边界等待），因此包入口只能在 vitest 运行中导入（启动器和规范化器没有此依赖，但从同一入口发布）。启动器和套件工厂按设计专用于 ACP，启动器使用 SDK 的 `ClientSideConnection`；规范化器是与传输无关的会话日志/文本辅助工具，还由 JSON-RPC 和 Web 快照录制器消费。输入脚本覆盖初始化、新建会话、文本提示、取消、预期 RPC 失败和持久轮次边界等待。权限往返是选项类别选择（`allow_once`、`reject_once` 等）的 FIFO 队列，映射到 agent 发出的 `optionId`；缺少或耗尽的队列回答 `cancelled`，未提供类别会拒绝运行。
+约束：`suite.ts` 与 `harness.ts` 导入 vitest（harness 通过 `vi.waitFor` 轮询其持久边界等待），因此包入口只能在 vitest 运行中导入（启动器和规范化器没有此依赖，但从同一入口发布）。启动器和套件工厂按设计专用于 ACP，启动器使用 SDK 的 `ClientSideConnection`；规范化器是与传输无关的会话日志/文本辅助工具，还由 JSON-RPC 和 Web 快照录制器消费。输入脚本覆盖初始化、新建会话、文本提示简写、精确结构化 ACP 提示词块、取消、预期 RPC 失败和持久轮次边界等待。权限往返是选项类别选择（`allow_once`、`reject_once` 等）的 FIFO 队列，映射到 agent 发出的 `optionId`；缺少或耗尽的队列回答 `cancelled`，未提供类别会拒绝运行。
 
 ## 模型体验
 

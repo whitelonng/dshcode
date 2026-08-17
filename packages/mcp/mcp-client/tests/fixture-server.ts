@@ -46,7 +46,7 @@ server.registerTool('image', {
 }, async () => ({
   content: [
     { type: 'text', text: 'Here is an image:' },
-    { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+    { type: 'image', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', mimeType: 'image/png' },
     { type: 'text', text: 'End of image.' },
   ],
 }))

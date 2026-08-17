@@ -1,4 +1,4 @@
-# Test-only composition of both public opt-in providers and foreground tools.
+# Test-only composition of both public opt-in providers and one-shot task tools.
 # The owning e2e boots this tree but never invokes a model or product process.
 - id: fixture
   name: './fixture.ts'
@@ -20,7 +20,7 @@
   config:
     provider: codex
     toolName: subagent_codex
-    enableRunInBackground: false
+    backgroundMode: one-shot
     maxDepth: 'provider-managed'
 
 - id: tool-subagent-claude-code
@@ -28,7 +28,7 @@
   config:
     provider: claude-code
     toolName: subagent_claude_code
-    enableRunInBackground: false
+    backgroundMode: one-shot
     maxDepth: 'provider-managed'
 
 - id: agent-spine

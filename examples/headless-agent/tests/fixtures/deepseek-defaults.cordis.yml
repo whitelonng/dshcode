@@ -6,7 +6,8 @@
       - id: llm-deepseek
         config:
           baseURL: !!js process.env.DSH_SNAPSHOT_BASE_URL
-          thinking: disabled
+          thinking: enabled
+          reasoningEffort: low
           streamIdleTimeoutMs: 150
       - id: agent-spine
         config:

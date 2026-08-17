@@ -113,7 +113,9 @@ async function settleStart(start: Promise<SubagentRun>, signal: AbortSignal): Pr
   try {
     return await settleRun(await start)
   } catch (error: unknown) {
-    return signal.aborted
+    // Product providers aggregate startup and rollback failures. Cancellation
+    // must not turn a failed cleanup into a cleanly killed Job.
+    return signal.aborted && !(error instanceof AggregateError)
       ? { status: 'killed' }
       : { status: 'failed', detail: String(error) }
   }
@@ -357,7 +359,7 @@ export function apply(ctx: Context, config: Config): void {
         render: (_args, value) => [{
           type: 'text',
           text: value.kind === 'background'
-            ? `started background subagent task ${value.jobId}`
+            ? `started background subagent job ${value.jobId}`
             : value.kind === 'continuable'
               ? `started subagent ${value.subagentId}`
               : outputValueText(value.output),

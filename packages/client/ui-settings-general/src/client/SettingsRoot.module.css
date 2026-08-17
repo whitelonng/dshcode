@@ -1,19 +1,19 @@
 /* Settings shell (figma 501:29904 mask context / 501:29947 panel): sidebar
    foot trigger row + centered 1080x700 modal panel. The trigger uses the
-   sidebar's 34px compact row / 36px rail circle rhythm; the
+   sidebar foot's 42px row / 36px rail circle rhythm; the
    panel is a two-column layout — 188px nav rail + content column with a
    54px header and the 24px-padded options area. */
 
-/* Trigger row: match the other wide sidebar controls' compact vertical rhythm. */
+/* Trigger row: the 42px foot-row box shared with the Cordis footer action. */
 .trigger {
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: calc(100% + 8px);
-  height: 34px;
-  margin: 4px -4px 4px;
-  padding: 6px 2px 6px 10px;
+  width: calc(100% + 4px);
+  height: 42px;
+  margin: 4px -2px;
+  padding: 0 10px 0 8px;
   box-sizing: border-box;
   border: none;
   border-radius: 12px;

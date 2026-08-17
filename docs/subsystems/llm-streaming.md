@@ -159,6 +159,29 @@ A streaming response interleaves several typed blocks (text, reasoning, multiple
 
 ```ts type-equiv
 /**
+ * Adapter-private lossless-JSON state for replaying a successful response,
+ * carried by a terminal `finish` chunk and stored on the assembled assistant
+ * message's model source. Both halves stay opaque to the harness; only the
+ * split is shared vocabulary, so assembly can keep stored metadata aligned
+ * with stored content without reading either half.
+ */
+interface ReplayEnvelope {
+  /** Response-level adapter-private metadata (ids, native stop reason). */
+  response: unknown
+  /**
+   * Per-block adapter-private metadata, one entry per emitted block in
+   * first-seen stream order. When assembly drops a block it drops the entry at
+   * the same position; entries whose length does not match the emitted block
+   * count discard the whole envelope. An adapter whose metadata is independent
+   * of block structure omits this field and the envelope passes through
+   * assembly unchanged.
+   */
+  blocks?: readonly unknown[]
+}
+```
+
+```ts type-equiv
+/**
  * Raw streaming protocol emitted by adapters.
  * Block indexes correlate interleaved deltas, and `block-end` carries the
  * assembled block. Adapters emit usage before the terminal finish and nothing
@@ -176,8 +199,8 @@ type StreamChunk =
   | {
     type: 'finish'
     reason: FinishReason
-    /** Adapter-private lossless-JSON state for replaying a successful response. */
-    replayState?: unknown
+    /** Replay metadata for a successful response; see {@link ReplayEnvelope}. */
+    replayState?: ReplayEnvelope
   }
 ```
 
@@ -213,7 +236,7 @@ Every adapter MUST obey these, and every consumer may rely on them:
 - **Context overflow has one canonical code.** Both DeepSeek adapters classify explicit provider detail through `isContextWindowExceededError()` and surface `CONTEXT_WINDOW_EXCEEDED`, whether the failure arrives as a thrown HTTP `LlmError` or an in-band finish error. Consumers route on the code, never provider text.
 - **An empty completion is a retryable error, not a silent success.** Both adapters map a terminal `stop` finish that carried no content blocks to `finish {kind:'error'}` with the canonical `EMPTY_RESPONSE` code, and `dsh-llm-retry` retries it by default; see [empty model responses are retryable](../../.agents/notes/implemented/bug-fix/2026-07-24-empty-model-response-is-retryable.md).
 - **Every provider HTTP request carries the app-attribution header.** Adapters send `attributionHeaders()` (below) - the `User-Agent` baseline - and prove it with a wire-level test.
-- **Replay state is adapter-owned.** A successful `finish` may carry lossless-JSON state needed to reconstruct a native provider response. The loop stores it with the assembled assistant message. On a later request, `LlmRuntime` passes the state only when the historical provider and target provider are currently registered to the exact same adapter instance. That adapter validates the state and owns any cross-model or cross-provider conversion; other adapters receive the provider-neutral content plus provider/model fields without the private state.
+- **Replay state is adapter-owned; its split is shared.** A successful `finish` may carry a `ReplayEnvelope`: opaque response-level metadata plus optional per-block entries aligned with the emitted block sequence. The alignment is the harness's vocabulary — when assembly drops a block it drops the entry at the same position, so stored metadata always describes stored content. The loop stores the pruned envelope with the assembled assistant message. On a later request, `LlmRuntime` passes the state only when the historical provider and target provider are currently registered to the exact same adapter instance. That adapter validates the state and owns any cross-model or cross-provider conversion; other adapters receive the provider-neutral content plus provider/model fields without the private state. Durable content stays authoritative: a stored state the reading adapter cannot use degrades that one message to provider-neutral conversion with a diagnostic instead of failing the request.
 
 ## `ResolvedRetryPolicy`
 
@@ -267,6 +290,8 @@ interface TokenUsage {
 
 `BlockAssembler` ([`packages/llm/llm/src/assembler.ts`](../../packages/llm/llm/src/assembler.ts)) is the single shared implementation that folds a `StreamChunk` stream back into `ContentBlock`s, usage, finish reason, and replay state. The loop logs the raw chunks while feeding the same chunks through an assembler, then stores the assembled assistant content with the provider and model that produced it. A consumer that needs the assembled result without re-implementing the fold uses this.
 
+One keep/drop decision covers content and metadata together: a `max-tokens` finish drops every tool call because a truncated call is unsafe to execute, and the same decision prunes the replay envelope's per-block entry at each dropped position. `blocks()` and `replayState` therefore cannot disagree, whatever assembly removes.
+
 ```ts public-api
 /**
  * Incrementally assembles raw {@link StreamChunk}s into complete
@@ -296,8 +321,12 @@ declare class BlockAssembler {
   get usage(): TokenUsage | undefined;
   /** Finish reason from the `finish` chunk; `{kind: 'stop'}` when the stream ended without one. */
   get finish(): FinishReason;
-  /** Adapter-private replay state from the terminal finish chunk, if any. */
-  get replayState(): unknown;
+  /**
+   * Replay metadata from the terminal finish chunk, if any, with per-block
+   * entries pruned in step with {@link blocks}. Undefined when the envelope's
+   * entries do not align with the emitted blocks.
+   */
+  get replayState(): ReplayEnvelope | undefined;
   /**
    * The assembled assistant message.
    * @param source - producer attribution for the assembled message.

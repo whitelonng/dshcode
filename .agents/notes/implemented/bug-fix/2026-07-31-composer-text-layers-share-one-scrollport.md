@@ -24,6 +24,8 @@ One scrolling box, holding both layers.
 
 The browser then applies one offset to both layers, in the same frame, on the same compositor. The caret is bound to its glyphs by construction rather than by upkeep: there is no code to run, no event to wait for, and no state that can be one frame stale. The wheel-chaining handler stays, retargeted from the textarea to the scrollport, and remains the only listener on the box.
 
+Safari's native text control has one engine exception: deleting across a soft-wrap threshold can retain the former line layout after the mirror shrinks. The [Safari soft-wrap recovery](2026-08-13-safari-textarea-soft-wrap-reflow.md) restores the zero-overflow invariant before paint without changing the one-scrollport design.
+
 Two things the previous mechanism needed are gone with it:
 
 **The backdrop's trailing-line sentinel.** It existed to keep the two boxes' scroll extents equal — a textarea reserves a line box for the caret after a final newline while `white-space: pre-wrap` collapses a text node's trailing newline, so a draft ending in a newline made the backdrop one line shorter and clamped the mirrored offset a line above the caret. With one scrollport the backdrop's own extent decides nothing: the mirror div sizes the stack for both layers, both start at the same top, and a layer whose content ends earlier simply paints nothing on the last line. The shape is worth keeping in mind rather than the mechanism: it is the one that measured 628 against 652 when the two boxes had to agree on a height.

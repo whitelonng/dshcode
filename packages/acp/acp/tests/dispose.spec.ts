@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { makeBridgeHarness, type BridgeHarness } from './harness.ts'
 
@@ -23,6 +24,37 @@ describe('ACP connection ownership', () => {
     await harness.acpFiber.dispose()
     await expect(prompt).resolves.toEqual({ stopReason: 'cancelled' })
     expect(agent.status).toBe('idle')
+    expect(harness.ctx.agents.get(SessionId(sessionId))).toBeUndefined()
+  })
+
+  it('disposal drains asynchronous assistant image delivery before releasing sessions', async () => {
+    const script: StreamChunk[][] = []
+    harness = await makeBridgeHarness({ script })
+    const ref = await harness.attachments!.saveImage({ data: Uint8Array.of(4), mediaType: 'image/png' })
+    script.push([
+      { type: 'block-start', index: 0, blockType: 'image' },
+      { type: 'block-end', index: 0, block: { type: 'image', attachment: ref } },
+      { type: 'finish', reason: { kind: 'stop' } },
+    ])
+    const readStarted = Promise.withResolvers<undefined>()
+    const releaseRead = Promise.withResolvers<undefined>()
+    harness.attachments!.beforeRead = () => {
+      readStarted.resolve(undefined)
+      return releaseRead.promise
+    }
+    await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
+    const prompt = harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'show it' }] })
+    await readStarted.promise
+
+    let disposed = false
+    const disposal = harness.acpFiber.dispose().finally(() => { disposed = true })
+    await Promise.resolve()
+    expect(disposed).toBe(false)
+
+    releaseRead.resolve(undefined)
+    await disposal
+    await expect(prompt).resolves.toEqual({ stopReason: 'cancelled' })
     expect(harness.ctx.agents.get(SessionId(sessionId))).toBeUndefined()
   })
 

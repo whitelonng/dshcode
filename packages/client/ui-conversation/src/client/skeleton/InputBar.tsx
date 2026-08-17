@@ -6,7 +6,7 @@
  * region-slot content) ride the owner props. Session facts
  * (running/removed/promptError) are self-selected via useSession. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
@@ -31,6 +31,7 @@ import {
 } from '../image-labels.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
+import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
@@ -106,6 +107,8 @@ export function InputBar({
   const dragDepthRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const mirrorRef = useRef<HTMLDivElement | null>(null)
+  const safari = useMemo(() => isSafariBrowser(navigator), [])
+  const safariNativeShrinkRef = useRef(false)
   // IME guard: composition Enter picks a candidate, it must not send. The ref outlives renders;
   // clearing is deferred one tick because Safari delivers the closing keydown AFTER compositionend.
   const composingRef = useRef(false)
@@ -153,6 +156,18 @@ export function InputBar({
       inputActions.pruneImages(attachments.map(attachment => attachment.id))
     }
   }, [attachments, input?.imageIds, inputActions])
+
+  // A native Safari edit that shortens the draft may leave the previous
+  // soft-wrap layout behind after the mirror shrinks. The native-change signal
+  // keeps ordinary typing and programmatic draft updates from reading layout;
+  // the helper then repairs only measured overflow before paint while
+  // preserving native editing state. See
+  // .agents/notes/implemented/bug-fix/2026-08-13-safari-textarea-soft-wrap-reflow.md.
+  useLayoutEffect(() => {
+    const nativeShrink = safariNativeShrinkRef.current
+    safariNativeShrinkRef.current = false
+    if (safari && nativeShrink) repairSafariTextareaLayout(inputRef.current)
+  }, [draft, safari])
 
   useEffect(() => {
     if (preview !== null && !attachments.some(attachment => attachment.id === preview.id)) setPreview(null)
@@ -343,6 +358,7 @@ export function InputBar({
     if (keyboard === undefined || locked) return // disabled/read-only states cannot edit the draft
     if (machineBusy) return // submitting is the read-only span; adjudicating holds the pending lock
     const next = e.target.value
+    safariNativeShrinkRef.current = safari && next.length < draft.length
     keyboard.setDraft(next)
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
     // oxlint-disable-next-line typescript/no-unnecessary-condition

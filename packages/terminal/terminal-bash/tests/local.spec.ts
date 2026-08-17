@@ -137,6 +137,26 @@ describe('terminal-bash real shell', () => {
     }
   }, 10_000)
 
+  it('restores the controlled prompt after an in-shell PS1 override', async () => {
+    // The silence tier is pushed beyond every assertion below, so each settle
+    // proves prompt-based readiness survives the override rather than the
+    // inferred_idle fallback absorbing a broken prompt.
+    const { ctx, agent } = await harness('danger-full-access', {
+      idleSilenceMs: 5_000,
+      timeoutMs: 8_000,
+    })
+    const created = await ctx.terminals.spawn(agent, { type: 'shell' })
+
+    const override = ctx.terminals.startSend(agent, created.sessionId, { text: 'PS1=broken-prompt', submit: true })
+    expect((await override.done).waitReason).toBe('stdin_read')
+
+    const after = ctx.terminals.startSend(agent, created.sessionId, { text: 'printf "healed=[%s]\\n" "$PS1"', submit: true })
+    const result = await after.done
+    expect(result.waitReason).toBe('stdin_read')
+    expect(result.viewport).toContain('healed=[dsh> ]')
+    await ctx.terminals.kill(agent, created.sessionId)
+  }, 20_000)
+
   it('wraps the exact shell argv under confined policy and unregisters on reload', async () => {
     const { ctx, root, agent, fiber, sandbox } = await harness('workspace-write')
     const created = await ctx.terminals.spawn(agent, { type: 'shell' })

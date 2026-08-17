@@ -39,6 +39,28 @@
   box-sizing: border-box;
 }
 
+/* Collapsed to the header strip: drop the height cap and the inner scroll
+   seat so the card hugs the title row, freeing the viewport for the
+   conversation above while the question stays pending. */
+.cardMinimized {
+  max-height: none;
+}
+
+/* The header strip is the whole card when collapsed: the title row needs
+   bottom padding once the body that normally carries it is hidden. */
+.cardMinimized .header {
+  padding-bottom: 14px;
+}
+
+/* Header button group: minimize sits next to the close action, both on the
+   same 24px icon-button grid. */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 /* Figma 1019:36938 header, user-tuned: heading block left, close right; the
    pager sits in the footer to balance the card. */
 .header {

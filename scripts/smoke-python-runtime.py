@@ -28,7 +28,6 @@ WORKFLOW_WORKER_TEXT = "workflow worker smoke ok"
 MINIMAL_PROMPT = "Exercise the packaged minimal agent's persistent Bash and string-replacement editor."
 MINIMAL_TEXT = "minimal agent smoke ok"
 MINIMAL_EDITOR_PATH_PREFIX = "Editor path: "
-MINIMAL_SYSTEM_PROMPT = "You are a helpful software engineer assistant."
 MINIMAL_CORDIS = (
     Path(__file__).resolve().parent.parent / "examples" / "jsonrpc-agent" / "minimal.cordis.yml"
 )
@@ -65,10 +64,18 @@ SNAPSHOT_WORKFLOW_SCRIPT = (
     f"const reply = await agent('{SNAPSHOT_WORKFLOW_CHILD_PROMPT}', {{ label: 'workflow-child' }})\n"
     "return { reply }"
 )
-SNAPSHOT_DIRECTORY = (
+ADVANCED_SNAPSHOT_DIRECTORY = (
     Path(__file__).resolve().parent / "snapshots" / "python-sdk-single-exe" / "advanced"
 )
-SNAPSHOT_FILENAMES = ("result.json", "session.jsonl", "session.1.jsonl", "session.2.jsonl")
+ADVANCED_SNAPSHOT_FILENAMES = ("result.json", "session.jsonl", "session.1.jsonl", "session.2.jsonl")
+MINIMAL_SNAPSHOT_DIRECTORY = (
+    Path(__file__).resolve().parent / "snapshots" / "python-sdk-single-exe" / "minimal"
+)
+MINIMAL_SNAPSHOT_FILENAMES = ("model-visible.json",)
+# The agent loop's dynamic runtime-context snapshot is the one model-visible message this
+# expected output cannot carry: the same composition emits it on macOS and not on Linux
+# (deepseek-harness#2488), and the file must replay on both. Everything else is compared.
+RUNTIME_CONTEXT_PREFIX = "Current runtime context"
 CUSTOM_CORDIS = """\
 - id: sdk-jsonrpc-server
   name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
@@ -170,17 +177,9 @@ def completion_chunks(body: dict[str, object]) -> list[dict[str, object]]:
         ),
         None,
     )
+    # The minimal composition's assembled system prompt, advertised tool schemas, and
+    # model-visible messages are pinned by its snapshot, not asserted here.
     if minimal_prompt is not None:
-        names = advertised_tool_names(body)
-        if names != {"bash", "str_replace_editor"}:
-            raise AssertionError(f"minimal agent smoke advertised unexpected tools: {names}")
-        system_prompts = [
-            message_text(message.get("content"))
-            for message in messages
-            if isinstance(message, dict) and message.get("role") == "system"
-        ]
-        if system_prompts != [MINIMAL_SYSTEM_PROMPT]:
-            raise AssertionError(f"minimal agent smoke assembled unexpected system prompts: {system_prompts}")
         return tool_call_chunks(
             "minimal-bash-1",
             "bash",
@@ -485,8 +484,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.scenario in {"all", "sdk-custom", "sdk-minimal", "sdk-snapshot", "direct"} and args.exe is None:
         parser.error("--exe is required for custom, minimal, snapshot, and direct scenarios")
-    if args.update_snapshots and args.scenario not in {"all", "sdk-snapshot"}:
-        parser.error("--update-snapshots requires --scenario sdk-snapshot or all")
+    if args.update_snapshots and args.scenario not in {"all", "sdk-minimal", "sdk-snapshot"}:
+        parser.error("--update-snapshots requires --scenario sdk-minimal, sdk-snapshot, or all")
     if args.exe is not None and not args.exe.is_file():
         parser.error(f"runtime executable does not exist: {args.exe}")
 
@@ -498,7 +497,7 @@ def main() -> None:
             smoke_sdk_custom(model.url, args.exe.resolve())
         if args.scenario in {"all", "sdk-minimal"}:
             assert args.exe is not None
-            smoke_sdk_minimal(model.url, args.exe.resolve())
+            smoke_sdk_minimal(model.url, args.exe.resolve(), args.update_snapshots)
         if args.scenario in {"all", "sdk-snapshot"}:
             assert args.exe is not None
             smoke_sdk_snapshot(model.url, args.exe.resolve(), args.update_snapshots)
@@ -558,10 +557,12 @@ def smoke_sdk_custom(base_url: str, executable: Path) -> None:
         assert_session_log(sessions, root, EXPECTED_TEXT, CODE_WORKER_TEXT, WORKFLOW_WORKER_TEXT)
 
 
-def smoke_sdk_minimal(base_url: str, executable: Path) -> None:
+def smoke_sdk_minimal(base_url: str, executable: Path, update_snapshots: bool) -> None:
     """Exercise the checked-in minimal composition through the packaged executable."""
     from deepseek_harness import DeepSeekHarness
 
+    # One mock model serves every scenario of a run, so the snapshot takes this turn's slice.
+    first_request = len(MockModelHandler.requests)
     with tempfile.TemporaryDirectory(prefix="dsh-sdk-minimal-") as temporary:
         root = Path(temporary).resolve()
         editor_path = root / "created.txt"
@@ -586,6 +587,11 @@ def smoke_sdk_minimal(base_url: str, executable: Path) -> None:
         if editor_path.read_text() != "created by packaged editor\n":
             raise AssertionError(f"packaged editor wrote unexpected content: {editor_path.read_text()!r}")
         assert_session_log(sessions, root, MINIMAL_TEXT, "COUNT=1", "COUNT=2 CWD=/tmp")
+
+        files = build_minimal_snapshot_files(MockModelHandler.requests[first_request:], root)
+        compare_snapshot_files(
+            files, update_snapshots, MINIMAL_SNAPSHOT_DIRECTORY, MINIMAL_SNAPSHOT_FILENAMES,
+        )
 
 
 def smoke_sdk_snapshot(base_url: str, executable: Path, update_snapshots: bool) -> None:
@@ -628,7 +634,9 @@ def smoke_sdk_snapshot(base_url: str, executable: Path, update_snapshots: bool) 
             raise AssertionError("second advanced child log has no workflow-subagent result")
 
         files = build_snapshot_files(result, logs, child_ids, root)
-        compare_snapshot_files(files, update_snapshots)
+        compare_snapshot_files(
+            files, update_snapshots, ADVANCED_SNAPSHOT_DIRECTORY, ADVANCED_SNAPSHOT_FILENAMES,
+        )
 
 
 def smoke_direct(base_url: str, executable: Path) -> None:
@@ -802,6 +810,79 @@ def snapshot_child_ids(result: "RunResult") -> list[str]:
     return child_ids
 
 
+def build_minimal_snapshot_files(
+    requests: list[dict[str, object]],
+    cwd: Path,
+) -> dict[str, str]:
+    """Render the minimal composition's model-visible surface as expected output.
+
+    Every assembled system prompt, advertised tool schema, and system or user message is
+    kept verbatim: they carry what the deployment actually shows the model, so a plugin
+    that contributes an unintended system section or user message cannot pass unnoticed.
+    Assistant and tool payloads keep only their call identity, and the dynamic
+    runtime-context snapshot is dropped, because their text differs across the platforms
+    this expected output must replay on.
+    """
+    snapshot = []
+    for body in requests:
+        messages = body.get("messages")
+        if not isinstance(messages, list):
+            raise AssertionError(f"minimal model request has no messages: {body}")
+        snapshot.append({
+            "tools": minimal_snapshot_text(body.get("tools"), cwd),
+            "messages": [
+                minimal_snapshot_message(message, cwd)
+                for message in messages
+                if not is_runtime_context_message(message)
+            ],
+        })
+    return {"model-visible.json": json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n"}
+
+
+def is_runtime_context_message(message: object) -> bool:
+    """Identify the agent loop's dynamic runtime-context snapshot, current or cleared."""
+    return (
+        isinstance(message, dict)
+        and message.get("role") == "user"
+        and message_text(message.get("content")).startswith(RUNTIME_CONTEXT_PREFIX)
+    )
+
+
+def minimal_snapshot_message(message: object, cwd: Path) -> dict[str, object]:
+    """Reduce one model-visible message to its stable, behavior-carrying parts."""
+    if not isinstance(message, dict):
+        raise AssertionError(f"minimal model request has an invalid message: {message}")
+    role = message.get("role")
+    if role in ("system", "user"):
+        return {"role": role, "text": minimal_snapshot_text(message_text(message.get("content")), cwd)}
+    if role == "assistant":
+        calls = message.get("tool_calls")
+        if not isinstance(calls, list):
+            raise AssertionError(f"minimal assistant message has no tool calls: {message}")
+        return {
+            "role": role,
+            "toolCalls": [
+                {"id": call.get("id"), "name": (call.get("function") or {}).get("name")}
+                for call in calls
+                if isinstance(call, dict)
+            ],
+        }
+    if role == "tool":
+        return {"role": role, "toolCallId": message.get("tool_call_id"), "text": "{{tool-result}}"}
+    raise AssertionError(f"minimal model request has an unexpected message role: {message}")
+
+
+def minimal_snapshot_text(value: object, cwd: Path) -> object:
+    """Replace the scenario's temporary working directory everywhere it appears."""
+    if isinstance(value, str):
+        return value.replace(str(cwd), "{{cwd}}")
+    if isinstance(value, list):
+        return [minimal_snapshot_text(item, cwd) for item in value]
+    if isinstance(value, dict):
+        return {key: minimal_snapshot_text(item, cwd) for key, item in value.items()}
+    return value
+
+
 def build_snapshot_files(
     result: "RunResult",
     logs: dict[str, list[dict[str, object]]],
@@ -838,8 +919,6 @@ def build_snapshot_files(
         files[f"session.{index}.jsonl"] = render_jsonl(
             [normalize_snapshot_value(record, replacements) for record in logs[child_id]]
         )
-    if tuple(files) != SNAPSHOT_FILENAMES:
-        raise AssertionError(f"advanced snapshot file set drifted: {tuple(files)}")
     return files
 
 
@@ -930,27 +1009,35 @@ def render_jsonl(records: list[object]) -> str:
     )
 
 
-def compare_snapshot_files(files: dict[str, str], update: bool) -> None:
-    """Write or exactly compare the advanced executable snapshot files."""
+def compare_snapshot_files(
+    files: dict[str, str],
+    update: bool,
+    directory: Path,
+    filenames: tuple[str, ...],
+) -> None:
+    """Write or exactly compare one scenario's expected snapshot files."""
+    scenario = directory.name
+    if tuple(files) != filenames:
+        raise AssertionError(f"{scenario} snapshot builder produced {tuple(files)}, expected {filenames}")
     if update:
-        SNAPSHOT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(parents=True, exist_ok=True)
         for name, content in files.items():
-            (SNAPSHOT_DIRECTORY / name).write_text(content, encoding="utf-8")
-        print(f"smoke-python-runtime: updated snapshots in {SNAPSHOT_DIRECTORY}")
+            (directory / name).write_text(content, encoding="utf-8")
+        print(f"smoke-python-runtime: updated snapshots in {directory}")
 
     existing = {
         path.name
-        for path in SNAPSHOT_DIRECTORY.iterdir()
+        for path in directory.iterdir()
         if path.is_file()
-    } if SNAPSHOT_DIRECTORY.is_dir() else set()
-    expected = set(SNAPSHOT_FILENAMES)
+    } if directory.is_dir() else set()
+    expected = set(filenames)
     if existing != expected:
         raise AssertionError(
-            "advanced snapshot files differ: "
+            f"{scenario} snapshot files differ: "
             f"missing={sorted(expected - existing)}, unexpected={sorted(existing - expected)}"
         )
     for name, actual in files.items():
-        expected_text = (SNAPSHOT_DIRECTORY / name).read_text(encoding="utf-8")
+        expected_text = (directory / name).read_text(encoding="utf-8")
         if actual == expected_text:
             continue
         diff = "".join(difflib.unified_diff(
@@ -960,7 +1047,7 @@ def compare_snapshot_files(files: dict[str, str], update: bool) -> None:
             tofile=f"actual/{name}",
         ))
         raise AssertionError(
-            f"advanced executable snapshot mismatch in {name}; "
+            f"{scenario} executable snapshot mismatch in {name}; "
             "rerun with --update-snapshots after reviewing the behavior\n"
             f"{diff}"
         )

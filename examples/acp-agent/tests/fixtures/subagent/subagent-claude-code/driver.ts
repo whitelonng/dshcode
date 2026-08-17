@@ -53,11 +53,16 @@ try {
       required: tool.parameters.required,
     }
   })
+  const jobTools = ctx.tools.schemas()
+    .map(schema => schema.name)
+    .filter(name => name === 'job_kill' || name === 'job_list' || name === 'job_output')
+    .sort()
 
   process.stdout.write(`${JSON.stringify({
     registeredProviders: ctx.subagents.list(),
     providers,
     tools,
+    jobTools,
     starts,
   })}\n`)
 } finally {

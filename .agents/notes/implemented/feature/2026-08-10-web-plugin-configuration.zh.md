@@ -4,6 +4,8 @@ Status: implemented
 
 [English](2026-08-10-web-plugin-configuration.md) | 中文
 
+> 三个分节、分层解析与暂存保存表单依然有效。Host 白名单与无键卡片列表已被[由插件自己拥有的设置表层](../architecture/2026-08-12-plugin-owned-settings-surface.md)取代：每一个已注册的命名空间都被服务，卡片以它所编辑的命名空间为键。
+
 ## 问题
 
 插件的一切可配置项都只存在于 `cordis.yml`。想要更长的 shell 超时、不同的搜索端点或更少的并行工具调用，用户必须找到组装文件、了解它的形状，然后重启——而 Models 页几个月来一直在证明：settings 命名空间可以在浏览器里编辑并立即生效。

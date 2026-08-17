@@ -27,7 +27,9 @@ The provider advertises no optional start-time capabilities and reports `inherit
 
 Production resolves `codex` from `PATH` and uses the host's native Codex configuration and authentication. The plugin does not install Codex, select a model, create `CODEX_HOME`, log in, or probe a version. Credential-shaped ambient variables are removed by the subprocess seam, so an API key intended for the child must be supplied explicitly in `env`; ordinary ambient values such as `PATH` and `HOME` remain available unless overridden.
 
-Shipped profiles load this provider once on the host and start no Codex process until a tool call. Full Agent Presets carry the tool row below with `disabled: true`; copy a preset and remove that field to expose `subagent_codex` only to agents composed from the copy. A custom host composition can still use both rows directly.
+Production `dsh` does not install or mount this optional provider. A Profile that opts in must install `@deepseek-ai/dsh-subagent-codex` and mount it once on the host plane; loading the provider starts no Codex process until a tool call. Full Agent Presets carry a matching product tool row with `disabled: true`; copy a preset and remove that field to expose `subagent_codex` only to agents composed from the copy. Its `one-shot` policy keeps omitted or `false` `run_in_background` calls in the foreground, while explicit `true` returns a parent-owned Job id for `job_output` or `job_kill`. The base host and full presets already provide the generic Job registry and controls.
+
+The standalone composition below shows the complete explicit capability. A Profile based on `@deepseek-ai/dsh-base` keeps its existing Job rows, adds the product provider row, and enables the preset tool row instead of mounting duplicate Job services.
 
 ```yaml
 - id: subagent-codex
@@ -36,13 +38,18 @@ Shipped profiles load this provider once on the host and start no Codex process 
     env:
       OPENAI_API_KEY: !!js process.env.OPENAI_API_KEY
 
+- id: jobs
+  name: '@deepseek-ai/dsh-jobs-local'
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
 - id: tool-subagent-codex
   name: '@deepseek-ai/dsh-tool-subagent'
-  disabled: true
   config:
     provider: codex
     toolName: subagent_codex
-    enableRunInBackground: false
+    backgroundMode: one-shot
     maxDepth: provider-managed
 ```
 
@@ -66,19 +73,19 @@ The child pays for an independent Codex context and turn. Child tokens do not en
 
 Independent of the parent request cache. Reuse depends only on Codex's own provider, model, instructions, tools, and ephemeral-thread request.
 
-### Parent tool result, indirectly
+### Parent scheduling and results, indirectly
 
 #### What the model sees
 
-Through `dsh-tool-subagent`, the parent sees only the selected final Codex answer or the consumer's exact error for a non-completed result. Codex commentary, reasoning, tool activity, stderr, workspace diffs, and product ids are not copied into the parent Session.
+Through `dsh-tool-subagent`, a foreground call gives the parent the selected final Codex answer or the consumer's exact error for a non-completed result. A background call first returns a Job id; the generic job controls later deliver a completion notice, expose the final answer and status through `job_output`, and let `job_kill` request cancellation. Codex commentary, reasoning, tool activity, stderr, workspace diffs, usage, and product ids are not copied into the parent Session.
 
 #### Token effect
 
-Parent input grows only by the final answer or error retained in the tool result. This provider adds no parent tool schema by itself.
+Foreground input grows by the retained final answer or error. Background input also includes the start acknowledgement, completion notice, and any `job_output`, `job_kill`, or later status results; child tokens still do not enter the parent context. This provider adds no parent tool schema by itself.
 
 #### KV Cache effect
 
-Append-only: the new tool result follows the reusable parent request prefix.
+Append-only: foreground adds one result after the reusable parent prefix, while background appends the Job acknowledgement, notice, and later control or collection results. Background scheduling can add a notice-driven turn, but none of these messages rewrites the earlier prefix.
 
 ## Known Limitations and Deferred Work
 
@@ -86,6 +93,6 @@ Append-only: the new tool result follows the reusable parent request prefix.
 - **Host-managed product installation and account state** — a missing or incompatible `codex`, configuration error, or authentication failure is surfaced as a startup or run error; the plugin provides no installer, login flow, or runtime version gate.
 - **Compatibility is pinned by development evidence** — upgrading from the verified 0.147.0 protocol baseline requires regenerating upstream schema evidence and rerunning handshake, answer-selection, approval, cancellation, keyless real-product, and credentialed DeepSeek nonce tests.
 - **No human approval path** — known unattended approval requests are denied and unknown server requests fail closed; deployments cannot configure an allow policy through this package.
-- **Final text only** — reasoning, commentary, intermediate messages, tool traffic, usage, stderr, and workspace diffs remain product-local.
+- **Product payload is final text only** — reasoning, commentary, intermediate messages, tool traffic, usage, stderr, and workspace diffs remain product-local; generic Job ids, notices, and status come from the shared job runtime.
 - **No optional shared capabilities** — output schemas, child personas, tool filtering, and harness depth enforcement are rejected by the shared service for this provider.
 - **No wall-clock timeout or side-effect rollback** — the caller cancels long work, and files or external systems changed before cancellation are not restored.

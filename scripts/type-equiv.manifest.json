@@ -353,6 +353,11 @@
     },
     {
       "doc": "docs/subsystems/llm-streaming.md",
+      "symbol": "ReplayEnvelope",
+      "source": "packages/llm/llm/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/llm-streaming.md",
       "symbol": "StreamChunk",
       "source": "packages/llm/llm/src/types.ts"
     },

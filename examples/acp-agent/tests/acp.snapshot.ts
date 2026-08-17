@@ -32,6 +32,7 @@ const AGENT = {
 // The Code Mode overlay configs (include-patched variants of cordis.yml; the
 // replay swap resolves each one's sibling `*cordis.snapshot.yml`).
 const CODE_MODE_CONFIG = fileURLToPath(new URL('../code-mode.cordis.yml', import.meta.url))
+const CODE_MODE_IMAGE_CONFIG = fileURLToPath(new URL('../code-mode-image.cordis.yml', import.meta.url))
 const CODE_MODE_WORKSPACE_CONTEXT_CONFIG = fileURLToPath(new URL('../code-mode-workspace-context.cordis.yml', import.meta.url))
 const BOTH_MODE_CONFIG = fileURLToPath(new URL('../both-mode.cordis.yml', import.meta.url))
 const WORKSPACE_CONTEXT_CONFIG = fileURLToPath(new URL('../agent-instructions.cordis.yml', import.meta.url))
@@ -213,6 +214,13 @@ const SCENARIOS: Scenario[] = [
     configPath: IMAGE_TEXT_ROUTE_CONFIG,
   },
   {
+    name: 'inline-image-prompt',
+    hasModelTurn: true,
+    recorded: false,
+    headerClass: 'image',
+    configPath: IMAGE_CONFIG,
+  },
+  {
     name: 'pty-tools',
     hasModelTurn: true,
     recorded: false,
@@ -348,6 +356,13 @@ const SCENARIOS: Scenario[] = [
   // reply, and a clean completed retry turn. Its overlay only pins a deterministic
   // 1 ms zero-jitter delay, so it shares the default header class.
   { name: 'empty-response-retry', hasModelTurn: true, recorded: false, configPath: RETRY_CONFIG },
+  // Keyless, authored (like error-finish): a live model cannot be coaxed into
+  // a deterministic mid-tool-call output-limit truncation. Turn 1's script ends
+  // at `max-tokens` with an unfinished tool call and adapter replay metadata for
+  // both blocks; the durable assistant/message pins assembly dropping the tool
+  // call AND pruning its per-block replay entry in the same decision, and turn 2
+  // proves the session continues past the truncated step.
+  { name: 'max-tokens-continue', hasModelTurn: true, recorded: false },
   // Keyless, authored (like error-finish/cancel): deterministically forcing a
   // LIVE model to repeat one call three times is not a stable recording, so
   // the fixture scripts five identical todo_write calls and pins BOTH reminder
@@ -540,6 +555,16 @@ const SCENARIOS: Scenario[] = [
   // tools:sdk section rides in the prompt, and the program's tool calls land as
   // tool/code-dispatch events. Each overlay composes and pins its own header class.
   { name: 'code-mode-turn', hasModelTurn: true, recorded: true, pinsHeader: true, headerClass: 'code', configPath: CODE_MODE_CONFIG },
+  {
+    name: 'code-mode-read-image',
+    hasModelTurn: true,
+    recorded: false,
+    pinsHeader: true,
+    headerClass: 'code-image',
+    toolSchemasSource: 'code-mode-turn',
+    configPath: CODE_MODE_IMAGE_CONFIG,
+    posixOnly: true,
+  },
   // A nested fs dispatch inside run_code discovers workspace instructions. The
   // projection enters the inbox after the outer result and becomes model-visible
   // on the following step, retaining workspace provenance end to end.

@@ -29,7 +29,7 @@ function fail<T>(message: string): RpcResponse<T> {
 const DeepSeekConfig = Schema.object({
   apiKeyEnv: Schema.string().role('credential-ref'),
   baseURL: Schema.string().pattern(/^https:\/\//),
-  reasoningEffort: Schema.union(['off', 'high', 'max']),
+  reasoningEffort: Schema.union(['off', 'low', 'high', 'max']),
   defaultContextWindow: Schema.number().step(1).min(1),
   models: Schema.array(Schema.object({
     id: Schema.string().required(),

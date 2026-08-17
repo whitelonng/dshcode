@@ -12,7 +12,7 @@ import { assemble, type AssembledResult } from './assemble.ts'
 
 /**
  * Real-API e2e for the direct-fetch adapter: V4 Flash + V4 Pro across
- * thinking modes and both official effort levels. Key-gated — skips
+ * thinking modes and all official effort levels. Key-gated — skips
  * entirely without $DEEPSEEK_API_KEY (see vitest.e2e.config.ts).
  */
 
@@ -95,7 +95,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('llm-deepseek e2e (real API)', ()
     }
   })
 
-  it('flash dynamically switches from off to high', async () => {
+  it('flash dynamically switches from off to low', async () => {
     const ctx = await harness(FLASH, { reasoningEffort: 'off' })
     const withoutThinking = await assemble(ctx,{
       model: FLASH,
@@ -110,7 +110,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('llm-deepseek e2e (real API)', ()
 
     const withThinking = await assemble(ctx,{
       model: FLASH,
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('low'),
       messages: ask('Which is larger, 9.11 or 9.8? Answer with just the number.'),
       maxTokens: 2000,
     })

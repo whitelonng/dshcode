@@ -7,7 +7,7 @@ import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { docsPages, landingLink, routeLink, sectionSpec, type DocsPage } from '../website/docs.ts'
 import {
-  addProjectionFrontmatter, projectedPageContent, publishableImage, rewriteMarkdown,
+  addProjectionFrontmatter, projectedPageContent, publishableImage, resolveRepositoryRef, rewriteMarkdown,
 } from './project-doc-site.ts'
 
 const roots: string[] = []
@@ -88,6 +88,16 @@ describe('publishableImage', () => {
   it('refuses a directory', () => {
     const { root } = fixture()
     expect(publishableImage(join(root, 'packages'), realpathSync(root))).toBeUndefined()
+  })
+})
+
+describe('resolveRepositoryRef', () => {
+  it('defaults to public master instead of a private workflow SHA', () => {
+    expect(resolveRepositoryRef({ GITHUB_SHA: 'private-sha' })).toBe('master')
+  })
+
+  it('accepts an explicit public repository ref', () => {
+    expect(resolveRepositoryRef({ DOCS_REPOSITORY_REF: 'public-sha' })).toBe('public-sha')
   })
 })
 

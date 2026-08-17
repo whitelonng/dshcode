@@ -27,7 +27,9 @@
 
 生产环境会从 `PATH` 中解析 `codex`，并使用宿主机原生的 Codex 配置与身份验证。本插件不安装 Codex、不选择模型、不创建 `CODEX_HOME`、不执行登录，也不探测版本。子进程 seam 会移除具有凭证特征的环境变量，因此供子进程使用的 API 密钥必须在 `env` 中显式提供；除非被覆盖，`PATH` 和 `HOME` 等普通环境变量值仍然可用。
 
-随附 profile 会在宿主上加载一次该提供方，而且在工具被调用前不会启动 Codex 进程。完整 Agent Preset 携带下列工具行并设置 `disabled: true`；复制一个 preset 后删除该字段，即可只向由该副本组装的 agent 暴露 `subagent_codex`。自定义宿主组装仍可直接使用两条配置行。
+生产 `dsh` 不会安装或挂载这个可选提供方。选择启用它的 Profile 必须安装 `@deepseek-ai/dsh-subagent-codex`，并在 host plane（宿主平面）挂载一次；加载提供方本身不会在工具调用前启动 Codex 进程。完整 Agent Preset 携带对应的产品工具行并设置 `disabled: true`；复制一个 preset 后删除该字段，即可只向由该副本组装的 agent 暴露 `subagent_codex`。其 `one-shot` 策略会让省略 `run_in_background` 或传入 `false` 的调用继续在前台等待，而显式传入 `true` 会返回由父 agent 拥有的 Job ID，供 `job_output` 或 `job_kill` 使用。base host（基础宿主）与完整 preset 已提供通用作业注册表和控制工具。
+
+下列独立组装展示完整的显式能力。基于 `@deepseek-ai/dsh-base` 的 Profile 保留已有 Job 行，只新增产品提供方行并启用 preset 工具行，禁止重复挂载 Job 服务。
 
 ```yaml
 - id: subagent-codex
@@ -36,13 +38,18 @@
     env:
       OPENAI_API_KEY: !!js process.env.OPENAI_API_KEY
 
+- id: jobs
+  name: '@deepseek-ai/dsh-jobs-local'
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
 - id: tool-subagent-codex
   name: '@deepseek-ai/dsh-tool-subagent'
-  disabled: true
   config:
     provider: codex
     toolName: subagent_codex
-    enableRunInBackground: false
+    backgroundMode: one-shot
     maxDepth: provider-managed
 ```
 
@@ -66,19 +73,19 @@ Codex 子级会在一个全新的临时线程中，以单个轮次接收这些�
 
 这与父请求缓存相互独立。能否复用只取决于 Codex 自身的提供方、模型、指令、工具和临时线程请求。
 
-### 父级工具结果（间接）
+### 父级调度与结果（间接）
 
 #### 模型看到的内容
 
-通过 `dsh-tool-subagent`，父级模型只会看到选定的 Codex 最终答案，或者看到消费方针对未成功完成的结果给出的原样错误。Codex 的过程说明、推理（reasoning）、工具活动、stderr、工作区差异和产品标识符均不会复制到父会话。
+通过 `dsh-tool-subagent`，前台调用会让父级模型看到选定的 Codex 最终答案，或者在结果未完成时看到消费方给出的原样错误。后台调用会先返回 Job id；随后通用作业控制面会送达完成通知，通过 `job_output` 公开最终答案与状态，并允许 `job_kill` 请求取消。Codex 的过程说明、推理（reasoning）、工具活动、stderr、工作区差异、用量信息和产品标识符均不会复制到父会话。
 
 #### 对 token 的影响
 
-父级输入只会增加工具结果中保留的最终答案或错误内容。本提供方自身不添加父级工具 schema。
+前台输入会增加工具结果中保留的最终答案或错误内容。后台输入还会包含启动确认、完成通知，以及 `job_output`、`job_kill` 或后续状态结果；子任务 token 仍不会进入父级上下文。本提供方自身不添加父级工具 schema。
 
 #### 对 KV Cache 的影响
 
-仅追加：新的工具结果接在可复用的父请求前缀之后。
+仅追加：前台会在可复用的父请求前缀后增加一个结果，后台则会继续追加 Job 启动确认、通知以及后续控制或收集结果。后台调度可能增加一个由通知唤醒的轮次，但这些消息都不会改写更早的前缀。
 
 ## 已知限制与后续工作
 
@@ -86,6 +93,6 @@ Codex 子级会在一个全新的临时线程中，以单个轮次接收这些�
 - **产品安装和账户状态由宿主管理**：`codex` 缺失或不兼容、配置错误或身份验证失败，都会呈现为启动错误或运行错误；本插件不提供安装程序、登录流程或运行时版本门禁。
 - **兼容性由开发证据锁定**：若要从已验证的 0.147.0 协议基线升级，必须重新生成上游 schema 证据，并重新运行握手、答案选择、审批、取消、无密钥真实产品以及带密钥的 DeepSeek 随机数测试。
 - **没有人工审批路径**：已知的无人值守审批请求会被拒绝，未知服务器请求会以默认拒绝方式使运行失败；部署方无法通过本包配置允许策略。
-- **仅返回最终文本**：推理、过程说明、中间消息、工具通信、用量信息、stderr 和工作区差异仍只保留在产品内部。
+- **产品载荷仅包含最终文本**：推理、过程说明、中间消息、工具通信、用量信息、stderr 和工作区差异仍只保留在产品内部；通用 Job id、通知与状态来自共享作业运行时。
 - **没有可选的共享能力**：对于本提供方，共享服务会拒绝输出 schema、子任务角色设定、工具筛选和 harness 深度强制约束。
 - **没有按实际经过时间触发的超时或副作用回滚**：长时间运行的工作由调用方取消，且取消前已更改的文件或外部系统不会恢复原状。
