@@ -109,7 +109,7 @@
     "@omdsh-dev/dsh-annotation": "github:omdsh-dev/dsh-annotation#a37edb01c3dbb0b19249cab3b93138ad529281ed",
     "@omdsh-dev/dsh-genui": "github:omdsh-dev/dsh-genui#57b4338222632f8ea81c2665d44e5f9e80b52686",
     "commander": "^15.0.0",
-    "schemastery": "link:../../vendor/schemastery"
+    "schemastery": "3.18.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

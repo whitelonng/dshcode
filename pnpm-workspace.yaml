@@ -27,9 +27,6 @@ linkWorkspacePackages: true
 overrides:
   '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
   '@deepseek-ai/schemastery': 'link:vendor/schemastery'
-  # Community plugins import the published bare name; alias it to the
-  # vendored copy so their loader entries resolve without a registry copy.
-  'schemastery': 'link:vendor/schemastery'
 
 peerDependencyRules:
   allowedVersions:
