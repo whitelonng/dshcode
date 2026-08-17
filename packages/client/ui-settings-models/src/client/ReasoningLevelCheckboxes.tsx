@@ -18,7 +18,7 @@ import styles from './ModelsSection.module.css'
 export interface ReasoningLevelCheckboxesProps {
   /** The stored declaration; `false` disables the whole group. */
   value: ReasoningEffortsValue | undefined
-  /** The levels this editor offers (pi-ai: all seven; DeepSeek: off/high/max). */
+  /** The levels this editor offers (pi-ai: all seven; DeepSeek: off/low/high/max). */
   levels: readonly ReasoningLevel[]
   /** Levels a protocol family commonly offers, shown as a hint; advisory only. */
   suggested?: readonly ReasoningLevel[] | undefined

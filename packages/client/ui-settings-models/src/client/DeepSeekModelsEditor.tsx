@@ -22,7 +22,7 @@ export type DeepSeekModelDraft = Record<string, unknown>
 type CatalogField = 'id' | 'name' | 'contextWindow' | 'maxTokens' | 'reasoningEfforts'
 
 /** The reasoning levels the direct DeepSeek wire route can dispatch. */
-const DEEPSEEK_REASONING_LEVELS: readonly ReasoningLevel[] = ['off', 'high', 'max']
+const DEEPSEEK_REASONING_LEVELS: readonly ReasoningLevel[] = ['off', 'low', 'high', 'max']
 
 /** The two token counts edited as K/M-suffixed text behind a row's disclosure. */
 type CapacityField = 'contextWindow' | 'maxTokens'
@@ -351,7 +351,7 @@ export function DeepSeekModelsEditor(props: DeepSeekModelsEditorProps): ReactNod
                     <div className={styles['modelAdvanced']}>
                       {capacityField(model, index, 'contextWindow', props.defaultContextWindow)}
                       {capacityField(model, index, 'maxTokens', props.defaultMaxTokens)}
-                      {/* The direct DeepSeek wire offers exactly off/high/max;
+                      {/* The direct DeepSeek wire offers exactly off/low/high/max;
                           capability checkboxes stay absent because the wire is
                           text-only with a note policy the adapter hardcodes. */}
                       <ReasoningLevelCheckboxes
