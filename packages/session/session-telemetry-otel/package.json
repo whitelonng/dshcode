@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-session-telemetry-otel",
   "description": "OpenTelemetry backend for the DeepSeek Harness telemetry seam: hands captured session records to the OTel JS SDK's log pipeline",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },

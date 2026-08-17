@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-host-plugin-installer",
   "description": "Loopback-only plugin installation and update for the current profile: npm/git sources into the shared module fallback",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },

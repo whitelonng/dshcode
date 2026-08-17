@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-subagent-report",
   "description": "Child-scoped report tool over ctx.subagents continuations",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },

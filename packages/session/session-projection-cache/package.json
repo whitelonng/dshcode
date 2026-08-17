@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-session-projection-cache",
   "description": "Persisted projection cache (ctx.sessionProjectionCache): durable per-session projection checkpoints over the domain data form, throttled write-behind, and the cold-read ladder (cache row + persistence tail replay)",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },

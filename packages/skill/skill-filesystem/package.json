@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-skill-filesystem",
   "description": "Local filesystem skill provider for the DeepSeek Harness",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },

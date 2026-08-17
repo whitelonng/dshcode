@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-user-questions",
   "description": "Web ask_user_question feature: host tool mount plus composer-takeover question UI",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },

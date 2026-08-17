@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-typert-registry",
   "description": "Runtime registry for generated package reflection and Zod schemas",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
