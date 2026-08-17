@@ -20,7 +20,7 @@ jobs:
     name: no golden filenames
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Check tracked filenames
         run: scripts/check-expected-filenames.sh

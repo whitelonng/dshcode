@@ -64,7 +64,7 @@ jobs:
     # still bounds retry storms against a slow API while the happy path fans out.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
