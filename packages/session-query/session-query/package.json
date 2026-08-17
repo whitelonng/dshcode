@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-session-query",
   "description": "Combined session query service contract with concrete reads, traces, and filters",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publishConfig": {
     "access": "public"
   },
