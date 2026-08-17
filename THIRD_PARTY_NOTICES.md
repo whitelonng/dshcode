@@ -40,7 +40,6 @@ External packages that a workspace package resolves at runtime. The tier covers 
 | [`@jridgewell/gen-mapping`](https://github.com/jridgewell/sourcemaps) | MIT |
 | [`@linxin666/dsh-client-ui-skin-center`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
 | [`@linxin666/dsh-client-ui-skin-whale-song`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
-| [`@linxin666/dsh-pet`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
 | [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) | MIT |
 | [`@omdsh-dev/dsh-annotation`](https://github.com/omdsh-dev/dsh-annotation) | MIT |
 | [`@omdsh-dev/dsh-genui`](https://github.com/omdsh-dev/dsh-genui) | MIT |

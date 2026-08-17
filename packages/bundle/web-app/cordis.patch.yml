@@ -110,14 +110,12 @@
           - id: web-ui
             name: dsh-web-ui
             repository: https://github.com/zhu1090093659/dsh-web-ui
-            # Trimmed suite: only the skin center and the pet ship with the
-            # built-in product (redundant features were removed to avoid
-            # duplicate sidebar entries and conflict with user installs).
+            # Trimmed suite: only the skin center ships with the built-in
+            # product (redundant features were removed to avoid duplicate
+            # sidebar entries and conflict with user installs).
             entryIds:
-              - pet
               - ui-skin-center
             packages:
-              - '@linxin666/dsh-pet'
               - '@linxin666/dsh-client-ui-skin-center'
 
     # Loopback-only user-plugin installs and updates into the shared fallback.

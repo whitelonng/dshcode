@@ -158,7 +158,7 @@ export function ConversationRoot({
 
   // The input selector row's context hole renders in every conversation phase
   // (cold start, hero, active) right above the composer card: session-maybe
-  // chips (git branch, pet summon) dock here beside the workspace selector.
+  // chips (git branch) dock here beside the workspace selector.
   // Hidden via `:empty` while no entry is registered, so the empty seat costs
   // no layout.
   const selectorContextRow = (

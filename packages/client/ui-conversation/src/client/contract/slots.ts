@@ -163,7 +163,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * The input selector row's context hole, rendered in every conversation
      * phase (cold start, blank-session hero, active seat) right above the
      * composer card — the seat for session-maybe chips that ride beside the
-     * workspace selector (the git branch chip, the pet summon button). The
+     * workspace selector (the git branch chip). The
      * owner supplies nothing; data and verbs arrive through each entry's own
      * inject face, and the session id is optional for the same reason as
      * {@link ComposerBarOwnerProps}.

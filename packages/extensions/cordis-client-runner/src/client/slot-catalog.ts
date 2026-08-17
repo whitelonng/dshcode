@@ -808,8 +808,8 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     key: 'conversation.input.selector.context',
     kind: 'list',
     scope: 'session-maybe',
-    summary: 'The input selector row\'s context hole, rendered in every conversation phase (cold start, blank-session hero, active seat) right above the composer card — the seat for session-maybe chips that ride beside the workspace selector (the git branch chip, the pet summon button).',
-    doc: 'The input selector row\'s context hole, rendered in every conversation\nphase (cold start, blank-session hero, active seat) right above the\ncomposer card — the seat for session-maybe chips that ride beside the\nworkspace selector (the git branch chip, the pet summon button). The\nowner supplies nothing; data and verbs arrive through each entry\'s own\ninject face, and the session id is optional for the same reason as\nComposerBarOwnerProps.',
+    summary: 'The input selector row\'s context hole, rendered in every conversation phase (cold start, blank-session hero, active seat) right above the composer card — the seat for session-maybe chips that ride beside the workspace selector (the git branch chip).',
+    doc: 'The input selector row\'s context hole, rendered in every conversation\nphase (cold start, blank-session hero, active seat) right above the\ncomposer card — the seat for session-maybe chips that ride beside the\nworkspace selector (the git branch chip). The\nowner supplies nothing; data and verbs arrive through each entry\'s own\ninject face, and the session id is optional for the same reason as\nComposerBarOwnerProps.',
     registerOptions: [
       {
         name: 'id',

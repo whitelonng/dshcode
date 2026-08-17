@@ -110,8 +110,6 @@ describe('profile patch rows', () => {
   it('flips the saved enablement of a plugin-control product group and leaves others alone', async () => {
     const path = await patchFile(`[
 # dsh-plugin-control: web-ui
-{ insert: [ { id: pet, name: '@linxin666/dsh-pet', disabled: false } ] },
-# dsh-plugin-control: web-ui
 { insert: [ { id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: false } ] },
 # dsh-plugin-control: genui
 { insert: [ { id: genui, name: '@omdsh-dev/dsh-genui', disabled: false } ] },
@@ -121,7 +119,6 @@ describe('profile patch rows', () => {
 `)
     await setControlRowsEnabled(path, 'web-ui', false)
     let text = await readFile(path, 'utf8')
-    expect(text).toContain("id: pet, name: '@linxin666/dsh-pet', disabled: true")
     expect(text).toContain("id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: true")
     // Other products and installer rows stay untouched.
     expect(text).toContain("id: genui, name: '@omdsh-dev/dsh-genui', disabled: false")
@@ -129,7 +126,6 @@ describe('profile patch rows', () => {
 
     await setControlRowsEnabled(path, 'web-ui', true)
     text = await readFile(path, 'utf8')
-    expect(text).toContain("id: pet, name: '@linxin666/dsh-pet', disabled: false")
     expect(text).toContain("id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: false")
   })
 
