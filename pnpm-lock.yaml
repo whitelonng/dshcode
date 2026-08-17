@@ -7,6 +7,7 @@ settings:
 overrides:
   '@deepseek-ai/cosmokit': link:vendor/cosmokit
   '@deepseek-ai/schemastery': link:vendor/schemastery
+  schemastery: link:vendor/schemastery
 
 patchedDependencies:
   '@linxin666/dsh-client-ui-skin-center@0.1.2': 7c404d7e3dd413f733af0119bb96110ccf53ac5c2ea5408e669063fe2dd73a44
@@ -1758,6 +1759,9 @@ importers:
       commander:
         specifier: ^15.0.0
         version: 15.0.0
+      schemastery:
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
