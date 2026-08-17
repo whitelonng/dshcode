@@ -72,7 +72,9 @@
     "react-dom": "^18.2.0"
   },
   "files": [
-    "lib",
-    "src"
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts"
   ]
 }
