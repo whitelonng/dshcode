@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-subagent-in-process-driver",
   "description": "Shared in-process subagent run driver: drives a child agent on ctx.agents (used by the spawn and fork backends)",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publishConfig": {
     "access": "public"
   },
