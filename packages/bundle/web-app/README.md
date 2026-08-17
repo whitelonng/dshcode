@@ -28,7 +28,7 @@ The prompt section sits near the system prompt's head and is stable for the life
 
 #### What the model sees
 
-With the community switches enabled, dsh-genui adds its `dsh-ui` output instructions and the `render_ui` and validation tools; dsh-annotation adds model-visible annotation text only when the user sends annotations; dsh-web-ui includes the SSH tool and prompt contribution alongside its browser panels, task board, Git graph, pet, live statistics, remote Web UI, settings, and skins. The upstream packages own their detailed prompts, tools, persistence, remote-access controls, and security behavior. In particular, SSH host configuration and credentials remain host data, SSH routes are loopback-only, and remote Web access requires the plugin's pairing flow.
+With the community switches enabled, dsh-genui adds its `dsh-ui` output instructions and the `render_ui` and validation tools; dsh-annotation adds model-visible annotation text only when the user sends annotations; dsh-web-ui includes the SSH tool and prompt contribution alongside its browser panels, task board, Git graph, live statistics, remote Web UI, settings, and skins. The upstream packages own their detailed prompts, tools, persistence, remote-access controls, and security behavior. In particular, SSH host configuration and credentials remain host data, SSH routes are loopback-only, and remote Web access requires the plugin's pairing flow.
 
 #### Token effect
 

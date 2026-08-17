@@ -731,8 +731,6 @@ describe('plugin-installer gateway', () => {
     const h = await harness(REGISTRY, undefined, [{ id: 'web-ui', matches: ['dsh-web-ui'] }])
     await writeFile(h.patchPath, `[
 # dsh-plugin-control: web-ui
-{ insert: [ { id: pet, name: '@linxin666/dsh-pet', disabled: false } ] },
-# dsh-plugin-control: web-ui
 { insert: [ { id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: false } ] }
 ]
 `, 'utf8')
@@ -741,7 +739,6 @@ describe('plugin-installer gateway', () => {
     )
     expect(installed.plugin.id).toBe('@linxin666/dsh-web-ui-all')
     const text = await readFile(h.patchPath, 'utf8')
-    expect(text).toContain("id: pet, name: '@linxin666/dsh-pet', disabled: true")
     expect(text).toContain("id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: true")
   })
 
@@ -754,12 +751,12 @@ describe('plugin-installer gateway', () => {
     const h = await harness(REGISTRY, undefined, [{ id: 'web-ui', matches: ['dsh-web-ui'] }])
     await writeFile(h.patchPath, `[
 # dsh-plugin-control: web-ui
-{ insert: [ { id: pet, name: '@linxin666/dsh-pet', disabled: false } ] }
+{ insert: [ { id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: false } ] }
 ]
 `, 'utf8')
     await call(h.handler, 'install', { spec: '@scope/demo' })
     const text = await readFile(h.patchPath, 'utf8')
-    expect(text).toContain("id: pet, name: '@linxin666/dsh-pet', disabled: false")
+    expect(text).toContain("id: ui-skin-center, name: '@linxin666/dsh-client-ui-skin-center', disabled: false")
   })
 
   it('rejects a whitespace-only install spec', async () => {
