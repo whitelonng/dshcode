@@ -350,9 +350,16 @@ async function startDesktop(): Promise<void> {
   if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
   installTray()
 
-  session.defaultSession.setPermissionCheckHandler(() => false)
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false)
+  // Deny every renderer permission except the sanitized clipboard write the
+  // Web UI's copy buttons need: `navigator.clipboard.writeText` rejects when
+  // `clipboard-sanitized-write` is refused, which would make every copy
+  // control a silent no-op. Everything else (notifications, media, location)
+  // stays denied.
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === 'clipboard-sanitized-write'
+  })
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === 'clipboard-sanitized-write')
   })
 
   const home = resolveDshHome()
