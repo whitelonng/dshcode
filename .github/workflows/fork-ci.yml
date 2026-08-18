@@ -1,0 +1,47 @@
+name: Fork CI
+
+# Fork-owned lean detection suite. The inherited upstream ci.yml targets
+# DeepSeek's in-house self-hosted runner pools on master pushes; those pools
+# do not exist on this fork, so its push jobs queue forever. This workflow
+# runs the same core gates on GitHub-hosted runners and never conflicts with
+# upstream syncs (a new file the upstream tree does not own).
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  checks:
+    name: lint, typecheck, tests, docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm run lint
+      - name: Typecheck (host + client)
+        run: pnpm run typecheck
+      - name: Unit tests
+        run: pnpm run test
+      - name: Keyless snapshot replays
+        run: pnpm run test:snapshot
+      - name: Documentation gates
+        run: pnpm run doc-sync
