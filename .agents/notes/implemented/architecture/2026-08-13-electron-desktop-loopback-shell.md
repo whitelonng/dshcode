@@ -26,7 +26,7 @@ The BrowserWindow keeps context isolation and Chromium sandboxing enabled, disab
 
 Every desktop launch passes `--host 127.0.0.1 --port 0` to the Web profile. Port zero delegates collision-free allocation to the operating system; the launcher builds the window URL from the host and actual nonzero port reported by the activated WebServer service, rejecting any non-loopback host or invalid port. No fixed DSHCode port exists.
 
-The Electron quit path coalesces repeated requests, awaits the shared Harness shutdown controller, and calls `app.exit()` only after the tree settles. The WebServer disposer owns HTTP and upgraded sockets, so application exit closes the listener before the native process terminates. Closing all windows quits on Windows; macOS keeps normal application semantics and recreates the window from the still-running profile until the user quits the application.
+The Electron quit path coalesces repeated requests, awaits the shared Harness shutdown controller, and calls `app.exit()` only after the tree settles. The WebServer disposer owns HTTP and upgraded sockets, so application exit closes the listener before the native process terminates. Closing all windows quits on Windows; macOS keeps normal application semantics — dock activation restores a tray-hidden window or recreates a closed one from the still-running profile — until the user quits the application.
 
 ### Packaged runtime
 

@@ -26,7 +26,7 @@ BrowserWindow 保持启用上下文隔离和 Chromium 沙箱，关闭 Node 集�
 
 每次桌面启动都会把 `--host 127.0.0.1 --port 0` 传给 Web profile。端口零把无冲突分配交给操作系统；启动器使用已激活 WebServer 服务报告的 host 与实际非零端口构造窗口 URL，并拒绝非回环 host 或无效端口。DSHCode 不存在固定端口。
 
-Electron 退出路径会合并重复请求，等待共享 Harness 关闭控制器完成，并且只在整棵树结算后调用 `app.exit()`。WebServer 的 dispose（资源释放）逻辑拥有 HTTP 与升级连接，所以应用退出会先关闭监听器，再结束原生进程。Windows 在所有窗口关闭后退出；macOS 保留普通应用语义，在用户退出应用前，可从仍在运行的 profile 重新创建窗口。
+Electron 退出路径会合并重复请求，等待共享 Harness 关闭控制器完成，并且只在整棵树结算后调用 `app.exit()`。WebServer 的 dispose（资源释放）逻辑拥有 HTTP 与升级连接，所以应用退出会先关闭监听器，再结束原生进程。Windows 在所有窗口关闭后退出；macOS 保留普通应用语义——Dock 激活时恢复隐藏到托盘的窗口，或从仍在运行的 profile 重建已关闭的窗口——直到用户退出应用。
 
 ### 打包运行时
 

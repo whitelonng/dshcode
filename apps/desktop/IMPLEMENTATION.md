@@ -389,6 +389,12 @@ The plugin list surfaces recorded boot failures per plugin with a **启动失败
 - **Archive search and multi-select**: the archived-sessions section gains a search box (title/session-id filter), per-row checkboxes with a select-all toggle, and a bulk toolbar — 恢复所选 runs immediately, 删除所选 keeps the irreversible-deletion confirmation modal; bulk runs sequentially and refreshes once
 - Verified: host package tests 193 green (control-row flip matrix incl. leaving other products and installer rows untouched, conflict-match install end to end, non-match no-op), `test:gui` 289 files / 4037 green, host + client TypeScript aggregates clean
 
+## Fix 20 Dock activation restores a tray-hidden window on macOS
+
+- Root cause: the close-to-tray policy hides the window without destroying it (`close` → `event.preventDefault()` + `window.hide()`), so `mainWindow` still exists afterwards. The macOS `activate` handler returned early on `mainWindow !== undefined`, so a dock click after closing did nothing; the tray click worked because it routes through `showMainWindow()`. An application-level hide (Cmd+H) worked regardless because macOS itself unhides the app on dock activation — which is why the two paths behaved differently
+- `apps/desktop/src/main.ts`: the `activate` handler now calls `showMainWindow()`, the shared entry point that restores a hidden window or recreates a closed one against the still-running profile (M1 already listed macOS activate among `showMainWindow()`'s users; the guard contradicted that contract)
+- Verified: desktop suite 30/30, `tsc -b apps/desktop` clean, and the packaged `main.js` inspected (activate → showMainWindow)
+
 ## Files changed (index)
 
 Per-milestone file tables are in the companion section below; the complete list in this working tree is:
@@ -401,6 +407,7 @@ Per-milestone file tables are in the companion section below; the complete list 
 - Merged plugin list: `packages/client/ui-settings-plugin-installer/{src/client/*, tests/*, package.json}`, `packages/host/plugin-inventory/{src/index.ts, src/types.ts, tests/*}` (read-only again), `packages/host/plugin-control/{src/index.ts, src/control-file.ts, tests/*}`, `packages/api/remotes/src/client/index.ts`, `packages/bundle/web-app/{cordis.patch.yml, README*}`, deleted packages `packages/client/ui-settings-plugin-inventory/*` and `packages/client/ui-settings-plugin-control/*`
 - Fallback tolerance: `packages/boot/app-boot/{src/profile.ts, tests/profile.spec.ts}`
 - Tray click fix: `apps/desktop/{src/main.ts, tests/lifecycle.spec.ts}`
+- Dock activation fix: `apps/desktop/src/main.ts`
 - Boot recovery: `apps/desktop/src/{boot-marker.ts, recovery.ts}` (+ tests), `apps/desktop/src/main.ts`, `apps/desktop/{package.json, tsconfig.json}`, `apps/cli/src/profile-boot.ts`, `packages/boot/app-boot/src/index.ts` (+ fail-loud report test), `packages/host/plugin-installer/src/boot-failures.ts` (+ tests), `packages/host/plugin-installer/{src/index.ts, tests/gateway.spec.ts, README*}`, `packages/client/ui-settings-plugin-installer/{src/client/*, tests/*, README*}`, `tsconfig.base.json` (installer paths entry)
 - Skin patch fix: `patches/@linxin666__dsh-client-ui-skin-center@0.1.2.patch` (regenerated, versioned), `pnpm-workspace.yaml`
 - Records and snapshots: the merged-list Agent Note triplet `.agents/notes/implemented/architecture/2026-08-15-merged-plugin-list-tab.*`, refreshed `apps/web/tests/snapshots/plugin-config/section.expected.md` and `apps/web/tests/snapshots/settings-chrome/plugins.expected.md` (removed `plugin-controls.expected.md`), regenerated `docs/module-graph.{md,zh.md}`, `packages/extensions/cordis-client-runner/src/client/slot-catalog.ts`, and README updates in plugin-installer / plugin-inventory / plugin-control / web-app

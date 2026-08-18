@@ -167,9 +167,16 @@ Windows 经隐藏式标题栏 + `titleBarOverlay` 把产品名、菜单按钮与
 - 登记为 vendor 本地修改 **#19**（`vendor/README.md`）
 - 回归测试 `packages/boot/app-boot/tests/user-patches.spec.ts`：强制 `ctx.loader.internal = undefined` 并从配置树 `node_modules` 加载夹具包
 
+## 修复 4 Dock 图标激活恢复隐藏到托盘的窗口（macOS）
+
+- 根因：关闭到托盘策略只隐藏窗口不销毁（`close` → `event.preventDefault()` + `window.hide()`），`mainWindow` 引用仍然存在。macOS 的 `activate` 处理器在 `mainWindow !== undefined` 时提前返回，于是点叉关闭后点 Dock 图标没有任何反应；托盘点击之所以有效，是因为它走 `showMainWindow()`。应用级隐藏（Cmd+H）一直有效，是因为 macOS 在 Dock 激活时会自动还原整个应用——两条路径因此表现不一致
+- `apps/desktop/src/main.ts`：`activate` 处理器改为调用 `showMainWindow()`——恢复隐藏窗口、或在窗口已销毁时基于仍在运行的 profile 重建（M1 的 `showMainWindow()` 契约本就包含 macOS activate；原守卫与契约相悖）
+- 验证：桌面套件 30/30、`tsc -b apps/desktop` 干净、打包后的 `main.js` 检查通过（activate → showMainWindow）
+
 ## 改动文件索引
 
 - 桌面壳：`apps/desktop/{src/main.ts, src/lifecycle.ts, src/preload.ts, tsdown.config.ts, electron-builder.yml, scripts/prepare-package.mjs, tests/lifecycle.spec.ts, assets/tray*.png, README*}`
+- Dock 激活修复：`apps/desktop/src/main.ts`
 - Web 壳：`packages/client/web/{src/app.tsx, src/DesktopTitleBar.tsx, src/DesktopTitleBar.module.css, tests/desktop-title-bar.client.spec.tsx}`
 - 归档宿主：`packages/session/session-persistence/{src/index.ts, src/coordinator.ts, tests/*}`、`packages/session/session-persistence-{jsonl,sqlite}/src/index.ts`、`packages/workspace/workspace/{src/index.ts, tests/workspace.spec.ts}`、`packages/host/apiproxy/{src/api-proxy.ts, src/api/{workspace.ts, workspace.schema.ts, rpc-map.ts, rpc.ts}, src/fetch/{handler.ts, client.ts}, tests/*}`
 - 归档客户端：`packages/client/runtime/src/client/workspaces/*`、`packages/client/runtime/tests/*`、`packages/client/connection/{src/client/fixture.ts, tests/fake-api.client.ts}`、`packages/test-support/client-runtime/src/workspaces.ts`、`packages/client/ui-settings-archive/*`

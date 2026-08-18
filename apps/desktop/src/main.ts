@@ -83,8 +83,9 @@ function installRendererPolicy(window: BrowserWindow, origin: string): void {
 
 /**
  * Show and focus the main window, recreating it when it no longer exists.
- * Used by the tray and the second-instance lock: a hidden window restores,
- * a closed one relaunches against the still-running application URL.
+ * Used by the tray, the second-instance lock, and macOS dock activation: a
+ * hidden window restores, a closed one relaunches against the still-running
+ * application URL.
  */
 function showMainWindow(): void {
   if (mainWindow !== undefined) {
@@ -479,11 +480,11 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') app.quit()
   })
   app.on('activate', () => {
-    if (mainWindow !== undefined || applicationUrl === undefined) return
-    void createMainWindow(applicationUrl).catch((error: unknown) => {
-      dialog.showErrorBox(`${PRODUCT_NAME} could not open`, error instanceof Error ? error.message : String(error))
-      requestQuit(1)
-    })
+    // The close-to-tray policy leaves the window existing but hidden, and
+    // unlike an application-level hide macOS does not restore it on dock
+    // activation. showMainWindow() restores a hidden window or recreates a
+    // closed one against the still-running profile.
+    showMainWindow()
   })
 
   void app.whenReady().then(startDesktop).catch((error: unknown) => {
