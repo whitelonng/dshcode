@@ -1,6 +1,7 @@
 # Agent Note: Dependabot version updates with a 30-day cooldown
 
 Status: implemented
+Archived: 2026-08-19
 
 English | [中文](2026-07-27-dependabot-version-updates.zh.md)
 

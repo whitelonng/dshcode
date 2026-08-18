@@ -1,6 +1,7 @@
 # Agent Note: Dependabot 版本更新采用 30 天冷却期
 
 Status: implemented
+Archived: 2026-08-19
 
 [English](2026-07-27-dependabot-version-updates.md) | 中文
 
