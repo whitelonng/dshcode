@@ -1,4 +1,5 @@
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 type SpawnWorker = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess
@@ -38,5 +39,17 @@ describe('spawnDialogWorker', () => {
       windowsHide: true,
     })
     expect(process.env.ELECTRON_RUN_AS_NODE).toBe('')
+  })
+
+  // Regression guard for the source plane: the worker must launch under plain
+  // node with native type stripping (no tsx bootstrap), so the absolute Windows
+  // path is a positional file argument, not a URL through a loader chain.
+  it('launches the source worker under plain node with no loader flags', () => {
+    spawnDialogWorker({ title: 'Source-plane guard' })
+
+    expect(spawnMock).toHaveBeenCalledOnce()
+    const args = spawnMock.mock.calls[0]?.[1]
+    expect(args).toEqual([fileURLToPath(new URL('../src/win32-dialog-worker.ts', import.meta.url))])
+    expect(args).not.toContain('--import')
   })
 })
