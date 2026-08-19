@@ -205,58 +205,17 @@ describe('serializeMessages', () => {
     expect(wire).toEqual([{ role: 'user', content: 'see chart' }])
   })
 
-  it('flattens image blocks into copyable attachment notes on the text-only route', () => {
-    const attachment = {
-      attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
-      mediaType: 'image/png' as const, bytes: 68, width: 1, height: 1,
-    }
-    const wire = serializeMessages([createUserMessage({
-      content: [
-        { type: 'text', text: 'look at this' },
-        { type: 'image', attachment },
-      ],
-      source: { kind: 'plugin', plugin: 'test' },
-    })])
-    expect(wire).toEqual([{
-      role: 'user',
-      content: `look at this[image attachment ${JSON.stringify(attachment)}]`,
-    }])
-  })
-
-  it('flattens nested tool-result images into the tool message', () => {
-    const attachment = {
-      attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
-      mediaType: 'image/jpeg' as const, bytes: 10, width: 2, height: 2,
-    }
-    const wire = serializeMessages([createUserMessage({
-      content: [{ type: 'tool-result', toolCallId: CallId('call-1'), content: [{ type: 'image', attachment }] }],
-      source: { kind: 'plugin', plugin: 'test' },
-    })])
-    expect(wire).toEqual([{
-      role: 'tool',
-      tool_call_id: 'call-1',
-      content: `[image attachment ${JSON.stringify(attachment)}]`,
-    }])
-  })
-
-  it('flattens a tool result nested inside another tool result', () => {
-    const attachment = {
-      attachmentId: AttachmentId(`sha256:${'c'.repeat(64)}`),
-      mediaType: 'image/gif' as const, bytes: 9, width: 1, height: 1,
-    }
-    const wire = serializeMessages([createUserMessage({
+  it('rejects image blocks instead of silently flattening them away', () => {
+    expect(() => serializeMessages([createUserMessage({
       content: [{
-        type: 'tool-result',
-        toolCallId: CallId('call-1'),
-        content: [{ type: 'tool-result', toolCallId: CallId('call-2'), content: [{ type: 'image', attachment }] }],
+        type: 'image',
+        attachment: {
+          attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
+          mediaType: 'image/png', bytes: 68, width: 1, height: 1,
+        },
       }],
       source: { kind: 'plugin', plugin: 'test' },
-    })])
-    expect(wire).toEqual([{
-      role: 'tool',
-      tool_call_id: 'call-1',
-      content: `[image attachment ${JSON.stringify(attachment)}]`,
-    }])
+    })])).toThrow(expect.objectContaining({ code: 'UNSUPPORTED_CONTENT' }))
   })
 
   it('emits an empty user message rather than dropping block-less messages', () => {

@@ -82,7 +82,7 @@ function bench(
     win.__ModuleLoader__?.load({ id, factory })
   }
   const loader = target.create({
-    boot: { rev: 'graph', entries },
+    boot: { rev: 'graph', version: '1.0.0', entries },
     staticModules: opts.seed ?? {},
     ...(opts.defaultTransport === true ? {} : { loadBundle }),
   })
@@ -302,7 +302,7 @@ describe('failure modes', () => {
   it('double boot is loud', () => {
     const b = bench([])
     const options: ClientModuleCreateOptions = {
-      boot: { rev: 'graph', entries: [] },
+      boot: { rev: 'graph', version: '1.0.0', entries: [] },
       staticModules: {},
     }
     expect(() => b.target.create(options)).toThrow('create called after module-system boot')
@@ -313,6 +313,7 @@ describe('boot manifest wire', () => {
   it('normalizes absent shared-module fields and carries the declared ones', () => {
     const manifest = parseBootManifest({
       rev: 'graph',
+      version: '1.0.0',
       entries: [
         { id: 'a', url: '/plugins/a/client.js', rev: '1' },
         { id: 'b', url: '/plugins/b/client.js', rev: '2', external: ['react'] },
@@ -327,6 +328,7 @@ describe('boot manifest wire', () => {
   it('rejects a non-array external', () => {
     expect(() => parseBootManifest({
       rev: 'graph',
+      version: '1.0.0',
       entries: [{ id: 'a', url: '/a', rev: '1', external: 'react' }],
     })).toThrow('client-modules: boot manifest entry "a" external must be a string array')
   })
