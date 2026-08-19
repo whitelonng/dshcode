@@ -305,6 +305,10 @@ jobs:
       # serially, keeping the lane well inside its timeout.
       DSH_COVERAGE_MAX_WORKERS: '3'
       DSH_GATE_CONCURRENCY: '2'
+      # The overlapping gates starve timing-sensitive scenario hosts; this
+      # knob widens Vitest timeouts AND the process-exit scenario's ready
+      # wait (which reads it) on this lane only.
+      DSH_COVERAGE_TEST_TIMEOUT_MS: '60000'
     steps:
       - uses: actions/checkout@v6
         with:

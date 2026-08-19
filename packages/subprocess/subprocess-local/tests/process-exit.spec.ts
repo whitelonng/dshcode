@@ -15,7 +15,20 @@ interface TreeState { root: number; descendant: number }
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 const hostScript = fileURLToPath(new URL('./fixtures/process-exit-host.ts', import.meta.url))
-const scenarioTimeoutMs = 30_000
+// The instrumented coverage lane runs this suite beside the exempt heavy
+// gates, so a loaded 4-vCPU runner can starve the scenario host past the
+// ordinary budget. DSH_COVERAGE_TEST_TIMEOUT_MS is run-gates' existing knob
+// for exactly that lane; it raises this wait and the owning test timeouts
+// together. Unset, the plain-lane budget is unchanged.
+const scenarioTimeoutMs = (() => {
+  const raw = process.env.DSH_COVERAGE_TEST_TIMEOUT_MS
+  if (raw === undefined || raw === '') return 30_000
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== raw) {
+    throw new Error(`DSH_COVERAGE_TEST_TIMEOUT_MS must be a positive integer, got ${JSON.stringify(raw)}`)
+  }
+  return parsed
+})()
 
 function processExists(pid: number): boolean {
   try {
@@ -143,7 +156,7 @@ describe('synchronous cleanup on host exit', () => {
     { trigger: 'direct' as const, expectedCode: 23, diagnostic: undefined },
     { trigger: 'uncaught-exception' as const, expectedCode: 1, diagnostic: 'host-exit-uncaught-exception' },
     { trigger: 'unhandled-rejection' as const, expectedCode: 1, diagnostic: 'host-exit-unhandled-rejection' },
-  ])('removes an ordinary managed tree after $trigger', { timeout: 45_000 }, async ({
+  ])('removes an ordinary managed tree after $trigger', { timeout: scenarioTimeoutMs + 15_000 }, async ({
     trigger,
     expectedCode,
     diagnostic,
@@ -156,7 +169,7 @@ describe('synchronous cleanup on host exit', () => {
 
   it.skipIf(process.platform === 'win32')(
     'removes a terminal root and descendant after direct exit',
-    { timeout: 45_000 },
+    { timeout: scenarioTimeoutMs + 15_000 },
     async () => {
       const { outcome } = await runScenario('terminal', 'direct')
       expect(outcome.exitCode).toBe(23)
@@ -164,7 +177,7 @@ describe('synchronous cleanup on host exit', () => {
     },
   )
 
-  it('preserves normal terminate-and-join disposal and removes the exit listener', { timeout: 45_000 }, async () => {
+  it('preserves normal terminate-and-join disposal and removes the exit listener', { timeout: scenarioTimeoutMs + 15_000 }, async () => {
     const { outcome, disposeCounts } = await runScenario('ordinary', 'dispose')
     expect(outcome.exitCode).toBe(0)
     expect(disposeCounts?.listenersAfterLoad).toBe((disposeCounts?.listenersBefore ?? 0) + 1)

@@ -246,6 +246,9 @@ describe('Fork CI workflow', () => {
       env: {
         DSH_COVERAGE_MAX_WORKERS: '3',
         DSH_GATE_CONCURRENCY: '2',
+        // The process-exit scenario reads this knob for its ready wait;
+        // dropping it re-exposes the loaded-lane race observed on CI.
+        DSH_COVERAGE_TEST_TIMEOUT_MS: '60000',
       },
     })
     expect(stepRuns(coverage)).toContain('pnpm run check:ci:coverage')
