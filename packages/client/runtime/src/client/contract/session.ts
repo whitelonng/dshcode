@@ -83,6 +83,28 @@ export interface ISession {
    * @returns the admission result, or the Remote face's error branch.
    */
   command(line: string): Promise<RemoteResult<{ matched: boolean }>>
+  /**
+   * Delete one user or assistant message from the transcript and the
+   * model-visible history; the host expands the target seq to its surface
+   * range (a user message's whole turn, an assistant message plus its step's
+   * tool results, a turn/end anchor's whole turn — the interrupted-answer
+   * path).
+   * @param seq - seq of the message event to delete, or of the turn/end event
+   *   anchoring a whole stopped turn.
+   * @returns the host-computed removed range, or the business error
+   * (`agent-busy` while running, `delete-unavailable` for a non-message seq).
+   */
+  deleteMessage(seq: number): Promise<RpcResult<{ start: number; end: number; deletedSeqs: number[] }>>
+  /**
+   * Edit the conversation's last user message and regenerate its turn: the
+   * host shadows the old turn's surface range and the new turn answers the
+   * edited prompt.
+   * @param seq - seq of the user message to edit.
+   * @param content - replacement text (plus optional browser image uploads).
+   * @returns acceptance, or the business error (`agent-busy` while running,
+   * `edit-unavailable` when the seq is not the last editable user message).
+   */
+  editMessage(seq: number, content: PromptContentPart[]): Promise<RpcResult<{ accepted: true }>>
 }
 
 /**

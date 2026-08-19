@@ -194,6 +194,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.input.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /**
+     * The input selector row's context hole, rendered in every conversation
+     * phase (cold start, blank-session hero, active seat) right above the
+     * composer card — the seat for session-maybe chips that ride beside the
+     * workspace selector (the git branch chip). The
+     * owner supplies nothing; data and verbs arrive through each entry's own
+     * inject face, and the session id is optional for the same reason as
+     * {@link ComposerBarOwnerProps}.
+     */
+    'conversation.input.selector.context': { kind: 'list'; scope: 'session-maybe' }
+    /**
      * The band under the composer card, inside the bar's width column — the
      * seat for an ambient readout about the conversation (the shipped stats
      * line lives here). Same {@link InputZone} owner share as the other
@@ -403,6 +413,19 @@ export interface ChatNodeOwnerProps {
   forkAt: (seq: number) => void
   /** Render a historical image group through the attachment slot. */
   renderMessageImages: RenderMessageImages
+  /**
+   * Delete one user or assistant message from the transcript and the
+   * model-visible history; resolves false when the host refused (running
+   * agent or an already-shadowed seq).
+   */
+  deleteAt: (seq: number) => Promise<boolean>
+  /**
+   * Edit the conversation's last user message and regenerate its turn;
+   * resolves false when the host refused.
+   */
+  editAt?: ((seq: number, text: string) => Promise<boolean>) | undefined
+  /** Resolve a session-authorized historical image for inline display. */
+  loadImage: (attachment: ImageAttachmentRef) => Promise<string>
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 
@@ -624,6 +647,7 @@ export type ConversationSlotProps =
     | 'conversation.input.dock' | 'conversation.composer.dock'
     | 'conversation.input.left' | 'conversation.input.right'
     | 'conversation.hero.brand.mark'
+    | 'conversation.input.selector.context'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
   >
@@ -751,6 +775,10 @@ export interface ChatViewInjected {
   }
   /** Fork through the completed turn ending at the eligible message `seq`, then open the child. */
   forkAt: (seq: number) => void
+  /** Delete the message at `seq` (or the whole turn when `seq` anchors its turn/end); resolves false when the host refused. */
+  deleteAt: (seq: number) => Promise<boolean>
+  /** Edit the last user message at `seq` with `text` and regenerate; resolves false on refusal. */
+  editAt: (seq: number, text: string) => Promise<boolean>
   /**
    * Prose file-mention vocabulary for one closing message, from the optional
    * {@link ChatFileMentions} service (resolved lazily per call, so composing

@@ -347,4 +347,74 @@ describe('translate: defensive tool-call branches', () => {
     )))
     expect(chunks[1]).toEqual({ type: 'tool-call-delta', index: 0, id: 'c', argumentsDelta: '' })
   })
+
+  // Regression coverage for deepseek-ai/deepseek-harness#725. Continuation
+  // deltas sometimes re-emit the field with an empty string; the bug
+  // overwrites the established tool name with `""`, producing
+  // `unknown tool ""`. The fix must ignore empty-string reseeds.
+  it('ignores empty-string continuation deltas for name and callId', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      // First delta stamps the established id + name.
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_42', type: 'function', function: { name: 'Glob', arguments: '' } }] } }] },
+      // Continuation delta re-emits the field as an empty string AND
+      // appends argument fragments. The fix must keep `Glob`.
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: '', function: { name: '', arguments: 'q=1' } }] } }] },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+      DONE,
+    )))
+    expect(chunks).toEqual([
+      { type: 'block-start', index: 0, blockType: 'tool-call' },
+      { type: 'tool-call-delta', index: 0, id: 'call_42', name: 'Glob', argumentsDelta: '' },
+      { type: 'tool-call-delta', index: 0, id: 'call_42', name: 'Glob', argumentsDelta: 'q=1' },
+      { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_42', name: 'Glob', arguments: 'q=1' } },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ])
+  })
+
+  // Regression coverage for the secondary root cause noted in
+  // deepseek-ai/deepseek-harness#725 (and confirmed in the discussion):
+  // hy3 & longcat-2.0 gateways emit `null` for id/name in continuation
+  // deltas. The naive `!== undefined` check passes and a naive string
+  // concat coerces null to `"null"`, producing tool ids like `"Globnull"`.
+  // The strict typeof guard must drop these as well.
+  it('ignores null continuation deltas for name and callId (hy3, longcat-2.0)', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_42', type: 'function', function: { name: 'Grep', arguments: '' } }] } }] },
+      // Continuation delta emits `null` for both id and name — the worst
+      // case for the original `!== undefined` check.
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: null, function: { name: null, arguments: 'p=x' } }] } }] },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+      DONE,
+    )))
+    expect(chunks).toEqual([
+      { type: 'block-start', index: 0, blockType: 'tool-call' },
+      { type: 'tool-call-delta', index: 0, id: 'call_42', name: 'Grep', argumentsDelta: '' },
+      { type: 'tool-call-delta', index: 0, id: 'call_42', name: 'Grep', argumentsDelta: 'p=x' },
+      { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_42', name: 'Grep', arguments: 'p=x' } },
+      { type: 'finish', reason: { kind: 'tool-calls' } },
+    ])
+  })
+
+  // When the FIRST delta itself is `null` or absent, downstream still
+  // surfaces `id: ""` / `name: ""` via the close-block fallback. We just
+  // must not produce the destructive `"Globnull"`-style concatenation.
+  it('does not concatenate null into the established name when no name was ever emitted', async () => {
+    const chunks = await collect(translate(feed(
+      firstChunk,
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: null, function: { name: null, arguments: '[]' } }] } }] },
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+      DONE,
+    )))
+    const blockEnd = chunks.find(chunk => chunk.type === 'block-end')
+    expect(blockEnd).toEqual({
+      type: 'block-end',
+      index: 0,
+      block: { type: 'tool-call', id: '', name: '', arguments: '[]' },
+    })
+    // Belt and suspenders: the name must remain a plain empty string.
+    const toolBlock = (blockEnd as { block: { name: string } }).block
+    expect(toolBlock.name).not.toMatch(/null/)
+  })
 })

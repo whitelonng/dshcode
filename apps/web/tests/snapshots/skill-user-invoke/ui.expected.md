@@ -12,6 +12,10 @@
 - text: /user-invoke-demo and confirm the fixture wiring {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -23,9 +27,7 @@
 - paragraph: USER_INVOKE_REPLY acknowledged; following the injected skill.
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

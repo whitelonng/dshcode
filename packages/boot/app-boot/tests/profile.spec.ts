@@ -143,6 +143,20 @@ describe('loadProfile', () => {
     expect(bare.layers).toEqual([])
   })
 
+  it('skips the user patch layer without parsing it when userLayer is false', () => {
+    const anchor = stageInstallation({ 'bundle-a': { patch: '- insert:\n    - id: a\n      name: pkg-a\n' } })
+    const home = tmp()
+    const dir = resolveProfileDir('demo', home)
+    initProfile(dir, ['bundle-a'])
+    // Safe mode must boot past a broken user patch file: skip, never parse.
+    writeFileSync(join(dir, PROFILE_PATCH_FILENAME), 'not: [valid yaml\n')
+    const skipped = loadProfile('t', 'demo', anchor, home, { userLayer: false })
+    expect(skipped.patches).toEqual([])
+    expect(skipped.layers.map(layer => layer.packageName)).toEqual(['bundle-a'])
+    // The default still parses (and rejects) the broken file.
+    expect(() => loadProfile('t', 'demo', anchor, home)).toThrow('failed to parse overlay')
+  })
+
   it('auto-initializes only shipped templates and fails loud otherwise', () => {
     const anchor = stageInstallation({})
     const home = tmp()
@@ -152,6 +166,10 @@ describe('loadProfile', () => {
     // cannot be asserted to fail here: the source-plane test runner resolves
     // @deepseek-ai/* through tsconfig paths regardless of the staged anchor.
     expect(PROFILE_TEMPLATES.web).toContain('@deepseek-ai/dsh-base')
+    expect(PROFILE_TEMPLATES.web).toEqual([
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+    ])
     try {
       loadProfile('t', 'web', anchor, home)
     } catch {
@@ -159,6 +177,40 @@ describe('loadProfile', () => {
     }
     expect(readProfileManifest('t', resolveProfileDir('web', home)).dsh?.profile?.bundles)
       .toEqual([...PROFILE_TEMPLATES.web ?? []])
+  })
+
+  it('normalizes only the exact installation-owned web bundle tuple', () => {
+    const anchor = stageInstallation({
+      '@deepseek-ai/dsh-base': { patch: '[]\n' },
+      '@deepseek-ai/dsh-web-app': { patch: '[]\n' },
+      'custom-bundle': { patch: '[]\n' },
+    })
+    const home = tmp()
+    const stock = resolveProfileDir('web', home)
+    initProfile(stock, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+    loadProfile('t', 'web', anchor, home)
+    expect(readProfileManifest('t', stock).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web)
+
+    // The former five-bundle template migrates down to the shipped one.
+    const migratedHome = tmp()
+    const migrated = resolveProfileDir('web', migratedHome)
+    initProfile(migrated, [
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      '@omdsh-dev/dsh-genui',
+      '@omdsh-dev/dsh-annotation',
+      '@linxin666/dsh-web-ui-all',
+    ])
+    loadProfile('t', 'web', anchor, migratedHome)
+    expect(readProfileManifest('t', migrated).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web)
+
+    const customHome = tmp()
+    const custom = resolveProfileDir('web', customHome)
+    initProfile(custom, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'custom-bundle'])
+    loadProfile('t', 'web', anchor, customHome)
+    expect(readProfileManifest('t', custom).dsh?.profile?.bundles).toEqual([
+      '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'custom-bundle',
+    ])
   })
 
   it('normalizes only the exact installation-owned headless bundle tuple', () => {
@@ -243,6 +295,27 @@ describe('healProfilesModuleFallback', () => {
     const anchor = stageInstallation({})
     const home = tmp()
     mkdirSync(join(home, 'profiles', 'node_modules', 'dsh-app'), { recursive: true })
+    expect(() => { healProfilesModuleFallback(anchor, home) }).toThrow('is not a symlink')
+  })
+
+  it('keeps a real directory that owns the same package name as the target (user install wins)', () => {
+    const anchor = stageInstallation({})
+    const home = tmp()
+    const fallback = join(home, 'profiles', 'node_modules')
+    const entry = join(fallback, 'dsh-app')
+    mkdirSync(entry, { recursive: true })
+    writeFileSync(join(entry, 'package.json'), JSON.stringify({ name: 'dsh-app', version: '9.9.9' }))
+    expect(() => { healProfilesModuleFallback(anchor, home) }).not.toThrow()
+    expect(lstatSync(entry).isDirectory()).toBe(true)
+    expect(JSON.parse(readFileSync(join(entry, 'package.json'), 'utf8'))).toMatchObject({ version: '9.9.9' })
+  })
+
+  it('still throws for a real directory owning a different package name', () => {
+    const anchor = stageInstallation({})
+    const home = tmp()
+    const entry = join(home, 'profiles', 'node_modules', 'dsh-app')
+    mkdirSync(entry, { recursive: true })
+    writeFileSync(join(entry, 'package.json'), JSON.stringify({ name: 'some-other-package' }))
     expect(() => { healProfilesModuleFallback(anchor, home) }).toThrow('is not a symlink')
   })
 

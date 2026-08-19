@@ -13,6 +13,9 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "归档会话":
+      - img
+      - text: 归档会话
   - button "打开配置文件"
   - button "关闭":
     - img
@@ -43,3 +46,9 @@
   - button "排队发送":
     - text: 排队发送
     - img
+  - text: 系统通知 授权等待与任务完成的系统级提醒 系统通知权限已被拒绝
+  - button "重试"
+  - text: 授权通知
+  - switch "授权通知" [checked]
+  - text: 任务完成通知
+  - switch "任务完成通知" [checked]

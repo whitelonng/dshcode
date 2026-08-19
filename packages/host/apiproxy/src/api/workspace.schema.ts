@@ -7,7 +7,7 @@
 import { z } from 'zod'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
-import type { WorkspaceView } from './workspace.ts'
+import type { ArchivedSessionItem, WorkspaceView } from './workspace.ts'
 import { sessionIdSchema, workspaceIdSchema } from './sessions.schema.ts'
 
 export { workspaceIdSchema } from './sessions.schema.ts'
@@ -98,3 +98,38 @@ export const workspaceArchiveSessionRequestSchema = z.object({
 export const workspaceArchiveSessionValueSchema = z.object({
   archivedSessionIds: z.array(sessionIdSchema),
 }) satisfies z.ZodType<Wire<ResponseValue<'workspace.archiveSession'>>>
+
+/** workspace.restoreSession request payload. */
+export const workspaceRestoreSessionRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'workspace.restoreSession'>>>
+
+/** workspace.restoreSession response value: the full updated archive set. */
+export const workspaceRestoreSessionValueSchema = z.object({
+  archivedSessionIds: z.array(sessionIdSchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.restoreSession'>>>
+
+/** workspace.deleteSession request payload. */
+export const workspaceDeleteSessionRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'workspace.deleteSession'>>>
+
+/** workspace.deleteSession response value: the full updated archive set. */
+export const workspaceDeleteSessionValueSchema = z.object({
+  archivedSessionIds: z.array(sessionIdSchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.deleteSession'>>>
+
+/** workspace.listArchived request payload. */
+export const workspaceListArchivedRequestSchema = z.object({}) satisfies z.ZodType<Wire<RequestPayload<'workspace.listArchived'>>>
+
+/** One archived session list item. */
+export const workspaceArchivedSessionItemSchema = z.object({
+  sessionId: sessionIdSchema,
+  title: z.string().optional(),
+  createdAt: z.number().int().nonnegative().optional(),
+}) satisfies z.ZodType<Wire<ArchivedSessionItem>>
+
+/** workspace.listArchived response value. */
+export const workspaceListArchivedValueSchema = z.object({
+  items: z.array(workspaceArchivedSessionItemSchema),
+}) satisfies z.ZodType<Wire<ResponseValue<'workspace.listArchived'>>>

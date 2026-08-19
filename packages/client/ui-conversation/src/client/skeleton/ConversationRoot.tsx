@@ -156,11 +156,23 @@ export function ConversationRoot({
     footer: !hero && zone !== undefined ? renderSlot('conversation.composer.dock', zone) : null,
   })
 
+  // The input selector row's context hole renders in every conversation phase
+  // (cold start, hero, active) right above the composer card: session-maybe
+  // chips (git branch) dock here beside the workspace selector.
+  // Hidden via `:empty` while no entry is registered, so the empty seat costs
+  // no layout.
+  const selectorContextRow = (
+    <div className={css.selectorContextRow}>
+      {renderSlot('conversation.input.selector.context', {})}
+    </div>
+  )
+
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
       {hero && <HeroShell t={t} renderSlot={renderSlot} />}
       {hero && heroWorkspaceRow}
+      {selectorContextRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
     </div>

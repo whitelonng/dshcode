@@ -19,6 +19,7 @@ import { pathToFileURL } from 'node:url'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { Include } from '@deepseek-ai/cordis-plugin-include'
 import type { EntryTree } from '@deepseek-ai/cordis-plugin-loader'
+import { formatLoaderFailure } from '@deepseek-ai/dsh-app-boot'
 import { scopeOf, scopeParentOf, type ScopeKey } from '@deepseek-ai/dsh-scope'
 import { PresetMountError, type AgentPreset } from './preset.ts'
 
@@ -301,25 +302,6 @@ export function inactiveRows(tree: EntryTree): string[] {
 }
 
 /**
- * The reportable text of a mount failure.
- *
- * The loader reports several failed rows as one `AggregateError`, whose own
- * message names none of them; without flattening, a composition that fails on
- * two rows says only "loader entries failed to apply" and the operator has
- * nothing to act on.
- * @param error - the value the mount rejected with.
- * @returns a single-line-per-cause description.
- */
-function mountDetail(error: unknown): string {
-  /* v8 ignore next -- every path into the mount's catch throws an Error: the loader
-     wraps a row's thrown value before it propagates, and this module's own
-     rejections are Errors. The fallback keeps a hostile value readable. */
-  if (!(error instanceof Error)) return String(error)
-  if (!(error instanceof AggregateError)) return error.message
-  return [error.message, ...error.errors.map(cause => `- ${mountDetail(cause)}`)].join('\n')
-}
-
-/**
  * Mount `preset` under `agentCtx` and return only once every row is usable.
  *
  * The subtree is owned by `agentCtx`'s fiber, so it unwinds with the agent and
@@ -376,6 +358,6 @@ export async function mountPreset(agentCtx: Context, preset: AgentPreset): Promi
       // Swallows only this subtree's teardown failure. The mount error below is
       // the actionable one, and the discarded fiber is unreachable either way.
     }
-    throw new PresetMountError(preset.id, `${mountDetail(error)} (${preset.path})`, { cause: error })
+    throw new PresetMountError(preset.id, `${formatLoaderFailure(error)} (${preset.path})`, { cause: error })
   }
 }

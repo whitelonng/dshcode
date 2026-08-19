@@ -519,6 +519,39 @@ describe('WorkspaceRuntime', () => {
     await workspaces.refresh()
     expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
   })
+
+  it('restores and permanently deletes archived sessions through the host set', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onWorkspaceList = () => Promise.resolve(ok({
+      items: [workspace('ws-a', [sid('s-archived')])],
+      archivedSessionIds: [sid('s-archived')],
+    }) as never)
+    await sessions.refresh()
+    await workspaces.refresh()
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual(['s-archived'])
+
+    api.onWorkspaceRestoreSession = () => Promise.resolve(ok({ archivedSessionIds: [] }))
+    await workspaces.restoreSession(sid('s-archived'))
+    expect(api.callsOf('workspace.restoreSession')).toEqual([{ sessionId: 's-archived' }])
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
+
+    api.onWorkspaceArchiveSession = () => Promise.resolve(ok({ archivedSessionIds: [sid('s-archived')] }))
+    await workspaces.archiveSession(sid('s-archived'))
+    api.onWorkspaceDeleteSession = () => Promise.resolve(ok({ archivedSessionIds: [] }))
+    await workspaces.deleteSession(sid('s-archived'))
+    expect(api.callsOf('workspace.deleteSession')).toEqual([{ sessionId: 's-archived' }])
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
+
+    // A Host failure propagates and leaves the set untouched.
+    api.onWorkspaceDeleteSession = () => Promise.resolve(err({
+      code: 'not-archived', message: 'not archived', details: { sessionId: sid('s-archived') },
+    }))
+    await expect(workspaces.deleteSession(sid('s-archived'))).rejects.toThrow(/not-archived/)
+    expect(workspaces.list.getSnapshot().archivedSessionIds).toEqual([])
+  })
 })
 
 describe('startInitialSelection', () => {

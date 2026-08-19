@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-commands",
   "description": "Client command surface: global directory cache, '/' source, three command UI kinds, popupSelect registry",
-  "version": "0.1.0-rc.8",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -57,7 +57,10 @@
     "@deepseek-ai/dsh-client-ui-input-trigger": "workspace:^",
     "@deepseek-ai/dsh-commands": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
+    "react": "^18.2.0"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-api-remotes": "workspace:^",

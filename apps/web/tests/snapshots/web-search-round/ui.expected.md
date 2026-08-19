@@ -12,6 +12,10 @@
 - text: Use web_search once with queries ["DeepSeek Harness snapshot search","DeepSeek Harness multi-query search"]. Then reply exactly SEARCH_DONE and stop. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -23,9 +27,7 @@
 - paragraph: SEARCH_DONE
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

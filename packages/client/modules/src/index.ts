@@ -27,6 +27,7 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
@@ -162,6 +163,28 @@ function clientExportOf(pkgName: string, exportsField: unknown): string | undefi
 function shortHash(input: string | Buffer): string {
   return createHash('sha1').update(input).digest('hex').slice(0, 12)
 }
+
+/**
+ * The product version this host serves, read once from this package's own
+ * manifest. The workspace constraint keeps every dsh package version equal to
+ * the root's, so this member's version is the product version in both the
+ * source tree and a built/deployed app. The source (`src/`) and built (`lib/`)
+ * entries both sit one directory under the package root, so one relative hop
+ * resolves the manifest from either artifact.
+ */
+function readProductVersion(): string {
+  const manifest = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+  ) as { version?: unknown }
+  /* v8 ignore next 3 -- a checked-in workspace manifest always carries the shared version; the throw only guards a corrupt install. */
+  if (typeof manifest.version !== 'string' || manifest.version === '') {
+    throw new Error('client-modules: package.json carries no usable version')
+  }
+  return manifest.version
+}
+
+/** Product version carried by every composed boot graph. */
+const PRODUCT_VERSION = readProductVersion()
 
 /** Graph row for one bundle rev (url carries the rev as its cache-busting query). */
 function graphRow(id: string, rev: string, fields: WebBootRowFields): WebBootEntry {
@@ -425,7 +448,7 @@ export class ClientModuleRegistry extends Service {
 
   private compose(): WebBootGraph {
     const entries = orderByModuleGraph([...this.table.values()].map(record => record.entry))
-    return { rev: shortHash(JSON.stringify(entries)), entries }
+    return { rev: shortHash(JSON.stringify(entries)), version: PRODUCT_VERSION, entries }
   }
 
   private notifyGraphChanged(): void {

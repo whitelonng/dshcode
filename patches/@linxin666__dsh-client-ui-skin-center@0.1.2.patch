@@ -1,0 +1,160 @@
+diff --git a/lib/index.js b/lib/index.js
+index 1a10d14f8ee8d8ee3594be06d341635712ec7a64..19fc6ee654618a5bef04f41fe24f48b49aadba79 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -4,6 +4,24 @@ import { lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSy
+ import { dirname, join } from "node:path";
+ import { fileURLToPath } from "node:url";
+ import { homedir } from "node:os";
++/**
++* Bundled deployments (npm/pnpm flat layouts) ship the skins tree as a
++* `skins/` directory beside an ancestor `node_modules` (the deployment-owned
++* assembly); the checkout-relative location stays first so the upstream repo
++* layout keeps working unchanged.
++*/
++const SKINS_DIR_LOCAL = fileURLToPath(new URL("../../../skins/", import.meta.url));
++function resolveSkinsDir() {
++	if (statSync(SKINS_DIR_LOCAL, { throwIfNoEntry: false })) return SKINS_DIR_LOCAL;
++	let current = fileURLToPath(new URL("../../", import.meta.url));
++	for (let depth = 0; depth < 12; depth += 1) {
++		current = dirname(current);
++		const candidate = join(current, "skins");
++		if (statSync(candidate, { throwIfNoEntry: false })) return candidate;
++	}
++	return SKINS_DIR_LOCAL;
++}
++const RESOLVED_SKINS_DIR = resolveSkinsDir();
+ //#region src/skin-switch.ts
+ /**
+ * In-process skin switching for the skin center — the official `dsh-skin use`
+@@ -23,7 +41,7 @@ import { homedir } from "node:os";
+ * @module @linxin666/dsh-client-ui-skin-center/skin-switch
+ */
+ /** Repo layout: skin bundles live at packages/skins/<id>. */
+-const SKINS_DIR$1 = fileURLToPath(new URL("../../../skins/", import.meta.url));
++const SKINS_DIR$1 = RESOLVED_SKINS_DIR;
+ /** Managed patch-section delimiters (the CLI's SINGLE authority boundaries). */
+ const MANAGED_START = "# --- dsh-skin managed (auto-generated; do not edit) ---";
+ const MANAGED_END = "# --- end dsh-skin managed ---";
+@@ -122,13 +140,12 @@ function stripManaged(patch) {
+ * @param registry - registry to render against (defaults to the repo registry).
+ */
+ function renderManaged(active, registry = loadRegistry()) {
+-	const wired = wiredNames(registry);
+ 	const lines = [MANAGED_START];
+ 	for (const name of Object.keys(registry)) {
+ 		if (name === active) continue;
+ 		lines.push(`- id: ${registry[name].id}`, "  disabled: true");
+ 	}
+-	if (active !== null && !wired.has(active)) lines.push("- insert:", `    - id: ${registry[active].id}`, `      name: '${registry[active].pkg}'`);
++	if (active !== null) lines.push("- insert:", `    - id: ${registry[active].id}`, `      name: '${registry[active].pkg}'`);
+ 	lines.push(MANAGED_END);
+ 	return lines.join("\n");
+ }
+@@ -263,7 +280,10 @@ function useSkin(name, opts = {}) {
+ 		const warn = checkInstalled(entry, paths.profileModulesDir);
+ 		if (warn !== null) notices.push(warn);
+ 	}
+-	const next = `${stripLegacySkinRows(stripManaged(readPatch(paths.patchPath))).replace(/\s+$/, "")}\n\n${renderManaged(official ? null : name, registry)}\n`;
++	const base = stripLegacySkinRows(stripManaged(readPatch(paths.patchPath))).replace(/\s+$/, "");
++	// A leftover empty document (`[]` from older initializers) is invalid YAML once
++	// the managed section follows it; normalize it away so the section owns the file.
++	const next = (base === "" || base === "[]") ? `${renderManaged(official ? null : name, registry)}\n` : `${base}\n\n${renderManaged(official ? null : name, registry)}\n`;
+ 	writePatchAtomic(paths.patchPath, next);
+ 	const core = official ? "restored the official stock look — the config watcher applies it within seconds; refresh the page to see it." : `skin switched to "${name}" — the config watcher applies it within seconds; refresh the page (or the manifest re-fetches) to see it.`;
+ 	return notices.length ? `${core}\n${notices.join("\n")}` : core;
+@@ -436,7 +456,7 @@ function postRoute(path, run) {
+ 	};
+ }
+ /** Repo layout: skin bundles live at packages/skins/<id>/lib/client.js. */
+-const SKINS_DIR = fileURLToPath(new URL("../../../skins/", import.meta.url));
++const SKINS_DIR = RESOLVED_SKINS_DIR;
+ /**
+ * Map skin id -> directory under packages/skins/, scanned from each
+ * skin.json. The id is validated against this map (never used as a raw
+@@ -522,6 +542,53 @@ function bundleRoute() {
+ * Build the skin-center route family.
+ * @param deps - optional runner override (tests).
+ */
++/**
++* Reconcile the running Loader tree with a freshly written managed patch.
++* The upstream flow relies on the host config watcher hot-reloading the
++* patch; bundled deployments without that watcher (packaged Electron)
++* instead update the live rows here, so the next page refresh boots the
++* graph the patch already describes. The patch file stays the authority:
++* a restart rebuilds the same tree from it.
++* @param ctx - cordis context (loader injected).
++* @returns a reconcile callback for an applied skin id (null = official).
++*/
++function makeLiveReconcile(ctx) {
++	const registry = loadRegistry();
++	const wired = wiredNames(registry);
++	const rowOf = (skin) => {
++		for (const entry of ctx.loader.entries()) {
++			const options = entry.options;
++			if (options === void 0) continue;
++			if (options.name === skin.pkg || options.id === skin.id) return entry;
++		}
++		return void 0;
++	};
++	return async (active) => {
++		// Toggle `disabled` on mounted rows and create missing active rows.
++		// The update path re-cycles the row's fiber (dispose/init), which the
++		// client roster needs to observe the change; a bare disabled flag
++		// write would not dirty it. The patch file stays the authority: its
++		// managed section carries the same rows, so a restart rebuilds the
++		// same tree.
++		for (const [skinName, skin] of Object.entries(registry)) {
++			const enabled = skinName === active;
++			const row = rowOf(skin);
++			if (row !== void 0) {
++				try {
++					await ctx.loader.update(row.id, { disabled: !enabled });
++				} catch (error) {
++					console.error("[ui-skin-center] live reconcile failed for", skin.pkg, error);
++				}
++			} else if (enabled) {
++				try {
++					await ctx.loader.create({ name: skin.pkg });
++				} catch (error) {
++					console.error("[ui-skin-center] live row creation failed for", skin.pkg, error);
++				}
++			}
++		}
++	};
++}
+ function makeSkinCenterRoutes(deps = {}) {
+ 	const run = deps.run ?? runDshSkin;
+ 	const current = () => run(["current"]).then((out) => out.trim() || "none");
+@@ -538,6 +605,13 @@ function makeSkinCenterRoutes(deps = {}) {
+ 				if (skin !== void 0) throw new Error("invalid-skin: skin and official are mutually exclusive");
+ 			} else if (typeof skin !== "string" || skin === "") throw new Error("invalid-skin: pass a skin name or official: true");
+ 			const out = await run(["use", official ? "official" : skin]);
++			if (deps.reconcile !== void 0) {
++				try {
++					await deps.reconcile(official ? null : skin);
++				} catch (error) {
++					console.error("[ui-skin-center] live reconcile invocation failed:", error);
++				}
++			}
+ 			return {
+ 				ok: true,
+ 				active: await current(),
+@@ -551,7 +625,7 @@ function makeSkinCenterRoutes(deps = {}) {
+ /** Stable cordis plugin name (matches cordis.patch.yml insert id). */
+ const name = "ui-skin-center";
+ /** Services required before the skin-center can mount its routes. */
+-const inject = ["webServer"];
++const inject = ["webServer", "loader"];
+ /**
+ * Settings namespace for the main-interface background scrim, owned by the
+ * skin center. The browser half spells the same string so it can bind the
+@@ -573,7 +647,7 @@ function apply(ctx) {
+ 		setSource: () => {},
+ 		onChange: () => {}
+ 	});
+-	const routes = makeSkinCenterRoutes();
++	const routes = makeSkinCenterRoutes({ reconcile: makeLiveReconcile(ctx) });
+ 	try {
+ 		ctx.effect(() => {
+ 			const disposers = [];

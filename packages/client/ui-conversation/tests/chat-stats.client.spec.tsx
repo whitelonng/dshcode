@@ -267,6 +267,30 @@ describe('StatsLine', () => {
       .toBe('Cache hit 90%| Input 100 tok · Output 5 tok')
   })
 
+  it('leads with the live throughput group while running and drops it once settled', () => {
+    const live = {
+      uncachedInputTokens: 10, outputTokens: 40, cacheReadTokens: 0, cacheWriteTokens: 0,
+      estimated: false, tokensPerSecond: 88.9,
+    }
+    const { source } = makeSource({ nodes: [assistant(1, 1)], running: true })
+    const view = render(<StatsLine {...props(source, { tokenUsage: USAGE, liveTokenUsage: live })} />)
+    expect(view.container.textContent)
+      .toBe('Generating 89 tok/s| 1 turns · 1 steps| Cache hit 90%| Input 100 tok · Output 5 tok')
+    // Settled: the live group leaves; the durable groups stay.
+    const settled = makeSource({ nodes: [assistant(1, 1)] })
+    const settledView = render(<StatsLine {...props(settled.source, { tokenUsage: USAGE, liveTokenUsage: live })} />)
+    expect(settledView.container.textContent)
+      .toBe('1 turns · 1 steps| Cache hit 90%| Input 100 tok · Output 5 tok')
+    // Running but no throughput reading yet (first output still pending): no live group.
+    const early = makeSource({ nodes: [assistant(1, 1)], running: true })
+    const earlyView = render(<StatsLine {...props(early.source, {
+      tokenUsage: USAGE,
+      liveTokenUsage: { ...live, tokensPerSecond: undefined },
+    })} />)
+    expect(earlyView.container.textContent)
+      .toBe('1 turns · 1 steps| Cache hit 90%| Input 100 tok · Output 5 tok')
+  })
+
   it('computes context occupancy only when both a numerator and capacity are known', () => {
     // The projected figure wins: it is the provider sample carried forward over
     // the surface's movement, so a compaction shows without waiting a request.

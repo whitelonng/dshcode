@@ -75,6 +75,10 @@ class TestPersistence extends SessionPersistence {
     entry.events.push(...structuredClone(events))
     return Promise.resolve()
   }
+  delete(id: SessionIdType): Promise<void> {
+    TestPersistence.entries.delete(id)
+    return Promise.resolve()
+  }
 
   load(id: SessionIdType): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
     return this.inspect(id)

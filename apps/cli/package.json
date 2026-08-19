@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh",
   "description": "dsh CLI: profile boot, plugin management, and the browser UI alias",
-  "version": "0.1.0-rc.8",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -16,6 +16,7 @@
   },
   "files": [
     "lib/*.js",
+    "lib/types/**/*.d.ts",
     "config"
   ],
   "license": "MIT",
@@ -98,5 +99,12 @@
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@types/js-yaml": "^4.0.9",
     "execa": "^10.0.0"
+  },
+  "exports": {
+    "./profile-boot": {
+      "types": "./lib/types/profile-boot.d.ts",
+      "default": "./lib/profile-boot.js"
+    },
+    "./package.json": "./package.json"
   }
 }

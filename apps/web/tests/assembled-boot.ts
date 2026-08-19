@@ -122,7 +122,7 @@ const bundles = new Map(PLUGINS.map(plugin => [
 ]))
 
 interface FixtureWindow extends Window {
-  __DSH_BOOT__?: { rev: string; entries: WebBootEntry[] }
+  __DSH_BOOT__?: { rev: string; version: string; entries: WebBootEntry[] }
   __ModuleLoader__?: ClientModuleLoaderTarget
 }
 
@@ -193,7 +193,7 @@ export function mountAssembledApp(search = '?fixture'): void {
   const root = document.createElement('div')
   root.id = 'root'
   document.body.appendChild(root)
-  win.__DSH_BOOT__ = { rev: 'fx', entries: PLUGINS.map(({ bundlePath: _bundlePath, ...plugin }) => plugin) }
+  win.__DSH_BOOT__ = { rev: 'fx', version: '1.0.0', entries: PLUGINS.map(({ bundlePath: _bundlePath, ...plugin }) => plugin) }
   const html = injectBootManifest('<head></head>', win.__DSH_BOOT__)
   const facadeSource = /<head><script>([\s\S]*?)<\/script>/.exec(html)?.[1]
   if (facadeSource === undefined) throw new Error('missing injected ModuleLoader facade')

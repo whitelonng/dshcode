@@ -757,6 +757,20 @@
         "@deepseek-ai/.+"
       ]
     },
+    "apps/desktop": {
+      "entry": [
+        "src/main.ts",
+        "tests/**/*.spec.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts",
+        "scripts/**/*.mjs"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/.+"
+      ]
+    },
     "packages/client/modules": {
       "entry": [
         "tests/**/*.spec.ts"
@@ -797,7 +811,20 @@
     },
     "packages/bundle/web-app": {
       "ignoreDependencies": [
-        "@deepseek-ai/.+"
+        "@deepseek-ai/.+",
+        "@linxin666/dsh-client-ui-aionui-panel",
+        "@linxin666/dsh-client-ui-git-graph",
+        "@linxin666/dsh-client-ui-skin-center",
+        "@linxin666/dsh-client-ui-skin-whale-song",
+        "@linxin666/dsh-client-ui-task-board",
+        "@linxin666/dsh-client-ui-web-ui-settings",
+        "@linxin666/dsh-live-stats",
+        "@linxin666/dsh-pet",
+        "@linxin666/dsh-remote-web-ui",
+        "@linxin666/dsh-ssh",
+        "@linxin666/dsh-web-ui-all",
+        "@omdsh-dev/dsh-annotation",
+        "@omdsh-dev/dsh-genui"
       ]
     }
   }

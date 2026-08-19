@@ -337,12 +337,10 @@ export interface Config {
   maxMessageImageBytes?: number
   /** Maximum intrinsic width multiplied by height accepted for one image. */
   maxImagePixels?: number
-  /** Maximum intrinsic width and maximum intrinsic height accepted for one image. */
-  maxImageDimension?: number
 }
 ```
 
-来源：[`packages/attachment/attachment-local/src/index.ts:31`](../packages/attachment/attachment-local/src/index.ts)
+来源：[`packages/attachment/attachment-local/src/index.ts:24`](../packages/attachment/attachment-local/src/index.ts)
 
 <a id="deepseek-aidsh-bash-local"></a>
 
@@ -420,7 +418,7 @@ export interface ConnectionConfig {
 
 ## `@deepseek-ai/dsh-client-hmr`
 
-需要：`clientModules` · `webServer`
+需要：`clientModuleHost` · `webServer`
 
 ```ts config-catalog
 /** Plugin config, validated by the same-named schemastery schema. */
@@ -589,68 +587,6 @@ export interface Config {
 
 来源：[`packages/e2b/e2b/src/index.ts:43`](../packages/e2b/e2b/src/index.ts)
 
-<a id="deepseek-aidsh-experimental-agent-team"></a>
-
-## `@deepseek-ai/dsh-experimental-agent-team`
-
-需要：`agents` · `sessions` · `sessionPersistence` · `subagents`
-
-```ts config-catalog
-/** Team-service deployment limits. */
-export interface Config {
-  /** Maximum immutable teammate names retained by one Team. */
-  readonly maxMembers?: number
-  /** Maximum non-deleted tasks retained by one Team. */
-  readonly maxTasks?: number
-  /** Maximum queued-minus-delivered messages for one target member. */
-  readonly maxPendingMessagesPerMember?: number
-  /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
-  readonly maxMessageBytes?: number
-  /** Maximum milliseconds allowed for Team-owned runtime disposal. */
-  readonly disposalTimeoutMs?: number
-}
-```
-
-来源：[`packages/experimental/agent-team/src/types.ts:125`](../packages/experimental/agent-team/src/types.ts)
-
-<a id="deepseek-aidsh-experimental-tool-agent-team"></a>
-
-## `@deepseek-ai/dsh-experimental-tool-agent-team`
-
-需要：`agents` · `agentTeams` · `tools` · `systemPrompt`
-
-```ts config-catalog
-/** Tool routing configuration. */
-export interface Config {
-  /** Continuable-subagent provider used for fresh teammates. */
-  readonly freshProvider?: string
-  /** Continuable-subagent provider used for completed-prefix fork teammates. */
-  readonly forkProvider?: string
-}
-```
-
-来源：[`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
-
-<a id="deepseek-aidsh-file-reference-local"></a>
-
-## `@deepseek-ai/dsh-file-reference-local`
-
-需要：`agents`
-
-```ts config-catalog
-/** Local file-reference discovery configuration. */
-export interface Config {
-  /** Maximum ranked candidates returned for one query. */
-  maxResults?: number
-  /** Maximum indexed files and directories per agent workspace. */
-  maxEntries?: number
-  /** Directory basenames never traversed or offered. */
-  excludedDirectories?: string[]
-}
-```
-
-来源：[`packages/context/file-reference-local/src/index.ts:35`](../packages/context/file-reference-local/src/index.ts)
-
 <a id="deepseek-aidsh-fs-local"></a>
 
 ## `@deepseek-ai/dsh-fs-local`
@@ -726,7 +662,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-hooks-claude-code`
 
-需要：`shell`
+需要：`bash`
 
 ```ts config-catalog
 /** Plugin config: where the CC hook config lives + substitution roots. */
@@ -764,7 +700,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-hooks-codex`
 
-需要：`shell`
+需要：`bash`
 
 ```ts config-catalog
 /** Plugin config: where the Codex hooks.json lives + the model name for payloads. */
@@ -791,7 +727,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-host-apiproxy`
 
-需要：`agentDefaultModel` · `agents` · `attachments` · `directoryPicker` · `llm` · `sessions` · `subagents` · `sessionQuery` · `tools` · `userQuestions` · `workspaceRegistry`
+需要：`agentDefaultModel` · `agents` · `attachments` · `directoryPicker` · `llm` · `sessions` · `subagents` · `sessionQuery` · `tools` · `userInteraction` · `workspace`
 
 ```ts config-catalog
 /** Gateway plugin configuration. */
@@ -850,6 +786,76 @@ export interface Config {
 ```
 
 来源：[`packages/host/frontend-static/src/index.ts:28`](../packages/host/frontend-static/src/index.ts)
+
+<a id="deepseek-aidsh-host-plugin-control"></a>
+
+## `@deepseek-ai/dsh-host-plugin-control`
+
+需要：`loader` · `connection`
+
+```ts config-catalog
+/** Plugin-control gateway configuration owned by the composing profile. */
+export interface Config {
+  /** Absolute user patch layer of the running profile. */
+  profilePatchPath: string
+  /** Logical products that this deployment permits the browser to control. */
+  controls: PluginControlSpec[]
+}
+
+/** One deployment-configured logical control and its Loader rows. */
+export interface PluginControlSpec {
+  /** Stable id used in the profile patch marker and mutation request. */
+  id: string
+  /** Human-readable product name shown in Settings. */
+  name: string
+  /** HTTP(S) source repository shown in Settings. */
+  repository: string
+  /** Complete Loader entry-id set controlled as one product. */
+  entryIds: string[]
+  /** Module specifier for each entry id, in the same order. */
+  packages: string[]
+}
+```
+
+来源：[`packages/host/plugin-control/src/index.ts:50`](../packages/host/plugin-control/src/index.ts)
+
+<a id="deepseek-aidsh-host-plugin-installer"></a>
+
+## `@deepseek-ai/dsh-host-plugin-installer`
+
+Requires: `connection` · `tools`
+
+```ts config-catalog
+/** Plugin-installer gateway configuration owned by the composing profile. */
+export interface Config {
+  /** Explicit Harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
+  dshHome?: string
+  /** npm registry base; omitted follows `npm_config_registry`, then npmjs. */
+  registry?: string
+  /**
+   * Optional GitHub mirror prefix (an http(s) URL, for example
+   * `https://gh-proxy.com/`) prepended to the codeload and api.github.com
+   * URLs on restricted networks. A set non-http(s) value fails loud at load.
+   */
+  githubMirror?: string
+  /**
+   * Conflict rules: after a successful install or update, each rule whose
+   * `matches` substrings match the installed package name (case-insensitive)
+   * disables the named plugin-control product's patch rows, so a user
+   * install does not double-mount a built-in suite.
+   */
+  disableControlsOnInstall?: Array<{
+    /** The plugin-control product id whose patch rows the rule disables. */
+    id: string
+    /** Package-name substrings (case-insensitive) that trigger the rule. */
+    matches: string[]
+  }>
+  /** Absolute user patch layer of the running profile. */
+  profilePatchPath: string
+}
+```
+
+来源：[`packages/host/plugin-installer/src/index.ts:135`](../packages/host/plugin-installer/src/index.ts)
 
 <a id="deepseek-aidsh-host-webserver"></a>
 
@@ -934,9 +940,7 @@ export interface Config {
   models?: DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
-  /** Maximum accumulated base64 image payload per request (default 20 MiB). */
-  maxRequestImageBytes?: number
-  /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
+  /** Provider-owned model-request retry policy; omission uses normal defaults. */
   retryPolicy?: RetryPolicyConfig
 }
 
@@ -952,14 +956,24 @@ export interface DeepSeekCatalogModel {
   contextWindow?: number
   /** Per-request output cap for this model; omission falls back to the profile's {@link DeepSeekConnectionOptions.maxTokens}. */
   maxTokens?: number
-  /** Accepted request modalities; omission is text-only. */
-  inputModalities?: ModelModality[]
+  /**
+   * Per-model reasoning override, when this model's offering differs from the
+   * route default. `false` declares a non-reasoning model; a map declares the
+   * offered levels (its keys) with their wire spellings, which for this wire
+   * route are fixed — `off` uses the empty spelling (thinking disabled), and
+   * `low`/`high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
+   * `reasoningEffort` for this model.
+   */
+  reasoningEfforts?: false | Partial<Record<DeepSeekReasoningLevel, string | null>>
 }
+
+/** One reasoning level the direct DeepSeek wire route can dispatch. */
+export type DeepSeekReasoningLevel = 'off' | 'low' | 'high' | 'max'
 ```
 
-依赖：[`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
+依赖：[`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
 
-来源：[`packages/llm/llm-deepseek/src/index.ts:66`](../packages/llm/llm-deepseek/src/index.ts)
+来源：[`packages/llm/llm-deepseek/src/index.ts:62`](../packages/llm/llm-deepseek/src/index.ts)
 
 <a id="deepseek-aidsh-llm-pi-ai"></a>
 
@@ -1008,11 +1022,10 @@ export interface PiAiProviderProfile {
    */
   modelOverrides?: Record<string, PiAiModelOverride>
   /**
-   * pi-ai wire-compatibility switches defaulting every model on this route
-   * whose protocol declares them; each model's own `compat` overrides per
-   * field. What neither sets keeps the installed catalog entry's value, then
-   * pi-ai's own detection. A switch no model on the route could read is
-   * refused rather than left looking applied.
+   * Reasoning-dispatch switches for every `openai-completions` model on this
+   * route; each model's own `compat` overrides per field. What neither sets
+   * keeps the installed catalog entry's value, then pi-ai's baseURL-derived
+   * detection.
    */
   compat?: PiAiCompatProfile
   /**
@@ -1054,14 +1067,7 @@ export interface PiAiProviderProfile {
   websocketConnectTimeoutMs?: number
   /** Maximum provider idle time while one stream read is outstanding. */
   streamIdleTimeoutMs?: number
-  /**
-   * Maximum base64-encoded image payload per request. When a request's
-   * accumulated images exceed it, the oldest images are replaced by text
-   * placeholders until the request fits, so a long session keeps completing
-   * requests instead of being rejected by a request-size cap.
-   */
-  maxRequestImageBytes?: number
-  /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
+  /** Provider-owned model-request retry policy; omission uses normal defaults. */
   retryPolicy?: RetryPolicyConfig
 }
 
@@ -1093,6 +1099,24 @@ export interface PiAiModelProfile {
    */
   input?: PiAiModality[]
   /**
+   * Output modalities this model can produce; `image` declares image
+   * generation. Absent — or empty — means text-only output, the floor every
+   * chat-completions model carries. This adapter's text seam never invokes
+   * image generation, so the field is advisory metadata: it is what model
+   * selectors and capability surfaces display, not a request path.
+   */
+  output?: PiAiModality[]
+  /**
+   * Capability claims a modality list cannot express. `imageUnderstanding`
+   * means the model can reason about image content, which is a stronger claim
+   * than merely accepting image input (the latter is `input` containing
+   * `image`). A model declaring understanding is expected to also declare
+   * image input, but nothing here forces the combination: the two answers are
+   * independent, and a gateway that accepts images without understanding them
+   * is a legitimate configuration.
+   */
+  capabilities?: PiAiModelCapabilities
+  /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
    * entry's capability (a hand-declared model has none and does not reason);
    * `false` declares a non-reasoning model, which is how a profile strips
@@ -1100,7 +1124,7 @@ export interface PiAiModelProfile {
    * declares the offered levels and their wire spellings.
    */
   reasoningEfforts?: false | PiAiReasoningEfforts
-  /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */
+  /** Reasoning-dispatch switches for this model, winning over the route's. */
   compat?: PiAiCompatProfile
 }
 
@@ -1114,84 +1138,29 @@ export interface PiAiModelProfile {
 export type PiAiModelOverride = Omit<PiAiModelProfile, 'id'>
 
 /**
- * pi-ai wire-compatibility switches, set on the route (its models' default) or
- * per model (winning over the route, field by field).
- *
- * pi-ai decides each of these from the provider id and baseURL when no layer
- * sets it, and a private gateway's URL says nothing: for an endpoint it does
- * not recognize the detection answers as though it were OpenAI itself, which
- * is wrong for most OpenAI-compatible gateways. So every field here is one a
- * deployment must be able to state because nothing can infer it, while the
- * fields pi-ai's catalog sets for a named vendor stay withheld.
- *
- * A field belongs to the protocols whose upstream compat type declares it: a
- * model-level switch its protocol does not take fails resolution, and a
- * route-level one skips past models it cannot fit. "The three Responses
- * protocols" below means `openai-responses`, `azure-openai-responses`, and
- * `openai-codex-responses`, which pi-ai gives one shared compat type, so a
- * switch settable on one is settable on all three.
+ * Reasoning-dispatch compatibility switches, set on the route (its models'
+ * default) or per model (winning over the route). Only the switches pi-ai's
+ * reasoning dispatch reads are offered; the rest of pi-ai's compat surface
+ * keeps its baseURL-derived auto-detection. pi-ai types both fields only on
+ * `OpenAICompletionsCompat` — the other wire protocols define their reasoning
+ * fields in the protocol itself — so resolution rejects a model-level switch
+ * anywhere else, while a route-level default skips past models it cannot fit.
  */
 export interface PiAiCompatProfile {
-  /** Whether the endpoint accepts `store`; `openai-completions`. */
-  supportsStore?: boolean
-  /**
-   * Whether the endpoint accepts the `developer` role for the system prompt,
-   * which pi-ai sends only to a reasoning model; `false` keeps `system`.
-   * `openai-completions` and the three Responses protocols.
-   */
-  supportsDeveloperRole?: boolean
-  /** Whether the endpoint accepts `reasoning_effort`; `openai-completions`. */
-  supportsReasoningEffort?: boolean
-  /** Whether the endpoint accepts `stream_options: {include_usage: true}`; `openai-completions`. */
-  supportsUsageInStreaming?: boolean
-  /** Which output-cap field the endpoint reads; `openai-completions`. */
-  maxTokensField?: NonNullable<OpenAICompletionsCompat['maxTokensField']>
-  /** Whether tool results must carry `name`; `openai-completions`. */
-  requiresToolResultName?: boolean
-  /** Whether a user message after tool results needs an assistant message between; `openai-completions`. */
-  requiresAssistantAfterToolResult?: boolean
-  /** Whether thinking blocks must travel as text in `<thinking>` delimiters; `openai-completions`. */
-  requiresThinkingAsText?: boolean
-  /** Whether replayed assistant messages need an empty `reasoning_content` while reasoning is on; `openai-completions`. */
-  requiresReasoningContentOnAssistantMessages?: boolean
-  /** Reasoning parameter format the endpoint expects; `openai-completions`. */
+  /** Reasoning parameter format the endpoint expects; absent keeps the catalog entry's, then pi-ai's baseURL-derived guess. */
   thinkingFormat?: PiAiThinkingFormat
-  /**
-   * Kwargs sent as `chat_template_kwargs`, which pi-ai reads only under the
-   * two `chat-template` thinking formats; `openai-completions`. Nothing checks
-   * that pairing: the format in force may come from the installed catalog
-   * entry or from pi-ai's own baseURL detection, neither of which resolution
-   * can read, so kwargs set beside another format are sent nowhere.
-   */
-  chatTemplateKwargs?: NonNullable<OpenAICompletionsCompat['chatTemplateKwargs']>
-  /**
-   * Whether the endpoint accepts `strict` in tool definitions;
-   * `openai-completions`, the three Responses protocols, `bedrock-converse-stream`.
-   */
-  supportsStrictMode?: boolean
-  /** Prompt-cache marker convention; `openai-completions`. */
-  cacheControlFormat?: NonNullable<OpenAICompletionsCompat['cacheControlFormat']>
-  /**
-   * Whether the endpoint accepts long prompt-cache retention;
-   * `openai-completions`, the three Responses protocols, `anthropic-messages`.
-   */
-  supportsLongCacheRetention?: boolean
-  /** Whether the endpoint accepts per-tool `eager_input_streaming`; `anthropic-messages`. */
-  supportsEagerToolInputStreaming?: boolean
-  /** Whether the endpoint accepts `cache_control` on tool definitions; `anthropic-messages`. */
-  supportsCacheControlOnTools?: boolean
-  /** Whether the endpoint accepts the `temperature` request field; `anthropic-messages`. */
-  supportsTemperature?: boolean
-  /** Whether to force adaptive thinking regardless of model id; `anthropic-messages`. */
-  forceAdaptiveThinking?: boolean
-  /** Whether to replay an empty thinking signature instead of converting thinking to text; `anthropic-messages`. */
-  allowEmptySignature?: boolean
-  /** Whether the endpoint accepts Anthropic strict tool schemas; `anthropic-messages`. */
-  supportsStrictTools?: boolean
+  /** Whether the endpoint accepts `reasoning_effort`; absent keeps the catalog entry's, then pi-ai's baseURL-derived guess. */
+  supportsReasoningEffort?: boolean
 }
 
 /** One request modality a pi-ai model may accept. */
 export type PiAiModality = Model<Api>['input'][number]
+
+/** Capability claims an entry may declare beyond its modality lists. */
+export interface PiAiModelCapabilities {
+  /** Whether the model can reason about image content, beyond accepting image input. */
+  imageUnderstanding?: boolean
+}
 
 /**
  * Selectable reasoning efforts for one model: each key is a level the model
@@ -1204,12 +1173,21 @@ export type PiAiModality = Model<Api>['input'][number]
 export type PiAiReasoningEfforts = Partial<Record<ModelThinkingLevel, string | null>>
 
 /** One reasoning-dispatch wire format a profile may name. */
-export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFormat']>
+export type PiAiThinkingFormat = Exclude<PiThinkingFormat, WithheldThinkingFormat>
+
+/** The `compat.thinkingFormat` spellings pi-ai accepts on an `openai-completions` model. */
+type PiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFormat']>
+
+/**
+ * pi-ai thinking formats a profile cannot name: both drive the request through
+ * `chatTemplateKwargs`, which this configuration does not expose.
+ */
+type WithheldThinkingFormat = 'chat-template' | 'qwen-chat-template'
 ```
 
-依赖：`Api`（`@earendil-works/pi-ai`）· `CacheRetention`（`@earendil-works/pi-ai`）· `Model`（`@earendil-works/pi-ai`）· `ModelThinkingLevel`（`@earendil-works/pi-ai`）· `OpenAICompletionsCompat`（`@earendil-works/pi-ai`）· [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets`（`@earendil-works/pi-ai`）· `Transport`（`@earendil-works/pi-ai`)
+依赖：`Api`（`@earendil-works/pi-ai`）· `CacheRetention`（`@earendil-works/pi-ai`）· `Model`（`@earendil-works/pi-ai`）· `ModelThinkingLevel`（`@earendil-works/pi-ai`）· `OpenAICompletionsCompat`（`@earendil-works/pi-ai`）· [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets`（`@earendil-works/pi-ai`）· `Transport`（`@earendil-works/pi-ai`）
 
-来源：[`packages/llm/llm-pi-ai/src/config.ts:201`](../packages/llm/llm-pi-ai/src/config.ts)
+来源：[`packages/llm/llm-pi-ai/src/config.ts:172`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="deepseek-aidsh-llm-replay"></a>
 
@@ -1407,27 +1385,11 @@ export interface ReconnectConfig {
 
 来源：[`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
 
-<a id="deepseek-aidsh-message-feedback"></a>
-
-## `@deepseek-ai/dsh-message-feedback`
-
-需要：`storageDomain` · `sessionPersistence` · `sessions`
-
-```ts config-catalog
-/** Required deployment policy for optional notes. */
-export interface Config {
-  /** Maximum UTF-8 byte length accepted for one note. */
-  readonly maxNoteBytes: number
-}
-```
-
-来源：[`packages/feedback/message-feedback/src/index.ts:49`](../packages/feedback/message-feedback/src/index.ts)
-
 <a id="deepseek-aidsh-permission-presets"></a>
 
 ## `@deepseek-ai/dsh-permission-presets`
 
-需要：`shell` · `approval` · `sessions`
+需要：`bash` · `approval` · `sessions`
 
 ```ts config-catalog
 /** The {@link PermissionPresetService} config: preset table and composition default. */
@@ -1500,7 +1462,7 @@ export interface PlanModeConfig {
 }
 ```
 
-来源：[`packages/plan/plan-mode/src/index.ts:71`](../packages/plan/plan-mode/src/index.ts)
+来源：[`packages/plan/plan-mode/src/index.ts:70`](../packages/plan/plan-mode/src/index.ts)
 
 <a id="deepseek-aidsh-pwsh-local"></a>
 
@@ -1722,23 +1684,41 @@ export type JsonlCompression = 'zstd' | 'none'
 ```ts config-catalog
 /** Plugin configuration. */
 export interface Config {
-  /** SQLite database path, or `:memory:` for an in-process database. */
+  /**
+   * Filesystem path to the SQLite database file. The special value `:memory:`
+   * opens an in-process database (tests). On filesystems with POSIX modes,
+   * missing directories and databases are created owner-only; existing path
+   * modes are preserved. Filesystem setup errors other than an existing database
+   * fail initialization. The backend does not protect confidentiality or
+   * integrity when another principal can replace the database entry in its
+   * parent directory.
+   */
   path: string
-  /** Durable SQLite journal mode; defaults to `wal`. */
+  /**
+   * SQLite `journal_mode` pragma. `wal` (the default) is the recorded
+   * durability model; pick a rollback-journal mode (`delete`/`truncate`/
+   * `persist`) on filesystems where WAL's shared-memory files do not work
+   * (network mounts). See {@link JournalMode}.
+   */
   journalMode?: JournalMode
-  /** Maximum wait for another SQLite connection's lock; defaults to 5,000 ms. */
-  busyTimeoutMs?: number
   /** Maximum cold Session preparations retained for history-to-resume reuse. */
   preparedSessionCacheSize?: number
   /** Fixed live-event coalescing window; not a backend completion deadline. */
   writeBatchMaxDelayMs?: number
 }
 
-/** Durable journal modes accepted by the backend. */
+/**
+ * Journal modes the backend will run under. `wal` is the default and the
+ * durability model the persistence ADR records; the rollback-journal modes
+ * (`delete`/`truncate`/`persist`) exist for filesystems where WAL's
+ * shared-memory files do not work (network mounts). `memory`/`off` are
+ * excluded: dropping journal durability silently contradicts what this
+ * backend promises.
+ */
 export type JournalMode = 'wal' | 'delete' | 'truncate' | 'persist'
 ```
 
-来源：[`packages/session/session-persistence-sqlite/src/index.ts:36`](../packages/session/session-persistence-sqlite/src/index.ts)
+来源：[`packages/session/session-persistence-sqlite/src/index.ts:70`](../packages/session/session-persistence-sqlite/src/index.ts)
 
 <a id="deepseek-aidsh-session-projection-cache"></a>
 
@@ -2193,31 +2173,19 @@ export type PermissionPolicy = 'allow' | 'reject'
 需要：`subagents` · `subprocess`
 
 ```ts config-catalog
-/** Deployment-owned permission, environment, and process-release settings. */
+/** Deployment-owned environment and process-release bound. */
 export interface Config {
-  /** Provider name on `ctx.subagents` (default `claude-code`). */
-  providerName?: string
   /**
    * Explicit environment entries layered over the subprocess seam's
    * credential-scrubbed parent environment.
    */
   env?: Record<string, string>
-  /**
-   * Native non-interactive mode fixed for this Provider instance. Defaults to
-   * `dontAsk`; `acceptEdits` accepts edits, `auto` uses the native classifier,
-   * `plan` returns a plan without approving execution, and
-   * `bypassPermissions` explicitly skips permission checks.
-   */
-  permissionMode?: ClaudeCodePermissionMode
   /** Grace in milliseconds for Claude Code process-tree termination. */
   disposeGraceMs?: number
 }
-
-/** Profile-selectable non-interactive Claude Code permission mode. */
-export type ClaudeCodePermissionMode = typeof CLAUDE_CODE_PERMISSION_MODES[number]
 ```
 
-来源：[`packages/subagent/subagent-claude-code/src/index.ts:38`](../packages/subagent/subagent-claude-code/src/index.ts)
+来源：[`packages/subagent/subagent-claude-code/src/index.ts:32`](../packages/subagent/subagent-claude-code/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-codex"></a>
 
@@ -2226,29 +2194,19 @@ export type ClaudeCodePermissionMode = typeof CLAUDE_CODE_PERMISSION_MODES[numbe
 需要：`subagents` · `subprocess`
 
 ```ts config-catalog
-/** Deployment-owned permission, environment, and process-release settings. */
+/** Deployment-owned environment and process-release bound. */
 export interface Config {
-  /** Provider name on `ctx.subagents` (default `codex`). */
-  providerName?: string
   /**
    * Explicit environment entries layered over the subprocess seam's
    * credential-scrubbed parent environment.
    */
   env?: Record<string, string>
-  /** Native non-interactive permission mode fixed for this Provider instance. */
-  permissionMode?: CodexPermissionMode
   /** Grace in milliseconds for app-server process-tree termination. */
   disposeGraceMs?: number
 }
-
-/** Profile-selectable non-interactive Codex permission mode. */
-export type CodexPermissionMode =
-  | 'never'
-  | 'approve-for-me'
-  | 'dangerously-bypass-approvals-and-sandbox'
 ```
 
-来源：[`packages/subagent/subagent-codex/src/index.ts:36`](../packages/subagent/subagent-codex/src/index.ts)
+来源：[`packages/subagent/subagent-codex/src/index.ts:30`](../packages/subagent/subagent-codex/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-dsh-sdk"></a>
 
@@ -2382,18 +2340,16 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-terminal-bash`
 
-需要：`terminals` · `sandboxPolicy` · `subprocess`
+需要：`pty` · `sandboxPolicy` · `subprocess`
 
 ```ts config-catalog
 /** Public plugin configuration. */
 export interface Config {
   /** Backend registry type (default: `shell`). */
   backendType?: string
-  /** Interactive shell dialect (default: `bash`); selects the argv/env/startup defaults. */
-  shellDialect?: ShellDialect
-  /** Interactive shell executable (default per dialect: `/bin/bash`, or the resolved pwsh). */
+  /** Interactive shell executable (default: `/bin/bash`). */
   shellPath?: string
-  /** Shell arguments (default per dialect: bash `--noprofile --norc -i`, pwsh `-NoLogo -NoProfile`). */
+  /** Shell arguments (default: `--noprofile --norc -i`). */
   shellArgs?: string[]
   /** Terminal rows. */
   rows?: number
@@ -2421,12 +2377,9 @@ export interface Config {
   /** Grace before teardown escalates to `SIGKILL`. */
   disposeGraceMs?: number
 }
-
-/** One supported interactive shell dialect. */
-export type ShellDialect = 'bash' | 'pwsh'
 ```
 
-来源：[`packages/terminal/terminal-bash/src/config.ts:10`](../packages/terminal/terminal-bash/src/config.ts)
+来源：[`packages/terminal/terminal-bash/src/config.ts:6`](../packages/terminal/terminal-bash/src/config.ts)
 
 <a id="deepseek-aidsh-time-context"></a>
 
@@ -2477,7 +2430,7 @@ export type TokenMeterConfig = Record<string, never>
 
 ## `@deepseek-ai/dsh-tool-bash`
 
-需要：`tools` · `shell` · `systemPrompt` · `shellEnv`
+需要：`tools` · `bash` · `systemPrompt` · `bashEnv`
 
 ```ts config-catalog
 /** Configuration for the bash tool. */
@@ -2493,7 +2446,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-tool-bash-persistent`
 
-需要：`tools` · `terminals`
+需要：`tools` · `pty`
 
 ```ts config-catalog
 /** Configuration for the persistent Bash tool. */
@@ -2509,7 +2462,41 @@ export interface Config {
 }
 ```
 
-来源：[`packages/shell/tool-bash-persistent/src/index.ts:432`](../packages/shell/tool-bash-persistent/src/index.ts)
+来源：[`packages/shell/tool-bash-persistent/src/index.ts:400`](../packages/shell/tool-bash-persistent/src/index.ts)
+
+<a id="deepseek-aidsh-tool-describe-image"></a>
+
+## `@deepseek-ai/dsh-tool-describe-image`
+
+需要：`tools`
+
+```ts config-catalog
+/**
+ * Deployment configuration for the describe-image tool. The interface keeps every field optional so
+ * programmatic construction is re-judged by {@link resolveConfig}; the schema requires `baseURL` and
+ * `model` for composition entries.
+ */
+export interface Config {
+  /** Root of the OpenAI-compatible endpoint, e.g. `https://api.openai.com/v1`; trailing slashes are stripped. */
+  baseURL?: string
+  /** Vision model id for the configured endpoint. */
+  model?: string
+  /** Inline API key; prefer `apiKeyEnv` with the credential seam. Feed from the environment via `!!js process.env.VISION_API_KEY`. */
+  apiKey?: string
+  /** Credential reference (environment-variable name) for the API key; defaults to `VISION_API_KEY`. */
+  apiKeyEnv?: string
+  /** Instruction used when a call omits its `prompt`; defaults to a concise factual description. */
+  defaultPrompt?: string
+  /** Image byte bound; defaults to {@link DEFAULT_MAX_BYTES}. */
+  maxBytes?: number
+  /** Output-token cap sent to the vision model; defaults to {@link DEFAULT_MAX_OUTPUT_TOKENS}. */
+  maxOutputTokens?: number
+  /** Per-call request timeout; defaults to {@link DEFAULT_TIMEOUT_MS}. */
+  timeoutMs?: number
+}
+```
+
+来源：[`packages/vision/tool-describe-image/src/index.ts:40`](../packages/vision/tool-describe-image/src/index.ts)
 
 <a id="deepseek-aidsh-tool-fs"></a>
 
@@ -2588,7 +2575,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-tool-jobs`
 
-需要：`tools` · `jobs` · `systemPrompt`
+需要：`tools` · `tasks` · `systemPrompt`
 
 ```ts config-catalog
 /** Configures bounded `job_output` waits and completion-notice delivery. */
@@ -2642,7 +2629,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-tool-pwsh`
 
-需要：`tools` · `shell` · `systemPrompt` · `shellEnv`
+需要：`tools` · `bash` · `systemPrompt` · `bashEnv`
 
 ```ts config-catalog
 /** Configuration for the pwsh tool. */
@@ -2654,33 +2641,11 @@ export interface Config {
 
 来源：[`packages/shell/tool-pwsh/src/index.ts:52`](../packages/shell/tool-pwsh/src/index.ts)
 
-<a id="deepseek-aidsh-tool-pwsh-persistent"></a>
-
-## `@deepseek-ai/dsh-tool-pwsh-persistent`
-
-需要：`tools` · `terminals`
-
-```ts config-catalog
-/** Configuration for the persistent pwsh tool. */
-export interface Config {
-  /** PTY backend used for each owner-isolated persistent shell (default `shell`). */
-  backendType?: string
-  /** Wall-clock limit for one command (default 300000). */
-  timeoutMs?: number
-  /** Maximum returned command-output characters before clipping (default 16000). */
-  maxOutputChars?: number
-  /** Model-facing tool description; deployments may describe their environment. */
-  description?: string
-}
-```
-
-来源：[`packages/shell/tool-pwsh-persistent/src/index.ts:472`](../packages/shell/tool-pwsh-persistent/src/index.ts)
-
 <a id="deepseek-aidsh-tool-ralph"></a>
 
 ## `@deepseek-ai/dsh-tool-ralph`
 
-需要：`tools` · `workflowEngine` · `subagents` · `systemPrompt`
+需要：`tools` · `workflows` · `subagents` · `systemPrompt`
 
 ```ts config-catalog
 /** Deployment policy for the fixed Ralph workflow. */
@@ -2825,9 +2790,9 @@ export interface Config {
 /** Config: how accepted reports are scheduled on the parent. */
 export interface Config {
   /**
-   * Parent scheduling (default `next-step`). `next-step` wakes the parent and
-   * enters at its nearest step boundary; `quiet` adds the same context without
-   * waking, so a parked parent waits for another waking input.
+   * Parent scheduling (default `wakeup`). `wakeup` creates one ordinary later
+   * parent turn; `quiet` adds context without waking, so a parked parent learns
+   * of the report only when something else wakes it.
    */
   reportDelivery?: SubagentReportDelivery
 }
@@ -2841,7 +2806,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-tool-terminal`
 
-需要：`terminals` · `tools` · `systemPrompt`
+需要：`pty` · `tools` · `systemPrompt`
 
 ```ts config-catalog
 /** Model-facing terminal tool configuration. */
@@ -2884,7 +2849,7 @@ export interface Config {
 需要：`tools` · `web` · `systemPrompt`
 
 ```ts config-catalog
-/** Plugin config: which web tools to register, search bounds, per-tool budgets, and the fetch output cap. */
+/** Plugin config: which web tools to register, the source cap, per-tool budgets, and the fetch output cap. */
 export interface Config {
   /** Register `web_search`. Defaults to true. */
   search?: boolean
@@ -2892,8 +2857,6 @@ export interface Config {
   fetch?: boolean
   /** Upper bound on sources returned by one `web_search` call. */
   searchMaxResults?: number
-  /** Upper bound on queries accepted by one `web_search` call. */
-  searchMaxQueries?: number
   /** Cooperative timeout budget (ms) for `web_fetch`. Defaults to 30000. */
   fetchTimeoutMs?: number
   /** Cooperative timeout budget (ms) for `web_search`. Defaults to 30000. */
@@ -2909,7 +2872,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-tool-workflow`
 
-需要：`tools` · `workflowEngine` · `systemPrompt`
+需要：`tools` · `workflows` · `systemPrompt`
 
 ```ts config-catalog
 /** Config: the model-facing tool name plus result rendering caps. */
@@ -3036,8 +2999,6 @@ export interface WebRuntimeConfig {
 ```ts config-catalog
 /** Plugin config: composed deployment settings plus per-invocation command-line values. */
 export interface Config {
-  /** Permit default-browser handoff after the Loader tree settles; an SSH launch suppresses it. */
-  openBrowser: boolean
   /** Print the URL line on activation; a non-interactive layer can turn it off. */
   printUrl: boolean
   /**
@@ -3052,7 +3013,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/bundle/web-app/src/index.ts:42`](../packages/bundle/web-app/src/index.ts)
+来源：[`packages/bundle/web-app/src/index.ts:38`](../packages/bundle/web-app/src/index.ts)
 
 <a id="deepseek-aidsh-web-fetch-http"></a>
 
@@ -3197,8 +3158,6 @@ export interface Config {
 - `@deepseek-ai/dsh-client-modules` — 需要 `webServer` · `loader`（[`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts)）
 - `@deepseek-ai/dsh-client-runtime`（[`packages/client/runtime/src/index.ts`](../packages/client/runtime/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-agent-preset`（[`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-attachment`（[`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-brand-official`（[`packages/client/ui-brand-official/src/index.ts`](../packages/client/ui-brand-official/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-commands`（[`packages/client/ui-commands/src/index.ts`](../packages/client/ui-commands/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-conversation`（[`packages/client/ui-conversation/src/index.ts`](../packages/client/ui-conversation/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-cordis`（[`packages/extensions/ui-cordis/src/index.ts`](../packages/extensions/ui-cordis/src/index.ts)）
@@ -3209,16 +3168,15 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-input-trigger`（[`packages/client/ui-input-trigger/src/index.ts`](../packages/client/ui-input-trigger/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-jobs`（[`packages/client/ui-jobs/src/index.ts`](../packages/client/ui-jobs/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-layout`（[`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-message-feedback`（[`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-model-selection`（[`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-notifications`（[`packages/client/ui-notifications/src/index.ts`](../packages/client/ui-notifications/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-permission-presets`（[`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-plan`（[`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-reference`（[`packages/client/ui-reference/src/index.ts`](../packages/client/ui-reference/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-renderer`（[`packages/client/ui-renderer/src/index.ts`](../packages/client/ui-renderer/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings`（[`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-archive`（[`packages/client/ui-settings-archive/src/index.ts`](../packages/client/ui-settings-archive/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）
-- `@deepseek-ai/dsh-client-ui-settings-plugin-inventory`（[`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-plugin-installer`（[`packages/client/ui-settings-plugin-installer/src/index.ts`](../packages/client/ui-settings-plugin-installer/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugins`（[`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-skill`（[`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts)）
@@ -3239,7 +3197,7 @@ export interface Config {
 - `@deepseek-ai/dsh-goal-round-driver` — 需要 `agents` · `goals` · `sessions`（[`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker-auto` — 需要 `webServer` · `loader`（[`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker-native`（[`packages/host/directory-picker-native/src/index.ts`](../packages/host/directory-picker-native/src/index.ts)）
-- `@deepseek-ai/dsh-host-plugin-inventory` — 需要 `loader`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
+- `@deepseek-ai/dsh-host-plugin-inventory`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-llm`（[`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts)）
 - `@deepseek-ai/dsh-lsp`（[`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts)）
 - `@deepseek-ai/dsh-schedule` — 需要 `agents` · `sessions` · `tools` · `sessionPersistence`（[`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts)）
@@ -3268,7 +3226,6 @@ export interface Config {
 - `@deepseek-ai/dsh-code-runtime` — 抽象 `CodeRuntime`（[`packages/code-runtime/code-runtime/src/index.ts`](../packages/code-runtime/code-runtime/src/index.ts)）
 - `@deepseek-ai/dsh-compaction` — 抽象 `CompactionEngine`（[`packages/compaction/compaction/src/index.ts`](../packages/compaction/compaction/src/index.ts)）
 - `@deepseek-ai/dsh-credentials` — 抽象 `Credentials`（[`packages/credentials/credentials/src/index.ts`](../packages/credentials/credentials/src/index.ts)）
-- `@deepseek-ai/dsh-file-reference` — 抽象 `FileReferenceService`（[`packages/context/file-reference/src/index.ts`](../packages/context/file-reference/src/index.ts)）
 - `@deepseek-ai/dsh-fs` — 抽象 `FileSystem`（[`packages/fs/fs/src/index.ts`](../packages/fs/fs/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker` — 抽象 `DirectoryPicker`（[`packages/host/directory-picker/src/index.ts`](../packages/host/directory-picker/src/index.ts)）
 - `@deepseek-ai/dsh-jobs` — 抽象 `JobRegistry`（[`packages/jobs/jobs/src/index.ts`](../packages/jobs/jobs/src/index.ts)）
@@ -3291,12 +3248,14 @@ export interface Config {
 - `@deepseek-ai/dsh-atomic-write`（[`packages/util/atomic-write/src/index.ts`](../packages/util/atomic-write/src/index.ts)）
 - `@deepseek-ai/dsh-base`（[`packages/bundle/base/src/index.ts`](../packages/bundle/base/src/index.ts)）
 - `@deepseek-ai/dsh-brand`（[`packages/util/brand/src/index.ts`](../packages/util/brand/src/index.ts)）
+- `@deepseek-ai/dsh-client-schema-form`（[`packages/client/schema-form/src/index.ts`](../packages/client/schema-form/src/index.ts)）
 - `@deepseek-ai/dsh-client-test-runtime`（[`packages/test-support/client-runtime/src/index.ts`](../packages/test-support/client-runtime/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-attachment`（[`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-primitives`（[`packages/client/ui-primitives/src/index.ts`](../packages/client/ui-primitives/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-slots`（[`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts)）
 - `@deepseek-ai/dsh-client-web`（[`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts)）
+- `@deepseek-ai/dsh-client-web-react`（[`packages/client/web-react/src/index.ts`](../packages/client/web-react/src/index.ts)）
 - `@deepseek-ai/dsh-cmdline`（[`packages/boot/cmdline/src/index.ts`](../packages/boot/cmdline/src/index.ts)）
-- `@deepseek-ai/dsh-code-runtime-python`（[`packages/code-runtime/code-runtime-python/src/index.ts`](../packages/code-runtime/code-runtime-python/src/index.ts)）
 - `@deepseek-ai/dsh-home-paths`（[`packages/util/home-paths/src/index.ts`](../packages/util/home-paths/src/index.ts)）
 - `@deepseek-ai/dsh-hook-protocol`（[`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts)）
 - `@deepseek-ai/dsh-launch-environment`（[`packages/util/launch-environment/src/index.ts`](../packages/util/launch-environment/src/index.ts)）

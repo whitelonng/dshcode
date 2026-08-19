@@ -38,6 +38,11 @@ peerDependencyRules:
 # default and only allow scripts we need. esbuild (native binary) and lefthook
 # (git hooks) genuinely need theirs.
 allowBuilds:
+  # Electron's install step downloads the reviewed desktop runtime binary.
+  electron: true
+  # Optional Squirrel.Windows support selects a bundled 7-Zip binary at install;
+  # DSHCode ships the electron-builder NSIS target and never invokes this path.
+  electron-winstaller: false
   esbuild: true
   lefthook: true
   # Cross-platform boundary for the persistent PTY backend, including ConPTY on Windows.
@@ -53,6 +58,13 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
+  # remote-web-ui installs cloudflared lazily when a quick tunnel is first
+  # requested; its dependency postinstall download is unnecessary.
+  cloudflared: false
+  # ssh2 has complete JavaScript implementations; these scripts only compile
+  # optional CPU-detection and crypto accelerators.
+  cpu-features: false
+  ssh2: false
 
 minimumReleaseAgeExclude:
   # Fresh pi-ai releases carry the model catalog updates that are the whole
@@ -67,6 +79,27 @@ minimumReleaseAgeExclude:
   - node-addon-require-builtin-win32-ia32-msvc@0.1.4
   - node-addon-require-builtin-win32-x64-msvc@0.1.4
   - node-addon-require-builtin@0.1.4
+  # The requested dsh-web-ui 0.1.2 bundle was published inside the ordinary
+  # release-age window; every aggregate member is pinned in the lockfile.
+  - '@linxin666/dsh-client-ui-aionui-panel@0.1.2'
+  - '@linxin666/dsh-client-ui-git-graph@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-blue-fantasy@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-center@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-dragon-heir@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-minecraft@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-qq98@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-ths@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-xp@0.1.2'
+  - '@linxin666/dsh-client-ui-task-board@0.1.2'
+  - '@linxin666/dsh-client-ui-web-ui-settings@0.1.2'
+  - '@linxin666/dsh-live-stats@0.1.2'
+  - '@linxin666/dsh-pet@0.1.2'
+  - '@linxin666/dsh-remote-web-ui@0.1.2'
+  - '@linxin666/dsh-skins@0.1.2'
+  - '@linxin666/dsh-ssh@0.1.2'
+  - '@linxin666/dsh-web-ui-all@0.1.2'
+  - '@linxin666/dsh-client-ui-skin-whale-song@0.1.2'
 
 patchedDependencies:
+  '@linxin666/dsh-client-ui-skin-center@0.1.2': patches/@linxin666__dsh-client-ui-skin-center@0.1.2.patch
   node-pty@1.2.0-beta.15: patches/node-pty@1.2.0-beta.15.patch

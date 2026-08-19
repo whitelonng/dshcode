@@ -199,6 +199,18 @@ export interface PersistenceBackend<TornMarker = unknown> {
   list(signal?: AbortSignal): Promise<SessionHeader[]>
 
   /**
+   * Durably delete one stored session artifact. Returns `false` when the id
+   * has no stored artifact; the coordinator still drops its in-memory state.
+   * A deletion must be visible to the next {@link list} observation so
+   * downstream indexes (search) reconcile the removal. Optional: backends
+   * that cannot delete leave the coordinator's `delete` refusing loudly.
+   * @param id - persisted session id to delete.
+   * @param signal - optional cancellation for backend delete work.
+   * @returns whether a stored artifact was removed.
+   */
+  deleteStored?(id: SessionId, signal?: AbortSignal): Promise<boolean>
+
+  /**
    * Optional side-effect-free artifact locator, used to point refusal
    * diagnostics ({@link SessionFormatUnsupportedError}) at the raw log.
    * Backends without one artifact per session omit it or return `undefined`.
@@ -707,6 +719,28 @@ export class PersistenceCoordinator<TornMarker = unknown> {
     state.materialized = true
     state.cursor += events.length
     this.preparations.invalidate(id)
+  }
+
+  /**
+   * Durably delete one persisted session: drop the in-memory state,
+   * invalidate any prepared read, and remove the backend artifact. Resolves
+   * once the artifact (if any) is gone — an id with no stored log still
+   * resolves after its state is dropped. The next backend {@link list}
+   * observation must no longer include the id; the successful removal emits
+   * `session/deleted` (the host stream fans it out as `host/session-deleted`)
+   * so cached client list mirrors evict a session no future listing mentions.
+   * @param id - persisted session id to delete.
+   */
+  async delete(id: SessionId): Promise<void> {
+    return this.serialize(id, async () => {
+      this.states.delete(id)
+      this.preparations.invalidate(id)
+      if (this.backend.deleteStored === undefined) {
+        throw new Error(`session-persistence backend "${this.backend.name}" does not support deleting sessions`)
+      }
+      await this.backend.deleteStored(id)
+      this.ctx.emit('session/deleted', id)
+    })
   }
 
   /**

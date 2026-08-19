@@ -1,0 +1,17 @@
+# DSHCode
+
+> DSHCode is a free, open-source desktop AI agent app for macOS and Windows. It wraps the DeepSeek Harness Web UI and plugin runtime in a single installable Electron application — no Node.js, no terminal, no CLI required.
+
+DSHCode is an independent community project based on DeepSeek Harness (dsh), DeepSeek's open-source plugin-based agent harness. Key capabilities: plugin-based agent runtime, inline generative UI cards (GenUI), an installable skill catalog, subagents and multi-agent workflows, plan mode, persisted goals, resumable sessions, sandboxed bash/filesystem/web tools, plugin management with safe-mode recovery, archive management, and an English/Chinese interface.
+
+Preview packages are not code-signed or notarized; macOS Gatekeeper and Windows SmartScreen may warn before first launch. The README documents the one-time steps to open the application.
+
+## Links
+
+- [README (English)](README.zh.md): features, screenshots, download, and FAQ
+- [README (中文)](README.md): 功能特性、截图、下载与常见问题
+- [GitHub Releases](https://github.com/whitelonng/dshcode/releases): installable packages for macOS Apple Silicon, macOS Intel, and Windows x64
+- [Web UI guide](docs/user/guide/index.md): product walkthrough
+- [Development guide](docs/development.md): contributor setup
+- [Architecture documentation](docs/architecture.md): system map
+- [Upstream DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): the official open-source harness

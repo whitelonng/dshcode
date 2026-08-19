@@ -2,8 +2,8 @@
  * Shared profile boot for every `dsh` surface: resolve the profile, stack its
  * patch layers (bundle layers in `dsh.profile.bundles` order, the profile's
  * own `cordis.patch.yml`, `--patch` overlays, the telemetry switch), mount the
- * tree over the profile's empty root config, keep the profile patch layer
- * live, and wire fail-loud plus bounded shutdown.
+ * tree over the profile's empty root config, optionally keep the profile
+ * patch layer live, and wire fail-loud plus bounded shutdown.
  *
  * App flags are not the launcher's business: the invocation's inner arguments
  * are provided to the tree through `ctx.cmdlineArgs`, where any injected app
@@ -134,17 +134,21 @@ function allPatches(composed: ComposedProfile): PatchOptions[] {
  * platform on its own rows), the profile's user layer, the home-level user
  * layer (`$DSH_HOME/cordis.patch.yml` — machine-local preferences that apply
  * to every profile, so it outranks the per-profile layer), `--patch` overlays,
- * then the telemetry switch.
+ * then the telemetry switch. `skipUserPatches` drops the profile's and the
+ * home-level user layers without parsing them — a broken user patch file must
+ * not block a safe-mode boot.
  * @param name - the profile name.
  * @param patchFiles - `--patch` overlay paths, in argv order.
+ * @param skipUserPatches - whether to omit the user patch layers (safe mode).
  * @returns the profile, its patch layers, and the composed row index.
  */
 function composeProfile(
   name: string,
   patchFiles: readonly string[],
+  skipUserPatches = false,
 ): ComposedProfile {
-  const profile = prepareProfile(name)
-  const homePatches = loadOptionalPatches(NAME, homePatchPath()) ?? []
+  const profile = prepareProfile(name, !skipUserPatches)
+  const homePatches = skipUserPatches ? [] : (loadOptionalPatches(NAME, homePatchPath()) ?? [])
   const overlays = patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))
   const bundlePatches = profile.layers.flatMap(layer => layer.patches)
   const rows = new Map<string, EntryOptions>()
@@ -180,6 +184,21 @@ export interface RunProfileOptions {
   patchFiles: readonly string[]
   /** The invocation's inner arguments, handed to the tree through `ctx.cmdlineArgs`. */
   args: readonly string[]
+  /** Whether profile and home patch-layer files remain watched after boot. */
+  watchUserPatches: boolean
+  /**
+   * Skip the profile's and the home-level user patch layers entirely (safe
+   * mode), without even parsing them: a broken user patch file is a recovery
+   * case, not a boot blocker. Bundle layers and overlays still apply.
+   */
+  skipUserPatches?: boolean
+  /**
+   * Report a late unhandled plugin-init rejection before the fail-loud exit.
+   * Absent, the CLI default writes one labelled stderr diagnostic and exits.
+   * A surface that needs to record or redirect the failure (the desktop
+   * recovery flow) provides this hook.
+   */
+  failLoud?: (error: unknown) => void
 }
 
 /**
@@ -201,11 +220,11 @@ function suppressShutdownError(ctx: Context, signal: AbortSignal, error: unknown
 /**
  * Boot one profile invocation end to end and leave process lifetime to the
  * mounted plugins (or to a one-shot runner the composition mounts).
- * @param options - environment snapshot, profile name, overlays, and the booted app's own arguments.
+ * @param options - environment snapshot, profile name, overlays, arguments, and patch-watching policy.
  * @returns the settled root context and the shutdown controller.
  */
 export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Context; shutdown: ProcessShutdown }> {
-  const composed = composeProfile(options.profile, options.patchFiles)
+  const composed = composeProfile(options.profile, options.patchFiles, options.skipUserPatches)
   const app: { current?: Context } = {}
   const shutdown = createProcessShutdown(async () => { await app.current?.fiber.dispose() })
   const signalShutdown = new AbortController()
@@ -222,7 +241,7 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   process.on('SIGINT', () => { interrupt(130) })
   installFailLoud(NAME, process, async () => {
     await app.current?.fiber.dispose()
-  })
+  }, options.failLoud)
 
   const rootConfig = join(composed.profile.dir, PROFILE_ROOT_FILENAME)
   // Recomposition for the live user layers: bundle layers below, overlays
@@ -239,8 +258,8 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // removing the override could never revert the row to the bundle default.
   const composeLive = (): PatchOptions[] => structuredClone([
     ...composed.bundlePatches,
-    ...loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
-    ...loadOptionalPatches(NAME, homePatchPath()) ?? [],
+    ...options.skipUserPatches === true ? [] : loadOptionalPatches(NAME, composed.profile.patchPath) ?? [],
+    ...options.skipUserPatches === true ? [] : loadOptionalPatches(NAME, homePatchPath()) ?? [],
     ...composed.overlays,
   ])
   // Cloned for the same insert-aliasing reason as composeLive: the boot
@@ -250,6 +269,9 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
     // Before any config-tree entry mounts, so plugins resolve all launch-time
     // environment values from the same immutable provenance snapshot.
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)
+    // Profile-aware plugins persist composition changes into this invocation's
+    // own user layer instead of assuming the shipped `web` profile name.
+    hostCtx.provide('profileUserPatchPath', composed.profile.patchPath)
     // The command line and bounded exit request are launcher facts available
     // to every app plugin that injects the argument snapshot.
     provideCmdline(hostCtx, {
@@ -262,10 +284,12 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // setup is still in flight — a signal, or a fast one-shot's appExit. Loader
   // presence and fiber state own liveness; the initial check skips a tree
   // that already exited, and the catch below re-checks for an exit that
-  // landed mid-setup. Watching is unconditional: a one-shot surface exits
-  // through its bounded shutdown, which disposes the watchers before the
-  // loop drains.
-  if (!signalShutdown.signal.aborted
+  // landed mid-setup. CLI launches enable watching, including one-shot
+  // surfaces whose bounded shutdown disposes the watchers before the loop
+  // drains. Embedded launchers can disable it when their Node runtime cannot
+  // provide the HMR loader hooks.
+  if (options.watchUserPatches
+    && !signalShutdown.signal.aborted
     && ctx.fiber.state === FiberState.ACTIVE
     && ctx.get('loader') !== undefined) {
     try {

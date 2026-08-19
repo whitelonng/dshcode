@@ -27,6 +27,20 @@ async function waitForFile(path: string): Promise<void> {
   }
 }
 
+// access() can observe the managed child's tree.json mid-write; a single
+// follow-up read would then parse a partial document and crash the host
+// before it publishes `ready`. Retry the full read+parse instead, like the
+// test's own readTree does.
+async function waitForParsedTree(path: string): Promise<{ root?: unknown; descendant?: unknown }> {
+  for (;;) {
+    try {
+      return JSON.parse(await readFile(path, 'utf8')) as { root?: unknown; descendant?: unknown }
+    } catch (_notReadyOrPartial) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+  }
+}
+
 const listenersBefore = process.listenerCount('exit')
 const ctx = new Context()
 const fiber = await ctx.plugin(LocalSubprocessRuntime)
@@ -52,8 +66,7 @@ if (kind === 'ordinary') {
   })
 }
 
-await waitForFile(treeState)
-const published = JSON.parse(await readFile(treeState, 'utf8')) as { root?: unknown; descendant?: unknown }
+const published = await waitForParsedTree(treeState)
 if (!Number.isSafeInteger(published.root) || !Number.isSafeInteger(published.descendant)) {
   throw new Error('managed tree published invalid process ids')
 }

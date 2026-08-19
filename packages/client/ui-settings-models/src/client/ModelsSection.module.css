@@ -512,10 +512,50 @@
   gap: 4px;
 }
 
+.modelFieldCheck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .modelFieldLabel {
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
   line-height: 18px;
+}
+
+/* A checkbox group (capability or reasoning level) inside a row's disclosure:
+   one wrapped row of boxes per label set. */
+.modelCheckGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modelCheckRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.modelCheckHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* The retained raw text editor lives behind its own disclosure so the
+   checkbox groups stay the primary surface. */
+.modelAdvancedDetails {
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  padding-top: 8px;
+}
+
+.modelAdvancedDetails[open] > .customizedSummary::before {
+  transform: rotate(45deg) translate(-1px, -1px);
 }
 
 .modelEmpty {

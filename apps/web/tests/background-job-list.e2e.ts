@@ -121,6 +121,11 @@ describe.skipIf(MODE === 'record')('web e2e: background job list', () => {
     const idle = page.getByRole('button', { name: '1 background job' })
     await idle.waitFor({ timeout: 20_000 })
 
+    // The row label follows on its own tick after the count drops; wait for
+    // the cancelled detail so the snapshot never races the last frame.
+    const settledRow = page.getByRole('list', { name: 'Background jobs' }).getByRole('listitem').first()
+    await expect.poll(() => settledRow.textContent()).toContain('SIGTERM')
+
     const snapshot = await captureStableAria(page, '[class*="menu"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(SETTLED_EXPECTED, snapshot, MODE)
     expect(tripwire.pageErrors).toEqual([])

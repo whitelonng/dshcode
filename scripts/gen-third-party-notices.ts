@@ -22,6 +22,9 @@ const RUNTIME_KINDS = ['dependencies', 'optionalDependencies'] as const
 /** All manifest sections that name an external package this file must disclose. */
 const ALL_KINDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const
 
+/** Build-time declarations whose runtime is embedded in a shipped application. */
+const PACKAGED_DEV_DEPENDENCIES = new Set(['electron'])
+
 /**
  * Workspace areas that never reach a user: repository tooling and gates (the
  * root manifest), test infrastructure, the documentation site, the runnable
@@ -74,6 +77,7 @@ const OVERRIDES: Record<string, { license?: string; repo?: string }> = {
   '@modelcontextprotocol/server-everything': { license: 'MIT / Apache-2.0', repo: 'https://github.com/modelcontextprotocol/servers' },
   '@modelcontextprotocol/server-filesystem': { license: 'MIT / Apache-2.0', repo: 'https://github.com/modelcontextprotocol/servers' },
   // No repository field in the published manifest.
+  '@linxin666/dsh-web-ui-all': { repo: 'https://github.com/zhu1090093659/dsh-web-ui' },
   'node-addon-require-builtin': { repo: 'https://www.npmjs.com/package/node-addon-require-builtin' },
 }
 
@@ -376,7 +380,10 @@ export function tierExternalDeps(manifests: Map<string, Manifest>, names: Set<st
     for (const kind of ALL_KINDS) {
       for (const [dep, range] of Object.entries(manifest[kind] ?? {})) {
         if (names.has(dep) || range.startsWith('workspace:')) continue
-        const runtime = !devOnly && (RUNTIME_KINDS as readonly string[]).includes(kind)
+        const runtime = !devOnly && (
+          (RUNTIME_KINDS as readonly string[]).includes(kind)
+          || (kind === 'devDependencies' && PACKAGED_DEV_DEPENDENCIES.has(dep))
+        )
         tiers.set(dep, (tiers.get(dep) ?? false) || runtime)
       }
     }

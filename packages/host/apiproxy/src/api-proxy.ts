@@ -297,6 +297,12 @@ async function buildModelCatalog(ctx: Context): Promise<{
           id: model.id,
           name: model.name,
           ...model.description === undefined ? {} : { description: model.description },
+          // Capability metadata the model selector's badges render; resolved
+          // metadata rides through because listModels is advisory and the
+          // exact-model result is the authoritative capability source.
+          ...resolved.inputModalities === undefined ? {} : { inputModalities: [...resolved.inputModalities] },
+          ...resolved.outputModalities === undefined ? {} : { outputModalities: [...resolved.outputModalities] },
+          ...resolved.capabilities === undefined ? {} : { capabilities: [...resolved.capabilities] },
           ...reasoning === undefined ? {} : { reasoning },
         }
       }))
@@ -451,6 +457,108 @@ function jobViews(snapshots: readonly JobSnapshot[]): JobView[] {
  */
 function sessionBlank(session: Session): boolean {
   return !session.events.some(event => event.type === 'turn/start')
+}
+
+/**
+ * Resolve the inclusive surface-range end for deleting one message node.
+ * Deleting a user message removes its whole turn (everything through the node
+ * before the next user message); deleting an assistant message removes it plus
+ * the tool results its own step produced, so no orphan tool results remain
+ * model-visible. The caller has verified `start` is a current surface node.
+ * @param nodes - current surface node seqs in model-visible order.
+ * @param events - the session log.
+ * @param start - seq of the message node being deleted.
+ * @returns the inclusive end seq of the surface range to remove.
+ */
+function deleteSurfaceEndOf(nodes: readonly number[], events: readonly SessionEvent[], start: number): number {
+  const target = events[start]
+  if (target?.type !== 'user/message' && target?.type !== 'assistant/message') {
+    throw new Error(`deleteSurfaceEndOf: node ${start} is not a deletable message`)
+  }
+  const index = nodes.indexOf(start)
+  if (target.type === 'user/message') {
+    for (let i = index + 1; i < nodes.length; i += 1) {
+      const node = nodes[i]
+      if (node === undefined) continue
+      const event = events[node]
+      if (event?.type === 'user/message') {
+        const previous = nodes[i - 1]
+        return previous ?? start
+      }
+    }
+    return nodes.at(-1) ?? start
+  }
+  let end = start
+  for (let i = index + 1; i < nodes.length; i += 1) {
+    const node = nodes[i]
+    if (node === undefined) break
+    const event = events[node]
+    if (event?.type !== 'tool/result') break
+    if (event.data.turn !== target.data.turn || event.data.step !== target.data.step) break
+    end = node
+  }
+  return end
+}
+
+/**
+ * Resolve the inclusive surface range of one whole turn, for deleting a
+ * stopped (interrupted) turn from its `turn/end` anchor. An interrupted turn
+ * leaves no durable assistant message — its partial renders from chunks — so
+ * the client targets the turn/end event and everything the turn put on the
+ * surface goes away together. The caller has verified `seq` is a `turn/end`
+ * event.
+ * @param nodes - current surface node seqs in model-visible order.
+ * @param events - the session log.
+ * @param seq - seq of the turn/end event anchoring the turn.
+ * @returns the inclusive surface range of the turn, or `undefined` when the
+ *   turn left nothing on the surface.
+ */
+function deleteSurfaceTurnRangeOf(
+  nodes: readonly number[],
+  events: readonly SessionEvent[],
+  seq: number,
+): { start: number; end: number } | undefined {
+  const target = events[seq]
+  if (target === undefined || target.type !== 'turn/end') {
+    throw new Error(`deleteSurfaceTurnRangeOf: event ${seq} is not a turn/end`)
+  }
+  const startIdx = events.findIndex(event => event.type === 'turn/start' && event.data.turn === target.data.turn)
+  if (startIdx === -1 || startIdx > seq) {
+    throw new Error(`deleteSurfaceTurnRangeOf: no turn/start precedes the turn/end at ${seq}`)
+  }
+  // Turns are contiguous, so the closed seq range between the turn's own
+  // boundaries is exactly its surface span (user messages carry no turn
+  // field, so membership resolves by position rather than payload).
+  let start: number | undefined
+  let end: number | undefined
+  for (const node of nodes) {
+    if (node < startIdx || node > seq) continue
+    start ??= node
+    end = node
+  }
+  return start === undefined || end === undefined ? undefined : { start, end }
+}
+
+/**
+ * Every event seq of one whole turn, from its `turn/start` through the
+ * `turn/end` anchor (turns are contiguous, so the closed range is exact).
+ * Used as the deletion provenance for whole-turn deletes: the surface op
+ * removes the model-visible nodes, and these citations let the transcript
+ * fold hide the turn's chunks and boundaries too.
+ * @param events - seq-indexed session log.
+ * @param turnEndSeq - seq of the turn/end event anchoring the turn.
+ * @returns the turn's event seqs in ascending order.
+ */
+function turnEventSeqs(events: readonly SessionEvent[], turnEndSeq: number): number[] {
+  const target = events[turnEndSeq]
+  if (target === undefined || target.type !== 'turn/end') {
+    throw new Error(`turnEventSeqs: event ${turnEndSeq} is not a turn/end`)
+  }
+  const startIdx = events.findIndex(event => event.type === 'turn/start' && event.data.turn === target.data.turn)
+  if (startIdx === -1 || startIdx > turnEndSeq) {
+    throw new Error(`turnEventSeqs: no turn/start precedes the turn/end at ${turnEndSeq}`)
+  }
+  return events.slice(startIdx, turnEndSeq + 1).map(event => event.seq)
 }
 
 /** Advance the Session-list hint projection by one committed event. */
@@ -1070,6 +1178,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   const presetSwitches = new Map<SessionId, Promise<unknown>>()
   /** Client-chosen identity creation/resume, deduplicated across concurrent retries. */
   const sessionCreations = new Map<SessionId, Promise<Agent>>()
+  /**
+   * Lifecycle disposers for every Session this gateway created or resumed
+   * (the factory's owned handle — stopping the loop, unregistering the agent,
+   * removing the session). A permanent delete disposes the live session
+   * through this before removing its log; sessions created outside the
+   * gateway (subagents, other subsystems) have no entry here and keep the
+   * `session-active` refusal.
+   */
+  const sessionDisposals = new Map<SessionId, () => Promise<void>>()
   /** Serializes path ownership and explicit title checks with Workspace mutations. */
   let workspaceCreationChain = Promise.resolve()
   const pendingQuestions = new Map<RpcId, PendingQuestion>()
@@ -1599,11 +1716,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // session's history was produced under that composition, and
           // rebuilding it differently would replay tool calls the model can no
           // longer make.
-          return (await ctx.agents.resume({
+          const resumed = await ctx.agents.resume({
             resumeSessionId: sessionId,
             agentOptions: agentOptions(),
             setup: (await composeAgent(storedPreset)).setup,
-          })).agent
+          })
+          sessionDisposals.set(sessionId, () => resumed.dispose())
+          return resumed.agent
         }
 
         try {
@@ -1612,7 +1731,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
         const composition = await composeAgent(presetId)
-        return (await ctx.agents.create({
+        const created = await ctx.agents.create({
           sessionId,
           agentOptions: agentOptions(),
           meta: {
@@ -1620,7 +1739,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset },
           },
           setup: composition.setup,
-        })).agent
+        })
+        sessionDisposals.set(sessionId, () => created.dispose())
+        return created.agent
       })().catch((error: unknown) => {
         // Another Host entry path may have published the same identity while
         // this operation crossed an asynchronous persistence/filesystem step.
@@ -2212,7 +2333,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               .some(message => contentHasImage(message.content))
             if (pendingImage || messagesHaveImage(found.agent.session.deriveMessages())) {
               const info = await ctx.llm.resolveModelInfo(resolved.provider, resolved.model)
-              if (info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
+              // A text-only route still carries an image-bearing session when
+              // its adapter serializes image blocks into text notes (the
+              // DeepSeek route the describe_image pipeline relies on); only a
+              // route that rejects image content would strand the session.
+              if (info.inputModalities !== undefined
+                && !info.inputModalities.includes('image')
+                && info.imagePolicy !== 'note') {
                 return err(request, {
                   code: 'model-unavailable',
                   message: `Model "${resolved.model}" does not accept image input, but this session already contains images; select an image-capable model.`,
@@ -2274,6 +2401,156 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
+      },
+
+      async deleteMessage(request) {
+        const { sessionId, seq } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        const session = found.agent.session
+        const events = session.events
+        const target = events[seq]
+        if (target === undefined
+          || (target.type !== 'user/message' && target.type !== 'assistant/message' && target.type !== 'turn/end')) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: `event ${String(seq)} is not a deletable message`,
+            details: { sessionId, seq },
+          })
+        }
+        const nodes = session.surface.nodes
+        // A turn/end anchor deletes its whole turn (the interrupted-answer
+        // path); everything else must address a current surface node.
+        if (target.type !== 'turn/end' && !nodes.includes(seq)) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: `event ${String(seq)} is not a current conversation message (already shadowed by compaction or an earlier edit)`,
+            details: { sessionId, seq },
+          })
+        }
+        const lastTurnStart = events.findLastIndex(event => event.type === 'turn/start')
+        const lastTurnEnd = events.findLastIndex(event => event.type === 'turn/end')
+        if (lastTurnStart > lastTurnEnd) {
+          return err(request, {
+            code: 'agent-busy',
+            message: 'message deletion is unavailable while the agent is running; stop the turn first',
+            details: { reason: 'turn-open' },
+          })
+        }
+        const range = target.type === 'turn/end'
+          ? deleteSurfaceTurnRangeOf(nodes, events, seq)
+          : {
+            start: seq,
+            end: deleteSurfaceEndOf(nodes, events, seq),
+          }
+        if (range === undefined) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: target.type === 'turn/end'
+              ? `turn ${String(target.data.turn)} left nothing on the surface to delete`
+              : 'the targeted message left nothing on the surface to delete',
+            details: { sessionId, seq },
+          })
+        }
+        const { start, end } = range
+        const shadowedSeqs = [...nodes.slice(nodes.indexOf(start), nodes.indexOf(end) + 1)]
+        // A whole-turn deletion also cites every non-surface event between the
+        // turn's boundaries (chunks, boundaries) so the transcript fold hides
+        // the stopped partial answer, not just the model-visible nodes.
+        const sourceEventSeqs = target.type === 'turn/end'
+          ? turnEventSeqs(events, seq)
+          : shadowedSeqs
+        try {
+          session.append('message/delete', { start, end }, {
+            surfaceOp: { op: 'delete', start, end },
+            sourceEventSeqs,
+          })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `failed to delete message at event ${String(seq)}: ${error instanceof Error ? error.message : String(error)}`,
+            details: { sessionId, seq },
+          })
+        }
+        return ok(request, { start, end, deletedSeqs: shadowedSeqs })
+      },
+
+      async editMessage(request) {
+        const { sessionId, seq, content, clientTimeZone } = request.payload
+        const canonicalTimeZone = clientTimeZone === undefined
+          ? undefined
+          : canonicalClientTimeZone(clientTimeZone)
+        if (clientTimeZone !== undefined && canonicalTimeZone === undefined) {
+          return err(request, {
+            code: 'invalid-time-zone',
+            message: 'clientTimeZone must be UTC or a valid IANA Area/Location name',
+            details: { value: clientTimeZone },
+          })
+        }
+        const resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
+        if ('refused' in resolved) return resolved.refused
+        const agent = resolved.agent
+        const session = agent.session
+        const events = session.events
+        const target = events[seq]
+        if (target === undefined || target.type !== 'user/message'
+          || (target.data.source.kind !== 'user')) {
+          return err(request, {
+            code: 'edit-unavailable',
+            message: `event ${String(seq)} is not an editable user message`,
+            details: { sessionId, seq },
+          })
+        }
+        const nodes = session.surface.nodes
+        const lastUserIndex = nodes.findLastIndex(node => events[node]?.type === 'user/message')
+        if (lastUserIndex === -1 || nodes[lastUserIndex] !== seq) {
+          return err(request, {
+            code: 'edit-unavailable',
+            message: 'only the last user message of a conversation can be edited',
+            details: { sessionId, seq },
+          })
+        }
+        const lastTurnStart = events.findLastIndex(event => event.type === 'turn/start')
+        const lastTurnEnd = events.findLastIndex(event => event.type === 'turn/end')
+        if (lastTurnStart > lastTurnEnd) {
+          return err(request, {
+            code: 'agent-busy',
+            message: 'message editing is unavailable while the agent is running; stop the turn first',
+            details: { reason: 'turn-open' },
+          })
+        }
+        // The edited message replaces its whole turn (the last user message has
+        // no later user nodes, so the range runs to the surface tail).
+        const end = deleteSurfaceEndOf(nodes, events, seq)
+        const shadowedSeqs = [...nodes.slice(nodes.indexOf(seq), nodes.indexOf(end) + 1)]
+        const source: MessageSource = {
+          kind: 'user',
+          rpcId: request.rpcId,
+          ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
+        }
+        const hasImage = content.some(part => part.type === 'image')
+        const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
+          try {
+            const durable = await durablePromptContent(ctx, content)
+            const message: UserMessage = createUserMessage({ content: durable, source })
+            agent.followup(message, { start: seq, end, sourceEventSeqs: shadowedSeqs })
+          } catch (error: unknown) {
+            if (error instanceof AttachmentError) {
+              return err(request, {
+                code: 'attachment-error',
+                message: error.message,
+                details: { reason: error.code },
+              })
+            }
+            return err(request, {
+              code: 'agent-busy',
+              message: 'edit rejected',
+              details: { reason: String(error) },
+            })
+          }
+          return ok(request, { accepted: true as const })
+        }
+        return hasImage ? serializeImageAdmission(agent, admit) : admit()
       },
 
       async fork(request) {
@@ -2398,17 +2675,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const hasImage = content.some(part => part.type === 'image')
         const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
           try {
-            if (hasImage) {
-              const current = selectionFor(agent).current
-              const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
-              if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
-                return err(request, {
-                  code: 'attachment-error',
-                  message: `Model "${current.model}" does not support image input.`,
-                  details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
-                })
-              }
-            }
             const durable = await durablePromptContent(ctx, content)
             const message: UserMessage = createUserMessage({ content: durable, source })
             if (mode === 'steer') agent.steer(message)
@@ -2833,6 +3099,73 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async restoreSession(request) {
+        const { sessionId } = request.payload
+        await ctx.workspaceRegistry.restoreSession(sessionId)
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async deleteSession(request) {
+        const { sessionId } = request.payload
+        if (!ctx.workspaceRegistry.archivedSessionIds.includes(sessionId)) {
+          return err(request, {
+            code: 'not-archived',
+            message: `session '${sessionId}' is not archived and cannot be permanently deleted`,
+            details: { sessionId },
+          })
+        }
+        // A live session the gateway owns is disposed first — the explicit
+        // confirmation stands in for a separate close gesture, and the
+        // session-deleted frame below evicts its row in every connected tab.
+        // Sessions created outside the gateway (subagents) have no disposal
+        // entry and keep the session-active refusal.
+        if (ctx.sessions.get(sessionId) !== undefined) {
+          const dispose = sessionDisposals.get(sessionId)
+          if (dispose === undefined) {
+            return err(request, {
+              code: 'session-active',
+              message: `session '${sessionId}' is still active and is not owned by this gateway; close it before deleting`,
+              details: { sessionId },
+            })
+          }
+          await dispose()
+          sessionDisposals.delete(sessionId)
+        }
+        // The log deletion is the irreversible step; workspace accounting is
+        // dropped only after the durable delete settles. Attachment bytes
+        // are content-addressed and shared, so they are left in place.
+        await ctx.sessionPersistence.delete(sessionId)
+        await ctx.workspaceRegistry.removeSession(sessionId)
+        return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async listArchived(request) {
+        const ids = ctx.workspaceRegistry.archivedSessionIds
+        // Title folding is best-effort: without sessionQuery (cold harnesses,
+        // disabled search) items carry only identity and age.
+        const sessionQuery = ctx.get('sessionQuery')
+        let titles: ReadonlyMap<SessionId, string> | undefined
+        if (sessionQuery !== undefined && ids.length > 0) {
+          const observations = await sessionQuery.readTitleSnapshots(ids)
+          titles = new Map(observations.flatMap((result) => {
+            if (result.status === 'rejected') return []
+            return result.value.title === undefined ? [] : [[result.value.session.id, result.value.title.title] as const]
+          }))
+        }
+        const headers = await ctx.sessionPersistence.list()
+        const byId = new Map(headers.map(header => [header.id, header] as const))
+        const items = ids.map((sessionId) => {
+          const createdAt = byId.get(sessionId)?.createdAt
+          const title = titles?.get(sessionId)
+          return {
+            sessionId,
+            ...title === undefined ? {} : { title },
+            ...createdAt === undefined ? {} : { createdAt },
+          }
+        })
+        return ok(request, { items })
       },
     },
 
@@ -3470,6 +3803,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }),
           ctx.on('session/disposed', (session: Session) => {
             queue.push(frame({ type: 'host/session-removed', sessionId: session.id }))
+          }),
+          ctx.on('session/deleted', (sessionId: SessionId) => {
+            queue.push(frame({ type: 'host/session-deleted', sessionId }))
           }),
           ctx.on('agent/status', ({ agent, status }: { agent: Agent; status: AgentStatus }) => {
             queue.push(frame({ type: 'host/session-status', sessionId: agent.id, running: status === 'running' }))

@@ -26,6 +26,17 @@ const FILE_REFERENCE_PROMPT = fileURLToPath(new URL(
 ))
 
 /**
+ * The plugin_* management quartet, registered at the global tool layer by
+ * plugin-installer (one authority shared with the browser panel).
+ */
+const GLOBAL_TOOLS = [
+  'plugin_install',
+  'plugin_search',
+  'plugin_status',
+  'plugin_uninstall',
+]
+
+/**
  * The catalog the shipped Web composition puts in front of the model, minus the
  * ripgrep-dependent pair below. The absences are deliberate, not incidental
  * gaps: the `cordis_*` toolset executes model-written JavaScript that no
@@ -45,6 +56,7 @@ const EXPECTED_TOOLS = [
   'job_list',
   'job_output',
   'list_agents',
+  ...GLOBAL_TOOLS,
   'ralph',
   'read',
   'read_image',
@@ -134,12 +146,12 @@ it('assembles the shipped Web catalog, file-reference guidance, retry policy, an
       "mode": "always",
     }
   `)
-  // The catalog belongs to an AGENT, not to the process: every model-facing row
-  // now lives in a preset mounted under one session's scope, so the global
-  // layer holds nothing and a caller must name the agent to see anything. This
-  // composes from the deployment default — what a session that names no preset
-  // gets — which is the shape this test has always been about.
-  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual([])
+  // Model-facing tools live in presets mounted under one session's scope —
+  // except the plugin_* management quartet, which plugin-installer registers
+  // at the global layer so every agent can install and search plugins. This
+  // composes from the deployment default: what a session that names no preset
+  // gets.
+  expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual(GLOBAL_TOOLS)
   const handle = await ctx.agents.create({
     sessionId: SessionId('shipped-composition'),
     setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),

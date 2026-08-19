@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-web-app",
   "description": "The dsh browser-surface bundle: the web patch layer over dsh-base plus the runtime glue plugin (frontend dist serving, web-surface prompt, bash runtime variables, URL line)",
-  "version": "0.1.0-rc.8",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -112,7 +112,17 @@
     "@deepseek-ai/dsh-workspace": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^",
     "commander": "^15.0.0",
-    "open": "^11.0.0"
+    "open": "^11.0.0",
+    "@deepseek-ai/dsh-client-ui-notifications": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-archive": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-settings-plugin-installer": "workspace:^",
+    "@deepseek-ai/dsh-host-plugin-control": "workspace:^",
+    "@deepseek-ai/dsh-host-plugin-installer": "workspace:^",
+    "@linxin666/dsh-client-ui-skin-center": "0.1.2",
+    "@linxin666/dsh-client-ui-skin-whale-song": "0.1.2",
+    "@omdsh-dev/dsh-annotation": "github:omdsh-dev/dsh-annotation#a37edb01c3dbb0b19249cab3b93138ad529281ed",
+    "@omdsh-dev/dsh-genui": "github:omdsh-dev/dsh-genui#57b4338222632f8ea81c2665d44e5f9e80b52686",
+    "schemastery": "3.18.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",

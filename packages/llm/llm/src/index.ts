@@ -12,6 +12,7 @@ import type {
   LlmConfigurableProvider,
   LlmDiscoveredModel,
   LlmFailure,
+  LlmModelCapability,
   LlmModelContext,
   LlmModelDiscoveryRequest,
   LlmModelInfo,
@@ -572,6 +573,30 @@ export class LlmRuntime extends Service {
     return modalities === undefined ? undefined : [...modalities]
   }
 
+  /** Detach typed adapter-owned capability metadata. */
+  private detachedCapabilities(capabilities: readonly LlmModelCapability[] | undefined): LlmModelCapability[] | undefined {
+    return capabilities === undefined ? undefined : [...capabilities]
+  }
+
+  /** Validate adapter-owned image-carriage policy metadata. */
+  private validImagePolicy(model: { imagePolicy?: unknown }): boolean {
+    return model.imagePolicy === undefined || model.imagePolicy === 'note' || model.imagePolicy === 'reject'
+  }
+
+  /** Validate adapter-owned output-modality metadata against the declared vocabulary. */
+  private validOutputModalities(model: { outputModalities?: unknown }): boolean {
+    return model.outputModalities === undefined
+      || (Array.isArray(model.outputModalities)
+        && model.outputModalities.every(modality => MODEL_MODALITIES.includes(modality as ModelModality)))
+  }
+
+  /** Validate adapter-owned capability metadata against the declared vocabulary. */
+  private validCapabilities(model: { capabilities?: unknown }): boolean {
+    return model.capabilities === undefined
+      || (Array.isArray(model.capabilities)
+        && model.capabilities.every(capability => MODEL_CAPABILITIES.includes(capability as LlmModelCapability)))
+  }
+
   /**
    * Discover models advertised by one registered provider. Catalog membership
    * is advisory and never changes routing or request validation.
@@ -591,18 +616,26 @@ export class LlmRuntime extends Service {
         || typeof model.name !== 'string'
         || model.name.length === 0
         || (model.description !== undefined && typeof model.description !== 'string')
+        || !this.validImagePolicy(model)
+        || !this.validOutputModalities(model)
+        || !this.validCapabilities(model)
         || seen.has(model.id)
       ) {
         throw new LlmError(`adapter returned invalid or duplicate model metadata for provider "${provider}"`, 'INVALID_CATALOG')
       }
       seen.add(model.id)
       const inputModalities = this.detachedModalities(model.inputModalities)
+      const outputModalities = this.detachedModalities(model.outputModalities)
+      const capabilities = this.detachedCapabilities(model.capabilities)
       return {
         provider: model.provider,
         id: model.id,
         name: model.name,
         ...model.description === undefined ? {} : { description: model.description },
         ...inputModalities === undefined ? {} : { inputModalities },
+        ...outputModalities === undefined ? {} : { outputModalities },
+        ...capabilities === undefined ? {} : { capabilities },
+        ...model.imagePolicy === undefined ? {} : { imagePolicy: model.imagePolicy },
       }
     })
   }
@@ -639,6 +672,9 @@ export class LlmRuntime extends Service {
       || typeof resolved.name !== 'string'
       || resolved.name.length === 0
       || (resolved.description !== undefined && typeof resolved.description !== 'string')
+      || !this.validImagePolicy(resolved)
+      || !this.validOutputModalities(resolved)
+      || !this.validCapabilities(resolved)
     ) {
       throw new LlmError(
         `adapter returned invalid exact model metadata for provider "${provider}" model "${model}"`,
@@ -655,6 +691,8 @@ export class LlmRuntime extends Service {
     // Capability metadata rides through: an explicit modality omission is
     // negative capability downstream preflights act on (image admission).
     const inputModalities = this.detachedModalities(resolved.inputModalities)
+    const outputModalities = this.detachedModalities(resolved.outputModalities)
+    const capabilities = this.detachedCapabilities(resolved.capabilities)
     const defaultMaxTokens = resolved.defaultMaxTokens
     if (defaultMaxTokens !== undefined
       && (!Number.isSafeInteger(defaultMaxTokens) || defaultMaxTokens <= 0)) {
@@ -669,6 +707,9 @@ export class LlmRuntime extends Service {
       name: resolved.name,
       ...resolved.description === undefined ? {} : { description: resolved.description },
       ...inputModalities === undefined ? {} : { inputModalities },
+      ...outputModalities === undefined ? {} : { outputModalities },
+      ...capabilities === undefined ? {} : { capabilities },
+      ...resolved.imagePolicy === undefined ? {} : { imagePolicy: resolved.imagePolicy },
       ...context === undefined ? {} : { context: { contextWindow: context.contextWindow } },
       ...defaultMaxTokens === undefined ? {} : { defaultMaxTokens },
     }
@@ -945,3 +986,24 @@ interface AdapterRegistration {
 }
 
 export default LlmRuntime
+
+/**
+ * Compile-time drift gate over the declared modality vocabulary: a plugin that
+ * widens {@link ModelModalityMap} fails compilation here until the runtime
+ * list is extended too, so registry validation never silently lags the type.
+ */
+const MODEL_MODALITY_GATE: Record<ModelModality, true> = {
+  text: true,
+  image: true,
+}
+
+/** Every declared model modality, as the runtime list registry validation accepts. */
+const MODEL_MODALITIES = Object.keys(MODEL_MODALITY_GATE)
+
+/** Compile-time drift gate over the declared capability vocabulary (see {@link MODEL_MODALITY_GATE}). */
+const MODEL_CAPABILITY_GATE: Record<LlmModelCapability, true> = {
+  'image-understanding': true,
+}
+
+/** Every declared model capability, as the runtime list registry validation accepts. */
+const MODEL_CAPABILITIES = Object.keys(MODEL_CAPABILITY_GATE)

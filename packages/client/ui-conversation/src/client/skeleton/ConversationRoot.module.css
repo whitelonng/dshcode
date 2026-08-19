@@ -351,6 +351,20 @@
   padding-left: 20px;
 }
 
+/* The input selector row's context hole: an ordinary stack row above the
+   composer card in every phase. Hidden while no entry is registered, so an
+   unoccupied seat never adds a gap (heroWorkspaceRow owns its own margin). */
+.selectorContextRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.selectorContextRow:empty {
+  display: none;
+}
+
 /* Hero: the composer sits inside the session scroll body; center there so
    the tree seat matches active (sticky footer) without a Root remount. */
 .root[data-phase='hero'] .scrollBody {

@@ -12,7 +12,7 @@
 // after a click and the panel leaves (the InputBar returns) on the broadcast
 // resolved frame.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { RunningToolCall } from '@deepseek-ai/dsh-client-runtime/client'
 import { PendingApproval, type ApprovalComposerProps } from '../contract/slots.ts'
@@ -58,10 +58,34 @@ function ApprovalFlow({ pending, command, t }: {
   // lands; until then the buttons must not re-fire. An answer failure
   // (rejected receipt / transport) re-arms them for retry.
   const [answered, setAnswered] = useState(false)
+  const answeredRef = useRef(false)
   const answer = (outcome: 'allowed-once' | 'rejected'): void => {
+    answeredRef.current = true
     setAnswered(true)
-    void pending.answer(outcome).catch(() => { setAnswered(false) })
+    void pending.answer(outcome).catch(() => {
+      answeredRef.current = false
+      setAnswered(false)
+    })
   }
+  // Cmd/Ctrl+Enter confirms the pending approval (allowed-once, same as the
+  // primary button). The panel occupies the composer while pending, so the
+  // gesture cannot collide with the chat input; it still yields to editable
+  // targets and IME composition elsewhere in the page.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (answeredRef.current) return
+      if (event.isComposing || event.shiftKey || !(event.metaKey || event.ctrlKey) || event.key !== 'Enter') return
+      const target = event.target as HTMLElement | null
+      if (target !== null && (
+        target.tagName === 'TEXTAREA' || target.tagName === 'INPUT'
+        || target.isContentEditable
+      )) return
+      event.preventDefault()
+      answer('allowed-once')
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [pending])
   return (
     <div className={css.root} data-approval-key={pending.key}>
       <div className={css.card}>
@@ -80,6 +104,7 @@ function ApprovalFlow({ pending, command, t }: {
           <Button variant="primary" disabled={answered} onClick={() => { answer('allowed-once') }}>
             {t('approval.allowOnce')}
           </Button>
+          <span className={css.shortcutHint} aria-hidden>{t('approval.confirmShortcut')}</span>
         </div>
       </div>
     </div>

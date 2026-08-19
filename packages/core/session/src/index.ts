@@ -30,7 +30,7 @@ export { interruptedTurnClosers, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from '
 export { decodeStorageRecord, packChunkRuns } from './chunk-rows.ts'
 export type { ChunkRow, StorageRecord } from './chunk-rows.ts'
 export type { SessionSurface, SurfaceFoldReplacement, SurfaceFoldResult } from './surface.ts'
-export { deriveEventMessage, foldSurface, isAppendSurfaceEvent, isReplacementSurfaceEvent, isSurfaceEvent, isSurfaceEligibleType } from './surface.ts'
+export { deriveEventMessage, foldSurface, isAppendSurfaceEvent, isDeleteSurfaceEvent, isReplacementSurfaceEvent, isSurfaceEvent, isSurfaceEligibleType } from './surface.ts'
 export { canonicalHeader, foldRequestHeader, headerEquals } from './request-header.ts'
 export { KNOWN_SESSION_EVENT_TYPES } from './known-event-types.ts'
 
@@ -334,9 +334,14 @@ function assertMessageEventShape(event: Record<string, unknown>, subject: string
     return
   }
   if (type !== 'tool/result') return
+  // Tolerate an empty callId so legacy session logs written before the
+  // deepseek-ai/deepseek-harness#725 SSE overwrite fix can still be
+  // loaded: the bug stamped `name=""`/`callId=""` events; rejecting them
+  // here would brick the file forever. Callers should still treat empty
+  // ids as 'unknown tool' downstream so the orchestration layer surfaces
+  // the failure rather than swallowing it.
   if (sourceRecord['kind'] !== 'tool'
-    || typeof sourceRecord['callId'] !== 'string'
-    || sourceRecord['callId'] === '') {
+    || typeof sourceRecord['callId'] !== 'string') {
     throw new Error(`${subject} message must have tool source`)
   }
   const content = messageRecord['content'] as unknown[]

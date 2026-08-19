@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-settings-file",
   "description": "File-backed settings provider (settings.yaml) for the DeepSeek Harness",
-  "version": "0.1.0-rc.8",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -39,7 +39,7 @@
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "chokidar": "^4.0.3",
+    "chokidar": "^5.0.0",
     "@deepseek-ai/schemastery": "workspace:^",
     "yaml": "^2.9.0"
   },

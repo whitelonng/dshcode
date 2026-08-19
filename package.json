@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-root",
-  "version": "0.1.0-rc.8",
+  "version": "1.0.5",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -144,7 +144,11 @@
     "demo:acp": "node --import tsx packages/examples/acp-demo/src/bin.ts --config examples/acp-agent/cordis.yml",
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "dev:web": "tsx scripts/dev-web.ts --poll",
-    "postinstall": "node scripts/install-lefthook.mjs"
+    "postinstall": "node scripts/install-lefthook.mjs && node scripts/link-community-skins.mjs",
+    "desktop:dev": "pnpm run build && pnpm --filter @dshcode/desktop run dev",
+    "desktop:package": "pnpm run build && pnpm --filter @dshcode/desktop run package",
+    "desktop:dist": "pnpm run build && pnpm --filter @dshcode/desktop run dist",
+    "verify-desktop-runtime-closure": "tsx scripts/verify-runtime-closure.ts --manifest apps/desktop/package.json"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "0.25.1",
@@ -166,8 +170,8 @@
     "js-yaml": "^4.2.0",
     "jscpd": "^5.0.12",
     "jsdom": "29.1.1",
-    "knip": "^6.16.1",
-    "lefthook": "^2.1.9",
+    "knip": "^6.26.0",
+    "lefthook": "^2.1.10",
     "lightningcss": "^1.32.0",
     "mdast-util-from-markdown": "^2.0.3",
     "mdast-util-gfm": "^3.1.0",

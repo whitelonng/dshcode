@@ -53,6 +53,8 @@ function scriptedApi(overrides: {
         selected: { provider: r.payload.provider, model: r.payload.model },
       }),
       rename: r => ok(r, { title: 'renamed', seq: 0 }),
+      deleteMessage: r => ok(r, { start: r.payload.seq, end: r.payload.seq, deletedSeqs: [r.payload.seq] }),
+      editMessage: r => ok(r, { accepted: true as const }),
       fork: r => ok(r, { sessionId: sid('s-fork') }),
       prompt: r => ok(r, { accepted: true as const }),
       attachment: r => ok(r, {
@@ -88,6 +90,9 @@ function scriptedApi(overrides: {
       insertBefore: r => ok(r, { workspaceIds: [r.payload.workspaceId] }),
       insertSessionBefore: r => ok(r, { workspace: { workspaceId: 'w1' as never, path: '/t', title: 't', sessionIds: [], createdAt: '0', updatedAt: '0' } }),
       archiveSession: r => ok(r, { archivedSessionIds: [r.payload.sessionId] }),
+      restoreSession: r => ok(r, { archivedSessionIds: [] }),
+      deleteSession: r => ok(r, { archivedSessionIds: [] }),
+      listArchived: r => ok(r, { items: [] }),
     },
     skills: { list: r => ok(r, { skills: [] }), ...overrides.skills },
     agentPresets: {

@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import {
-  IconBranchOutline16, IconCheckOutline16, IconCopyOutline16, Tooltip, writeClipboard,
+  IconBranchOutline16, IconCheckOutline16, IconCopyOutline16, IconEditOutline16, IconTrashOutline16, Tooltip, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { formatLatencySeconds, formatMessageClock, formatRunDuration, formatTokensPerSecond } from './message-chrome.ts'
@@ -27,6 +27,15 @@ export interface MessageIconActionsProps {
   onBranch?: (() => void) | undefined
   /** The message is not a completed transcript tail, so branch stays visible but unavailable. */
   branchUnavailable?: boolean | undefined
+  /**
+   * Delete this message from the transcript; resolves false when the host
+   * refused. Omission hides the delete action.
+   */
+  onDelete?: (() => Promise<boolean>) | undefined
+  /** The message's turn is still running, so delete stays visible but unavailable. */
+  deleteUnavailable?: boolean | undefined
+  /** Open the inline editor for this message; omission hides the edit action. */
+  onEdit?: (() => void) | undefined
   /** Parent layout class composed onto the actions row. */
   className?: string | undefined
   /**
@@ -45,10 +54,11 @@ export interface MessageIconActionsProps {
  */
 export function MessageIconActions({
   text, time, runMs, ttftMs, tokensPerSecond, clock, onBranch, branchUnavailable = false, className,
-  extraActions, t,
+  onDelete, deleteUnavailable = false, onEdit, extraActions, t,
 }: MessageIconActionsProps) {
   const day = useCalendarDay()
   const reasonId = useId()
+  const deleteReasonId = useId()
   // Same success chrome as CodeBlock: a short check swap after the write,
   // gated so re-clicks during the window neither re-copy nor stack timers.
   const [copied, setCopied] = useState(false)
@@ -60,6 +70,17 @@ export function MessageIconActions({
     copyPending.current = false
     if (copyTimer.current !== null) clearTimeout(copyTimer.current)
   }, [])
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteFailed, setDeleteFailed] = useState(false)
+  const onDeleteClick = useCallback(() => {
+    if (onDelete === undefined || deletePending || deleteUnavailable) return
+    setDeletePending(true)
+    setDeleteFailed(false)
+    void onDelete().then((ok) => {
+      setDeletePending(false)
+      if (!ok) setDeleteFailed(true)
+    })
+  }, [onDelete, deletePending, deleteUnavailable])
   const onCopy = useCallback(() => {
     if (copied || copyPending.current) return
     const epoch = copyEpoch.current
@@ -116,6 +137,34 @@ export function MessageIconActions({
         </button>
       </Tooltip>
       {extraActions}
+      {onDelete !== undefined && (
+        <Tooltip
+          label={deleteFailed ? t('message.deleteFailed') : deleteUnavailable ? t('message.deleteUnavailable') : t('message.delete')}
+          side="bottom"
+        >
+          <button
+            type="button"
+            className={css.action}
+            aria-label={t('message.delete')}
+            aria-disabled={deleteUnavailable || deletePending || undefined}
+            aria-describedby={deleteUnavailable ? deleteReasonId : undefined}
+            data-unavailable={deleteUnavailable || undefined}
+            onClick={onDeleteClick}
+          >
+            <IconTrashOutline16 />
+          </button>
+        </Tooltip>
+      )}
+      {onDelete !== undefined && deleteUnavailable && (
+        <span id={deleteReasonId} className={css.visuallyHidden}>{t('message.deleteUnavailable')}</span>
+      )}
+      {onEdit !== undefined && (
+        <Tooltip label={t('message.edit')} side="bottom">
+          <button type="button" className={css.action} aria-label={t('message.edit')} onClick={onEdit}>
+            <IconEditOutline16 />
+          </button>
+        </Tooltip>
+      )}
       {onBranch !== undefined && (
         <Tooltip label={branchUnavailable ? t('message.branchUnavailable') : t('message.branch')} side="bottom">
           {/* Native disabled buttons do not deliver the hover/focus events Tooltip needs. */}

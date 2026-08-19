@@ -10,6 +10,10 @@
 - text: Show the local preview URL. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - heading "Inline code links" [level=2]
 - paragraph:
   - text: "Preview:"
@@ -29,9 +33,7 @@
 - paragraph: INLINE_CODE_LINK_DONE
 - button "Copy":
   - img
-- button "Good response":
-  - img
-- button "Bad response":
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

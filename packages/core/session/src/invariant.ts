@@ -144,6 +144,13 @@ function validateEvent(
     }
     case 'user/message':
       break
+    case 'message/delete':
+      // A transcript edit removes surface nodes outside model execution; a
+      // delete racing an open turn would shadow nodes the loop may still read.
+      if (trace.openTurn !== null) {
+        fail('message/delete appended inside an open turn')
+      }
+      break
     case 'session/end-seed':
       // Unconstrained: an unbalanced seed legally puts it inside an open turn.
       break

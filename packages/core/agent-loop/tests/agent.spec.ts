@@ -165,3 +165,55 @@ describe('Agent', () => {
     )
   })
 })
+
+describe('Agent edit-and-regenerate', () => {
+  it('followup(replace) appends the claimed message as a surface replacement', async () => {
+    const ctx = await harness(new MockAdapter([textResponse('first'), textResponse('second')]))
+    const agent = ctx.agentLoop.create(SessionId('edit-replace'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'original' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    const original = agent.session.events.find(event => event.type === 'user/message')
+    const firstAnswer = agent.session.events.find(event => event.type === 'assistant/message')
+    expect(original?.surfaceOp).toBe('append')
+    if (original === undefined || firstAnswer === undefined) return
+
+    agent.followup(
+      createUserMessage({ content: [{ type: 'text', text: 'edited' }], source: { kind: 'user' } }),
+      { start: original.seq, end: firstAnswer.seq, sourceEventSeqs: [original.seq, firstAnswer.seq] },
+    )
+    await agent.whenIdle()
+
+    const messages = agent.session.events.filter(event => event.type === 'user/message')
+    const edited = messages.at(-1)
+    expect(edited?.surfaceOp).toEqual({ op: 'replace', start: original.seq, end: firstAnswer.seq })
+    expect(edited?.sourceEventSeqs).toEqual([original.seq, firstAnswer.seq])
+    // The replacement shadows the whole old turn: only the edited prompt and
+    // its fresh answer are derived.
+    const derived = agent.session.deriveMessages().map(message => message.role)
+    expect(derived).toEqual(['user', 'assistant'])
+    expect(agent.session.deriveMessages()[0]?.content).toEqual([{ type: 'text', text: 'edited' }])
+    await ctx.fiber.dispose()
+  })
+
+  it('clears a pending edit surface when the waking turn never claims its message', async () => {
+    const ctx = await harness(new MockAdapter([textResponse('ok')]))
+    const agent = ctx.agentLoop.create(SessionId('edit-rejected'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'one' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    const original = agent.session.events.find(event => event.type === 'user/message')
+    if (original === undefined) return
+    // A cancelled wake discards the queued edit input without a claim.
+    agent.followup(
+      createUserMessage({ content: [{ type: 'text', text: 'edited' }], source: { kind: 'user' } }),
+      { start: original.seq, end: original.seq, sourceEventSeqs: [original.seq] },
+    )
+    agent.cancel({ kind: 'user' })
+    await agent.whenIdle()
+    // The next ordinary followup must append, not replace.
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'later' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    const lastUser = agent.session.events.filter(event => event.type === 'user/message').at(-1)
+    expect(lastUser?.surfaceOp).toBe('append')
+    await ctx.fiber.dispose()
+  })
+})

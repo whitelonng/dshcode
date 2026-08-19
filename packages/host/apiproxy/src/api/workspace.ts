@@ -17,6 +17,15 @@ import type { RpcRequest, RpcResponse } from './rpc.ts'
  */
 export type WorkspaceId = Branded<'WorkspaceId'>
 
+/** One archived-session row: identity plus best-effort title and age. */
+export interface ArchivedSessionItem {
+  sessionId: SessionId
+  /** Folded log title; absent when the log has no title event. */
+  title?: string
+  /** Header creation timestamp (ms); absent when the session is not persisted. */
+  createdAt?: number
+}
+
 /** One workspace row: the record projection every workspace.* value carries. */
 export interface WorkspaceView {
   workspaceId: WorkspaceId
@@ -106,4 +115,31 @@ export interface WorkspaceApi {
    */
   archiveSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Removes one session from the registry-global archive set: the session
+   * reappears in its original workspace position. Idempotent for an id that
+   * is not archived. Returns the full updated set.
+   */
+  restoreSession(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Permanently deletes one archived session: its session log is removed
+   * from persistence and its workspace accounting and archive-set entries
+   * are dropped. A live session whose lifecycle this gateway owns is
+   * disposed first (stop, unregister, session removal) — the explicit
+   * confirmation stands in for a separate close gesture; a live session the
+   * gateway does not own (subagents) refuses with `session-active`, and a
+   * session that is not archived refuses with `not-archived`. Irreversible;
+   * UI must confirm first. Returns the full updated set.
+   */
+  deleteSession(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Lists the registry-global archive set with best-effort titles (folded
+   * from the session logs) and creation times. Items preserve archive order.
+   */
+  listArchived(request: RpcRequest<{}>): Promise<RpcResponse<{ items: ArchivedSessionItem[] }>>
 }

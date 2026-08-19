@@ -13,6 +13,9 @@
     - button "Agent 预设":
       - img
       - text: Agent 预设
+    - button "归档会话":
+      - img
+      - text: 归档会话
   - button "打开配置文件"
   - button "关闭":
     - img
@@ -62,6 +65,17 @@
           - textbox "最大输出 token 数 2":
             - /placeholder: 256K
             - text: 64K
+          - text: 思考程度
+          - checkbox "思考程度 2 off"
+          - text: "off"
+          - checkbox "思考程度 2 low"
+          - text: low
+          - checkbox "思考程度 2 high"
+          - text: high
+          - checkbox "思考程度 2 max"
+          - text: max
+          - checkbox "禁用推理 2"
+          - text: 禁用推理
           - button "添加模型":
             - img
             - text: 添加模型

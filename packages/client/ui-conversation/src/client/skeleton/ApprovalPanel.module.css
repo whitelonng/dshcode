@@ -101,3 +101,10 @@
   color: var(--dsw-alias-state-error-primary);
   border-color: transparent;
 }
+
+.shortcutHint {
+  align-self: center;
+  margin-right: 4px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary, #888);
+}
