@@ -11,10 +11,10 @@ import { describe, expect, it } from 'vitest'
 // one stable verdict, and single-producer caches restored by every lane.
 const root = resolve(import.meta.dirname, '..')
 const workflowPath = '.github/workflows/fork-ci.yml'
-// The lanes behind the required verdict. `web` is the diagnostic lane for
-// now and must stay OUT of this list until its Ubuntu run proves the fork's
-// web goldens current; promote it here together with all-checks-passed.needs.
-const BLOCKING_JOBS = ['static', 'unit', 'coverage'] as const
+// The lanes behind the required verdict. `web` joined after its Ubuntu run
+// proved the fork's goldens current; a lane only leaves this list together
+// with all-checks-passed.needs.
+const BLOCKING_JOBS = ['static', 'unit', 'web', 'coverage'] as const
 const CACHED_JOBS = ['static', 'unit', 'web', 'coverage'] as const
 
 describe('Fork CI workflow', () => {
@@ -129,8 +129,6 @@ describe('Fork CI workflow', () => {
     for (const jobName of BLOCKING_JOBS) {
       expect(aggregate.needs, `${jobName} must gate the verdict`).toContain(jobName)
     }
-    // The diagnostic web lane must not gate merges while unverified.
-    expect(aggregate.needs).not.toContain('web')
     if (!Array.isArray(aggregate.steps)) throw new TypeError('Aggregate must define steps')
     const failStep = aggregate.steps.filter(isRecord).find(step => step.name === 'Fail if any needed job did not succeed')
     expect(failStep).toMatchObject({
@@ -253,9 +251,9 @@ describe('Fork CI workflow', () => {
     })
     expect(stepRuns(coverage)).toContain('pnpm run check:ci:coverage')
 
-    // The non-blocking status must stay visible in the pull-request check
-    // list; a rename would make a red diagnostic lane look like a blocking one.
-    expect(web).toMatchObject({ name: 'web browser replay (diagnostic)' })
+    // A renamed or resuffixed check changes the check name branch protection
+    // sees; the lane is blocking now, so keep the plain name.
+    expect(web).toMatchObject({ name: 'web browser replay' })
   })
 
   it('keeps snapshot replay and real-API e2e out until they are re-owned for the fork', () => {

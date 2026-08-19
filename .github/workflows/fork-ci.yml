@@ -17,10 +17,9 @@ name: Fork CI
 # - unit:     the complete keyless vitest unit inventory (thread-safe and
 #             process-bound projects; includes apps/desktop and apps/web specs)
 # - web:      built web frontend + keyless browser replay
-#             (DSH_SNAPSHOT=replay over apps/web/tests). DIAGNOSTIC lane for
-#             now: local runs cannot exercise the confined bash tool, so the
-#             fork verifies this lane green on Ubuntu before it joins
-#             all-checks-passed.needs (then promote it there).
+#             (DSH_SNAPSHOT=replay over apps/web/tests). Promoted into the
+#             verdict after its first Ubuntu run proved the fork's goldens
+#             current (one stale retry golden, refreshed in df281d24e2).
 # - coverage: per-file 100% coverage gate on packages/*/*/src
 # - all-checks-passed: single stable required check for branch protection
 #
@@ -218,11 +217,7 @@ jobs:
         run: pnpm exec vitest run --maxWorkers=2
 
   web:
-    # Diagnostic lane (see the header job map): the name suffix keeps its
-    # non-blocking status visible in the pull-request check list. Absent from
-    # all-checks-passed.needs until its first Ubuntu run proves the fork's web
-    # goldens current. A red lane here never blocks a pull request.
-    name: web browser replay (diagnostic)
+    name: web browser replay
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -356,16 +351,14 @@ jobs:
 
   # Single stable required check for branch protection: require "Fork CI /
   # all checks passed" instead of enumerating jobs whose names evolve as lanes
-  # change. Every blocking job above must stay listed in `needs`; `web` is
-  # deliberately absent while it is the diagnostic lane above (rejoin it once
-  # the fork's web replay is proven green on Ubuntu).
+  # change. Every blocking job above must stay listed in `needs`.
   # `if: always()` is load-bearing: without it a failed dependency would SKIP
   # this job, and GitHub counts a skipped required check as passing — so this
   # job always runs on pull requests and fails on any non-success result,
   # including 'cancelled' and 'skipped'.
   all-checks-passed:
     name: all checks passed
-    needs: [static, unit, coverage]
+    needs: [static, unit, web, coverage]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
