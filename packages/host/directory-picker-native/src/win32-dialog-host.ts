@@ -31,29 +31,27 @@ function sanitizeNodeOptions(value: string | undefined): string | undefined {
  * Spawn the dialog child process. Built consumers launch the bundled CJS
  * entry next to this module under plain node; unbuilt (source) consumers
  * run the worker directly under Node's native type stripping (stable since
- * 22.18, covered by the engines range) — the worker's dependency graph is
- * package-local and uses only erasable TypeScript syntax. The dialog is the
- * child's first window, so Windows activates it without a foreground call.
+ * 22.18, covered by the engines range). The source worker dependency graph
+ * is package-local and uses erasable TS with type-only relative imports.
+ * The dialog is the child's first window, so Windows activates it without a
+ * foreground call.
  * @param data - the child payload (dialog title).
  * @returns the spawned child process.
  */
 export function spawnDialogWorker(data: Win32DialogWorkerData): ReturnType<typeof spawn> {
   // A packaged Electron host uses its branded application as process.execPath;
   // child-only Node mode bypasses application startup and its single-instance lock.
-  const env = {
-    ...process.env,
-    DSH_DIALOG_TITLE: data.title,
-    ELECTRON_RUN_AS_NODE: '1',
-    NODE_OPTIONS: sanitizeNodeOptions(process.env.NODE_OPTIONS),
-  }
+  const baseEnv = { ...process.env, DSH_DIALOG_TITLE: data.title, ELECTRON_RUN_AS_NODE: '1' }
   const stdio: StdioOptions = ['ignore', 'inherit', 'inherit', 'ipc']
   // Use pathname (not the raw URL): bundlers/tests may append query strings,
   // which are not part of the source file extension.
   /* v8 ignore next 3 -- the built-output arm: tests always run unbuilt (src/) */
   if (!new URL(import.meta.url).pathname.endsWith('.ts')) {
-    return spawn(process.execPath, [fileURLToPath(new URL('./worker.cjs', import.meta.url))], { env, stdio, windowsHide: true })
+    return spawn(process.execPath, [fileURLToPath(new URL('./worker.cjs', import.meta.url))], { env: baseEnv, stdio, windowsHide: true })
   }
-  // `node <absolute .ts path>`: no loader hook is inserted before the path.
+  // `node <absolute .ts path>`: no loader hook is inserted before the path, so an
+  // absolute Windows path cannot be misparsed as an `e:` scheme URL.
+  const env = { ...baseEnv, NODE_OPTIONS: sanitizeNodeOptions(process.env.NODE_OPTIONS) }
   return spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', import.meta.url))], { env, stdio, windowsHide: true })
 }
 
