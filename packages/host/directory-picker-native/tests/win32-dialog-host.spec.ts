@@ -52,6 +52,22 @@ describe('spawnDialogWorker', () => {
     expect(process.env.NODE_OPTIONS).toBe('--max-old-space-size=256 --no-experimental-strip-types --trace-warnings --no-strip-types')
   })
 
+  it('drops NODE_OPTIONS entirely when it carried only the disabling flag', () => {
+    vi.stubEnv('NODE_OPTIONS', '--no-strip-types')
+
+    spawnDialogWorker({ title: 'NODE_OPTIONS sole-flag guard' })
+
+    expect(spawnMock.mock.calls[0]?.[2]?.env?.NODE_OPTIONS).toBeUndefined()
+  })
+
+  it('passes no NODE_OPTIONS when the host did not set one', () => {
+    vi.stubEnv('NODE_OPTIONS', undefined)
+
+    spawnDialogWorker({ title: 'NODE_OPTIONS unset guard' })
+
+    expect(spawnMock.mock.calls[0]?.[2]?.env?.NODE_OPTIONS).toBeUndefined()
+  })
+
   it('launches the source worker under plain node with no loader flags', () => {
     spawnDialogWorker({ title: 'Source-plane guard' })
 
