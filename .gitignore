@@ -39,3 +39,10 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+# Build artifacts that must never land inside src/ (transient misconfigured
+# builds; see rc8-desktop integration notes).
+packages/*/*/src/**/*.js
+packages/*/*/src/**/*.js.map
+packages/*/*/src/**/*.d.ts
+packages/*/*/src/**/*.d.ts.map

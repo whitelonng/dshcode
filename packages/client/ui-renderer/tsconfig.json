@@ -19,6 +19,9 @@
     },
     {
       "path": "../../runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../modules"
     }
   ]
 }

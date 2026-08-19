@@ -61,6 +61,12 @@
       config:
         backend: json
 
+    # Per-message feedback records with sidecar persistence over the Remote.
+    - id: message-feedback
+      name: '@deepseek-ai/dsh-message-feedback'
+      config:
+        maxNoteBytes: 8192
+
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
@@ -246,6 +252,9 @@
     - id: ui-settings-archive
       name: '@deepseek-ai/dsh-client-ui-settings-archive'
 
+    - id: ui-settings-plugin-inventory
+      name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+
     - id: ui-settings-plugin-installer
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-installer'
 
@@ -264,6 +273,11 @@
 
     - id: ui-attachment
       name: '@deepseek-ai/dsh-client-ui-attachment'
+
+    # Per-message feedback: Like/Dislike plus an optional note in the
+    # assistant-message action strip, over the messageFeedback Remote.
+    - id: ui-message-feedback
+      name: '@deepseek-ai/dsh-client-ui-message-feedback'
 
     # Tool call tree, generic fallback, and keyed business Tool views.
     - id: ui-tool
