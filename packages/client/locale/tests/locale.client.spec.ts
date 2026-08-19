@@ -36,15 +36,15 @@ describe('LocaleRuntime', () => {
     vi.unstubAllGlobals()
   })
 
-  it('translates through the active-locale -> en -> key chain', () => {
+  it('translates through the active-locale -> zh -> key chain', () => {
     const { svc } = make()
-    svc.register('ns', 'zh', { hello: '你好' })
-    svc.register('ns', 'en', { hello: 'Hello', onlyEn: 'English only' })
+    svc.register('ns', 'en', { hello: 'Hello' })
+    svc.register('ns', 'zh', { hello: '你好', onlyZh: '仅中文' })
     const t = svc.bind('ns')
     expect(svc.getLocale().active).toBe('zh')
     expect(t('hello')).toBe('你好')
-    // The active locale misses this key; the en fallback supplies it.
-    expect(t('onlyEn')).toBe('English only')
+    // The active locale misses this key; the zh fallback supplies it.
+    expect(t('onlyZh')).toBe('仅中文')
     svc.setLocale('en')
     expect(t('hello')).toBe('Hello')
     expect(t('missing.key')).toBe('missing.key')
@@ -53,17 +53,18 @@ describe('LocaleRuntime', () => {
   it('falls through to the common vocabulary after the namespace misses (production keys)', () => {
     const { svc } = make()
     // The shipped common pair is registered by apply; the bench registers it
-    // directly to pin the production chain: ns -> common -> en -> key.
+    // directly to pin the production chain: ns -> common -> zh -> key.
     svc.register('common', 'zh', { retry: '重试' })
     svc.register('common', 'en', { retry: 'Retry' })
-    svc.register('ns', 'en', { own: 'Own' })
+    svc.register('ns', 'zh', { own: '自有' })
     const t = svc.bind('ns')
     expect(t('retry')).toBe('重试')
-    // zh is active and `ns` has no zh dictionary at all: the en fallback answers.
-    expect(t('own')).toBe('Own')
+    // ns owns the zh key directly; the common vocabulary answers the missing one.
+    expect(t('own')).toBe('自有')
     svc.setLocale('en')
     expect(t('retry')).toBe('Retry')
-    expect(t('own')).toBe('Own')
+    // en misses 'own' in both ns and common; the zh fallback answers it.
+    expect(t('own')).toBe('自有')
     // common itself must not recurse: a miss inside common echoes the key.
     // (Wide-string ns hits the untyped bind overload — the typed one rejects
     // unknown keys at compile time, which is the point of the typed registry contract.)
@@ -160,14 +161,14 @@ describe('LocaleRuntime', () => {
   it('persists an explicit pick of the provisional locale, so a shared DSH home agrees', () => {
     // A browser naming no shipped language opens at FALLBACK_LOCALE with
     // nothing stored. Choosing that same language in the menu must become
-    // durable, or a Chinese browser sharing the home still opens Chinese.
+    // durable, or an English browser sharing the home still opens English.
     stubLanguages('fr-FR')
     const host = stubSettingsScope<LocaleSettings>()
     const { svc } = make(host)
-    expect(svc.getLocale().active).toBe('en')
+    expect(svc.getLocale().active).toBe('zh')
     expect(host.set).not.toHaveBeenCalled()
-    svc.setLocale('en')
-    expect(host.set).toHaveBeenCalledWith('preference', 'en')
+    svc.setLocale('zh')
+    expect(host.set).toHaveBeenCalledWith('preference', 'zh')
   })
 
   it('setLocale without a host scope stays process-local', () => {
@@ -226,21 +227,21 @@ describe('LocaleRuntime', () => {
     expect(make().svc.getLocale().active).toBe('en')
     vi.stubGlobal('navigator', { language: 'en-US' })
     expect(make().svc.getLocale().active).toBe('en')
-    // No shipped language anywhere in the browser's preferences: en is the
+    // No shipped language anywhere in the browser's preferences: zh is the
     // product default rather than an arbitrary near-match.
     stubLanguages('fr-FR', 'de')
-    expect(make().svc.getLocale().active).toBe('en')
+    expect(make().svc.getLocale().active).toBe('zh')
   })
 
   it('runs outside a browser (node boots): the default decides and the machine language does not', () => {
     vi.stubGlobal('window', undefined)
     // Node exposes its own global navigator; without a window it must not
     // reach the resolution at all.
-    stubLanguages('zh-CN')
+    stubLanguages('en-US')
     const { svc } = make()
-    expect(svc.getLocale().active).toBe('en')
-    svc.setLocale('zh')
     expect(svc.getLocale().active).toBe('zh')
+    svc.setLocale('en')
+    expect(svc.getLocale().active).toBe('en')
   })
 
   it('lets an explicit in-process preference replace the browser-derived value', () => {
@@ -250,26 +251,26 @@ describe('LocaleRuntime', () => {
     expect(svc.getLocale().active).toBe('zh')
   })
 
-  it('serves English as both the opening locale and the dictionary fallback', () => {
+  it('serves Chinese as both the opening locale and the dictionary fallback', () => {
     // One constant covers both jobs: the locale the UI opens in with no usable
     // browser signal, and the dictionary backing a key the active locale
     // misses. Safe to share only because the shipped zh/en dictionaries carry
     // identical key sets (asserted below on a registered pair).
-    expect(FALLBACK_LOCALE).toBe('en')
+    expect(FALLBACK_LOCALE).toBe('zh')
     vi.stubGlobal('window', undefined)
     const { svc } = make()
-    // A key present only in en resolves for a zh reader through the fallback.
-    svc.register('ns', 'zh', {})
-    svc.register('ns', 'en', { onlyEn: 'English only' })
-    svc.setLocale('zh')
-    expect(svc.getLocale().active).toBe('zh')
-    expect(svc.bind('ns')('onlyEn')).toBe('English only')
-    // The reverse no longer resolves: a zh-only key is unreachable from en, so
-    // the key itself surfaces (fail loud) rather than silently rendering zh.
-    svc.register('ns2', 'zh', { onlyZh: '仅中文' })
-    svc.register('ns2', 'en', {})
+    // A key present only in zh resolves for an en reader through the fallback.
+    svc.register('ns', 'en', {})
+    svc.register('ns', 'zh', { onlyZh: '仅中文' })
     svc.setLocale('en')
-    expect(svc.bind('ns2')('onlyZh')).toBe('onlyZh')
+    expect(svc.getLocale().active).toBe('en')
+    expect(svc.bind('ns')('onlyZh')).toBe('仅中文')
+    // The reverse no longer resolves: an en-only key is unreachable from zh, so
+    // the key itself surfaces (fail loud) rather than silently rendering en.
+    svc.register('ns2', 'en', { onlyEn: 'English only' })
+    svc.register('ns2', 'zh', {})
+    svc.setLocale('zh')
+    expect(svc.bind('ns2')('onlyEn')).toBe('onlyEn')
   })
 
   it('exposes the two shipped locales with self-described labels', () => {
