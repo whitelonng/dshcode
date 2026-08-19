@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-launch-environment",
   "description": "Immutable DeepSeek Harness launch environment that records which layer supplied each value",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -38,5 +38,7 @@
   "devDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  }
+  },
+  "dependencies": {},
+  "optionalDependencies": {}
 }

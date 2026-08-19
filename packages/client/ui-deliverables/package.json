@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-deliverables",
   "description": "Produced-files turn tail and clickable final-response file references for Web",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -52,7 +52,8 @@
     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-slots": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-client-connection": "workspace:^",
@@ -73,5 +74,9 @@
     "lib/invariant.js",
     "lib/client.js",
     "lib/types/**/*.d.ts"
-  ]
+  ],
+  "dependencies": {
+    "react": "^18.2.0"
+  },
+  "optionalDependencies": {}
 }

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-web-frontend",
   "description": "Web application entry: vite build over the @deepseek-ai/dsh-client-web shell library; dist/ served by apps/cli's dsh web",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -43,6 +43,14 @@
     "typescript": "^6.0.3",
     "vite": "^6.0.0",
     "vitest": "^4.1.8",
-    "fflate": "^0.8.2"
-  }
+    "fflate": "^0.8.2",
+    "@deepseek-ai/dsh-client-web-react": "workspace:^"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-client-web": "workspace:^",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "peerDependencies": {},
+  "optionalDependencies": {}
 }

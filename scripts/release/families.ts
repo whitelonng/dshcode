@@ -316,10 +316,10 @@ export abstract class ReleaseFamily {
   abstract readonly installedEntry: InstalledEntry | undefined
 }
 
-/** Release packages and apps: one shared version across the whole family. */
+/** Harness packages and the two npm-published apps: one shared version across the whole family. */
 class DshFamily extends ReleaseFamily {
   readonly id = 'dsh'
-  readonly patterns = ['packages/!(experimental)/*/package.json', 'apps/*/package.json'] as const
+  readonly patterns = ['packages/!(experimental)/*/package.json', 'apps/cli/package.json', 'apps/web/package.json'] as const
   readonly tagPrefix = 'dsh-v'
 
   /** Require current artifacts from a complete official client build. */

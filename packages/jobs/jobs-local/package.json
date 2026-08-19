@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-jobs-local",
   "description": "Process-local implementation of the DeepSeek Harness background job registry seam",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -53,5 +53,6 @@
     "@deepseek-ai/dsh-jobs": "workspace:^",
     "@deepseek-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  }
+  },
+  "optionalDependencies": {}
 }

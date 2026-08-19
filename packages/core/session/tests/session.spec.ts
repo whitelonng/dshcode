@@ -892,7 +892,7 @@ describe('Session', () => {
       .toThrow(/invalid surfaceOp/)
     expect(() => appendRaw('user/message', data, {
       surfaceOp: { op: 'replace', start: -1, end: 0 },
-    })).toThrow(/invalid replace surfaceOp/)
+    })).toThrow(/carries an invalid surfaceOp/)
     expect(() => appendRaw('user/message', data, {
       surfaceOp: 'append',
       sourceEventSeqs: [0, -1],

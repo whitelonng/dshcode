@@ -356,6 +356,17 @@ describe('installFailLoud', () => {
     expect(proc.exits).toEqual([1])
   })
 
+  it('invokes the report hook with the rejection before the exit', () => {
+    const proc = fakeProc()
+    const reported: unknown[] = []
+    installFailLoud(NAME, proc, undefined, (error) => { reported.push(error) })
+    const error = new Error('boom')
+    proc.handlers[0]!(error)
+    expect(reported).toEqual([error])
+    expect(proc.written[0]).toContain('boom')
+    expect(proc.exits).toEqual([1])
+  })
+
   // The Loader mounts entries concurrently, so a terminal-owning surface can
   // already hold raw mode when a sibling entry rejects. Exiting without running
   // its teardown strands the terminal on the user's shell.
@@ -721,6 +732,23 @@ describe('boot', () => {
     writeFileSync(join(dir, 'cordis.yml'), '- id: ghost\n  name: ./missing.mjs\n')
     await expect(boot(NAME, join(dir, 'cordis.yml'))).rejects.toThrow(
       `${NAME}: plugin tree failed to load: failed to apply loader entry`,
+    )
+  })
+
+  it('names every failed row when several entries fail together', async () => {
+    // The Loader folds several failed rows into one AggregateError whose own
+    // message names none of them; unflattened, the operator is told only that
+    // "loader entries failed to apply" and has nothing to act on.
+    const dir = tmp()
+    writeFileSync(join(dir, 'cordis.yml'), [
+      '- id: first-missing',
+      '  name: ./first-missing.mjs',
+      '- id: second-missing',
+      '  name: ./second-missing.mjs',
+      '',
+    ].join('\n'))
+    await expect(boot(NAME, join(dir, 'cordis.yml'))).rejects.toThrow(
+      /first-missing[\s\S]*second-missing/,
     )
   })
 

@@ -10,11 +10,13 @@ type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
 
 /** Turn-local actions and feature tail over the Location index, independent of Assistant placement. */
 export const TurnTailNodeView = memo(function TurnTailNodeView({
-  node, openFile, forkAt, renderSlot, renderSlotChain, t, useSession,
+  node, openFile, forkAt, deleteAt, renderSlot, renderSlotChain, t, useSession,
 }: TurnTailNodeViewProps) {
   const data = node.data
   const hasLaterChatNode = useSession(snapshot =>
     snapshot.chat.locations.getTurn(data.turn).at(-1) !== node.key)
+  const anyOpenTurn = useSession(snapshot =>
+    [...snapshot.chat.timeline.turns.values()].some(turn => turn.status === 'open'))
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
     ? node.location.turn
     : undefined
@@ -32,6 +34,10 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const assistantActions = messageId === undefined
     ? null
     : renderSlot('conversation.chat.assistant-actions', { messageId })
+  // A synthetic closing node (interrupted partial) cannot address a durable
+  // message; deleting it anchors the whole turn through its turn/end seq and
+  // the host folds the entire interrupted turn off the surface.
+  const deleteTarget = messageId === undefined ? data.seq : closing.finalNode.seq
   return (
     <div className={css.root} data-turn-tail={data.turn} data-time-hover-root>
       {tail}
@@ -44,6 +50,8 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
         clock="end"
         onBranch={() => { forkAt(closing.finalNode.seq) }}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}
+        onDelete={() => deleteAt(deleteTarget)}
+        deleteUnavailable={anyOpenTurn}
         className={css.actions}
         extraActions={assistantActions}
         t={t}

@@ -203,6 +203,7 @@ export function apply(ctx: Context): void {
       'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' },
       'conversation.input.overlay': { kind: 'list', scope: 'session' },
       'conversation.input.dock': { kind: 'list', scope: 'session' },
+      'conversation.input.selector.context': { kind: 'list', scope: 'session-maybe' },
       'conversation.composer.dock': { kind: 'list', scope: 'session' },
       'conversation.input.left': { kind: 'list', scope: 'session' },
       'conversation.input.right': { kind: 'list', scope: 'session' },
@@ -422,6 +423,18 @@ export function apply(ctx: Context): void {
             .catch(() => {
               // Fork or child-rename failure keeps the source view untouched.
             })
+        },
+        deleteAt: async (seq) => {
+          const session = sessions.binding(sessionId)?.session
+          if (session === undefined) return false
+          const result = await session.deleteMessage(seq).catch(() => undefined)
+          return result?.ok ?? false
+        },
+        editAt: async (seq, text) => {
+          const session = sessions.binding(sessionId)?.session
+          if (session === undefined) return false
+          const result = await session.editMessage(seq, [{ type: 'text', text }]).catch(() => undefined)
+          return result?.ok ?? false
         },
       }
     },

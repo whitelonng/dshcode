@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
-  launchWebScaffold, parseSeedFixture, renderSeedFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
+  launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
@@ -21,12 +21,17 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/message-actions', import
 const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
 const FORK_EXPECTED = join(SNAPSHOT_DIR, 'fork.expected.md')
+const DELETE_EXPECTED = join(SNAPSHOT_DIR, 'delete.expected.md')
 const MODE = webSnapshotMode()
 const SEED_ID = 'message-actions-web-e2e'
+const DELETE_SEED_ID = 'message-actions-web-e2e-delete'
+const EDIT_SEED_ID = 'message-actions-web-e2e-edit'
 
 const PROMPT = 'Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop.'
 const MID_TURN_TEXT = 'I will read both files before answering.'
 const SECOND_PROMPT = 'Now give the final answer.'
+const DELETE_PROMPT = 'Delete this answer next.'
+const EDIT_PROMPT = 'Edit this prompt next.'
 
 /**
  * Adapt the borrowed recording into response -> tools -> interrupted Think,
@@ -35,38 +40,37 @@ const SECOND_PROMPT = 'Now give the final answer.'
  * @param raw - Recorded seeded-history JSONL.
  * @returns A contiguous, closed two-turn fixture.
  */
-function completedTailFixture(raw: string): string {
-  const decoded = parseSeedFixture(raw)
-  const kept = decoded.events.filter(event => event.seq < 101).map((event) => {
-    if (event.type === 'assistant/message' && event.seq === 64) {
-      const data = event.data as unknown as { content?: unknown[] }
-      const content = data.content
-      if (!Array.isArray(content)) throw new Error('borrowed step-one assistant message has no content')
-      return {
-        ...event,
-        data: { ...data, content: [...content.slice(0, 1), { type: 'text', text: MID_TURN_TEXT }, ...content.slice(1)] },
-      }
+function completedTailFixture(raw: string, secondPrompt = SECOND_PROMPT): string {
+  const kept: string[] = []
+  for (const line of raw.trimEnd().split('\n')) {
+    const row = JSON.parse(line) as {
+      type: string
+      seq?: number
+      seq0?: number
+      data?: { content?: unknown[] }
     }
-    return event
-  })
-  let seq = kept.length
-  let time = (kept.at(-1)?.time ?? -1) + 1
-  const at = (event: Record<string, unknown>): { seq: number; time: number } & Record<string, unknown> => ({
-    ...event,
-    seq: seq++,
-    time: time++,
-  })
+    const firstSeq = row.seq ?? row.seq0
+    if (firstSeq !== undefined && firstSeq >= 101) break
+    if (row.type === 'assistant/message' && row.seq === 64) {
+      const content = row.data?.content
+      if (!Array.isArray(content)) throw new Error('borrowed step-one assistant message has no content')
+      content.splice(1, 0, { type: 'text', text: MID_TURN_TEXT })
+      kept.push(JSON.stringify(row))
+    } else {
+      kept.push(line)
+    }
+  }
   const tail = [
-    at({ type: 'step/end', data: { turn: 1, step: 2 } }),
-    at({ type: 'turn/end', data: { turn: 1, reason: { kind: 'aborted' } } }),
-    at({ type: 'turn/start', data: { turn: 2, trigger: { kind: 'message', source: { kind: 'user', rpcId: '{{rpcId}}' } } } }),
-    at({ type: 'user/message', data: { content: [{ type: 'text', text: SECOND_PROMPT }], source: { kind: 'user', rpcId: '{{rpcId}}' } }, surfaceOp: 'append' }),
-    at({ type: 'step/start', data: { turn: 2, step: 1 } }),
-    at({ type: 'assistant/message', data: { turn: 2, step: 1, content: [{ type: 'text', text: 'DONE' }], provenance: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }, sourceEventSeqs: [], surfaceOp: 'append' }),
-    at({ type: 'step/end', data: { turn: 2, step: 1 } }),
-    at({ type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } }),
+    { type: 'step/end', seq: 101, time: 1784974102749, data: { turn: 1, step: 2 } },
+    { type: 'turn/end', seq: 102, time: 1784974102750, data: { turn: 1, reason: { kind: 'aborted' } } },
+    { type: 'turn/start', seq: 103, time: 1784974103000, data: { turn: 2, trigger: { kind: 'message', source: { kind: 'user', rpcId: '{{rpcId}}' } } } },
+    { type: 'user/message', seq: 104, time: 1784974103001, data: { content: [{ type: 'text', text: secondPrompt }], source: { kind: 'user', rpcId: '{{rpcId}}' } }, surfaceOp: 'append' },
+    { type: 'step/start', seq: 105, time: 1784974103002, data: { turn: 2, step: 1 } },
+    { type: 'assistant/message', seq: 106, time: 1784974103003, data: { turn: 2, step: 1, content: [{ type: 'text', text: 'DONE' }], provenance: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }, sourceEventSeqs: [], surfaceOp: 'append' },
+    { type: 'step/end', seq: 107, time: 1784974103004, data: { turn: 2, step: 1 } },
+    { type: 'turn/end', seq: 108, time: 1784974103005, data: { turn: 2, reason: { kind: 'completed' } } },
   ]
-  return renderSeedFixture(decoded.headerLine, [...kept, ...tail])
+  return `${[...kept, ...tail.map(row => JSON.stringify(row))].join('\n')}\n`
 }
 
 describe('web e2e: message IconActions and clocks on settled history', () => {
@@ -122,7 +126,8 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     await branchButtons.first().focus()
     await expect.poll(() => page.getByRole('tooltip').textContent(), { timeout: 5_000 })
       .toBe('Available only on the last message of a completed turn')
-    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(0)
+    // Exactly one edit action: the last user message of the transcript.
+    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(1)
   }, 60_000)
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden with IconActions and clocks', async () => {
@@ -192,9 +197,77 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     await compareOrRefreshGolden(FORK_EXPECTED, tree, MODE)
   })
 
+  it.skipIf(MODE === 'record')('deletes the last assistant answer and folds it out of the transcript', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-message-delete'))
+    // A fresh seeded session isolates the deletion from the fork tests: its
+    // second prompt is unique, so the view switch is verifiable.
+    const raw = completedTailFixture(await readFile(SEED, 'utf8'), DELETE_PROMPT)
+    await seedSession(scaffold, raw, DELETE_SEED_ID)
+    // The seeded session joins the sidebar list only after a reload: the
+    // already-open mux never announced it as a live frame.
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 15_000 }).toBe(5)
+    await page.locator('[role="treeitem"]').nth(1).click()
+    await expect.poll(() => page.getByText(DELETE_PROMPT, { exact: false }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    const deleteButton = page.getByRole('button', { name: 'Delete' }).last()
+    await deleteButton.focus()
+    await deleteButton.click()
+    // The host folds the assistant message out of the model-visible surface.
+    await expect.poll(
+      () => scaffold.ctx.sessions.get(SessionId(DELETE_SEED_ID))?.deriveMessages().some(message =>
+        message.content.some(block => block.type === 'text' && block.text === 'DONE')),
+      { timeout: 10_000 },
+    ).toBe(false)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    // The user prompt survives the deletion.
+    await expect.poll(
+      () => page.getByText(DELETE_PROMPT, { exact: false }).count(),
+      { timeout: 5_000 },
+    ).toBeGreaterThanOrEqual(1)
+    const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
+      .split(DELETE_SEED_ID).join('{{seededId}}')
+    await compareOrRefreshGolden(DELETE_EXPECTED, snapshot, MODE)
+  })
+
+  it.skipIf(MODE === 'record')('edits the last user message and shadows the previous answer', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-message-edit'))
+    const raw = completedTailFixture(await readFile(SEED, 'utf8'), EDIT_PROMPT)
+    await seedSession(scaffold, raw, EDIT_SEED_ID)
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await expect.poll(() => page.locator('[role="treeitem"]').count(), { timeout: 15_000 }).toBe(6)
+    await page.locator('[role="treeitem"]').nth(1).click()
+    await expect.poll(() => page.getByText(EDIT_PROMPT, { exact: false }).count(), { timeout: 15_000 }).toBe(1)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    // The transcript's only editable message is its last user prompt.
+    await page.getByRole('button', { name: 'Edit' }).click()
+    const textarea = page.getByRole('textbox', { name: 'Edit message' })
+    await textarea.waitFor({ timeout: 5_000 })
+    await textarea.fill('Edited regeneration prompt')
+    await page.getByRole('button', { name: 'Regenerate' }).click()
+    // The replacement user message shadows the old turn's answer.
+    await expect.poll(
+      () => scaffold.ctx.sessions.get(SessionId(EDIT_SEED_ID))?.deriveMessages().some(message =>
+        message.content.some(block => block.type === 'text' && block.text === 'DONE')),
+      { timeout: 10_000 },
+    ).toBe(false)
+    await expect.poll(
+      () => scaffold.ctx.sessions.get(SessionId(EDIT_SEED_ID))?.deriveMessages().some(message =>
+        message.content.some(block => block.type === 'text' && block.text === 'Edited regeneration prompt')),
+      { timeout: 10_000 },
+    ).toBe(true)
+    await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 10_000 }).toBe(0)
+    await expect.poll(
+      () => page.getByText('Edited regeneration prompt', { exact: false }).count(),
+      { timeout: 10_000 },
+    ).toBeGreaterThanOrEqual(1)
+  })
+
   it.skipIf(MODE === 'record')('issued zero model calls and kept a closed inventory', async () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['fork.expected.md', 'ui.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['delete.expected.md', 'fork.expected.md', 'ui.expected.md'])
   })
 })

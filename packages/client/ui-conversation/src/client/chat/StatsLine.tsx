@@ -210,7 +210,9 @@ export interface StatsLineProps {
 
 export const StatsLine = memo(function StatsLine({ useSession, useProjection, t }: StatsLineProps) {
   const settledNodes = useSession(s => s.chat.legacy.nodes)
+  const running = useSession(s => s.running)
   const usage = useProjection('tokenUsage')
+  const live = useProjection('liveTokenUsage')
   // Every figure rides the durable sessionStats projection, so paging and
   // compaction cannot change any of them; an assembly without the unit falls
   // back to the window-scoped fold wholesale (same field names), paid only
@@ -219,6 +221,16 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
   const stats = useMemo(() => projected ?? deriveStats(settledNodes), [projected, settledNodes])
   // Pipe-separated groups (figma stats strip); a group with no data drops out whole.
   const groups: string[] = []
+  // The live-stats projection streams the in-flight generation's throughput:
+  // leading group while the session is running, so the strip reads live before
+  // the settled counts and speeds behind it. The group disappears once the
+  // run settles (the decode-average group below takes over the speed story).
+  const liveThroughput = running ? live?.tokensPerSecond : undefined
+  if (liveThroughput !== undefined && liveThroughput > 0) {
+    groups.push(t('stats.liveTokensPerSecond', {
+      throughput: formatTokensPerSecond(liveThroughput),
+    }))
+  }
   if (stats.steps > 0) {
     groups.push(t('stats.counts', { turns: stats.turns, steps: stats.steps }))
     const durations: string[] = []

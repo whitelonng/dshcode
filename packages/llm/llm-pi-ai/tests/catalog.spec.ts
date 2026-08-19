@@ -113,16 +113,19 @@ describe('hand-declared providers', () => {
     })
   })
 
-  it('offers no reasoning control it could not honour', async () => {
+  it('defaults a hand-declared model to the off/low/max reasoning offer', async () => {
     const server = await mockServer([])
     const ctx = await harness(gateway(`${server.url}/v1`))
 
-    // pi-ai reports a model with no reasoning metadata as supporting the single
-    // level `off`, but `off` is translated to *omitting* the reasoning option —
-    // byte-for-byte the same request as naming no effort — so a provider whose
-    // own default is to think would keep thinking with `off` selected. The
-    // capability is reported unavailable instead of offering that control.
-    expect((await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning).toBeUndefined()
+    // A hand-declared model without a reasoningEfforts declaration defaults
+    // to the off/low/max offer. pi-ai reports a model with no reasoning
+    // metadata as supporting the single level `off`, but `off` is translated
+    // to *omitting* the reasoning option — byte-for-byte the same request as
+    // naming no effort — so the default offer is the smallest honest set: the
+    // two thinking levels most OpenAI-compatible gateways serve, plus `off`.
+    const reasoning = (await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning
+    expect(reasoning?.efforts.map(e => e.id)).toEqual(['off', 'low', 'max'])
+    expect(reasoning?.defaultEffort).toBeUndefined()
 
     // A catalog route is unaffected: its models carry the metadata that makes
     // `off` actually disable thinking.
@@ -287,6 +290,62 @@ describe('hand-declared providers', () => {
         models: [{ id: 'bare' }],
       },
     })).toThrow(/defaultInput must name at least one modality/)
+  })
+
+  it('resolves declared output modalities and image understanding into the capability side table', () => {
+    const resolved = resolveProfiles({
+      'gateway': {
+        api: 'openai-completions',
+        baseURL: 'https://gateway.test',
+        models: [
+          { id: 'plain' },
+          { id: 'drawer', output: ['text', 'image'] },
+          { id: 'seer', capabilities: { imageUnderstanding: true } },
+          { id: 'both', output: ['image'], capabilities: { imageUnderstanding: true } },
+        ],
+      },
+    })
+    const profile = resolved.get('gateway')
+    if (profile === undefined) throw new Error('fixture route must resolve')
+    expect([...profile.modelCapabilities.entries()]).toEqual([
+      ['drawer', { output: ['text', 'image'] }],
+      ['seer', { imageUnderstanding: true }],
+      ['both', { output: ['image'], imageUnderstanding: true }],
+    ])
+    // Nothing declared resolves to no facts — the text-only floor is the
+    // absence, so a catalog-served route is untouched.
+    expect(profile.modelCapabilities.has('plain')).toBe(false)
+    const catalogServed = resolveProfiles({ deepseek: {} }).get('deepseek')
+    expect([...catalogServed!.modelCapabilities.entries()]).toEqual([])
+  })
+
+  it('carries declared output modalities and image understanding to the seam metadata', async () => {
+    const dir = await home()
+    const ctx = await bootWithSettings(dir, {})
+    await ctx.settings.update(settingsNamespace('llm-pi-ai'), {
+      providers: {
+        'capable-gateway': {
+          api: 'openai-completions',
+          baseURL: 'https://capable.test/v1',
+          models: [
+            { id: 'plain' },
+            { id: 'drawer', output: ['text', 'image'] },
+            { id: 'seer', capabilities: { imageUnderstanding: true } },
+          ],
+        },
+      },
+    })
+
+    const listed = await ctx.llm.listModels('capable-gateway')
+    const byId = Object.fromEntries(listed.map(model => [model.id, model]))
+    // A model with no declaration carries neither field; image understanding
+    // is a separate claim from image input, so `seer` stays text-input.
+    expect(byId['plain']).not.toHaveProperty('outputModalities')
+    expect(byId['plain']).not.toHaveProperty('capabilities')
+    expect(byId['drawer']).toMatchObject({ outputModalities: ['text', 'image'] })
+    expect(byId['seer']).toMatchObject({ capabilities: ['image-understanding'], inputModalities: ['text'] })
+    expect((await ctx.llm.resolveModelInfo('capable-gateway', 'drawer')).outputModalities).toEqual(['text', 'image'])
+    expect((await ctx.llm.resolveModelInfo('capable-gateway', 'seer')).capabilities).toEqual(['image-understanding'])
   })
 
   it('rejects a model the route cannot identify', () => {
@@ -632,6 +691,24 @@ describe('per-model reasoning efforts', () => {
   it('offers exactly the declared keys: leaving off out makes thinking mandatory', () => {
     const model = modelOf(declared([{ id: 'm', reasoningEfforts: { high: 'high' } }]))
     expect(getSupportedThinkingLevels(model)).toEqual(['high'])
+  })
+
+  it('defaults a hand-declared model with no declaration to off/low/max', () => {
+    const model = modelOf(declared([{ id: 'acme-plain' }]))
+
+    expect(model.reasoning).toBe(true)
+    // `off` and `low` stay absent from the map — supported with pi-ai's
+    // default dispatch (send nothing / send the level name) — while `max`,
+    // which pi-ai would otherwise pin unsupported, carries its own name as
+    // the wire spelling; every other level is pinned null.
+    expect(model.thinkingLevelMap).toEqual({
+      minimal: null,
+      medium: null,
+      high: null,
+      xhigh: null,
+      max: 'max',
+    })
+    expect(getSupportedThinkingLevels(model)).toEqual(['off', 'low', 'max'])
   })
 
   it('narrows a catalog model’s levels in place', () => {

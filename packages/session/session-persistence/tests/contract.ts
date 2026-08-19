@@ -115,6 +115,25 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
       }
     })
 
+    it('deletes a persisted session durably and hides it from every read', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('delete-me')
+        await persistence.create(m)
+        await persistence.append(m.id, oneTurnLog())
+        expect((await persistence.list()).some(header => header.id === m.id)).toBe(true)
+
+        await persistence.delete(m.id)
+
+        expect((await persistence.list()).some(header => header.id === m.id)).toBe(false)
+        await expect(persistence.load(m.id)).rejects.toThrow()
+        // Deleting an absent session still resolves (idempotent).
+        await persistence.delete(m.id)
+      } finally {
+        await dispose()
+      }
+    })
+
     it('crash recovery: load preserves an interrupted (unclosed) turn and closes it with turn/end {interrupted}', async () => {
       const { persistence, dispose } = await make()
       try {

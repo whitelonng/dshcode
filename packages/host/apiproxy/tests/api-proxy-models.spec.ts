@@ -129,6 +129,14 @@ function registerTextOnly(ctx: Context): void {
   }('Text Only', []))
 }
 
+function registerNotePolicy(ctx: Context): void {
+  ctx.llm.registerAdapter(['note-route'], new class extends CatalogAdapter {
+    override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+      return Promise.resolve({ provider, id: model, name: model, inputModalities: ['text'], imagePolicy: 'note' })
+    }
+  }('Note Route', []))
+}
+
 describe('Web session model selection', () => {
   it('validates an ordered image batch before persisting any member', async () => {
     const { ctx, agent, sessionId } = await harness()
@@ -233,6 +241,35 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('selects a note-policy route while durable or pending image content remains visible', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    registerNotePolicy(ctx)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    const image = {
+      type: 'image' as const,
+      attachment: { attachmentId: 'att-history', mediaType: 'image/png' as const, bytes: 1, width: 1, height: 1 },
+    }
+    agent.session.append('user/message', {
+      id: 'image-message', role: 'user', source: { kind: 'user' }, content: [image],
+    } as never, { surfaceOp: 'append' })
+    // The note policy declares the route serializes image blocks into text
+    // notes, so the switch must succeed with durable images in the log...
+    expect(expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'note-route', model: 'note-model',
+    }))).selected).toEqual({ provider: 'note-route', model: 'note-model' })
+    // ...and with images still parked in the pending inbox.
+    ;(agent.inbox.nextTurn as UserMessage[]).push({
+      id: 'pending-image', role: 'user', source: { kind: 'user' }, content: [image],
+    } as never)
+    expect(expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'note-route', model: 'note-model-2',
+    }))).selected).toEqual({ provider: 'note-route', model: 'note-model-2' })
+    await ctx.fiber.dispose()
+  })
+
   it('authorizes attachment bytes only when the session event stream references the id', async () => {
     const { ctx, agent, sessionId } = await harness()
     const ref = {
@@ -303,6 +340,35 @@ describe('Web session model selection', () => {
         message: 'adapter returned invalid or duplicate model metadata for provider "duplicate"',
       },
     ])
+    await ctx.fiber.dispose()
+  })
+
+  it('rides declared capability metadata through to the catalog groups', async () => {
+    const { ctx, sessionId } = await harness()
+    ctx.llm.registerAdapter(['capable'], new class extends CatalogAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({
+          provider, id: model, name: model,
+          inputModalities: ['text', 'image'],
+          outputModalities: ['text', 'image'],
+          capabilities: ['image-understanding'],
+        })
+      }
+    }('Capable', [{ provider: 'capable', id: 'seer', name: 'Seer' }]))
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    const catalog = expectValue(await api.sessions.models(request({ sessionId })))
+    const group = catalog.groups.find(candidate => candidate.id === 'capable')
+    expect(group?.models[0]).toEqual({
+      id: 'seer',
+      name: 'Seer',
+      inputModalities: ['text', 'image'],
+      outputModalities: ['text', 'image'],
+      capabilities: ['image-understanding'],
+    })
     await ctx.fiber.dispose()
   })
 

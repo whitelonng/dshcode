@@ -61,11 +61,6 @@
       config:
         backend: json
 
-    - id: message-feedback
-      name: '@deepseek-ai/dsh-message-feedback'
-      config:
-        maxNoteBytes: 8192
-
     # Browser Session export: `/export` command plus the shared download dialog.
     - id: session-log-download
       name: '@deepseek-ai/dsh-session-log-export'
@@ -99,6 +94,51 @@
     # Read-only projection of current Loader entries for trusted client RPCs.
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'
+
+    # Loopback-only profile controls. The catalog groups the requested
+    # community bundles as three products; dsh-web-ui's rows move together.
+    - id: plugin-control
+      name: '@deepseek-ai/dsh-host-plugin-control'
+      inject: [profileUserPatchPath]
+      config:
+        profilePatchPath: !!js ctx.profileUserPatchPath
+        controls:
+          - id: genui
+            name: dsh-genui
+            repository: https://github.com/omdsh-dev/dsh-genui
+            entryIds: [genui]
+            packages: ['@omdsh-dev/dsh-genui']
+          - id: annotation
+            name: dsh-annotation
+            repository: https://github.com/dsh-external/dsh-annotation
+            entryIds: [dsh-annotation]
+            packages: ['@omdsh-dev/dsh-annotation']
+          - id: web-ui
+            name: dsh-web-ui
+            repository: https://github.com/zhu1090093659/dsh-web-ui
+            # Trimmed suite: only the skin center ships with the built-in
+            # product (redundant features were removed to avoid duplicate
+            # sidebar entries and conflict with user installs).
+            entryIds:
+              - ui-skin-center
+            packages:
+              - '@linxin666/dsh-client-ui-skin-center'
+
+    # Loopback-only user-plugin installs and updates into the shared fallback.
+    - id: plugin-installer
+      name: '@deepseek-ai/dsh-host-plugin-installer'
+      inject: [profileUserPatchPath]
+      config:
+        profilePatchPath: !!js ctx.profileUserPatchPath
+        # Optional GitHub mirror for restricted networks (e.g. DSH_GITHUB_MIRROR
+        # = https://gh-proxy.com/ in ~/.dsh/.env); unset downloads from GitHub
+        # directly.
+        githubMirror: !!js process.env.DSH_GITHUB_MIRROR
+        # When the user installs a webui suite themselves, the built-in web-ui
+        # product's rows are disabled so the two do not double-mount.
+        disableControlsOnInstall:
+          - id: web-ui
+            matches: ['dsh-web-ui']
 
     # The API gateway: the transport-agnostic dispatch face every client shape
     # shares. The base layer's agent-default-model service owns the default model.
@@ -203,8 +243,17 @@
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
 
-    - id: ui-settings-plugin-inventory
-      name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+    - id: ui-settings-archive
+      name: '@deepseek-ai/dsh-client-ui-settings-archive'
+
+    - id: ui-settings-plugin-installer
+      name: '@deepseek-ai/dsh-client-ui-settings-plugin-installer'
+
+    # System notifications: the browser Notification API (Electron desktop
+    # routes through the shell's native notifications) for approval waits and
+    # task completion, plus its Notifications settings section.
+    - id: ui-notifications
+      name: '@deepseek-ai/dsh-client-ui-notifications'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
@@ -264,8 +313,6 @@
 
     # Per-message feedback: Like/Dislike plus an optional note in the
     # assistant-message action strip, over the messageFeedback Remote.
-    - id: ui-message-feedback
-      name: '@deepseek-ai/dsh-client-ui-message-feedback'
 
     # Model selection: the /model popupSelect + composer seat over session.models.
     - id: ui-model-selection

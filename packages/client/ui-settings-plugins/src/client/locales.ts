@@ -11,6 +11,9 @@ export type PluginsSettingsLocaleKey =
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
+  | 'describeImageTitle' | 'describeImageDescription'
+  | 'describeImageApiKey' | 'describeImageApiKeyHint' | 'describeImageApiKeySet' | 'describeImageApiKeyUnset'
+  | 'describeImageBaseUrl' | 'describeImageBaseUrlHint' | 'describeImageModel' | 'describeImageModelHint'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
@@ -51,6 +54,16 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   webSearchBaseUrlHint: 'Leave blank to use the provider default.',
   webSearchMaxUses: 'Max searches per request',
   webSearchMaxUsesHint: 'How many times one request may search before it must answer.',
+  describeImageTitle: 'Image understanding',
+  describeImageDescription: 'The vision-language endpoint the describe_image tool calls.',
+  describeImageApiKey: 'API key',
+  describeImageApiKeyHint: 'Stored outside the settings file. Leave blank to keep the current key.',
+  describeImageApiKeySet: 'A key is configured.',
+  describeImageApiKeyUnset: 'No key is configured; describing images is unavailable until one is.',
+  describeImageBaseUrl: 'Endpoint',
+  describeImageBaseUrlHint: 'OpenAI-compatible root; /chat/completions is appended.',
+  describeImageModel: 'Model',
+  describeImageModelHint: 'The vision model id served by this endpoint.',
 }
 
 /** Simplified Chinese copy. */
@@ -92,4 +105,14 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   webSearchBaseUrlHint: '留空则使用提供方默认地址。',
   webSearchMaxUses: '单次请求最多搜索次数',
   webSearchMaxUsesHint: '一次请求在必须作答前最多可以搜索多少次。',
+  describeImageTitle: '图像理解',
+  describeImageDescription: 'describe_image 工具所调用的视觉语言端点。',
+  describeImageApiKey: 'API Key',
+  describeImageApiKeyHint: '不写入设置文件。留空表示保持当前密钥。',
+  describeImageApiKeySet: '已配置密钥。',
+  describeImageApiKeyUnset: '未配置密钥；配置之前无法识图。',
+  describeImageBaseUrl: '接口地址',
+  describeImageBaseUrlHint: 'OpenAI 兼容根地址；会自动追加 /chat/completions。',
+  describeImageModel: '模型',
+  describeImageModelHint: '该端点提供的视觉模型 id。',
 }

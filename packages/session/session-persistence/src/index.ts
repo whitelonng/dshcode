@@ -61,6 +61,20 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     sessionPersistence: SessionPersistence
   }
+  interface Events {
+    /**
+     * One persisted session was permanently deleted: the backend artifact is
+     * gone and the next {@link SessionPersistence.list} no longer includes the
+     * id. Emitted once per successful {@link SessionPersistence.delete}, after
+     * the backend acknowledges the removal. The host stream converts it into
+     * `host/session-deleted` so every connected client evicts its cached list
+     * mirror; content-search indexes reconcile on their next list observation.
+     * No later listing or reconnect baseline mentions the id.
+     * @param sessionId - the deleted session id.
+     * @mode emit
+     */
+    'session/deleted'(sessionId: SessionId): void
+  }
 }
 
 /**
@@ -141,6 +155,16 @@ export abstract class SessionPersistence extends Service {
    * @param events - the contiguous batch to persist, in seq order.
    */
   abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>
+
+  /**
+   * Durably delete one persisted session: drop any in-memory state and remove
+   * the stored artifact (log file or rows). Resolves once the artifact, if
+   * any, is gone; the next {@link list} must no longer include the id, and a
+   * successful deletion emits `session/deleted`. Refusing deletion of a live
+   * session is the caller's responsibility.
+   * @param id - persisted session id to delete.
+   */
+  abstract delete(id: SessionId): Promise<void>
 
   /**
    * Prepare the exact unpublished Session used by resume. Implementations may

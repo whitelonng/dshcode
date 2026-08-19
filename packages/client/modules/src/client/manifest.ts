@@ -67,6 +67,8 @@ export interface WebBootEntry {
 export interface WebBootGraph {
   /** Consistency anchor over the whole graph (content + bundle hashes). */
   rev: string
+  /** Product version the host serves (workspace-shared manifest version). */
+  version: string
   /**
    * Composed entries in module-graph order — a dynamic package row precedes
    * rows whose `external` requests that package. Cordis activation order is
@@ -101,6 +103,8 @@ export interface BootPluginRow {
 export interface BootManifest {
   /** Consistency anchor over the whole graph. */
   rev: string
+  /** Product version the host serves. */
+  version: string
   /** Rows as the module table consumes them. */
   modules: BootModuleRow[]
   /** Rows as entry composition consumes them. */
@@ -152,6 +156,9 @@ export function parseBootManifest(wire: unknown): BootManifest {
   if (typeof graph.rev !== 'string') {
     throw new Error('client-modules: boot manifest rev must be a string')
   }
+  if (typeof graph.version !== 'string') {
+    throw new Error('client-modules: boot manifest version must be a string')
+  }
   if (!Array.isArray(graph.entries)) {
     throw new Error('client-modules: boot manifest entries must be an array')
   }
@@ -184,7 +191,7 @@ export function parseBootManifest(wire: unknown): BootManifest {
       immediately: row.immediately === true,
     })
   }
-  return { rev: graph.rev, modules, plugins }
+  return { rev: graph.rev, version: graph.version, modules, plugins }
 }
 
 /** One client bundle's factory registration submitted through `window.__ModuleLoader__.load`. */

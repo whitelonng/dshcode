@@ -15,7 +15,6 @@
     "apps/web/tests/scaffold-hermetic.e2e.ts",
     "apps/web/tests/startup-rpc-budget.e2e.ts",
     "apps/web/tests/minimal-preset.snapshot.ts",
-    "apps/web/tests/message-feedback-protocol.snapshot.ts",
     "apps/web/tests/live-interactions.e2e.ts",
     "apps/web/tests/question-composer.e2e.ts",
     "apps/web/tests/approval-composer.e2e.ts",
@@ -47,7 +46,6 @@
     "apps/web/tests/cordis-tool-round.e2e.ts",
     "apps/web/tests/web-search-round.e2e.ts",
     "apps/web/tests/message-actions.e2e.ts",
-    "apps/web/tests/message-feedback.e2e.ts",
     "apps/web/tests/message-feedback-layout.e2e.ts",
     "apps/web/tests/markdown-images.e2e.ts",
     "apps/web/tests/reference-composer.e2e.ts",
@@ -89,6 +87,7 @@
     "apps/web/tests/workflow-run.e2e.ts",
     "apps/web/stress-tests/reasoning-chunks.stress.ts",
     "apps/cli/tests/**/*.ts",
+    "apps/desktop/tests/**/*.ts",
     "examples/*/src/**/*.ts",
     "examples/*/start.ts",
     "examples/*/tests/**/*.ts",
@@ -160,7 +159,6 @@
     { "path": "./packages/storage/storage-json" },
     { "path": "./packages/storage/storage-sqlite" },
     { "path": "./packages/storage/storage-domain" },
-    { "path": "./packages/feedback/message-feedback" },
     { "path": "./packages/workspace/workspace" },
     { "path": "./packages/session/session-title" },
     { "path": "./packages/session/session-title-llm" },
@@ -243,6 +241,7 @@
     { "path": "./packages/web/web-search-deepseek" },
     { "path": "./packages/web/web-fetch-http" },
     { "path": "./packages/web/tool-web" },
+    { "path": "./packages/vision/tool-describe-image" },
     { "path": "./packages/spill/spill" },
     { "path": "./packages/spill/spill-local" },
     { "path": "./packages/spill/spill-policy" },
@@ -300,6 +299,8 @@
     { "path": "./packages/host/directory-picker-browse" },
     { "path": "./packages/host/directory-picker-native" },
     { "path": "./packages/host/frontend-static" },
+    { "path": "./packages/host/plugin-control" },
+    { "path": "./packages/host/plugin-installer" },
     { "path": "./packages/host/plugin-inventory" },
     { "path": "./packages/host/webserver" },
     { "path": "./packages/sdk/client" },
@@ -307,6 +308,7 @@
     { "path": "./packages/lsp/lsp" },
     { "path": "./packages/lsp/lsp-stdio" },
     { "path": "./packages/lsp/tool-lsp" },
-    { "path": "./apps/cli" }
+    { "path": "./apps/cli" },
+    { "path": "./apps/desktop" }
   ]
 }

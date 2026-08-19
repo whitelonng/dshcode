@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-command-feedback",
   "description": "Log-only session feedback producer and human-facing slash command",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -50,5 +50,7 @@
     "@deepseek-ai/dsh-session-telemetry": "workspace:^",
     "@deepseek-ai/dsh-anonymous-user-id": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  }
+  },
+  "dependencies": {},
+  "optionalDependencies": {}
 }

@@ -101,6 +101,10 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return this.coordinator.append(id, events)
   }
 
+  delete(id: SessionId): Promise<void> {
+    return this.coordinator.delete(id)
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): ReturnType<PersistenceCoordinator['prepare']> {
     return this.coordinator.prepare(id, signal)
   }
@@ -164,6 +168,11 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
   async list(signal?: AbortSignal): Promise<SessionHeader[]> {
     signal?.throwIfAborted()
     return [...this.store.values()].map(e => structuredClone(e.meta))
+  }
+
+  async deleteStored(id: SessionId): Promise<boolean> {
+    const existed = this.store.delete(id)
+    return existed
   }
 
   async listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]> {
@@ -234,6 +243,11 @@ class ControlledBackend implements PersistenceBackend<never> {
     return [...this.store.values()].map(entry => structuredClone(entry.meta))
   }
 
+  async deleteStored(id: SessionId): Promise<boolean> {
+    const existed = this.store.delete(id)
+    return existed
+  }
+
   async close(): Promise<void> {
     this.lifecycle.push('close')
   }
@@ -248,6 +262,30 @@ runPersistenceContract('memory', async () => {
     persistence: ctx.sessionPersistence,
     dispose: async () => { await fiber.dispose() },
   }
+})
+
+describe('deletion announcement', () => {
+  it('emits session/deleted after every settled delete so cached mirrors converge', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const fiber = await ctx.plugin(MemoryPersistence)
+    const deleted: SessionId[] = []
+    const off = ctx.on('session/deleted', (id) => { deleted.push(id) })
+    try {
+      const m = meta('announce-me', '/work')
+      await ctx.sessionPersistence.create(m)
+      await ctx.sessionPersistence.append(m.id, oneTurnLog())
+      await ctx.sessionPersistence.delete(m.id)
+      expect(deleted).toEqual([m.id])
+      // An idempotent repeat still announces: a mirror that only learns from
+      // this signal must converge even when the artifact was already gone.
+      await ctx.sessionPersistence.delete(m.id)
+      expect(deleted).toEqual([m.id, m.id])
+    } finally {
+      off()
+      await fiber.dispose()
+    }
+  })
 })
 
 describe('the inherited readRaw default', () => {

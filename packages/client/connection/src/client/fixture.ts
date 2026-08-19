@@ -2395,6 +2395,63 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const appended = logOf(sessionId).at(-1) as SessionEvent
         return ok(request, { title: normalized, seq: appended.seq })
       },
+      deleteMessage: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        const { sessionId, seq } = request.payload
+        const events = logOf(sessionId)
+        const target = events[seq]
+        if (target === undefined || (target.type !== 'user/message' && target.type !== 'assistant/message')) {
+          return err(request, {
+            code: 'delete-unavailable',
+            message: 'not a deletable message',
+            details: { sessionId, seq },
+          })
+        }
+        // Fixture simplification: the replay removes just that message, while
+        // the real host expands a user message to its whole turn.
+        append(sessionId, {
+          type: 'message/delete',
+          data: { start: seq, end: seq },
+          surfaceOp: { op: 'delete', start: seq, end: seq },
+          sourceEventSeqs: [seq],
+        })
+        return ok(request, { start: seq, end: seq, deletedSeqs: [seq] })
+      },
+      editMessage: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        const { sessionId, seq, content } = request.payload
+        const events = logOf(sessionId)
+        const target = events[seq]
+        if (target === undefined || target.type !== 'user/message') {
+          return err(request, {
+            code: 'edit-unavailable',
+            message: 'not an editable user message',
+            details: { sessionId, seq },
+          })
+        }
+        // The edited prompt replaces its whole turn (through the node before
+        // the next user message), mirroring the host's range expansion.
+        const shadowed = [seq]
+        for (let i = seq + 1; i < events.length; i += 1) {
+          const event = events[i]
+          if (event?.type === 'user/message') break
+          if (event?.type === 'assistant/message' || event?.type === 'tool/result') shadowed.push(i)
+        }
+        const end = shadowed.at(-1) ?? seq
+        const text = content
+          .filter(part => part.type === 'text')
+          .map(part => (part as { text: string }).text)
+          .join('')
+        append(sessionId, {
+          type: 'user/message',
+          data: { content: [{ type: 'text', text }], source: { kind: 'user' } },
+          surfaceOp: { op: 'replace', start: seq, end },
+          sourceEventSeqs: shadowed,
+        })
+        return ok(request, { accepted: true as const })
+      },
       fork: (request) => {
         const { sessionId, atSeq } = request.payload
         const source = summaryOf(sessionId)
@@ -2787,6 +2844,40 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
         }
         return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      restoreSession: (request) => {
+        const { sessionId } = request.payload
+        const next = archivedSessionIds.filter(id => id !== sessionId)
+        if (next.length !== archivedSessionIds.length) {
+          archivedSessionIds.splice(0, archivedSessionIds.length, ...next)
+          emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        }
+        return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      deleteSession: (request) => {
+        const { sessionId } = request.payload
+        if (!archivedSessionIds.includes(sessionId)) {
+          return err(request, { code: 'not-archived', message: 'not archived', details: { sessionId } })
+        }
+        archivedSessionIds.splice(archivedSessionIds.indexOf(sessionId), 1)
+        emitHost({ type: 'host/archived-sessions-changed', archivedSessionIds: [...archivedSessionIds] })
+        // Mirror the real host: the permanent delete drops the workspace
+        // accounting and the listing row, then announces the deletion so
+        // every connected client evicts its cached summary.
+        for (const workspace of workspaces) {
+          if (!workspace.sessionIds.includes(sessionId)) continue
+          workspace.sessionIds = workspace.sessionIds.filter(id => id !== sessionId)
+          workspace.updatedAt = new Date().toISOString()
+          emitHost({ type: 'host/workspace-changed', workspace: { ...workspace } })
+        }
+        const listed = sessions.findIndex(summary => summary.sessionId === sessionId)
+        if (listed !== -1) sessions.splice(listed, 1)
+        emitHost({ type: 'host/session-deleted', sessionId })
+        return ok(request, { archivedSessionIds: [...archivedSessionIds] })
+      },
+      listArchived: (request) => {
+        const items = archivedSessionIds.map(sessionId => ({ sessionId }))
+        return ok(request, { items })
       },
     },
     agentPresets: {
@@ -3182,6 +3273,8 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.models': return this.api.sessions.models(request)
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
+      case 'session.deleteMessage': return this.api.sessions.deleteMessage(request)
+      case 'session.editMessage': return this.api.sessions.editMessage(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
       case 'session.attachment': return this.api.sessions.attachment(request)
@@ -3203,6 +3296,9 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'workspace.insertBefore': return this.api.workspace.insertBefore(request)
       case 'workspace.insertSessionBefore': return this.api.workspace.insertSessionBefore(request)
       case 'workspace.archiveSession': return this.api.workspace.archiveSession(request)
+      case 'workspace.restoreSession': return this.api.workspace.restoreSession(request)
+      case 'workspace.deleteSession': return this.api.workspace.deleteSession(request)
+      case 'workspace.listArchived': return this.api.workspace.listArchived(request)
       case 'skill.list': return this.api.skills.list(request)
       case 'agentPreset.list': return this.api.agentPresets.list(request)
       case 'agentPreset.select': return this.api.agentPresets.select(request)

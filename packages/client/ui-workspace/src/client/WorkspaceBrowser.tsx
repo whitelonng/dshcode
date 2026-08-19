@@ -964,8 +964,9 @@ export function WorkspaceBrowser({
 
   // Archive is dialog-free: not destructive (the log and the accounting slot
   // remain), so the menu action commits directly; the row disappears when the
-  // archive-set echo lands. Failures are non-fatal console diagnostics, the
-  // same posture as reorder rejections.
+  // archive-set echo lands, and the Archived sessions settings page restores
+  // or permanently deletes afterwards. Failures are non-fatal console
+  // diagnostics, the same posture as reorder rejections.
   const onSessionArchive = (sessionId: SessionNode['id']) => {
     archiveSession(sessionId).catch((reason: unknown) => {
       console.warn('session archive rejected:', reason)

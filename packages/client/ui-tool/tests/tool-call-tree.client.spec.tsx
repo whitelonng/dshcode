@@ -45,6 +45,7 @@ function props(
     openFile: vi.fn(),
     inspectCall: vi.fn(),
     forkAt: vi.fn(),
+    deleteAt: vi.fn(() => Promise.resolve(true)),
     fileMentions: vi.fn(),
     useHostDescription: (selector => selector(description)) as ToolTreeProps['useHostDescription'],
     t,

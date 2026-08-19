@@ -14,6 +14,10 @@ permissions:
 jobs:
   policy:
     name: Issue policy
+    # The policy script reads its repository identity from the upstream-owned
+    # config (project board, labels, lifecycle actor); forks cannot run it
+    # meaningfully, so skip cleanly instead of failing on the hardcoded repo.
+    if: ${{ github.repository == 'deepseek-harness/deepseek-harness' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out trusted policy

@@ -14,6 +14,9 @@
 - text: Explain event sourcing in one sentence. {{clock}}
 - button "Copy":
   - img
+- button "Delete" [disabled]:
+  - img
+- text: Agent is running; stop the turn to delete
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img

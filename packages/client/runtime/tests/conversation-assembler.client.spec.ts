@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { ConversationNodeAssembler } from '../src/client/sessions/conversation-assembler.ts'
+import { ConversationNodeAssembler, foldTranscript } from '../src/client/sessions/conversation-assembler.ts'
 import type {
   ConversationEventInput, ConversationMatch, ConversationNodeContext,
   ConversationNodeDefinition, ConversationViewDefinition, ConversationViewNode,
@@ -1043,5 +1043,117 @@ describe('ConversationNodeAssembler', () => {
     )).toThrow(/received more than one start Match/)
     assembler.flush()
     expect([...chatSnapshot(assembler)?.nodes.values() ?? []][0]?.data).toBe(1)
+  })
+
+  it('rebuilds the transcript without the deleted range or its emptied turn', () => {
+    const assembler = new ConversationNodeAssembler(
+      new TestEventDefinitions([fallbackDefinition(() => 'tail')]),
+      new TestViewDefinitions([testView()]),
+    )
+    assembler.replaceWindow([
+      input(at(0, 'turn/start', { turn: 1 })),
+      input(at(1, 'user/message', { content: [] })),
+      input(at(2, 'step/start', { turn: 1, step: 1 })),
+      input(at(3, 'assistant/message', { turn: 1, step: 1 })),
+      input(at(4, 'step/end', { turn: 1, step: 1 })),
+      input(at(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } })),
+    ], false)
+    assembler.flush()
+    expect(chatSnapshot(assembler)?.order.length).toBeGreaterThan(0)
+
+    assembler.append(input(at(6, 'message/delete', { start: 1, end: 3 })))
+    assembler.flush()
+    // Every message node and the emptied turn's brackets leave the transcript.
+    expect(chatSnapshot(assembler)?.order).toEqual([])
+  })
+})
+
+describe('foldTranscript', () => {
+  const window = [
+    input(at(0, 'turn/start', { turn: 1 })),
+    input(at(1, 'user/message', { content: [] })),
+    input(at(2, 'step/start', { turn: 1, step: 1 })),
+    input(at(3, 'assistant/message', { turn: 1, step: 1 })),
+    input(at(4, 'step/end', { turn: 1, step: 1 })),
+    input(at(5, 'turn/end', { turn: 1, reason: { kind: 'completed' } })),
+    input(at(6, 'turn/start', { turn: 2 })),
+    input(at(7, 'user/message', { content: [] })),
+    input(at(8, 'step/start', { turn: 2, step: 1 })),
+    input(at(9, 'assistant/message', { turn: 2, step: 1 })),
+    input(at(10, 'step/end', { turn: 2, step: 1 })),
+    input(at(11, 'turn/end', { turn: 2, reason: { kind: 'completed' } })),
+  ]
+
+  const deletion = (seq: number, start: number, end: number) =>
+    input(at(seq, 'message/delete', { start, end }))
+
+  const edit = (seq: number, shadowed: number[]) =>
+    input({
+      seq,
+      time: 1_700_000_000_000 + seq,
+      type: 'user/message',
+      data: { content: [], source: { kind: 'user' } },
+      surfaceOp: { op: 'replace', start: shadowed[0] ?? seq, end: shadowed.at(-1) ?? seq },
+      sourceEventSeqs: shadowed,
+    } as never)
+
+  it('returns the window unchanged without transcript edits', () => {
+    expect(foldTranscript(window).map(entry => entry.event.seq)).toEqual(
+      window.map(entry => entry.event.seq),
+    )
+  })
+
+  it('drops a whole-turn deletion range and prunes its emptied brackets', () => {
+    const visible = foldTranscript([...window, deletion(12, 1, 3)])
+    // Turn 1 vanishes entirely; turn 2 keeps every event.
+    expect(visible.map(entry => entry.event.seq)).toEqual([6, 7, 8, 9, 10, 11])
+  })
+
+  it('prunes an emptied step but keeps a turn whose user message remains', () => {
+    const visible = foldTranscript([...window, deletion(12, 3, 3)])
+    expect(visible.map(entry => entry.event.seq)).toEqual([
+      0, 1, 5, 6, 7, 8, 9, 10, 11,
+    ])
+  })
+
+  it('folds a deletion whose start and end are the user message alone', () => {
+    // Only the user message hides; the turn keeps its assistant step, so the
+    // turn and step brackets stay.
+    const visible = foldTranscript([...window, deletion(12, 1, 1)])
+    expect(visible.map(entry => entry.event.seq)).toEqual([
+      0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    ])
+  })
+
+  it('hides a whole-turn deletion\'s cited non-surface events (stopped partials)', () => {
+    // A stopped turn's surface range may cover only its user message; the
+    // provenance cites chunks and boundaries so the partial answer and the
+    // turn brackets hide with it.
+    const wholeTurnDelete = input({
+      ...at(12, 'message/delete', { start: 1, end: 1 }),
+      sourceEventSeqs: [0, 1, 2, 3, 4, 5],
+    } as never)
+    const visible = foldTranscript([...window, wholeTurnDelete])
+    expect(visible.map(entry => entry.event.seq)).toEqual([6, 7, 8, 9, 10, 11])
+  })
+
+  it('hides the shadowed range of a human edit-replace and keeps the replacement', () => {
+    const visible = foldTranscript([...window, edit(12, [1, 3])])
+    // Turn 1's prompt and answer are shadowed; the edited message (12) stays
+    // and turn 2 is untouched.
+    expect(visible.map(entry => entry.event.seq)).toEqual([6, 7, 8, 9, 10, 11, 12])
+  })
+
+  it('keeps a plugin-source replace (compaction) unfolded', () => {
+    const checkpoint = input({
+      seq: 12,
+      time: 1_700_000_000_012,
+      type: 'user/message',
+      data: { content: [], source: { kind: 'plugin', plugin: 'compaction-basic' } },
+      surfaceOp: { op: 'replace', start: 1, end: 3 },
+      sourceEventSeqs: [1, 3],
+    } as never)
+    const visible = foldTranscript([...window, checkpoint])
+    expect(visible.map(entry => entry.event.seq)).toEqual([...window.map(e => e.event.seq), 12])
   })
 })

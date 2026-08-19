@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: read
+      pages: write
     steps:
       # Complete history: the release scripts read tags.
       - uses: actions/checkout@v6
@@ -67,6 +67,8 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v6
+        with:
+          enablement: true
 
       - name: Verify and build documentation
         env:

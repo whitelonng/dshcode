@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-goal",
   "description": "Model-facing same-session goal tools with execution-time authority checks",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -54,5 +54,6 @@
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  }
+  },
+  "optionalDependencies": {}
 }

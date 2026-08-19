@@ -26,6 +26,8 @@ import {
   sessionListValueSchema,
   sessionModelsValueSchema,
   sessionPromptValueSchema,
+  sessionDeleteMessageValueSchema,
+  sessionEditMessageValueSchema,
   sessionRenameValueSchema,
   sessionSearchValueSchema,
   sessionSelectModelValueSchema,
@@ -33,10 +35,13 @@ import {
 } from '../api/sessions.schema.ts'
 import {
   workspaceArchiveSessionValueSchema,
+  workspaceDeleteSessionValueSchema,
+  workspaceRestoreSessionValueSchema,
   workspaceCreateValueSchema,
   workspaceDeleteValueSchema,
   workspaceInsertBeforeValueSchema,
   workspaceInsertSessionBeforeValueSchema,
+  workspaceListArchivedValueSchema,
   workspaceListValueSchema,
   workspaceRenameValueSchema,
 } from '../api/workspace.schema.ts'
@@ -93,6 +98,8 @@ export interface IApiClient {
     models(payload: RequestPayload<'session.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.models'>>>
     selectModel(payload: RequestPayload<'session.selectModel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.selectModel'>>>
     rename(payload: RequestPayload<'session.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.rename'>>>
+    deleteMessage(payload: RequestPayload<'session.deleteMessage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.deleteMessage'>>>
+    editMessage(payload: RequestPayload<'session.editMessage'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.editMessage'>>>
     fork(payload: RequestPayload<'session.fork'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.fork'>>>
     prompt(payload: RequestPayload<'session.prompt'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.prompt'>>>
     attachment(payload: RequestPayload<'session.attachment'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.attachment'>>>
@@ -120,6 +127,9 @@ export interface IApiClient {
     insertBefore(payload: RequestPayload<'workspace.insertBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertBefore'>>>
     insertSessionBefore(payload: RequestPayload<'workspace.insertSessionBefore'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.insertSessionBefore'>>>
     archiveSession(payload: RequestPayload<'workspace.archiveSession'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.archiveSession'>>>
+    restoreSession(payload: RequestPayload<'workspace.restoreSession'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.restoreSession'>>>
+    deleteSession(payload: RequestPayload<'workspace.deleteSession'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.deleteSession'>>>
+    listArchived(payload: RequestPayload<'workspace.listArchived'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'workspace.listArchived'>>>
   }
   skills: {
     list(payload: RequestPayload<'skill.list'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'skill.list'>>>
@@ -177,6 +187,8 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'session.models': sessionModelsValueSchema,
   'session.selectModel': sessionSelectModelValueSchema,
   'session.rename': sessionRenameValueSchema,
+  'session.deleteMessage': sessionDeleteMessageValueSchema,
+  'session.editMessage': sessionEditMessageValueSchema,
   'session.fork': sessionForkValueSchema,
   'session.prompt': sessionPromptValueSchema,
   'session.attachment': sessionAttachmentValueSchema,
@@ -198,6 +210,9 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'workspace.insertBefore': workspaceInsertBeforeValueSchema,
   'workspace.insertSessionBefore': workspaceInsertSessionBeforeValueSchema,
   'workspace.archiveSession': workspaceArchiveSessionValueSchema,
+  'workspace.restoreSession': workspaceRestoreSessionValueSchema,
+  'workspace.deleteSession': workspaceDeleteSessionValueSchema,
+  'workspace.listArchived': workspaceListArchivedValueSchema,
   'skill.list': skillListValueSchema,
   'agentPreset.list': agentPresetListValueSchema,
   'agentPreset.select': agentPresetSelectValueSchema,
@@ -417,6 +432,8 @@ export abstract class AbstractApiClient implements IApiClient {
     models: (payload, signal) => this.callUnary('session.models', payload, signal),
     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),
+    deleteMessage: (payload, signal) => this.callUnary('session.deleteMessage', payload, signal),
+    editMessage: (payload, signal) => this.callUnary('session.editMessage', payload, signal),
     fork: (payload, signal) => this.callUnary('session.fork', payload, signal),
     prompt: (payload, signal) => this.callUnary('session.prompt', payload, signal),
     attachment: (payload, signal) => this.callUnary('session.attachment', payload, signal),
@@ -451,6 +468,9 @@ export abstract class AbstractApiClient implements IApiClient {
     insertBefore: (payload, signal) => this.callUnary('workspace.insertBefore', payload, signal),
     insertSessionBefore: (payload, signal) => this.callUnary('workspace.insertSessionBefore', payload, signal),
     archiveSession: (payload, signal) => this.callUnary('workspace.archiveSession', payload, signal),
+    restoreSession: (payload, signal) => this.callUnary('workspace.restoreSession', payload, signal),
+    deleteSession: (payload, signal) => this.callUnary('workspace.deleteSession', payload, signal),
+    listArchived: (payload, signal) => this.callUnary('workspace.listArchived', payload, signal),
   }
 
   readonly skills: IApiClient['skills'] = {

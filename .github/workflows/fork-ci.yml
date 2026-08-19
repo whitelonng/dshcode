@@ -1,0 +1,371 @@
+name: Fork CI
+
+# Fork-owned CI (dshcode). The inherited upstream workflows keep their
+# upstream targets (DeepSeek's org-scoped runner pools and provider secrets)
+# and stay disabled in the fork's Actions settings — ci.yml, e2e.yml,
+# sandbox.yml, and the npm release workflows are `disabled_manually`; they
+# stay verbatim so upstream syncs never conflict on them. This workflow is
+# the fork's real signal, entirely on GitHub-hosted runners and entirely
+# keyless, so it is safe for untrusted contributor PRs.
+#
+# Job map:
+# - static:   Typert contracts, lint, typecheck (host + client), the doc-sync
+#             aggregate, the shared static gates (constraints, package
+#             invariants, Cordis config, runtime closure, optional-dependency
+#             imports, issue policy), the module graph check, and the desktop
+#             runtime closure
+# - unit:     the complete keyless vitest unit inventory (thread-safe and
+#             process-bound projects; includes apps/desktop and apps/web specs)
+# - web:      built web frontend + keyless browser replay
+#             (DSH_SNAPSHOT=replay over apps/web/tests). Promoted into the
+#             verdict after its first Ubuntu run proved the fork's goldens
+#             current (one stale retry golden, refreshed in df281d24e2).
+# - coverage: per-file 100% coverage gate on packages/*/*/src
+# - all-checks-passed: single stable required check for branch protection
+#
+# Deliberately absent for now:
+# - knip and duplication: the fork carries pre-existing debt on both
+#   (unused desktop file/deps, 108 unlisted test imports, 14 plugin-installer
+#   clones), so the upstream check:ci:static aggregate (which embeds knip)
+#   cannot run whole; this lane pins its green subset instead. Fix the debt,
+#   then rejoin via check:ci:static plus one duplication step.
+# - Snapshot replays (test:snapshot): their goldens are upstream-owned and
+#   drift on this fork; re-own them with a fork-side refresh before
+#   re-enabling (check:ci:snapshot after build).
+# - Real-API e2e: needs provider keys this public fork does not hold; e2e.yml
+#   stays disabled in the fork's Actions settings, and real-API runs remain a
+#   manual, keyed concern.
+# - Desktop packaging: desktop.yml owns the desktop-v* tag matrix
+#   (macOS arm64/x64 + Windows x64) and the release assembly.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  # A push run is the post-merge signal and the cache producer; never cancel
+  # it. Every other event (pull request, manual dispatch) cancels superseded
+  # runs in the same group — the negated form matches upstream's semantics.
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  # CI runs must never report to the production telemetry endpoint baked
+  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  static:
+    name: static (lint, typecheck, gates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # Full history so the archived-agent-notes gate can read the trusted PR
+      # base from a reused shallow checkout.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Configure pnpm store path
+        id: pnpm-store
+        run: |
+          store_root="$HOME/.local/share/pnpm/store"
+          echo "PNPM_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(PNPM_CONFIG_STORE_DIR="$store_root" pnpm store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # One host build feeds every contracts-ready consumer below; the raw
+      # `lint`/`typecheck` scripts would each rebuild it.
+      - name: Typert contracts (host build)
+        run: pnpm run build:lib:host
+
+      - name: Lint
+        run: pnpm run lint:contracts-ready
+
+      - name: Typecheck (host + client)
+        run: pnpm run typecheck:contracts-ready
+
+      # DSH_ARCHIVE_BASE_REF must be set exactly on pull requests: an empty
+      # string would be read as a literal ref instead of the HEAD default.
+      - name: Run documentation gates (pull request)
+        if: github.event_name == 'pull_request'
+        env:
+          DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: pnpm run doc-sync
+
+      - name: Run documentation gates (push)
+        if: github.event_name != 'pull_request'
+        run: pnpm run doc-sync
+
+      # The shared static gates from upstream's check:ci:static, minus the
+      # deferred knip and duplication lanes (see the header job map).
+      - name: Runtime closure
+        run: pnpm run verify-runtime-closure
+
+      - name: Workspace constraints
+        run: pnpm run constraints
+
+      - name: DSH package licenses
+        run: pnpm run verify-dsh-package-licenses
+
+      - name: Package invariants
+        run: pnpm run verify-package-invariants
+
+      - name: Cordis config
+        run: pnpm run verify-cordis-config
+
+      - name: Optional dependency imports
+        run: pnpm run verify-optional-dependency-imports
+
+      - name: Issue management policy
+        run: pnpm run test:issue-management
+
+      - name: Module graph
+        run: pnpm run verify-module-graph
+
+      - name: Desktop runtime closure
+        run: pnpm run verify-desktop-runtime-closure
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Configure pnpm store path
+        id: pnpm-store
+        run: |
+          store_root="$HOME/.local/share/pnpm/store"
+          echo "PNPM_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(PNPM_CONFIG_STORE_DIR="$store_root" pnpm store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
+
+      # The single producer of the pnpm store cache: five parallel saves of
+      # one key would race and waste compression on every master push.
+      - name: Save pnpm store (master push)
+        if: github.event_name == 'push'
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
+
+      - name: Install dependencies and prepare bubblewrap
+        run: |
+          pnpm install --frozen-lockfile &
+          install_pid=$!
+          bash scripts/prepare-ci-bubblewrap.sh &
+          sandbox_pid=$!
+          install_status=0
+          wait "$install_pid" || install_status=$?
+          sandbox_status=0
+          wait "$sandbox_pid" || sandbox_status=$?
+          if (( install_status != 0 )); then exit "$install_status"; fi
+          exit "$sandbox_status"
+
+      - name: Run unit tests
+        # Two forked workers leave headroom on the 4-vCPU hosted runner:
+        # run 5 of the fork's monolith CI failed at unit tests on a docs-only
+        # commit, and the timing-sensitive terminal/subprocess suites run in
+        # the same inventory as the CPU-heavy files.
+        run: pnpm exec vitest run --maxWorkers=2
+
+  web:
+    name: web browser replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Configure pnpm store path
+        id: pnpm-store
+        run: |
+          store_root="$HOME/.local/share/pnpm/store"
+          echo "PNPM_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(PNPM_CONFIG_STORE_DIR="$store_root" pnpm store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
+
+      - name: Install dependencies and prepare bubblewrap
+        run: |
+          pnpm install --frozen-lockfile &
+          install_pid=$!
+          bash scripts/prepare-ci-bubblewrap.sh &
+          sandbox_pid=$!
+          install_status=0
+          wait "$install_pid" || install_status=$?
+          sandbox_status=0
+          wait "$sandbox_pid" || sandbox_status=$?
+          if (( install_status != 0 )); then exit "$install_status"; fi
+          exit "$sandbox_status"
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      # The single producer of the Playwright browser cache (only this lane
+      # installs Chromium, so the save needs no deduplication).
+      - name: Save Playwright browser cache (master push)
+        if: github.event_name == 'push'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Chromium and system dependencies
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
+
+      - name: Build and run keyless web browser replay
+        env:
+          DSH_SNAPSHOT: replay
+        run: pnpm run test:web
+
+  coverage:
+    name: coverage (per-file 100%)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # A 4-vCPU hosted runner splits its worker budget: two instrumented
+      # workers plus one exempt heavy-suite worker. Gate concurrency 2 lets
+      # the two coverage gates overlap (2 + 1 = 3 forks) instead of running
+      # serially, keeping the lane well inside its timeout.
+      DSH_COVERAGE_MAX_WORKERS: '3'
+      DSH_GATE_CONCURRENCY: '2'
+      # The overlapping gates starve timing-sensitive scenario hosts; this
+      # knob widens Vitest timeouts AND the process-exit scenario's ready
+      # wait (which reads it) on this lane only.
+      DSH_COVERAGE_TEST_TIMEOUT_MS: '60000'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Configure pnpm store path
+        id: pnpm-store
+        run: |
+          store_root="$HOME/.local/share/pnpm/store"
+          echo "PNPM_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(PNPM_CONFIG_STORE_DIR="$store_root" pnpm store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
+
+      - name: Install dependencies and prepare bubblewrap
+        run: |
+          pnpm install --frozen-lockfile &
+          install_pid=$!
+          bash scripts/prepare-ci-bubblewrap.sh &
+          sandbox_pid=$!
+          install_status=0
+          wait "$install_pid" || install_status=$?
+          sandbox_status=0
+          wait "$sandbox_pid" || sandbox_status=$?
+          if (( install_status != 0 )); then exit "$install_status"; fi
+          exit "$sandbox_status"
+
+      - name: Run exhaustive coverage
+        run: pnpm run check:ci:coverage
+
+  # Single stable required check for branch protection: require "Fork CI /
+  # all checks passed" instead of enumerating jobs whose names evolve as lanes
+  # change. Every blocking job above must stay listed in `needs`.
+  # `if: always()` is load-bearing: without it a failed dependency would SKIP
+  # this job, and GitHub counts a skipped required check as passing — so this
+  # job always runs on pull requests and fails on any non-success result,
+  # including 'cancelled' and 'skipped'.
+  all-checks-passed:
+    name: all checks passed
+    needs: [static, unit, web, coverage]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job did not succeed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "::error::Needed job results: ${{ join(needs.*.result, ', ') }}"
+          exit 1
+      - name: All checks passed
+        run: echo "All needed jobs succeeded (${{ join(needs.*.result, ', ') }})"

@@ -68,7 +68,15 @@ function MessageItem({ node, t: translate, referenceLabels }: MessageItemProps) 
         ? { ...node, referenceLabels }
         : node,
   }
-  const props = { node: viewNode, t: translate, renderMessageImages } as ChatNodeViewProps
+  const props = {
+    node: viewNode,
+    t: translate,
+    renderMessageImages,
+    loadImage: vi.fn(),
+    deleteAt: vi.fn(() => Promise.resolve(true)),
+    useSession: ((selector: (snapshot: unknown) => unknown) =>
+      selector({ chat: { timeline: { turns: new Map() }, nodes: new Map() } })) as ChatNodeViewProps['useSession'],
+  } as unknown as ChatNodeViewProps
   switch (node.kind) {
     case 'user':
     case 'steering':
@@ -1040,5 +1048,138 @@ describe('small branch tails', () => {
       />,
     )
     expect(view.container.textContent).toBe('1 轮 · 1 步| 输入 0 tok · 输出 10 tok')
+  })
+})
+
+function userViewNode(seq: number, source: unknown): ChatConversationViewNode {
+  return {
+    key: `delete-fixture:${String(seq)}`,
+    kind: 'user',
+    id: String(seq),
+    target: 'chat',
+    anchorSeq: seq,
+    location: { kind: 'session' },
+    visibility: 'visible',
+    data: {
+      kind: 'user', seq, time: 1_700_000_000_000,
+      content: [{ type: 'text', text: `prompt ${String(seq)}` }],
+      source,
+    },
+  }
+}
+
+const props = (
+  node: ChatConversationViewNode,
+  overrides: Partial<{
+    deleteAt: () => Promise<boolean>
+    editAt: (seq: number, text: string) => Promise<boolean>
+    turns: ReadonlyMap<number, { status: 'open' | 'closed' }>
+    nodes: ReadonlyMap<string, ChatConversationViewNode>
+  }> = {},
+): ChatNodeViewProps<'user'> => ({
+  node: node as ChatNodeViewProps<'user'>['node'],
+  t,
+  loadImage: vi.fn(),
+  deleteAt: overrides.deleteAt ?? vi.fn(() => Promise.resolve(true)),
+  editAt: overrides.editAt ?? vi.fn(() => Promise.resolve(true)),
+  useSession: ((selector: (snapshot: unknown) => unknown) => selector({
+    chat: {
+      timeline: { turns: overrides.turns ?? new Map() },
+      nodes: overrides.nodes ?? new Map(),
+    },
+  })) as ChatNodeViewProps['useSession'],
+} as unknown as ChatNodeViewProps<'user'>)
+describe('message deletion actions', () => {
+
+  it('shows delete only on human-authored messages and calls deleteAt with the seq', async () => {
+    const deleteAt = vi.fn(() => Promise.resolve(true))
+    const injected = render(<UserMessageNodeView {...props(userViewNode(7, { kind: 'plugin', plugin: 'x' }))} />)
+    expect(injected.queryByRole('button', { name: '删除' })).toBeNull()
+
+    const human = render(<UserMessageNodeView {...props(userViewNode(7, { kind: 'user' }), { deleteAt })} />)
+    const button = human.getByRole('button', { name: '删除' })
+    fireEvent.click(button)
+    expect(deleteAt).toHaveBeenCalledWith(7)
+  })
+
+  it('disables delete while the owning turn is open', () => {
+    const node = {
+      ...userViewNode(7, { kind: 'user' }),
+      location: { kind: 'turn', turn: { turn: 1, start: null, end: null, status: 'open', steps: [], data: {} } },
+    } as unknown as ChatConversationViewNode
+    const view = render(<UserMessageNodeView {...props(node, {
+      turns: new Map([[1, { status: 'open' }]]),
+    })} />)
+    expect(view.getByRole('button', { name: '删除' }).getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('surfaces a failed deletion on the tooltip label', async () => {
+    const view = render(<UserMessageNodeView {...props(userViewNode(7, { kind: 'user' }), {
+      deleteAt: () => Promise.resolve(false),
+    })} />)
+    const button = view.getByRole('button', { name: '删除' })
+    fireEvent.click(button)
+    button.focus()
+    await expect.poll(() => view.getByRole('tooltip').textContent).toBe('删除失败，请重试')
+  })
+})
+
+describe('message edit actions', () => {
+  const editProps = (
+    node: ChatConversationViewNode,
+    overrides: Partial<{
+      editAt: (seq: number, text: string) => Promise<boolean>
+      nodes: ReadonlyMap<string, ChatConversationViewNode>
+    }> = {},
+  ) => {
+    const base = props(node, {
+      editAt: overrides.editAt ?? vi.fn(() => Promise.resolve(true)),
+      nodes: overrides.nodes ?? new Map([[node.key, node]]),
+    })
+    return base
+  }
+
+  it('offers edit only on the last human user message while idle', () => {
+    const earlier = userViewNode(3, { kind: 'user' })
+    const last = userViewNode(9, { kind: 'user' })
+    const nodes = new Map([[earlier.key, earlier], [last.key, last]])
+    const earlierView = render(<UserMessageNodeView {...editProps(earlier, { nodes })} />)
+    expect(earlierView.queryByRole('button', { name: '编辑' })).toBeNull()
+    const lastView = render(<UserMessageNodeView {...editProps(last, { nodes })} />)
+    expect(lastView.getByRole('button', { name: '编辑' })).toBeTruthy()
+  })
+
+  it('submits the edited text and leaves the editor on success', async () => {
+    const editAt = vi.fn(() => Promise.resolve(true))
+    const node = userViewNode(7, { kind: 'user' })
+    const view = render(<UserMessageNodeView {...editProps(node, { editAt })} />)
+    fireEvent.click(view.getByRole('button', { name: '编辑' }))
+    const textarea = view.getByRole('textbox', { name: '编辑消息' })
+    expect(textarea).toHaveProperty('value', 'prompt 7')
+    fireEvent.change(textarea, { target: { value: 'edited text' } })
+    fireEvent.click(view.getByRole('button', { name: '重新生成' }))
+    await expect.poll(() => editAt).toHaveBeenCalledWith(7, 'edited text')
+    await expect.poll(() => view.queryByRole('textbox', { name: '编辑消息' })).toBeNull()
+  })
+
+  it('keeps the editor open and surfaces a refusal', async () => {
+    const node = userViewNode(7, { kind: 'user' })
+    const view = render(<UserMessageNodeView {...editProps(node, {
+      editAt: () => Promise.resolve(false),
+    })} />)
+    fireEvent.click(view.getByRole('button', { name: '编辑' }))
+    fireEvent.click(view.getByRole('button', { name: '重新生成' }))
+    await expect.poll(() => view.getByRole('status').textContent).toBe('修改失败，请重试')
+    expect(view.getByRole('textbox', { name: '编辑消息' })).toBeTruthy()
+  })
+
+  it('cancels the editor without calling editAt', () => {
+    const editAt = vi.fn(() => Promise.resolve(true))
+    const node = userViewNode(7, { kind: 'user' })
+    const view = render(<UserMessageNodeView {...editProps(node, { editAt })} />)
+    fireEvent.click(view.getByRole('button', { name: '编辑' }))
+    fireEvent.click(view.getByRole('button', { name: '取消' }))
+    expect(view.queryByRole('textbox', { name: '编辑消息' })).toBeNull()
+    expect(editAt).not.toHaveBeenCalled()
   })
 })

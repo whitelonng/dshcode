@@ -216,6 +216,26 @@
   white-space: nowrap;
 }
 
+/* Capability badges (image input / generation / understanding): caption
+   capsules in the tertiary tone, so they annotate the model name without
+   competing with it. */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.badge {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .check {
   display: grid;
   place-items: center;

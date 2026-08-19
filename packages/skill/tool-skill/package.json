@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-skill",
   "description": "Model-facing skill loading tool for the DeepSeek Harness",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -52,5 +52,6 @@
     "@deepseek-ai/dsh-skill-filesystem": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  }
+  },
+  "optionalDependencies": {}
 }

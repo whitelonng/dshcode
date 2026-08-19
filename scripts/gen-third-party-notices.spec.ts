@@ -52,6 +52,8 @@ describe('tierExternalDeps', () => {
       // A plugin package's runtime dependency ships even when no app mounts it by default.
       'packages/mcp/mcp-client/package.json': { name: '@deepseek-ai/dsh-mcp-client', dependencies: { 'protocol-sdk': '^1' }, devDependencies: { 'protocol-fixture-server': '^1' } },
       'apps/cli/package.json': { name: '@deepseek-ai/dsh-cli', dependencies: { 'cli-lib': '^1', '@deepseek-ai/dsh-mcp-client': 'workspace:^' } },
+      // Electron stays a devDependency for electron-builder, but the runtime is embedded in the desktop artifact.
+      'apps/desktop/package.json': { name: '@dshcode/desktop', devDependencies: { electron: '^43', 'electron-builder': '^26' } },
     })
 
     expect(tierExternalDeps(manifests, names)).toEqual(new Map([
@@ -64,6 +66,8 @@ describe('tierExternalDeps', () => {
       ['protocol-sdk', true],
       ['protocol-fixture-server', false],
       ['cli-lib', true],
+      ['electron', true],
+      ['electron-builder', false],
     ]))
   })
 

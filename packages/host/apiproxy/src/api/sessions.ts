@@ -128,6 +128,12 @@ export interface ModelCatalogModel {
   name: string
   /** Optional provider-supplied description. */
   description?: string
+  /** Accepted request modalities (`image` = multimodal input); absent when the adapter does not declare any. */
+  inputModalities?: string[]
+  /** Response modalities (`image` = image generation); absent means text-only output. */
+  outputModalities?: string[]
+  /** Declared capabilities beyond modalities (e.g. `image-understanding`); absent means none declared. */
+  capabilities?: string[]
   /** Exact-route reasoning metadata when the adapter exposes it. */
   reasoning?: ModelReasoning
 }
@@ -315,6 +321,36 @@ export interface SessionsApi {
    */
   rename(request: RpcRequest<{ sessionId: SessionId; title: string }>):
   Promise<RpcResponse<{ title: string; seq: number }>>
+
+  /**
+   * Deletes one user or assistant message from the model-visible surface.
+   * A user message removes its whole turn (the surface range through the node
+   * before the next user message); an assistant message removes itself plus
+   * the tool results its own step produced, so no orphan tool results remain.
+   * Appends a `message/delete` event and never runs during an open turn: a
+   * running agent fails with `agent-busy`, and a seq that is not a current
+   * surface message fails with `delete-unavailable`. Session-backed subagents
+   * reject with `agent-busy`.
+   */
+  deleteMessage(request: RpcRequest<{ sessionId: SessionId; seq: number }>):
+  Promise<RpcResponse<{ start: number; end: number; deletedSeqs: number[] }>>
+
+  /**
+   * Edits the last user message of a conversation and regenerates its turn:
+   * the replacement rides the new turn's own `user/message` as a surface
+   * `replace` over the old turn's range, so the previous answer is shadowed
+   * and the model answers the edited prompt. Refuses with `edit-unavailable`
+   * for a non-human message or one that is not the surface's last user
+   * message, and with `agent-busy` while a turn runs. Session-backed
+   * subagents reject with `agent-busy`.
+   */
+  editMessage(request: RpcRequest<{
+    sessionId: SessionId
+    seq: number
+    content: PromptContentPart[]
+    clientTimeZone?: string
+  }>):
+  Promise<RpcResponse<{ accepted: true }>>
 
   /**
    * Sends a message. content is core's ContentBlock[] verbatim; mode maps 1:1 — queue→send, steer→steer.

@@ -9,6 +9,10 @@
 import { globSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import * as PluginInstaller from '@deepseek-ai/dsh-host-plugin-installer'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -46,6 +50,7 @@ import * as ToolBashPersistent from '@deepseek-ai/dsh-tool-bash-persistent'
 import * as ToolPwshPersistent from '@deepseek-ai/dsh-tool-pwsh-persistent'
 import CordisHostRunner from '@deepseek-ai/dsh-cordis-host-runner'
 import * as ToolCordis from '@deepseek-ai/dsh-tool-cordis'
+import * as ToolDescribeImage from '@deepseek-ai/dsh-tool-describe-image'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
@@ -200,6 +205,23 @@ const TOOL_PACKAGES: ToolPackage[] = [
       'ask_user_question pauses the tool call until the active UI provider returns a human answer.',
   },
   {
+    pkg: '@deepseek-ai/dsh-host-plugin-installer',
+    dir: 'plugin-installer',
+    source: 'packages/host/plugin-installer/src/tools.ts',
+    requires: ['ctx.tools', 'ctx.connection'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // The gateway tools share the gateway's install state; the harvest only
+      // reads schemas, so a temp home and a loopback-stub connection suffice.
+      const home = mkdtempSync(join(tmpdir(), 'dsh-plugin-installer-catalog-'))
+      const patchPath = join(home, 'cordis.patch.yml')
+      writeFileSync(patchPath, '[]\n')
+      ctx.provide('connection', { rpc: { handle: () => async () => {}, intercept: () => {} } })
+      await ctx.plugin(PluginInstaller, { dshHome: home, profilePatchPath: patchPath })
+    },
+    note: 'The plugin_* tools share the installer gateway state with the desktop plugin list.',
+  },
+  {
     pkg: '@deepseek-ai/dsh-tools',
     dir: 'tools',
     source: 'packages/core/tools/src/code-mode.ts',
@@ -309,6 +331,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'Standalone view/create/unique literal replace/line insert tool over the filesystem seam; it composes with any shell or terminal API.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-describe-image',
+    dir: 'tool-describe-image',
+    source: 'packages/vision/tool-describe-image/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolDescribeImage, { baseURL: 'https://catalog.example.invalid/v1', model: 'catalog-vision-model' })
+    },
+    note:
+      'describe_image sends one image (local path or http(s) URL) to an OpenAI-compatible vision-language endpoint and returns the text answer; the image never enters the conversation. The catalog harvest uses a placeholder endpoint — the schema is endpoint-independent, and execution would fail with an unresolvable host until a deployment configures baseURL, model, and a credential.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-fs',

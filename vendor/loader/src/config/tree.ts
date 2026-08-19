@@ -155,6 +155,18 @@ export abstract class EntryTree {
         return await this.ctx.loader.internal.import(name, this.ctx.baseUrl!, {})
       } else if (name.startsWith('.')) {
         return await import(/* @vite-ignore */new URL(name, this.ctx.baseUrl).href)
+      } else if (this.ctx.baseUrl !== undefined && this.ctx.baseUrl.startsWith('file://')) {
+        // Local modification: packaged hosts lack Node loader internals, so the
+        // bare import below would resolve entry names from the LOADER MODULE's
+        // own location (the app's node_modules) instead of the config tree that
+        // declared them. Resolve from the cordis.yml directory so profile-level
+        // plugins resolve. The Node builtins load dynamically so the browser
+        // bundle never imports them (browsers inject their own internal and
+        // their baseUrl is not a file URL, so this branch is host-only).
+        const { createRequire } = await import('node:module')
+        const { pathToFileURL } = await import('node:url')
+        const resolved = createRequire(this.ctx.baseUrl).resolve(name)
+        return await import(/* @vite-ignore */pathToFileURL(resolved).href)
       } else {
         return await import(/* @vite-ignore */name)
       }

@@ -1,0 +1,58 @@
+appId: com.whitelonng.dshcode
+productName: DSHCode
+electronVersion: 43.4.0
+artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
+# Profile plugins resolve as ordinary packages and the Harness-home fallback
+# links to them. Keep those paths real on disk on both macOS and Windows.
+asar: false
+# The deployed runtime uses platform prebuilds/N-API. Re-running pnpm here
+# would treat the staging directory as the source workspace and replace it.
+npmRebuild: false
+directories:
+  output: release
+  buildResources: build
+files:
+  - lib/**/*
+  - package.json
+  # Runtime tray icons resolved from the bundled lib directory's ../assets.
+  - assets/**/*
+extraResources:
+  - from: licenses
+    to: licenses
+  # The deployment-owned skins tree the skin center reads at runtime. The
+  # node-module collector would drop an orphan directory inside node_modules,
+  # so the staged skins-extras assembly ships through extraResources into the
+  # exact ancestor the patched skin center resolves.
+  - from: skins-extras
+    to: app/node_modules/skins
+  # The dsh-web-ui compat shim (npm-unpublished) ships beside the family
+  # packages so bare plugin rows resolve it from the app's own node_modules.
+  - from: compat-extras
+    to: app/node_modules/@linxin666
+mac:
+  category: public.app-category.developer-tools
+  # Signing identity is auto-discovered from the keychain (Apple Development /
+  # Developer ID Application / Apple Distribution). A valid signature is
+  # REQUIRED for macOS notifications: UNUserNotificationCenter silently drops
+  # every notification from an ad-hoc (linker-signed) app and never shows the
+  # permission prompt. Builds without any signing certificate skip signing
+  # with a warning (notifications unavailable, build still succeeds);
+  # set CSC_NAME to force a specific identity, or CSC_LINK/CSC_KEY_PASSWORD
+  # for CI signing from a .p12.
+  icon: build/icon.svg
+  hardenedRuntime: true
+  target:
+    - dmg
+    - zip
+win:
+  icon: build/icon.svg
+  requestedExecutionLevel: asInvoker
+  target:
+    - nsis
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: DSHCode
+  runAfterFinish: true

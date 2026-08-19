@@ -420,3 +420,36 @@ describe('boot with user patches', () => {
     }
   })
 })
+
+
+describe('packaged-host entry resolution', () => {
+  afterEach(() => {
+    delete process.env.DSH_HOME
+  })
+
+  it('resolves bare entry names from the config tree when Node loader internals are absent', async () => {
+    const dir = tmp()
+    const pkgDir = join(dir, 'node_modules', '@fixture', 'demo')
+    mkdirSync(pkgDir, { recursive: true })
+    writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({ name: '@fixture/demo', type: 'module' }))
+    writeFileSync(join(pkgDir, 'index.js'), 'export const name = "demo";\nexport function apply() {}\n')
+    // baseUrl only needs to exist as the resolution anchor directory.
+    writeFileSync(join(dir, 'cordis.yml'), '')
+
+    const ctx = new Context()
+    ctx.baseUrl = pathToFileURL(join(dir, 'cordis.yml')).href
+    const fiber = ctx.plugin(Loader, {})
+    await fiber.await()
+    // Packaged hosts cannot reach Node loader internals; the loader's import
+    // fallback must then resolve from the config tree.
+    ctx.loader.internal = undefined
+    const id = await ctx.loader.create({ name: '@fixture/demo' })
+    await ctx.loader.await()
+    const resolved = ctx.loader.resolve(id)
+    expect(resolved.fiber).toBeDefined()
+    // The fixture module exports its own name; loading it at all through
+    // the fallback proves resolution started at the config tree.
+    expect(resolved.fiber?.name).toBe('demo')
+    await fiber.dispose()
+  })
+})

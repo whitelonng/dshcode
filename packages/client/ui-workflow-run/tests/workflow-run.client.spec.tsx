@@ -295,6 +295,8 @@ function panelProps(data: WorkflowRunChatData, sessions = listState(), openSessi
     inspectCall: () => {},
     forkAt: () => {},
     renderMessageImages: () => null,
+    deleteAt: () => Promise.resolve(true),
+    loadImage: () => Promise.reject(new Error('unused')),
     fileMentions: () => undefined,
     openSession,
     t: makeTranslate(zh),

@@ -299,6 +299,15 @@ export interface SessionEventMap {
     error?: { name: string; code: string }
     meta?: JsonValue
   }
+  /**
+   * Removes the surface range [`start`, `end`] (inclusive, both existing
+   * surface node seqs) from the model-visible history without replacement.
+   * Log-only: derives no message, but the surface fold must know the range —
+   * its `surfaceOp` carries the same {@link SurfaceOp delete} values and
+   * `sourceEventSeqs` cites every removed node. Appended only outside an open
+   * turn, by a human transcript edit (delete message / discard a turn).
+   */
+  'message/delete': { start: number; end: number }
   /** Whole-list snapshot; latest write wins on replay. Log-only UI state; never derived history. */
   'todo/write': { todos: TodoItem[] }
   /**
@@ -348,6 +357,7 @@ export type SurfaceEventType =
   | 'user/message'
   | 'assistant/message'
   | 'tool/result'
+  | 'message/delete'
 
 /**
  * A {@link SessionEvent} that is **on** the ordered surface — its
@@ -372,10 +382,16 @@ export type SurfaceEvent = SessionEvent<SurfaceEventType> & { surfaceOp: Surface
  *   node. The node's {@link SessionEvent.sourceEventSeqs} must include every
  *   shadowed surface node. Used by compaction; any surface-replacing producer
  *   may use it.
+ * - `{ op: 'delete', start, end }`: removes surface nodes from `start`
+ *   (inclusive) through `end` (inclusive) without a replacement. Only
+ *   `message/delete` events carry it — a human-edited transcript removal. Both
+ *   ends must exist as surface nodes in the current surface; the event's
+ *   {@link SessionEvent.sourceEventSeqs} must include every removed node.
  */
 export type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: number; end: number }
+  | { op: 'delete'; start: number; end: number }
 
 /**
  * Surface placement and cited source-event seqs for {@link Session.append}. Required on

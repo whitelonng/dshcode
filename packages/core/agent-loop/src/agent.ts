@@ -11,6 +11,7 @@ import type {
   AgentOptions,
   AgentStatus,
   CancelOptions,
+  FollowupReplace,
   InboxTarget,
   PreStepDecision,
   RequestErrorAction,
@@ -76,6 +77,12 @@ export class ReactLoopAgent implements Agent {
   /** Whether this loop instance has appended its initial/resume request anchor. */
   private requestHeaderLogged = false
   private readonly runtimeContext: RuntimeContextProjection
+  /**
+   * Surface rewrite for the next turn's first claimed message (an
+   * edit-and-regenerate follow-up). Consumed by the first `user/message`
+   * append of the next turn and cleared when that turn ends.
+   */
+  private pendingEditSurface: FollowupReplace | undefined
 
   constructor(
     private loopCtx: Context,
@@ -119,7 +126,8 @@ export class ReactLoopAgent implements Agent {
     if (wakeup) this.wakeDriver(wakingAfterAbort)
   }
 
-  followup(input: UserMessage): void {
+  followup(input: UserMessage, replace?: FollowupReplace): void {
+    if (replace !== undefined) this.pendingEditSurface = replace
     this.send(input, 'next-turn', true)
   }
 
@@ -279,8 +287,19 @@ export class ReactLoopAgent implements Agent {
         this.session.append('step/start', { turn, step })
         phase.step = step
         try {
+          let claimedFirst = true
           for (const message of decision.messages) {
-            this.session.append('user/message', message, { surfaceOp: 'append' })
+            if (claimedFirst && this.pendingEditSurface !== undefined) {
+              const edit = this.pendingEditSurface
+              this.pendingEditSurface = undefined
+              this.session.append('user/message', message, {
+                surfaceOp: { op: 'replace', start: edit.start, end: edit.end },
+                sourceEventSeqs: edit.sourceEventSeqs,
+              })
+            } else {
+              this.session.append('user/message', message, { surfaceOp: 'append' })
+            }
+            claimedFirst = false
           }
           // max-tokens is sticky: once any step hits the ceiling, later steps
           // that complete normally must not downgrade the turn outcome.
@@ -314,6 +333,9 @@ export class ReactLoopAgent implements Agent {
       }
       this.throwError(error)
     } finally {
+      // A turn that never claimed its message (a rejected wake) must not
+      // leak the edit surface into a later turn.
+      this.pendingEditSurface = undefined
       try {
         // oxlint-disable-next-line typescript/no-non-null-assertion -- every exit assigns a turn ending
         this.session.append('turn/end', { turn, reason: turnEnds! })

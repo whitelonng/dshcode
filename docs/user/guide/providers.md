@@ -2,7 +2,7 @@
 
 English | [中文](providers.zh.md)
 
-This guide assumes you started the Web UI through the [root README](../../../README.md#run). Model changes take effect on the next request without restarting the server.
+This guide assumes you started the Web UI through the [root README](../../../README.md#快速开始). Model changes take effect on the next request without restarting the server.
 
 ## Configure DeepSeek
 

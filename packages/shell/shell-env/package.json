@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-shell-env",
   "description": "Tool-independent managed DSH_* shell environment registry",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -51,5 +51,6 @@
     "@deepseek-ai/dsh-session-persistence": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  }
+  },
+  "optionalDependencies": {}
 }

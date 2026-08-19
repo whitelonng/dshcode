@@ -91,6 +91,7 @@ Every `SessionEvent` carries three optional top-level fields (structural metadat
 - Persistence plugins: subscribe to `session/event` (write-behind) and drain on `session/flush` (awaited) and fiber dispose. A durable backend reads the log and reloads it into a live session; the metadata contract (`SessionHeader`, `session.header`) is what such a backend stores beside the log.
 - Replay/fork: `create(id, { seed })` validates and freezes a contiguous current-format log and rebuilds its surface; request headers require provider/model, and assistant messages require provider/model provenance. Persistence owns read compatibility before constructing this current-format seed. `fork(source, boundary?, childSessionId?)` selects a completed-turn prefix and records lineage.
 - Compaction: `dsh-compaction-basic` appends a `user/message` replacement for summary checkpoints, while `dsh-compaction-tool-result-pruner` appends a content-only `tool/result` replacement. Tool-pairing boundary policy and its cache belong to the [`dsh-compaction` seam](../../compaction/compaction/README.md), while this package owns ordered surface membership, replacement validation, and `replaceGeneration`.
+- Message deletion: a human transcript edit appends a `message/delete` event carrying `{ op: 'delete', start, end }` plus the removed nodes' seqs; the fold splices the range out of the surface without a replacement. Deletes are refused inside an open turn by the session invariant. The [message deletion decision](../../../.agents/notes/implemented/feature/2026-08-16-message-deletion-and-transcript-removal.md) owns the semantics.
 
 ## Model Experience
 
@@ -102,7 +103,7 @@ The model receives the complete messages from `user/message`, `assistant/message
 
 #### Token effect
 
-Appended surface entries are resent on later steps. A `replace` surface operation removes the shadowed entries from future inputs without deleting their raw log records.
+Appended surface entries are resent on later steps. A `replace` surface operation removes the shadowed entries from future inputs without deleting their raw log records; a `delete` operation removes the range without any replacement node.
 
 #### KV Cache effect
 

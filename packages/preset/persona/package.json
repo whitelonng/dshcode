@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-persona",
   "description": "Composition-authored deployment persona section for the DeepSeek Harness",
-  "version": "0.1.1-rc.2",
+  "version": "1.0.5",
   "publishConfig": {
     "access": "public"
   },
@@ -44,5 +44,6 @@
     "@deepseek-ai/dsh-scope": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  }
+  },
+  "optionalDependencies": {}
 }
