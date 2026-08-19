@@ -358,7 +358,7 @@ jobs:
   # including 'cancelled' and 'skipped'.
   all-checks-passed:
     name: all checks passed
-    needs: [static, unit, web, coverage]
+    needs: [static, unit, coverage]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:

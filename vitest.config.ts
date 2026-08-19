@@ -307,6 +307,10 @@ export default defineConfig({
         ...windowsOnlyCoverageExclusions,
         ...windowsRunnerCoverageExclusions,
         ...pwshCoverageExclusions,
+        // Fork adaptation: the hosted fork CI lanes are Linux-only and the
+        // persistent-pwsh tests are excluded there (posixUnsupportedTests), so
+        // their source has no per-file coverage on those hosts either.
+        ...(process.platform !== 'win32' ? ['packages/shell/tool-pwsh-persistent/src/**/*.ts'] : []),
       ],
       // 100% or it doesn't merge (docs/testing.md: excessive tests are welcome).
       // Per-file so a well-covered big file can't subsidize a bare one.
