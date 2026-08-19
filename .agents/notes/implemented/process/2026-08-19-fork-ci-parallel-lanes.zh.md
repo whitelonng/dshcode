@@ -17,6 +17,7 @@ Fork CI 现在是四个并行、无密钥的 job，汇聚到一个稳定判定�
 - pull request 触发工作流；`cancel-in-progress` 只豁免 push（`${{ github.event_name != 'push' }}`），因为 master push 既是合并后信号也是缓存生产者，而被取代的 PR 与手动运行可丢弃。
 - 缓存由 master 流向所有车道：只有 `unit` 车道在 master push 保存 pnpm store（五个并行写同一 key 会竞争并浪费压缩），只有 `web` 车道保存 Playwright 浏览器缓存；每个车道在每个事件上都恢复这两个缓存族。
 - `coverage` 以 `DSH_COVERAGE_MAX_WORKERS=3`（两个插桩 worker 加一个豁免重套件 worker）与 `DSH_GATE_CONCURRENCY=2` 运行，两个 coverage gate 以 2 + 1 = 3 个 fork 重叠而不是串行——按 4-vCPU 托管 runner 定尺寸。本车道的首次 Ubuntu 运行复现了 process-exit 竞态：场景宿主进程因读到写了一半的 tree.json 而崩溃，永远没有发布 ready 文件。宿主夹具现在对读取+解析做重试，场景读取 `DSH_COVERAGE_TEST_TIMEOUT_MS`（本车道设为 60000）放宽 ready 等待，且 ready 超时失败会带出宿主的退出码与 stderr。
+- 竞态修复后，该车道暴露了 fork 的真实覆盖率债：24 个文件低于逐文件 100% 门槛（fork 新增的包没有配套测试达标，fork 分叉的文件改了上游代码却没有带着覆盖率走，`util/atomic-write` 与上游快照完全一致却仍不达标）。它们以 `TODO(fork)` 标记列入 `vitest.config.ts` 的 fork 维护豁免块；其余所有文件保持 100% 门槛。
 - `unit`、`web`、`coverage` 在执行前准备 bubblewrap，与上游车道一致，沙箱套件真正执行而不是静默跳过。
 - `static` 车道只在 PR 专属的 `doc-sync` 步骤上把 `DSH_ARCHIVE_BASE_REF` 设为 PR base：空字符串会被脚本当作字面 ref 而非 HEAD 默认值。
 - `knip` 与 `duplication` 在 fork 既有债务修复前不进车道：knip 因一个未使用的桌面文件与依赖、108 条未列明的测试导入而失败，jscpd 因 14 处 plugin-installer clone 而失败。`check:ci:static` 内嵌 knip，因此车道以显式步骤运行其绿色子集而非聚合；债务修复后应重新采用 `check:ci:static` 加一个 duplication 步骤。
