@@ -97,7 +97,7 @@ before koffi ever loaded.
 
 ## Verification
 
-- Package Vitest: **50 passed, 1 skipped** after the coverage regression case is added.
+- Package Vitest: **51 passed, 1 skipped** after the coverage and unset-environment cases are added.
 - Coverage gate: the sanitizer's `undefined` branch is explicitly exercised so the
   per-file 100% branch threshold is retained.
 - Typecheck: passed.
