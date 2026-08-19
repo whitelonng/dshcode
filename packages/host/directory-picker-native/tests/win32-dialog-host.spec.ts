@@ -41,9 +41,17 @@ describe('spawnDialogWorker', () => {
     expect(process.env.ELECTRON_RUN_AS_NODE).toBe('')
   })
 
-  // Regression guard for the source plane: the worker must launch under plain
-  // node with native type stripping (no tsx bootstrap), so the absolute Windows
-  // path is a positional file argument, not a URL through a loader chain.
+  it('removes inherited flags that disable native TypeScript stripping', () => {
+    vi.stubEnv('NODE_OPTIONS', '--max-old-space-size=256 --no-experimental-strip-types --trace-warnings --no-strip-types')
+
+    spawnDialogWorker({ title: 'NODE_OPTIONS guard' })
+
+    expect(spawnMock).toHaveBeenCalledOnce()
+    const options = spawnMock.mock.calls[0]?.[2]
+    expect(options?.env?.NODE_OPTIONS).toBe('--max-old-space-size=256 --trace-warnings')
+    expect(process.env.NODE_OPTIONS).toBe('--max-old-space-size=256 --no-experimental-strip-types --trace-warnings --no-strip-types')
+  })
+
   it('launches the source worker under plain node with no loader flags', () => {
     spawnDialogWorker({ title: 'Source-plane guard' })
 
