@@ -5198,9 +5198,6 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
-      tsx:
-        specifier: ^4.19.2
-        version: 4.22.4
 
   packages/host/frontend-static:
     dependencies:

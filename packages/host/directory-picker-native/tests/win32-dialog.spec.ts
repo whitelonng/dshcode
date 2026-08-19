@@ -145,8 +145,9 @@ describe('pickWin32Directory', () => {
     expect(close.mock.calls.length).toBeGreaterThan(10)
   })
 
-  // POSIX hosts exercise the REAL default plumbing end to end: the tsx-bootstrapped
-  // worker spawns, loads koffi, fails to load ole32.dll, and reports the error.
+  // POSIX hosts exercise the REAL default plumbing end to end: the source
+  // worker spawns under plain node with native type stripping (no tsx
+  // bootstrap), loads koffi, fails to load ole32.dll, and reports the error.
   it.skipIf(process.platform === 'win32')('rejects through the real worker where the Win32 surface is unavailable', async () => {
     await expect(pickWin32Directory(live())).rejects.toThrow('win32 folder dialog failed')
   }, 30_000)

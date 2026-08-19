@@ -11,25 +11,50 @@ import { spawn, type StdioOptions } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import type { Win32DialogWorkerData } from './win32-dialog-worker.ts'
 
+const NODE_TYPE_STRIPPING_DISABLE_FLAGS = /(?:^|\s)--(?:no-experimental-strip-types|no-strip-types)(?=\s|$)/g
+
+/**
+ * Remove Node options that disable native TypeScript type stripping. The
+ * worker source plane relies on Node's native type stripping, and inherited
+ * NODE_OPTIONS can otherwise restore the same generic worker-exit failure.
+ */
+function sanitizeNodeOptions(value: string | undefined): string | undefined {
+  if (!value) return value
+  const sanitized = value
+    .replace(NODE_TYPE_STRIPPING_DISABLE_FLAGS, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return sanitized === '' ? undefined : sanitized
+}
+
 /**
  * Spawn the dialog child process. Built consumers launch the bundled CJS
  * entry next to this module under plain node; unbuilt (source) consumers
- * bootstrap tsx first, mirroring the dsh CLI's source launch. The dialog is
- * the child's first window, so Windows activates it without a foreground
- * call.
+ * run the worker directly under Node's native type stripping (stable since
+ * 22.18, covered by the engines range). That source arm requires a
+ * package-local graph whose every type-naming relative import is marked
+ * (`import type` or the inline `type` modifier): an unmarked one compiles
+ * and bundles, then fails at load under strip mode.
+ * The dialog is the child's first window, so Windows activates it without a
+ * foreground call.
  * @param data - the child payload (dialog title).
  * @returns the spawned child process.
  */
 export function spawnDialogWorker(data: Win32DialogWorkerData): ReturnType<typeof spawn> {
   // A packaged Electron host uses its branded application as process.execPath;
   // child-only Node mode bypasses application startup and its single-instance lock.
-  const env = { ...process.env, DSH_DIALOG_TITLE: data.title, ELECTRON_RUN_AS_NODE: '1' }
+  const baseEnv = { ...process.env, DSH_DIALOG_TITLE: data.title, ELECTRON_RUN_AS_NODE: '1' }
   const stdio: StdioOptions = ['ignore', 'inherit', 'inherit', 'ipc']
+  // Use pathname (not the raw URL): bundlers/tests may append query strings,
+  // which are not part of the source file extension.
   /* v8 ignore next 3 -- the built-output arm: tests always run unbuilt (src/) */
-  if (!import.meta.url.endsWith('.ts')) {
-    return spawn(process.execPath, [fileURLToPath(new URL('./worker.cjs', import.meta.url))], { env, stdio, windowsHide: true })
+  if (!new URL(import.meta.url).pathname.endsWith('.ts')) {
+    return spawn(process.execPath, [fileURLToPath(new URL('./worker.cjs', import.meta.url))], { env: baseEnv, stdio, windowsHide: true })
   }
-  return spawn(process.execPath, ['--import', import.meta.resolve('tsx/esm'), fileURLToPath(new URL('./win32-dialog-worker.ts', import.meta.url))], { env, stdio, windowsHide: true })
+  // `node <absolute .ts path>`: no loader hook is inserted before the path, so an
+  // absolute Windows path cannot be misparsed as an `e:` scheme URL.
+  const env = { ...baseEnv, NODE_OPTIONS: sanitizeNodeOptions(process.env.NODE_OPTIONS) }
+  return spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', import.meta.url))], { env, stdio, windowsHide: true })
 }
 
 export { closeThreadWindows } from './win32-dialog-bindings.ts'
