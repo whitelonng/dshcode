@@ -6,7 +6,9 @@ English | [中文](2026-08-19-win32-dialog-worker-source-launch.zh.md)
 
 ## Problem
 
-On Windows, the source-plane folder dialog worker never started: the Web UI reported `win32 folder dialog worker exited before reporting a result`. The failure was in the launch vector, not koffi: the source arm ran `node --import tsx/esm <absolute .ts path>`. With a loader registered through `--import`, an absolute path such as `E:\dsh\packages\host\directory-picker-native\src\win32-dialog-worker.ts` can be read as an `e:` scheme URL and rejected with `ERR_UNSUPPORTED_ESM_URL_SCHEME`, before the worker posts its first IPC message. The registered entry is what differs from this repository's other absolute-path launches: they register the full `tsx` entry (`packages/test-support/loader-smoke/src/index.ts`) and pass on Windows CI, while this arm registered the ESM-only `tsx/esm` hook.
+On Windows, the source-plane folder dialog worker never started: the Web UI reported `win32 folder dialog worker exited before reporting a result`, and the worker died before koffi ever loaded. The source arm ran `node --import tsx/esm <absolute .ts path>`, and the reported diagnosis was that a loader registered through `--import` makes an absolute path such as `E:\dsh\packages\host\directory-picker-native\src\win32-dialog-worker.ts` resolve as an `e:` scheme URL, rejected with `ERR_UNSUPPORTED_ESM_URL_SCHEME` before the first IPC message. Replacing that launch fixed the dialog on Windows.
+
+The vector alone does not explain the failure. `packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts` spawns `node --import tsx/esm <absolute path>` on win32 only, and `vitest.config.ts` treats that suite as the Windows signal that lets `runner.ts` leave the per-file coverage gate; `packages/test-support/loader-smoke/src/index.ts` launches an absolute path behind a resolved tsx loader from a spec Windows does not exclude. The factor unique to this call site is `ELECTRON_RUN_AS_NODE=1` over a `process.execPath` that a packaged host points at its own binary; whether that is what turned the path into an `e:` scheme URL is untested. The decision below does not rest on settling it.
 
 A raw `import.meta.url.endsWith('.ts')` check also decided which arm to launch. Vitest and Vite may decorate a module URL with a query string, and a decorated URL fails that suffix test, so a source-plane test could exercise the built arm — a bundler-specific test hazard rather than a cause of the Windows failure.
 
@@ -47,7 +49,7 @@ An inherited `--import` is preserved like any other entry, so a host that regist
 
 The `dsh` CLI source launch keeps the tsx ESM hook because its graph needs a transform mode Node no longer ships, per [the source-launch decision](../architecture/2026-07-29-dsh-source-launch-tsx-esm.md); that constraint is about the CLI graph, not about native stripping being unavailable in the engines range.
 
-`packages/sandbox/sandbox-local/src/index.ts` still builds this vector — the same ESM-only `tsx/esm` hook in front of an absolute path — for the windows-acl runner's source arm, and that graph is package-local and erasable too, so the same launch applies there. It is a separate change: it also rewrites the assertion in `packages/sandbox/sandbox-local/tests/local.spec.ts` that pins the `--import tsx/esm` prefix.
+`packages/sandbox/sandbox-local/src/index.ts` builds the same argv for the windows-acl runner's source arm, and `packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts` runs exactly that argv on win32, which is why it is not recorded here as a second instance of this failure. Its graph is package-local and erasable, so this launch would suit it as a simplification — one that rewrites the `--import tsx/esm` assertion in `packages/sandbox/sandbox-local/tests/local.spec.ts` — not as a fix.
 
 `packages/workflow/workflow-worker-thread/src/host.ts` selects its own source/built arm from the raw `import.meta.url`, but it boots the worker from a `data:` URL carrying a proper `file://` href, so the `e:` scheme failure cannot reach that launch. Its raw check does leave the query-string hazard: on a built tree a decorated URL selects `worker.cjs`, so a source-plane test there can exercise built code — which artifact a test covers, not a production launch.
 
@@ -61,7 +63,7 @@ The `dsh` CLI source launch keeps the tsx ESM hook because its graph needs a tra
 
 ## Consequences
 
-- Windows source launches (`pnpm dsh web`) run the worker directly under Node's native type stripping, so no loader chain can read the worker path as an `e:` scheme URL.
+- Windows source launches (`pnpm dsh web`) run the worker directly under Node's native type stripping, so the launch no longer depends on how a loader chain resolves the worker path.
 - Packaged hosts keep the unchanged CJS worker arm and an untouched `NODE_OPTIONS`.
 - The source arm depends on the engines range, a package-local erasable-only graph, marked type imports, and removal of inherited type-stripping disable flags; [the package README](../../../../packages/host/directory-picker-native/README.md) states those preconditions for consumers.
 - The Win32 smoke reaches the real source launch even where a module runner decorates URLs with query strings.
