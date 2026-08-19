@@ -93,17 +93,13 @@ describe('Fork CI workflow', () => {
       const job = workflow.jobs[jobName]
       if (!isRecord(job) || !Array.isArray(job.steps)) throw new TypeError(`${jobName} must define steps`)
 
-      const restore = job.steps.find(step => (
-        isRecord(step) && step.name === 'Restore pnpm store'
-      ))
+      const restore = job.steps.filter(isRecord).find(step => step.name === 'Restore pnpm store')
       expect(restore, `${jobName} must restore the pnpm store on every event`).toMatchObject({
         uses: 'actions/cache/restore@v4',
       })
       expect(restore?.if, `${jobName} restore must be unconditional`).toBeUndefined()
 
-      const save = job.steps.find(step => (
-        isRecord(step) && step.name === 'Save pnpm store (master push)'
-      ))
+      const save = job.steps.filter(isRecord).find(step => step.name === 'Save pnpm store (master push)')
       if (jobName === 'unit') {
         // The single producer: five parallel saves of one key would race and
         // waste cache compression on every master push.
@@ -136,7 +132,7 @@ describe('Fork CI workflow', () => {
     // The diagnostic web lane must not gate merges while unverified.
     expect(aggregate.needs).not.toContain('web')
     if (!Array.isArray(aggregate.steps)) throw new TypeError('Aggregate must define steps')
-    const failStep = aggregate.steps.find(step => isRecord(step) && step.name === 'Fail if any needed job did not succeed')
+    const failStep = aggregate.steps.filter(isRecord).find(step => step.name === 'Fail if any needed job did not succeed')
     expect(failStep).toMatchObject({
       if: "contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')",
     })
@@ -201,10 +197,10 @@ describe('Fork CI workflow', () => {
     const staticJob = workflow.jobs.static
     if (!isRecord(staticJob) || !Array.isArray(staticJob.steps)) throw new TypeError('static job must define steps')
     // Full history is load-bearing for the baseline the PR step passes.
-    const checkout = staticJob.steps.find(step => isRecord(step) && typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@'))
+    const checkout = staticJob.steps.filter(isRecord).find(step => typeof step.uses === 'string' && step.uses.startsWith('actions/checkout@'))
     expect(checkout).toMatchObject({ with: { 'fetch-depth': 0 } })
-    const prStep = staticJob.steps.find(step => isRecord(step) && step.name === 'Run documentation gates (pull request)')
-    const pushStep = staticJob.steps.find(step => isRecord(step) && step.name === 'Run documentation gates (push)')
+    const prStep = staticJob.steps.filter(isRecord).find(step => step.name === 'Run documentation gates (pull request)')
+    const pushStep = staticJob.steps.filter(isRecord).find(step => step.name === 'Run documentation gates (push)')
     // An empty string would be read as a literal ref instead of the HEAD default.
     expect(prStep).toMatchObject({
       if: "github.event_name == 'pull_request'",
@@ -232,14 +228,14 @@ describe('Fork CI workflow', () => {
 
     const web = workflow.jobs.web
     if (!isRecord(web) || !Array.isArray(web.steps)) throw new TypeError('web job must define steps')
-    const replayStep = web.steps.find(step => isRecord(step) && step.name === 'Build and run keyless web browser replay')
+    const replayStep = web.steps.filter(isRecord).find(step => step.name === 'Build and run keyless web browser replay')
     expect(replayStep).toMatchObject({
       env: { DSH_SNAPSHOT: 'replay' },
       run: 'pnpm run test:web',
     })
     // The Playwright cache producer stays single-writer: only the web lane
     // installs Chromium.
-    const playwrightSave = web.steps.find(step => isRecord(step) && step.name === 'Save Playwright browser cache (master push)')
+    const playwrightSave = web.steps.filter(isRecord).find(step => step.name === 'Save Playwright browser cache (master push)')
     expect(playwrightSave).toMatchObject({
       if: "github.event_name == 'push'",
       uses: 'actions/cache@v4',
