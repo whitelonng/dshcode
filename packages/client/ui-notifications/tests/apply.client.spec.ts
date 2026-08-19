@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry, createSnapshotStore, type ISessions, type SessionId, type SessionListState, type SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
-import { SettingsScopeBinder } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { apply as applySettingsBase, inject as injectSettingsBase } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-notifications/client'
 import type { NotificationsSectionInjected } from '../src/client/NotificationsSection.tsx'
 import { NotificationsSection } from '../src/client/NotificationsSection.tsx'
@@ -84,7 +84,7 @@ async function bench() {
     isLoopback: true,
   } as never)
   new TestRemote(ctx)
-  await ctx.plugin(SettingsScopeBinder).await()
+  await ctx.plugin({ inject: [...injectSettingsBase], apply: applySettingsBase }).await()
   const sessions = sessionsDouble()
   ctx.provide('sessions', sessions.sessions)
   return { ctx, sessions, locale, describe, mutate, notificationInstances }
