@@ -72,8 +72,7 @@ describe('spawnDialogWorker', () => {
     spawnDialogWorker({ title: 'Source-plane guard' })
 
     expect(spawnMock).toHaveBeenCalledOnce()
-    const args = spawnMock.mock.calls[0]?.[1]
-    expect(args).toEqual([fileURLToPath(new URL('../src/win32-dialog-worker.ts', import.meta.url))])
-    expect(args).not.toContain('--import')
+    expect(spawnMock.mock.calls[0]?.[0]).toBe(process.execPath)
+    expect(spawnMock.mock.calls[0]?.[1]).toEqual([fileURLToPath(new URL('../src/win32-dialog-worker.ts', import.meta.url))])
   })
 })
