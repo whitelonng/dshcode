@@ -83,7 +83,7 @@ worker 从带有正确 `file://` href 的 `data:` URL 启动，因此不存在�
 
 ## 验证
 
-- directory-picker-native Vitest：**50 passed, 1 skipped**。
+- directory-picker-native Vitest：**51 passed, 1 skipped**。
 - coverage：新增 sanitizer `undefined` 分支测试，保持每文件 100% branch threshold。
 - typecheck：通过。
 - lint：0 warnings，0 errors。
