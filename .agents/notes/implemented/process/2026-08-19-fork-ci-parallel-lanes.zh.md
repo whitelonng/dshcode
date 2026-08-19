@@ -16,7 +16,7 @@ Fork CI 现在是四个并行、无密钥的 job，汇聚到一个稳定判定�
 - `all-checks-passed` 以 `if: always()` 聚合三个阻塞车道，失败依赖永远不可能把必查项跳过成绿色；branch protection 只需勾选 `Fork CI / all checks passed`。
 - pull request 触发工作流；`cancel-in-progress` 只豁免 push（`${{ github.event_name != 'push' }}`），因为 master push 既是合并后信号也是缓存生产者，而被取代的 PR 与手动运行可丢弃。
 - 缓存由 master 流向所有车道：只有 `unit` 车道在 master push 保存 pnpm store（五个并行写同一 key 会竞争并浪费压缩），只有 `web` 车道保存 Playwright 浏览器缓存；每个车道在每个事件上都恢复这两个缓存族。
-- `coverage` 以 `DSH_COVERAGE_MAX_WORKERS=3`（两个插桩 worker 加一个豁免重套件 worker）与 `DSH_GATE_CONCURRENCY=2` 运行，两个 coverage gate 以 2 + 1 = 3 个 fork 重叠而不是串行——按 4-vCPU 托管 runner 定尺寸。重叠的 gate 会饿死时序敏感的场景宿主进程，因此该车道还设置 `DSH_COVERAGE_TEST_TIMEOUT_MS=60000`；process-exit 场景读取该旋钮，仅在本车道放宽 ready 等待（本车道的首次 Ubuntu 运行恰好复现了该竞态）。
+- `coverage` 以 `DSH_COVERAGE_MAX_WORKERS=3`（两个插桩 worker 加一个豁免重套件 worker）与 `DSH_GATE_CONCURRENCY=2` 运行，两个 coverage gate 以 2 + 1 = 3 个 fork 重叠而不是串行——按 4-vCPU 托管 runner 定尺寸。本车道的首次 Ubuntu 运行复现了 process-exit 竞态：场景宿主进程因读到写了一半的 tree.json 而崩溃，永远没有发布 ready 文件。宿主夹具现在对读取+解析做重试，场景读取 `DSH_COVERAGE_TEST_TIMEOUT_MS`（本车道设为 60000）放宽 ready 等待，且 ready 超时失败会带出宿主的退出码与 stderr。
 - `unit`、`web`、`coverage` 在执行前准备 bubblewrap，与上游车道一致，沙箱套件真正执行而不是静默跳过。
 - `static` 车道只在 PR 专属的 `doc-sync` 步骤上把 `DSH_ARCHIVE_BASE_REF` 设为 PR base：空字符串会被脚本当作字面 ref 而非 HEAD 默认值。
 - `knip` 与 `duplication` 在 fork 既有债务修复前不进车道：knip 因一个未使用的桌面文件与依赖、108 条未列明的测试导入而失败，jscpd 因 14 处 plugin-installer clone 而失败。`check:ci:static` 内嵌 knip，因此车道以显式步骤运行其绿色子集而非聚合；债务修复后应重新采用 `check:ci:static` 加一个 duplication 步骤。
