@@ -6,104 +6,64 @@ English | [中文](2026-08-19-win32-dialog-worker-source-launch.zh.md)
 
 ## Problem
 
-On Windows, the source-plane folder dialog worker never started: the Web UI reported
-`win32 folder dialog worker exited before reporting a result`. The failure was in the
-launch vector, not koffi: the source arm used `node --import tsx/esm <absolute .ts path>`.
-With a loader registered through `--import`, a Windows absolute path can be interpreted
-as an `e:` scheme URL and rejected with `ERR_UNSUPPORTED_ESM_URL_SCHEME` before the worker
-posts its first IPC message.
+On Windows, the source-plane folder dialog worker never started: the Web UI reported `win32 folder dialog worker exited before reporting a result`. The failure was in the launch vector, not koffi: the source arm used `node --import tsx/esm <absolute .ts path>`. With a loader registered through `--import`, a Windows absolute path can be interpreted as an `e:` scheme URL and rejected with `ERR_UNSUPPORTED_ESM_URL_SCHEME` before the worker posts its first IPC message.
 
-CI also had a test-selection blind spot: Vitest/Vite may append a query string to
-`import.meta.url`, so a raw `import.meta.url.endsWith('.ts')` check can select the built
-arm during source-plane tests. This is a bundler-specific test hazard, not a POSIX runtime
-root cause.
+The arm choice also read the raw `import.meta.url`. Vitest and Vite may decorate a module URL with a query string, and a decorated URL failed that `endsWith('.ts')` test, so a source-plane test could select the built arm. That is a bundler-specific test hazard, not a POSIX runtime cause of the Windows failure.
 
 ## Decision
 
 Run the source worker directly under Node's native type stripping:
 
 ```ts
-spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', import.meta.url))], ...)
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', import.meta.url))], {
+  stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+})
 ```
 
-The repository requires `^22.19.0 || >=24.0.0`, and this worker dependency graph is
-package-local: the worker, bindings, and logic modules import no workspace packages.
-The graph is erasable-only **with type-only relative imports**; `tsconfig.base.json`
-uses `verbatimModuleSyntax: false`, so value-position type imports are not automatically
-rewritten into type-only imports and would be unsafe for direct native stripping.
+The repository requires `^22.19.0 || >=24.0.0`, and this worker dependency graph is package-local: the worker, bindings, and logic modules import no workspace packages, so no tsconfig `paths` projection is needed. The graph is erasable-only **with type-only relative imports**; `tsconfig.base.json` sets `verbatimModuleSyntax: false`, so TypeScript does not force a value-position type import into a type-only one, and such an import would fail under direct native stripping.
 
-This is backed by existing repository precedent rather than a novel launch mode:
-`packages/code-runtime/code-runtime-worker-thread/src/index.ts` already loads its
-source worker directly under native type stripping and requires an erasable-only graph
-with type-only relative imports. `docs/testing.md#test-subprocess-launch-modes` also
-explicitly permits erasable `.ts` subprocesses to run directly with Node without tsx or
-the root paths map.
+`packages/code-runtime/code-runtime-worker-thread/src/index.ts` already loads its source worker this way under the same two preconditions, and `docs/testing.md#test-subprocess-launch-modes` permits erasable `.ts` subprocesses to run directly with Node without tsx or the root paths map.
 
-The packaged arm remains `worker.cjs` under plain node. The source/built arm now uses
-`new URL(import.meta.url).pathname.endsWith('.ts')` so bundler query strings cannot
-misclassify source modules as built.
+The packaged arm remains `worker.cjs` under plain node. Both arms choose from `new URL(import.meta.url).pathname.endsWith('.ts')`, so a query string on the module URL cannot misclassify a source module as built.
 
 ## Runtime inheritance
 
-A source worker can inherit `NODE_OPTIONS` from the host. Both spellings used across
-the supported Node range that disable native type stripping are removed from the child
-environment:
+A source worker inherits `NODE_OPTIONS` from the host, and either spelling that disables native type stripping across the supported Node range is removed from the child environment:
 
 - `--no-experimental-strip-types`
 - `--no-strip-types`
 
-Other `NODE_OPTIONS` entries are preserved. Sanitization is deliberately scoped to the
-source arm because the packaged `worker.cjs` arm has no native type-stripping dependency
-and should not have its inherited options rewritten for an unrelated reason.
+Every other `NODE_OPTIONS` entry is preserved, and an options string that carried only disable flags leaves the variable unset in the child. Sanitization is scoped to the source arm: the packaged `worker.cjs` arm has no native type-stripping dependency, so its inherited options are passed through untouched.
 
-The source graph's erasability is also guarded by the real worker launch: introducing a
-non-erasable construct such as a value `enum` or losing a type-only import causes native
-Node execution to fail before the expected Win32 dialog error, so POSIX CI catches syntax
-or import drift in this graph.
+The two preconditions are enforced by the real worker launch rather than by a static gate. A non-erasable construct such as a value `enum`, or a type-only import degraded to a value import, makes Node reject the entry before the worker reports, which surfaces as a worker-exit rejection instead of the expected Win32 dialog error.
 
 ## Related launch paths
 
-The CLI source graph still uses tsx because it has a broader runtime dependency graph;
-that is an intentional separate case. The packaged dialog worker is already CJS and does
-not need the source-plane treatment.
+The `dsh` CLI source launch keeps the tsx ESM hook because its graph needs a transform mode Node no longer ships, per [the source-launch decision](../architecture/2026-07-29-dsh-source-launch-tsx-esm.md); that constraint is about the CLI graph, not about native stripping being unavailable in the engines range.
 
-`packages/workflow/workflow-worker-thread/src/host.ts:69` also has source/built arm
-detection, but its worker boots from a `data:` URL with a proper `file://` href, so it
-does not expose the Windows `e:`-scheme failure addressed here. It remains unchanged;
-the shared lesson is to use URL pathname when bundler query strings can decorate the URL.
+`packages/workflow/workflow-worker-thread/src/host.ts` selects its own source/built arm from the raw `import.meta.url`, but it boots the worker from a `data:` URL carrying a proper `file://` href, so the Windows `e:`-scheme failure cannot reach that launch.
 
 ## Alternatives considered
 
-**Pass the worker as a `file://` URL instead of a path.** Rejected: tsx's tsconfig-paths
-hook mangles `file://` URLs into `<cwd>\\file:\\<path>` (`ERR_MODULE_NOT_FOUND`); keeping
-any tsx involvement leaves a fragile launch.
+**Pass the worker as a `file://` URL instead of a path.** Rejected: tsx's tsconfig-paths hook mangles `file://` URLs into `<cwd>\file:\<path>` (`ERR_MODULE_NOT_FOUND`); keeping any tsx involvement leaves a fragile launch.
 
-**Probe koffi availability and fall back to pure-Node dialogs.** Out of scope:
-dshcode pins koffi 3.1.1, which predates the broken 3.1.3/3.1.4 win32-x64 prebuilds, so
-the worker's koffi usage is not the failure on this codebase; the worker itself crashed
-before koffi ever loaded.
+**Probe koffi availability and fall back to pure-Node dialogs.** Out of scope: dshcode pins koffi 3.1.1, which predates the broken 3.1.3/3.1.4 win32-x64 prebuilds, so the worker's koffi usage is not the failure on this codebase; the worker itself crashed before koffi ever loaded.
+
+**Pass an explicit enabling flag to the child instead of sanitizing `NODE_OPTIONS`.** Rejected: Node already renamed the negation of this feature once (`--no-experimental-strip-types`, then `--no-strip-types`), so a hardcoded enabling flag couples the launch to a Node line; removing both known disable spellings needs no such pin and leaves every unrelated host option intact.
 
 ## Consequences
 
-- Windows source launches (`pnpm dsh web`) run the worker directly under Node's native
-  type stripping, removing the `e:` scheme failure caused by the previous loader chain.
-- Packaged hosts continue launching the unchanged CJS worker arm, without rewriting
-  their `NODE_OPTIONS`.
-- The source arm remains dependent on the repository Node engines range, an erasable-only
-  package-local graph, type-only relative imports, and removal of inherited type-stripping
-  disable flags.
-- The Win32 source smoke test now reaches the actual source launch even when Vitest/Vite
-  decorates module URLs with query strings.
+- Windows source launches (`pnpm dsh web`) run the worker directly under Node's native type stripping, so the `e:` scheme failure of the loader chain is gone.
+- Packaged hosts keep the unchanged CJS worker arm and an untouched `NODE_OPTIONS`.
+- The source arm depends on the engines range, a package-local erasable-only graph, type-only relative imports, and removal of inherited type-stripping disable flags; `packages/host/directory-picker-native/README.md` records that for consumers.
+- The Win32 smoke reaches the real source launch even where a module runner decorates URLs with query strings.
 
 ## Verification
 
-- Package Vitest: **51 passed, 1 skipped** after the coverage and unset-environment cases are added.
-- Coverage gate: the sanitizer's `undefined` branch is explicitly exercised so the
-  per-file 100% branch threshold is retained.
-- Typecheck: passed.
-- Lint: passed with 0 warnings and 0 errors.
-- `verify-translation-pairing`: passed with the bilingual sidecar record.
-- `verify-agent-note-classification`: passed.
-- `verify-agent-note-format`: required `Alternatives considered` and `Consequences` are
-  restored.
-- The existing real Win32 smoke continues to exercise the source-plane dialog launch.
+- `packages/host/directory-picker-native/tests/win32-dialog-host.spec.ts` pins the source launch: `process.execPath` runs the worker path as the sole positional argument, with no loader flag.
+- The same suite pins all three `NODE_OPTIONS` inputs: a mixed string keeps its unrelated entries, a string of only disable flags leaves the variable unset, and an unset variable stays unset without the parent being mutated.
+- `tests/win32-dialog.spec.ts` launches the real source worker on POSIX, which is what catches a non-erasable construct or a lost type-only import in this graph.
+- On win32 the same suite opens and abort-closes a real dialog through the source arm; `tests/built-worker.e2e.ts` owns the packaged `worker.cjs` arm this decision leaves unchanged.
