@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-Windows 上源码面的文件夹对话框 worker 从未启动成功：Web UI 只报出 `win32 folder dialog worker exited before reporting a result`。故障出在启动向量而非 koffi：源码分支运行的是 `node --import tsx/esm <绝对路径 .ts>`。通过 `--import` 注册 loader 后，像 `E:\dsh\packages\host\directory-picker-native\src\win32-dialog-worker.ts` 这样的绝对路径可能被读作 `e:` scheme URL 并以 `ERR_UNSUPPORTED_ESM_URL_SCHEME` 拒绝，此时 worker 还没发出第一条 IPC 消息。
+Windows 上源码面的文件夹对话框 worker 从未启动成功：Web UI 只报出 `win32 folder dialog worker exited before reporting a result`。故障出在启动向量而非 koffi：源码分支运行的是 `node --import tsx/esm <绝对路径 .ts>`。通过 `--import` 注册 loader 后，像 `E:\dsh\packages\host\directory-picker-native\src\win32-dialog-worker.ts` 这样的绝对路径可能被读作 `e:` scheme URL 并以 `ERR_UNSUPPORTED_ESM_URL_SCHEME` 拒绝，此时 worker 还没发出第一条 IPC 消息。与仓库中其他「绝对路径」启动的区别在于注册的入口：它们注册的是完整的 `tsx` 入口（`packages/test-support/loader-smoke/src/index.ts`），在 Windows CI 上是绿的，而这个分支注册的是仅 ESM 的 `tsx/esm` hook。
 
 决定启动哪个分支的判断此前读的是裸 `import.meta.url`。Vitest 与 Vite 可能给模块 URL 附加查询串，带查询串的 URL 通不过这个后缀判断，于是源码面的测试可能跑到 built 分支上——这属于 bundler 测试环境的风险，而不是 Windows 故障的成因。
 
@@ -30,7 +30,7 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 打包分支继续由纯 node 启动 `worker.cjs`。两个分支都由 `new URL(import.meta.url).pathname.endsWith('.ts')` 选择，模块 URL 上的查询串无法把源码模块误判为构建产物。
 
-这两个前提都没有静态门禁，由真实 worker 启动来保证。出现 value `enum`，或有类型导入漏了标注，Node 会在 worker 上报之前拒绝入口，表现为 worker 退出类拒绝，而不是预期中的 Win32 对话框错误。
+这两个前提都没有静态门禁，由真实 worker 启动来保证。出现剥离模式拒绝的语法——value `enum`、带运行时成员的 `namespace`、参数属性、装饰器——或有类型导入漏了标注，Node 会在 worker 上报之前拒绝入口，表现为 worker 退出类拒绝，而不是预期中的 Win32 对话框错误。
 
 ## 继承的 NODE_OPTIONS
 
@@ -47,9 +47,9 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 `dsh` CLI 的源码启动保留 tsx ESM hook，因为它的源码图需要 Node 已不再提供的 transform 模式，见[源码启动决策](../architecture/2026-07-29-dsh-source-launch-tsx-esm.md)；那条约束针对的是 CLI 源码图，而不是说 engines 范围内没有原生剥离。
 
-`packages/sandbox/sandbox-local/src/index.ts` 仍在为 windows-acl runner 的源码分支拼出同一个启动向量，而那个源码图同样包内闭合且可擦除，因此同样的启动方式适用。它属于独立改动：一并要改写 `packages/sandbox/sandbox-local/tests/local.spec.ts` 中钉住 `--import tsx/esm` 前缀的断言。
+`packages/sandbox/sandbox-local/src/index.ts` 仍在为 windows-acl runner 的源码分支拼出同一个启动向量——同样是仅 ESM 的 `tsx/esm` hook 加绝对路径，而那个源码图同样包内闭合且可擦除，因此同样的启动方式适用。它属于独立改动：一并要改写 `packages/sandbox/sandbox-local/tests/local.spec.ts` 中钉住 `--import tsx/esm` 前缀的断言。
 
-`packages/workflow/workflow-worker-thread/src/host.ts` 同样从裸 `import.meta.url` 选择源码/构建分支，但它的 worker 从携带正确 `file://` href 的 `data:` URL 启动，`e:` scheme 故障触及不到那条启动路径。
+`packages/workflow/workflow-worker-thread/src/host.ts` 同样从裸 `import.meta.url` 选择源码/构建分支，但它的 worker 从携带正确 `file://` href 的 `data:` URL 启动，`e:` scheme 故障触及不到那条启动路径。它的裸判断确实留下了查询串风险：在已构建的树上，带查询串的 URL 会选中 `worker.cjs`，于是那里的源码面测试可能跑到构建产物上——这影响测试覆盖的是哪个产物，而非生产启动。
 
 ## 考虑过的替代方案
 

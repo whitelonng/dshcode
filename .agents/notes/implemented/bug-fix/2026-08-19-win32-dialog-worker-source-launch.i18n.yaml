@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-19-win32-dialog-worker-source-launch.md
-2026-08-19-win32-dialog-worker-source-launch.md: a61e2cb8b8c2a7bf95098a7aacc18a7c8973e362
-2026-08-19-win32-dialog-worker-source-launch.zh.md: 0f99fa039a2dfd9a30c16b9969dace8aef54c909
+2026-08-19-win32-dialog-worker-source-launch.md: 44eb6634d44c7338bae7ac90c5f50aecfa142bd2
+2026-08-19-win32-dialog-worker-source-launch.zh.md: 9055289fa40a914f6506064b63388520352cf29d
