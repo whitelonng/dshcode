@@ -94,6 +94,7 @@ function injectedFacade(graph: WebBootGraph): { html: string; target: ClientModu
 
 const bootGraph = (): WebBootGraph => ({
   rev: 'graph',
+  version: '1.0.0',
   entries: [
     { id: MODULES_ID, url: '/plugins/modules.js?rev=m', rev: 'm' },
     { id: RUNTIME_ID, url: '/plugins/runtime.js?rev=r', rev: 'r' },

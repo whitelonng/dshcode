@@ -235,6 +235,9 @@
       "@deepseek-ai/dsh-client-ui-settings-models": ["./packages/client/ui-settings-models/src"],
       "@deepseek-ai/dsh-client-locale": ["./packages/client/locale/src"],
       "@deepseek-ai/dsh-client-web": ["./packages/client/web/src"],
+      "@deepseek-ai/dsh-client-schema-form": ["./packages/client/schema-form/src"],
+      "@deepseek-ai/dsh-client-schema-form/invariant": ["./packages/client/schema-form/src/invariant.ts"],
+      "@deepseek-ai/dsh-client-web-react": ["./packages/client/web-react/src"],
       // sdk/ folders are role-named without their npm-side sdk/jsonrpc prefixes,
       // so the generic wildcard cannot map these three package names.
       "@deepseek-ai/dsh-sdk-client": ["./packages/sdk/client/src"],
