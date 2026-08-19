@@ -31,8 +31,10 @@ function sanitizeNodeOptions(value: string | undefined): string | undefined {
  * Spawn the dialog child process. Built consumers launch the bundled CJS
  * entry next to this module under plain node; unbuilt (source) consumers
  * run the worker directly under Node's native type stripping (stable since
- * 22.18, covered by the engines range). The source worker dependency graph
- * is package-local and uses erasable TS with type-only relative imports.
+ * 22.18, covered by the engines range). That source arm requires a
+ * package-local graph whose every type-naming relative import is marked
+ * (`import type` or the inline `type` modifier): an unmarked one compiles
+ * and bundles, then fails at load under strip mode.
  * The dialog is the child's first window, so Windows activates it without a
  * foreground call.
  * @param data - the child payload (dialog title).

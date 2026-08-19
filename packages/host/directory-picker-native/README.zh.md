@@ -18,4 +18,4 @@
 
 - **Linux 依赖桌面工具**——Zenity 与 KDialog 均未安装时，`pick` 以包含解决建议的错误拒绝；它不会回退为手输路径提示（组合层面的回退是 browse 后端）。
 - **Windows 没有机制级回退**——通过打包依赖 koffi 运行的子进程选择器是唯一原生层级，因此 COM 拒绝或对话框崩溃会直接上报失败。组合层面的回退仍是 browse 后端。
-- **Windows 源码层启动依赖原生 TypeScript 类型剥离**——源码 worker 在仓库 engines 范围（`^22.19.0 || >=24.0.0`）内由 Node 直接执行，因此其包内闭合的依赖图必须保持可擦除 TypeScript 且相对导入全部为仅类型导入。源码子进程还会移除继承而来的关闭原生类型剥离的 `NODE_OPTIONS` flag（`--no-experimental-strip-types` 与 `--no-strip-types`）；无关选项原样保留。打包后的 CJS worker 没有这项源码层依赖。
+- **Windows 源码面启动依赖原生 TypeScript 类型剥离**——Node 在仓库 engines 范围（`^22.19.0 || >=24.0.0`）内直接执行源码 worker，因此其包内闭合的依赖图必须保持可擦除 TypeScript，且凡是命名类型的相对导入都必须标注（`import type` 或行内 `type` 修饰符）；漏标注的导入能编译通过、却会在加载时失败。源码子进程还会移除继承而来的关闭原生类型剥离的 `NODE_OPTIONS` 条目（`--no-experimental-strip-types`、`--no-strip-types`），其余条目一律保留——包括 `--import` loader，而它会把本后端所规避的启动故障重新引入。打包后的 CJS worker 不含这些源码面依赖。
