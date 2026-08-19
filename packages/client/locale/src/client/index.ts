@@ -87,12 +87,12 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /**
- * English is both the locale the UI opens in when the browser names no shipped
- * language (and for non-browser runs), and the dictionary consulted after the
- * active locale misses a key. One constant serves both because the shipped
- * `zh`/`en` dictionaries carry identical key sets, so neither direction can
- * leave a key unresolved; the DSHCode product is Chinese-first, so the
- * residual case points at Chinese for a browser naming neither shipped
+ * Chinese is both the locale the UI opens in when the browser names no
+ * shipped language (and for non-browser runs), and the dictionary consulted
+ * after the active locale misses a key. One constant serves both because the
+ * shipped `zh`/`en` dictionaries carry identical key sets, so neither
+ * direction can leave a key unresolved; the DSHCode product is Chinese-first,
+ * so the residual case points at Chinese for a browser naming neither shipped
  * language.
  */
 export const FALLBACK_LOCALE: LocaleId = 'zh'

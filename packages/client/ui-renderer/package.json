@@ -49,7 +49,8 @@
   "peerDependencies": {
     "@deepseek-ai/dsh-client-runtime": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-client-modules": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-client-runtime": "workspace:^",

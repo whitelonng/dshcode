@@ -1,0 +1,64 @@
+.shell {
+  position: relative;
+  height: 100%;
+}
+
+.titlebar {
+  -webkit-app-region: drag;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  background: var(--dsw-alias-bg-base, #ffffff);
+  border-bottom: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  z-index: 20;
+}
+
+/* Windows titleBarOverlay reserves the right side for the native window
+   controls; env(titlebar-area-width) is the safe content width. */
+.inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: env(titlebar-area-width, 100%);
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.brand {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #0f1115);
+  user-select: none;
+}
+
+.menu {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #61666b);
+  cursor: pointer;
+}
+
+.menu:hover {
+  background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 6%));
+  color: var(--dsw-alias-label-primary, #0f1115);
+}
+
+/* The absolute title bar (38px + 1px border) overlays the top of the
+   application frame; the frame itself keeps its 100% height. */
+.body {
+  height: 100%;
+  padding-top: 39px;
+  box-sizing: border-box;
+}

@@ -5,7 +5,9 @@
 import type { ReactNode } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import { bindSnapshotSelector } from './bind.ts'
+import { DesktopTitleBar } from './DesktopTitleBar.tsx'
 import { DocumentTitle } from './DocumentTitle.tsx'
+import { VersionCaption } from './VersionCaption.tsx'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 
 /** Inputs available after the UI renderer's inject set activates. */
@@ -34,7 +36,10 @@ export function buildRenderApp(deps: AssemblyDeps): () => ReactNode {
   return () => (
     <>
       <SessionDocumentTitle />
-      {ctx.slots.renderSlot('root', {})}
+      <DesktopTitleBar>
+        {ctx.slots.renderSlot('root', {})}
+      </DesktopTitleBar>
+      <VersionCaption />
     </>
   )
 }
