@@ -74,7 +74,7 @@ describe('bootstrap failure rendering', () => {
     await expectBootFailure(() => {
       installFacade()
       const duplicate = { id: 'duplicate', url: '/duplicate/client.js', rev: '1' }
-      win.__DSH_BOOT__ = { rev: 'graph', entries: [duplicate, duplicate] }
+      win.__DSH_BOOT__ = { rev: 'graph', version: '1.0.0', entries: [duplicate, duplicate] }
     }, 'duplicate graph entry "duplicate"')
   })
 })
@@ -90,7 +90,7 @@ describe('plugin activation', () => {
       { id: MODULES_ID, url: '/modules.js', rev: '1' },
       { id: 'renderer', url: '/renderer.js', rev: '1' },
     ]
-    win.__DSH_BOOT__ = { rev: 'graph', entries }
+    win.__DSH_BOOT__ = { rev: 'graph', version: '1.0.0', entries }
     const registrations = new Map<string, ClientBundleRegistration>([
       ['/consumer.js', {
         id: 'consumer',

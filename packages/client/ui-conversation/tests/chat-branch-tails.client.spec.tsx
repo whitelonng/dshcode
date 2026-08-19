@@ -1079,6 +1079,7 @@ const props = (
 ): ChatNodeViewProps<'user'> => ({
   node: node as ChatNodeViewProps<'user'>['node'],
   t,
+  renderMessageImages,
   loadImage: vi.fn(),
   deleteAt: overrides.deleteAt ?? vi.fn(() => Promise.resolve(true)),
   editAt: overrides.editAt ?? vi.fn(() => Promise.resolve(true)),

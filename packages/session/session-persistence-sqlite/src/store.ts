@@ -170,6 +170,20 @@ export class SqliteStore implements PersistenceBackend<number> {
     return { meta: rowToMeta(snapshot.row), events: preserved.filter(event => event.seq >= fromSeq) }
   }
 
+  async deleteStored(id: SessionId, signal?: AbortSignal): Promise<boolean> {
+    await this.open()
+    await this.observe(signal)
+    this.db.exec(sql('begin-immediate'))
+    try {
+      validateSchemaForMutation(this.databaseConstructor, this.db, this.databasePath)
+      const removed = this.db.prepare(sql('delete-session')).run(id)
+      this.db.exec(sql('commit'))
+      return removed.changes > 0
+    } catch (error: unknown) {
+      this.rollback(error, 'delete')
+    }
+  }
+
   async appendBatch(
     meta: SessionHeader,
     events: readonly SessionEvent[],
