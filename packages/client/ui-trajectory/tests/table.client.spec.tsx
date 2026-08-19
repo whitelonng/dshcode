@@ -6,10 +6,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { TrajectoryTable } from '../src/client/TrajectoryTable.tsx'
 import type { TrajectoryTurnModel } from '../src/client/layout.ts'
 
-afterEach(() => {
+afterEach(async () => {
   cleanup()
   vi.restoreAllMocks()
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollTo')
+  // The virtualizer's scrollend fallback debounces notify by
+  // isScrollingResetDelay on the jsdom window; a scroll in the last test can
+  // leave that timer pending past the environment teardown, where its
+  // callback reads a destroyed `window` (ReferenceError) and fails the whole
+  // run. Let it fire while jsdom is still alive.
+  await new Promise(resolve => setTimeout(resolve, 200))
 })
 
 const TURNS: readonly TrajectoryTurnModel[] = [{
