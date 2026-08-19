@@ -167,19 +167,19 @@ describe('candidates', () => {
     releaseFiles()
     await expect(pending).resolves.toEqual([
       expect.objectContaining({
-        name: 'Folder · src/',
+        name: '文件夹 · src/',
         description: 'src',
-        section: 'Files & folders',
+        section: '文件与文件夹',
       }),
       expect.objectContaining({
-        name: 'File · a b.md',
+        name: '文件 · a b.md',
         description: 'docs/a b.md',
-        section: 'Files & folders',
+        section: '文件与文件夹',
       }),
       expect.objectContaining({
         name: 'Session · Research',
         description: 'source · /project · 2023-11-14T22:13:20.000Z',
-        section: 'Session conversations',
+        section: 'Session 对话',
       }),
     ])
   })
@@ -203,7 +203,7 @@ describe('candidates', () => {
     }))
     const { source } = await bench(files, sessions)
     const quoted = await source.candidates(session, request('READ', { quoted: true }))
-    expect(quoted).toEqual([expect.objectContaining({ name: 'File · README.md' })])
+    expect(quoted).toEqual([expect.objectContaining({ name: '文件 · README.md' })])
     expect(source.onPick({
       candidate: quoted[0]!,
       session,
@@ -269,7 +269,7 @@ describe('candidates', () => {
     await expect(source.candidates(session, request('same'))).resolves.toEqual([
       expect.objectContaining({
         name: 'Session · same',
-        description: '(no cwd) · 1970-01-01T00:00:00.000Z',
+        description: '（无工作目录） · 1970-01-01T00:00:00.000Z',
       }),
     ])
   })

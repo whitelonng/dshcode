@@ -41,9 +41,9 @@ External packages that a workspace package resolves at runtime. The tier covers 
 | [`@linxin666/dsh-client-ui-skin-center`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
 | [`@linxin666/dsh-client-ui-skin-whale-song`](https://github.com/zhu1090093659/dsh-web-ui) | BSD-3-Clause |
 | [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) | MIT |
-| [`@openai/codex`](https://github.com/openai/codex) | Apache-2.0 |
 | [`@omdsh-dev/dsh-annotation`](https://github.com/omdsh-dev/dsh-annotation) | MIT |
 | [`@omdsh-dev/dsh-genui`](https://github.com/omdsh-dev/dsh-genui) | MIT |
+| [`@openai/codex`](https://github.com/openai/codex) | Apache-2.0 |
 | [`@opentelemetry/api`](https://github.com/open-telemetry/opentelemetry-js) | Apache-2.0 |
 | [`@opentelemetry/api-logs`](https://github.com/open-telemetry/opentelemetry-js) | Apache-2.0 |
 | [`@opentelemetry/exporter-logs-otlp-http`](https://github.com/open-telemetry/opentelemetry-js) | Apache-2.0 |
