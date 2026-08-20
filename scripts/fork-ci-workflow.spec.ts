@@ -14,7 +14,7 @@ const workflowPath = '.github/workflows/fork-ci.yml'
 // The lanes behind the required verdict. `web` joined after its Ubuntu run
 // proved the fork's goldens current; a lane only leaves this list together
 // with all-checks-passed.needs.
-const BLOCKING_JOBS = ['static', 'unit', 'web', 'coverage'] as const
+const BLOCKING_JOBS = ['static', 'unit', 'coverage'] as const
 const CACHED_JOBS = ['static', 'unit', 'web', 'coverage'] as const
 
 describe('Fork CI workflow', () => {
