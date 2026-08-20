@@ -170,7 +170,13 @@ export class InputHub implements SessionInputResolver {
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
     if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
-    return this.conversation().sendSession(session, text, imageIds, mode, signal)
+    // Legacy send hooks (e.g. the describe-image plugin's installSendHook)
+    // wrap sendSession and resolve `undefined` on success — their failure
+    // path throws instead of returning `{ kind: 'error' }`. Normalize the
+    // void resolution to a success outcome so the input state machine still
+    // releases consumed draft images after a wrapped send.
+    return Promise.resolve(this.conversation().sendSession(session, text, imageIds, mode, signal))
+      .then(outcome => outcome ?? { kind: 'success' as const })
   }
 
   /**
