@@ -46,3 +46,8 @@ packages/*/*/src/**/*.js
 packages/*/*/src/**/*.js.map
 packages/*/*/src/**/*.d.ts
 packages/*/*/src/**/*.d.ts.map
+!packages/*/*/src/**/css-modules.d.ts
+!packages/*/*/src/**/env.d.ts
+!packages/*/*/src/**/ripgrep.d.ts
+!packages/*/*/src/**/turndown-plugin-gfm.d.ts
+!packages/*/*/src/**/use-sync-external-store.d.ts

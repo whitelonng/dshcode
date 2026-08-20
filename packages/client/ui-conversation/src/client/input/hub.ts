@@ -162,21 +162,21 @@ export class InputHub implements SessionInputResolver {
    * exactly one path; a failed first prompt is an ordinary prompt failure
    * (banner via promptError, draft restored only while untouched).
    */
-  private sink(
+  private async sink(
     session: SessionFace,
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
-    if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
+    if (text === '' && imageIds.length === 0) return { kind: 'success' }
     // Legacy send hooks (e.g. the describe-image plugin's installSendHook)
     // wrap sendSession and resolve `undefined` on success — their failure
     // path throws instead of returning `{ kind: 'error' }`. Normalize the
     // void resolution to a success outcome so the input state machine still
     // releases consumed draft images after a wrapped send.
-    return Promise.resolve(this.conversation().sendSession(session, text, imageIds, mode, signal))
-      .then(outcome => outcome ?? { kind: 'success' as const })
+    const outcome = await this.conversation().sendSession(session, text, imageIds, mode, signal) as SubmitOutcome | undefined
+    return outcome ?? { kind: 'success' }
   }
 
   /**

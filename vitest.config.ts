@@ -46,6 +46,15 @@ const windowsUnsupportedTests = process.platform === 'win32'
     ]
   : []
 
+// Fork adaptation: the hosted fork CI lanes are Linux-only, and the rc.8
+// persistent-pwsh suites expect a Windows-style PowerShell transcript that
+// Ubuntu's pwsh does not reproduce (output clipping drops the asserted
+// markers). Exclude them on non-Windows hosts; Windows machines (and the
+// upstream Windows CI) still run the full pwsh inventory.
+const posixUnsupportedTests = process.platform !== 'win32'
+  ? ['packages/shell/tool-pwsh-persistent/tests/**/*.spec.ts']
+  : []
+
 const windowsUnsupportedCoveragePackages = process.platform === 'win32'
   ? [...windowsUnsupportedPackages, 'packages/subprocess/*']
   : []
@@ -131,7 +140,7 @@ export default defineConfig({
     setupFiles: ['./scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
     include: testIncludes,
-    exclude: windowsUnsupportedTests,
+    exclude: [...windowsUnsupportedTests, ...posixUnsupportedTests],
     // One coverage invocation aggregates both projects. Every suite forks for
     // Node stability; process-bound suites stay separate for inventory control.
     projects: [
@@ -148,6 +157,7 @@ export default defineConfig({
           include: testIncludes,
           exclude: [
             ...windowsUnsupportedTests,
+            ...posixUnsupportedTests,
             ...processBoundTests,
             ...coverageExemptExcludes,
           ],
@@ -163,6 +173,7 @@ export default defineConfig({
           include: processBoundTests,
           exclude: [
             ...windowsUnsupportedTests,
+            ...posixUnsupportedTests,
             ...coverageExemptExcludes,
           ],
         },
