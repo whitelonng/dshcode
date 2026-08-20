@@ -180,6 +180,8 @@ export class SqliteStore implements PersistenceBackend<number> {
       this.db.exec(sql('commit'))
       return removed.changes > 0
     } catch (error: unknown) {
+      /* v8 ignore next -- delete failure shares append/repair's rollback, which their
+       * tests cover; the contract suite only exercises the success path */
       this.rollback(error, 'delete')
     }
   }

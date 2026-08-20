@@ -24,7 +24,7 @@ Status: implemented
 
 ### web 壳仅在自定义框架下渲染该栏
 
-壳组装（`packages/client/web/src/app.tsx`）用 `DesktopTitleBar` 组件包裹 root 插槽渲染。无桥或原生框架时，组件原样渲染子节点——普通浏览器与 macOS 的布局输出完全不变，现有快照与 e2e 覆盖保持有效。自定义框架下渲染一条可拖拽条（产品名 + 菜单按钮，`-webkit-app-region: drag`，按钮 no-drag），绝对定位覆盖顶部 38 px，同时带 padding 的 body 宿主让应用框架保持全高；`env(titlebar-area-width)` 保证内容不与原生 overlay 按钮重叠。
+壳组装（`packages/client/ui-renderer/src/client/app.tsx`）用 `DesktopTitleBar` 组件包裹 root 插槽渲染。无桥或原生框架时，组件原样渲染子节点——普通浏览器与 macOS 的布局输出完全不变，现有快照与 e2e 覆盖保持有效。自定义框架下渲染一条可拖拽条（产品名 + 菜单按钮，`-webkit-app-region: drag`，按钮 no-drag），绝对定位覆盖顶部 38 px，同时带 padding 的 body 宿主让应用框架保持全高；`env(titlebar-area-width)` 保证内容不与原生 overlay 按钮重叠。
 
 ## 验证
 
