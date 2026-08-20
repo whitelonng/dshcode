@@ -54,7 +54,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-async function bench() {
+async function bench(namespaces?: unknown[]) {
   // A granted browser Notification API so the wired sink dispatches in the spec.
   const notificationInstances = stubGrantedNotification()
   const ctx = new Context()
@@ -72,7 +72,7 @@ async function bench() {
   })
   const describe = vi.fn(() => Promise.resolve({
     rpcId: 'notifications-describe' as never,
-    result: { ok: true as const, value: { writable: true, hasDocument: true, namespaces: [namespace()] } },
+    result: { ok: true as const, value: { writable: true, hasDocument: true, namespaces: namespaces ?? [namespace()] } },
   }))
   const mutate = vi.fn((request: { ns: string; ops: { path: string[]; value?: unknown }[] }) => {
     const op = request.ops[0]!
@@ -138,6 +138,18 @@ describe('ui-notifications apply', () => {
 
     const { instance } = faceOf(b.ctx.get('slots') as SlotRegistry)
     expect(instance.getSnapshot()).toMatchObject({ approvals: true, completions: true, permission: 'granted' })
+  })
+
+  it('mirrors schema defaults when the settings document has no notifications section', async () => {
+    // The document exists but the namespace is absent: the scope reports
+    // `unavailable` with no value, and the section falls back to the defaults.
+    const b = await bench([])
+    declareSection(b.ctx.get('slots') as SlotRegistry)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const { instance } = faceOf(b.ctx.get('slots') as SlotRegistry)
+    expect(instance.getSnapshot()).toMatchObject({
+      approvals: true, completions: true, settingsStatus: 'unavailable',
+    })
   })
 
   it('routes face writes to the settings transport', async () => {

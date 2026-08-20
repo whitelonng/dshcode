@@ -864,6 +864,33 @@ describe('inject: execution point, parameter derivation, cache granularity', () 
     expect(seen.at(-1)!['read']).toBe('hot')
   })
 
+  it('binds an empty-named hook source under the bare use selector', () => {
+    const h = makeHost()
+    h.declare('k.single', SINGLE_ROOT)
+    const badge = observable('cold')
+    const seen: Record<string, unknown>[] = []
+    h.add('k.single', {
+      component: (props: { use?: <S>(sel: (s: string) => S) => S }) => {
+        seen.push({ read: props.use!(s => s) })
+        return null
+      },
+      inject: () => ({ hooks: { '': badge } }),
+    })
+    mountRoot(h, { 'k.single': SINGLE_ROOT }, renderSlot => renderSlot('k.single', {}))
+    expect(seen.at(-1)).toEqual({ read: 'cold' })
+  })
+
+  it('treats a hook-less slot inject face as plain props', () => {
+    const h = makeHost()
+    h.declare('k.single', { kind: 'single', scope: 'root', inject: { plain: 'static' } })
+    const seen: AnyProps[] = []
+    h.add('k.single', {
+      component: (props: AnyProps) => { seen.push(props); return null },
+    })
+    mountRoot(h, { 'k.single': { kind: 'single', scope: 'root', inject: { plain: 'static' } } }, renderSlot => renderSlot('k.single', {}))
+    expect(seen.at(-1)?.['plain']).toBe('static')
+  })
+
   it('session inject receives sessionId and caches per (entry x session): switch-back reuses', () => {
     const h = makeHost()
     h.declare('k.session', SINGLE_SESSION)

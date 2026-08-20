@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-experimental-tool-agent-team",
   "description": "Scoped model-facing Agent Teams tools over ctx.agentTeams",
-  "version": "0.1.0-rc.8",
+  "version": "1.0.5",
   "private": true,
   "repository": {
     "type": "git",

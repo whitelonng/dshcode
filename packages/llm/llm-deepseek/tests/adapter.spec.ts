@@ -1004,6 +1004,78 @@ describe('plugin registration and config', () => {
       .resolves.toMatchObject({ defaultMaxTokens: 4096 })
   })
 
+  it('offers a per-model reasoning subset with the route default when it is among them', async () => {
+    const adapter = adapterOf({
+      reasoningEffort: 'off',
+      models: [{ id: 'private-reasoner', reasoningEfforts: { off: null, high: 'high', max: 'max' } }],
+    })
+    await expect(adapter.resolveModel('deepseek-official', 'private-reasoner')).resolves.toMatchObject({
+      reasoning: {
+        efforts: [
+          { id: ReasoningEffortId('off'), name: 'Off' },
+          { id: ReasoningEffortId('high'), name: 'High' },
+          { id: ReasoningEffortId('max'), name: 'Max' },
+        ],
+        // The route default (`off`) is offered, so it stays the default.
+        defaultEffort: ReasoningEffortId('off'),
+      },
+    })
+  })
+
+  it('falls back to high, then off, when a per-model declaration drops the route default', async () => {
+    const adapter = adapterOf({
+      models: [
+        { id: 'no-high', reasoningEfforts: { off: null, max: 'max' } },
+        { id: 'off-only-reasoner', reasoningEfforts: { off: null, high: 'high' } },
+      ],
+    })
+    await expect(adapter.resolveModel('deepseek-official', 'no-high')).resolves.toMatchObject({
+      reasoning: {
+        efforts: [
+          { id: ReasoningEffortId('off'), name: 'Off' },
+          { id: ReasoningEffortId('max'), name: 'Max' },
+        ],
+        defaultEffort: ReasoningEffortId('max'),
+      },
+    })
+    // The route default (`high`) is offered here, so it stays the default.
+    await expect(adapter.resolveModel('deepseek-official', 'off-only-reasoner')).resolves.toMatchObject({
+      reasoning: {
+        efforts: [
+          { id: ReasoningEffortId('off'), name: 'Off' },
+          { id: ReasoningEffortId('high'), name: 'High' },
+        ],
+        defaultEffort: ReasoningEffortId('high'),
+      },
+    })
+  })
+
+  it('declares a per-model false as off-only and clamps declarations under disabled thinking', async () => {
+    const adapter = adapterOf({
+      thinking: 'disabled',
+      reasoningEffort: 'off',
+      models: [{ id: 'flat', reasoningEfforts: false }, { id: 'loud', reasoningEfforts: { high: 'high' } }],
+    })
+    // Deployment-wide thinking policy wins: a per-model declaration cannot
+    // re-enable thinking, so both resolve to the off-only set.
+    await expect(adapter.resolveModel('deepseek-official', 'flat')).resolves.toMatchObject({
+      reasoning: { efforts: [{ id: ReasoningEffortId('off'), name: 'Off' }], defaultEffort: ReasoningEffortId('off') },
+    })
+    await expect(adapter.resolveModel('deepseek-official', 'loud')).resolves.toMatchObject({
+      reasoning: { efforts: [{ id: ReasoningEffortId('off'), name: 'Off' }], defaultEffort: ReasoningEffortId('off') },
+    })
+  })
+
+  it.each([
+    [{ id: 'm', reasoningEfforts: { ultra: 'x' } }, /unsupported level "ultra"/],
+    [{ id: 'm', reasoningEfforts: { high: 'ultra' } }, /must spell the wire literal "high"/],
+    [{ id: 'm', reasoningEfforts: { off: 'off' } }, /must use the empty spelling/],
+    [{ id: 'm', reasoningEfforts: { off: null } }, /offers no level beyond "off"/],
+  ])('rejects an invalid per-model reasoningEfforts declaration at resolve', (models, message) => {
+    expect(() => resolveAdapterOptions({ models: [models as LlmDeepSeek.DeepSeekCatalogModel] }))
+      .toThrow(message)
+  })
+
   it('rejects invalid context capacity when apply is called directly', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
