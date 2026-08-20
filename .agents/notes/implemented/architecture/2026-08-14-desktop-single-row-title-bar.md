@@ -24,7 +24,7 @@ The `desktop:show-menu` handler validates the sender frame against the exact app
 
 ### The web shell renders the bar only on a custom frame
 
-The shell assembly (`packages/client/web/src/app.tsx`) wraps the root-slot render in a `DesktopTitleBar` component. Without the bridge, or with a native frame, the component renders its children unchanged — plain browsers and macOS see zero layout difference, so existing snapshots and e2e coverage stay valid. On a custom frame it renders a draggable strip (product name + menu button, `-webkit-app-region: drag` with a no-drag button) positioned absolutely over the top 38 px, while a padded body host keeps the application frame at full height; `env(titlebar-area-width)` keeps the content clear of the native overlay buttons.
+The shell assembly (`packages/client/ui-renderer/src/client/app.tsx`) wraps the root-slot render in a `DesktopTitleBar` component. Without the bridge, or with a native frame, the component renders its children unchanged — plain browsers and macOS see zero layout difference, so existing snapshots and e2e coverage stay valid. On a custom frame it renders a draggable strip (product name + menu button, `-webkit-app-region: drag` with a no-drag button) positioned absolutely over the top 38 px, while a padded body host keeps the application frame at full height; `env(titlebar-area-width)` keeps the content clear of the native overlay buttons.
 
 ## Verification
 

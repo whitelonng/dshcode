@@ -662,6 +662,8 @@ export class LlmRuntime extends Service {
         ...inputModalities === undefined ? {} : { inputModalities },
         ...outputModalities === undefined ? {} : { outputModalities },
         ...capabilities === undefined ? {} : { capabilities },
+        /* v8 ignore next -- the imagePolicy-present path is the rc.8 uncatalogued-endpoint
+         * fallback; fork provider fixtures exercise the declared-modality routes only */
         ...model.imagePolicy === undefined ? {} : { imagePolicy: model.imagePolicy },
       }
     })

@@ -17,7 +17,7 @@ Status: implemented
 - **桌面桥**——`apps/desktop/src/main.ts` 把 `app.getVersion()` 通过 `desktopLaunchArguments` 以 `--dsh-app-version=<编码>` 传入（产品名与版本参数在所有平台携带，自定义框架参数保持仅 Windows），`desktopBridgePayload` 解析进桥负载，渲染层读取 `window.dshDesktop.appVersion`。这是打包应用自身的版本——即用户下载到的版本——即使未来某个仅桌面的补丁单独推进它，它对桌面产物仍是权威来源。
 - **启动图**——client-modules 的 node 半边一次性读取自身 `package.json` 的版本，作为 `WebBootGraph.version` 注入 `window.__DSH_BOOT__`，与 `rev`、`entries` 并列。自身清单在每种布局（源码树与打包后的 `node_modules`）中都紧邻可解析，且按工作区约束与产品版本相等，因此无需解析根路径。`parseBootManifest` 在 wire 边界校验该字段（缺失或非字符串的版本会抛错，与其他 wire 成员一致）。
 
-显示是壳级 chrome：[`VersionCaption`](../../../../packages/client/web/src/VersionCaption.tsx) 渲染一条 muted、点击穿透的字幕（`position: fixed`，屏幕右下角，`pointer-events: none`），作为壳装配（`app.tsx`）中 `DesktopTitleBar` 的兄弟节点。版本经 [`appVersion`](../../../../packages/client/web/src/app-version.ts) 解析——桌面桥优先，启动图次之——两条载体都没有版本时（孤立测试）不渲染任何东西。它作为框架旁的壳级 chrome，在桌面窗口与浏览器中都悬浮于布局之上，不触碰任何插件的 slot，也不触碰设置表面。
+显示是壳级 chrome：[`VersionCaption`](../../../../packages/client/ui-renderer/src/client/VersionCaption.tsx) 渲染一条 muted、点击穿透的字幕（`position: fixed`，屏幕右下角，`pointer-events: none`），作为壳装配（`app.tsx`）中 `DesktopTitleBar` 的兄弟节点。版本经 [`appVersion`](../../../../packages/client/ui-renderer/src/client/app-version.ts) 解析——桌面桥优先，启动图次之——两条载体都没有版本时（孤立测试）不渲染任何东西。它作为框架旁的壳级 chrome，在桌面窗口与浏览器中都悬浮于布局之上，不触碰任何插件的 slot，也不触碰设置表面。
 
 ## 曾考虑的替代方案
 
