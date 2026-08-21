@@ -28,6 +28,7 @@ env:
 
 jobs:
   pack:
+    if: github.repository_owner == 'deepseek-ai'
     name: Pack npm tarballs
     runs-on: ubuntu-24.04
     steps:
