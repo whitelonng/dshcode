@@ -76,15 +76,15 @@
             - /placeholder: 256K
             - text: 64K
           - text: 思考程度
-          - checkbox "思考程度 2 off"
+          - checkbox "思考程度 3 off"
           - text: "off"
-          - checkbox "思考程度 2 low"
+          - checkbox "思考程度 3 low"
           - text: low
-          - checkbox "思考程度 2 high"
+          - checkbox "思考程度 3 high"
           - text: high
-          - checkbox "思考程度 2 max"
+          - checkbox "思考程度 3 max"
           - text: max
-          - checkbox "禁用推理 2"
+          - checkbox "禁用推理 3"
           - text: 禁用推理
           - button "添加模型":
             - img
