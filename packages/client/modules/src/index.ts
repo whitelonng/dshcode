@@ -27,7 +27,6 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
@@ -170,11 +169,15 @@ function shortHash(input: string | Buffer): string {
  * the root's, so this member's version is the product version in both the
  * source tree and a built/deployed app. The source (`src/`) and built (`lib/`)
  * entries both sit one directory under the package root, so one relative hop
- * resolves the manifest from either artifact.
+ * from `import.meta.dirname` resolves the manifest from either artifact.
+ * Resolving from `import.meta.dirname` (not `import.meta.url`) keeps the read
+ * working under the vitest module runner, which serves in-root modules over
+ * the dev server's HTTP URL — a non-`file:` `import.meta.url` — while
+ * `dirname` stays the real filesystem directory.
  */
 function readProductVersion(): string {
   const manifest = JSON.parse(
-    readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+    readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8'),
   ) as { version?: unknown }
   /* v8 ignore next 3 -- a checked-in workspace manifest always carries the shared version; the throw only guards a corrupt install. */
   if (typeof manifest.version !== 'string' || manifest.version === '') {

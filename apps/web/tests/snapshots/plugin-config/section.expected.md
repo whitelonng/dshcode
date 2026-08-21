@@ -24,6 +24,7 @@
   - paragraph: 配置和查看本部署已安装的插件。
   - tablist "插件视图":
     - tab "插件配置" [selected]
+    - tab "插件状态"
     - tab "插件列表"
   - tabpanel "插件配置":
     - list:

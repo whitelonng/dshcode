@@ -27,6 +27,10 @@
 - paragraph: USER_INVOKE_REPLY acknowledged; following the injected skill.
 - button "Copy":
   - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
 - button "Delete":
   - img
 - button "Branch into a new conversation":
