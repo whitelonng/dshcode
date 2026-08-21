@@ -263,7 +263,7 @@ describe('SubagentHeaderLineage', () => {
     const trigger = screen.getByRole('button', { name: /2 个子代理/ })
 
     fireEvent.mouseEnter(trigger.parentElement!)
-    await vi.advanceTimersByTimeAsync(150)
+    act(() => { vi.advanceTimersByTime(150) })
     const menu = screen.getByRole('tree')
 
     // Move the trigger before resize so the reposition is observable as a
@@ -276,7 +276,7 @@ describe('SubagentHeaderLineage', () => {
       toJSON: () => ({}),
     })
 
-    fireEvent.resize(window)
+    act(() => { fireEvent.resize(window) })
     expect(rect).toHaveBeenCalled()
     expect(menu.style.top).toBe(`${224 + 5}px`)
     expect(menu.style.left).toBe('100px')
