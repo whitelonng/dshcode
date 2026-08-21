@@ -55,11 +55,13 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     name: e2e
+    # Upstream repository only; forks run their own keyless CI (fork-ci.yml).
     # Run on every trusted event. Skip untrusted PRs (forks + Dependabot) where
     # the secret is withheld — they would otherwise hard-fail the preflight.
     if: >-
-      github.event_name != 'pull_request'
-      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')
+      github.repository_owner == 'deepseek-ai'
+      && (github.event_name != 'pull_request'
+      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]'))
     # Bounded file parallelism (DSH_E2E_MAX_WORKERS), 120s/test, retry 2. 45m
     # still bounds retry storms against a slow API while the happy path fans out.
     timeout-minutes: 45
