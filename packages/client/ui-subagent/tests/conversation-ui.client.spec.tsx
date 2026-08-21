@@ -257,6 +257,30 @@ describe('SubagentHeaderLineage', () => {
     await vi.advanceTimersByTimeAsync(120)
   })
 
+  it('repositions the portaled menu when the window resizes while open', async () => {
+    vi.useFakeTimers()
+    const view = render(<SubagentHeaderLineage {...props(catalog())} />)
+    const trigger = screen.getByRole('button', { name: /2 个子代理/ })
+
+    fireEvent.mouseEnter(trigger.parentElement!)
+    await vi.advanceTimersByTimeAsync(150)
+    const menu = screen.getByRole('tree')
+
+    // Move the trigger before resize so the reposition is observable as a
+    // style change, proving placeMenu re-reads the live trigger rectangle.
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      x: 100, y: 200, width: 80, height: 24,
+      top: 200, right: 180, bottom: 224, left: 100,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.resize(window)
+    expect(menu.style.top).toBe(`${224 + 5}px`)
+    expect(menu.style.left).toBe('100px')
+
+    view.unmount()
+  })
+
   it('cancels a pending hover when the trigger becomes hidden', async () => {
     vi.useFakeTimers()
     const view = render(<SubagentHeaderLineage {...props(catalog())} />)
