@@ -2,7 +2,7 @@
   "name": "@dshcode/desktop",
   "productName": "DSHCode",
   "description": "Electron desktop shell for the DeepSeek Harness Web UI",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "DSHCode contributors",
   "repository": {
     "type": "git",
