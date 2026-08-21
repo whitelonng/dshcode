@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-通过 JSON-RPC stdio 提供的仅面向自动化的 [ACP（Agent Client Protocol）](https://agentclientprotocol.com) 服务器。程序化客户端可以创建新 harness agent（智能体）、发送文本／图片提示词、收集已提交的 assistant 文本／图片、按策略响应一次性权限请求并取消工作。仓库中的主要客户端是 [`dsh-subagent-acp`](../../subagent/subagent-acp/README.md)。
+通过 JSON-RPC stdio 提供的仅面向自动化的 [ACP（Agent Client Protocol）](https://agentclientprotocol.com) 服务器。程序化客户端可以创建新 harness agent（智能体）、发送文本／图片提示词、收集已提交的 assistant 文本／图片、按策略响应一次性权限请求并取消工作。仓库中的主要客户端是 [`dsh-subagent-acp`](../../subagent/subagent-acp/README.zh.md)。
 
 此包是传输适配器，而非 UI 集成或能力 seam。它不公开编辑器导航、transcript（文本记录）回放、命令、模式、配置选择器、信息征集、推理（reasoning）、计划、标题或工具展示。交互式渲染与向用户提问属于 Web 宿主和客户端模块。
 
@@ -16,6 +16,8 @@
 | `model` | 无 | 每个已创建 agent 的初始模型。 |
 
 两个字段都是可选的，以便由另一个 agent/request 监听器提供目标。可运行的 ACP 组合同时要求两者。
+
+<a id="protocol-contract"></a>
 
 ## 协议约定
 
@@ -41,7 +43,7 @@ ACP 要求每个提示词响应都携带 `stopReason`，但桥接层不声称它
 
 ## 运行
 
-`pnpm --dir /path/to/deepseek-harness run demo:acp` 启动仓库的自动化服务器组合。父 harness 可以通过 [`@deepseek-ai/dsh-subagent-acp`](../../subagent/subagent-acp/README.md) spawn 它；其他 ACP 客户端只需上述核心方法。
+`pnpm --dir /path/to/deepseek-harness run demo:acp` 启动仓库的自动化服务器组合。父 harness 可以通过 [`@deepseek-ai/dsh-subagent-acp`](../../subagent/subagent-acp/README.zh.md) spawn 它；其他 ACP 客户端只需上述核心方法。
 
 ## 模型体验
 

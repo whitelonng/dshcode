@@ -2,10 +2,9 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  normalizeSessionLog,
+  normalizeSessionSnapshot,
   normalizeStdout,
   runScenario,
-  scrubRequestHeaders,
   type AgentUnderTest,
   type InputScript,
   type NormalizeContext,
@@ -59,9 +58,7 @@ function normalizeGoalTimestamps(value: unknown): unknown {
 
 /** Normalize one persisted goal log after the shared snapshot scrubbers. */
 function normalizeGoalLog(content: string, context: NormalizeContext): string {
-  return parseJsonl(scrubRequestHeaders(normalizeSessionLog(content, context)))
-    .map(record => JSON.stringify(normalizeGoalTimestamps(record)))
-    .join('\n') + '\n'
+  return normalizeGoalTimestamps(normalizeSessionSnapshot(content, context)) as string
 }
 
 describe('same-session goal snapshot through the ACP automation driver', () => {

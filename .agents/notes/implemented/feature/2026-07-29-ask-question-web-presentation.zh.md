@@ -12,7 +12,7 @@ Web GUI 已经可以通过 `QuestionComposer` 的输入区接管收集回答，�
 
 ## 决定
 
-一个待回答的问题恰好拥有两个界面：输入区接管收集回答，会话记录中一个专门的 `ask_user_question` toolview 行陈述交互结果。该行与 `todo_write` 完全一样注册进带 key 的 `tool.call.toolview` 槽位，并复用共享的 `ToolRow`（外观、运行扫光、前导展开）。其摘要是交互裁决而非参数：运行中显示 `waiting`，结算后从结果 JSON 得出 `N/M answered`（被跳过的回答 —— `selected` 为空且无 `custom` —— 不计入），`ASK_CANCELLED` 显示 `cancelled`，`ASK_ABORTED` 显示 `interrupted` 并沿用共享的琥珀色 stopped 语义。畸形或截断的结果回退到通用摘要。`PendingCard` 曾收窄为 `PendingWait<'approval'>`，`ChatView` 曾将待处理列表过滤为仅审批等待，使占位卡片只服务于审批；其后审批输入区接管（[Web 权限与审批](2026-07-23-web-permission-and-approval.md)）已将它彻底移除。
+一个待回答的问题恰好拥有两个界面：输入区接管收集回答，会话记录中一个专门的 `ask_user_question` toolview 行陈述交互结果。该行与 `todo_write` 完全一样注册进带 key 的 `tool.call.toolview` 槽位，并复用共享的 `ToolRow`（外观、运行扫光、前导展开）。其摘要是交互裁决而非参数：运行中显示 `waiting`，结算后从结果 JSON 得出 `N/M answered`（被跳过的回答 —— `selected` 为空且无 `custom` —— 不计入），`ASK_CANCELLED` 显示 `cancelled`，`ASK_ABORTED` 显示 `interrupted` 并沿用共享的琥珀色 stopped 语义。畸形或截断的结果回退到通用摘要。`PendingCard` 曾收窄为 `PendingWait<'approval'>`，`ChatView` 曾将待处理列表过滤为仅审批等待，使占位卡片只服务于审批；其后审批输入区接管（[Web 权限与审批](2026-07-23-web-permission-and-approval.zh.md)）已将它彻底移除。
 
 输入区重设计将分页移到底部操作区旁，多选选项渲染显式复选框，单选保留编号行，并用始终可见的自定义输入行取代展开式自定义入口（无选项问题用多行文本框）。删除 `parseQuestionTitle` 的多选后缀约定；`multi_select` 已是结构化元数据，标题原样渲染。
 
@@ -36,7 +36,7 @@ Web GUI 已经可以通过 `QuestionComposer` 的输入区接管收集回答，�
 
 `ask_user_question` 与 `todo_write` 现在共同示范预期的 toolview 模式：复用 `ToolRow`、从调用参数或结果 JSON 做带形状校验回退的摘要、通过带 key 的 slot 注册。专用的 `todo-row.module.css` 已删除。
 
-行内裁决字符串是问题流程仅剩的硬编码英文面；将其本地化是推迟的后续工作。审批输入区接管已交付（[Web 权限与审批](2026-07-23-web-permission-and-approval.md)，并按[审批面板 Agent Note](../bug-fix/2026-07-30-approval-panel-command-cap.md)施加高度上限），`PendingCard` 已不复存在。
+行内裁决字符串是问题流程仅剩的硬编码英文面；将其本地化是推迟的后续工作。审批输入区接管已交付（[Web 权限与审批](2026-07-23-web-permission-and-approval.zh.md)，并按[审批面板 Agent Note](../bug-fix/2026-07-30-approval-panel-command-cap.zh.md)施加高度上限），`PendingCard` 已不复存在。
 
 `ui-user-questions` 新增 `dsh-client-locale` 依赖和此前没有的 inject face；其约定（`QuestionComposerInjected`）与消费方一起放在 `contract/slots.ts`。
 

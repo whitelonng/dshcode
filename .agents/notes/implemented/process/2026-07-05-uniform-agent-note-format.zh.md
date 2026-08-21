@@ -10,7 +10,7 @@ Agent Note 的路径编码了生命周期和类别，但文件内容仍混杂着
 
 ## 决策
 
-[README.md § 文件格式](../../README.md#the-file-format)是文件内约定——头部块（`# Agent Note: <title>`，加上无日期且与文件夹一致的 `Status:` 枚举，其中只有拒绝原因可作为额外内容）、各生命周期的正文骨架（所有文件均以 `Problem` 开篇；`proposed/` 使用 `Proposal`/`Acceptance criteria`/`Risks`；`implemented/` 使用现在时的 `Decision`/`Consequences`，并禁止提案阶段标题；`rejected/` 冻结提案结构）、强制的 `Alternatives considered` 章节，以及规范章节词汇；定制技术章节可在这些规范章节之间保持自由形式。`pnpm run verify-agent-note-format`（[scripts/verify-agent-note-format.ts](../../../../scripts/verify-agent-note-format.ts)）作为 `doc-sync` 的一部分强制执行每项机械规则，因此跳过改写的生命周期迁移现在会使 CI 失败，而不再依赖评审者记忆。
+[README.md § 文件格式](../../README.zh.md#the-file-format)是文件内约定——头部块（`# Agent Note: <title>`，加上无日期且与文件夹一致的 `Status:` 枚举，其中只有拒绝原因可作为额外内容）、各生命周期的正文骨架（所有文件均以 `Problem` 开篇；`proposed/` 使用 `Proposal`/`Acceptance criteria`/`Risks`；`implemented/` 使用现在时的 `Decision`/`Consequences`，并禁止提案阶段标题；`rejected/` 冻结提案结构）、强制的 `Alternatives considered` 章节，以及规范章节词汇；定制技术章节可在这些规范章节之间保持自由形式。`pnpm run verify-agent-note-format`（[scripts/verify-agent-note-format.ts](../../../../scripts/verify-agent-note-format.ts)）作为 `doc-sync` 的一部分强制执行每项机械规则，因此跳过改写的生命周期迁移现在会使 CI 失败，而不再依赖评审者记忆。
 
 定义该格式的同一变更规范化了整个语料库——遵循预发布立场：不设过渡期，不容忍双格式。唯一适用既有内容豁免的是内容，而非格式：替代方案只能记录、不能杜撰，因此若某份格式制定前的 Agent Note 无法从记录中还原替代方案，就会带有内容完全匹配 `agent-note-format: alternatives-not-recorded` 的注释；门禁只对日期早于本文的文件接受该注释。
 

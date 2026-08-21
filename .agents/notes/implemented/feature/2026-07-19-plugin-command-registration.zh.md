@@ -12,7 +12,7 @@ TUI 拥有斜杠命令。如果命令名、帮助文本、自动补全、分派�
 
 ## 决策
 
-位于 `packages/interaction/commands/` 的 `@deepseek-ai/dsh-commands` 是产品命令注册表。TUI 应用组合包把它挂载在消费该服务的前端旁；[仅面向自动化的 ACP（Agent Client Protocol）应用](../simplification/2026-07-23-acp-automation-only-protocol.md)和无执行器、无 UI 的 agent spine 都省略该服务。TUI 注入该服务，命令生产者只依赖注册表及其操作的领域。
+位于 `packages/interaction/commands/` 的 `@deepseek-ai/dsh-commands` 是产品命令注册表。TUI 应用组合包把它挂载在消费该服务的前端旁；[仅面向自动化的 ACP（Agent Client Protocol）应用](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)和无执行器、无 UI 的 agent spine 都省略该服务。TUI 注入该服务，命令生产者只依赖注册表及其操作的领域。
 
 ### 注册表约定
 

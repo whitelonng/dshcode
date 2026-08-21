@@ -78,14 +78,36 @@ async function isLockContention(error: unknown, lockPath: string): Promise<boole
 }
 
 /**
- * Writer-lock protocol constants. These are robustness invariants of the
- * cross-process write protocol, not deployment tunables: contention normally
- * resolves within the retry deadline, while expiry fails the contender without
- * guessing whether the existing lock still has an owner.
+ * Retry cadence for a contended lock. These stay robustness invariants of the
+ * cross-process write protocol rather than deployment tunables: they govern how
+ * often a contender asks, which no caller has a reason to vary.
  */
 const LOCK_RETRY_INITIAL_MS = 20
 const LOCK_RETRY_MAX_MS = 200
-const LOCK_TIMEOUT_MS = 2_000
+
+/**
+ * How long a contender waits when the caller states no limit — sized for the
+ * render-and-rename cycle every call site had when this package was written.
+ * Expiry fails the contender rather than guessing whether the existing lock
+ * still has an owner. How long is *worth* waiting is a property of the
+ * operation the lock holder runs, which is why {@link FileLockOptions.waitMs}
+ * exists; the value here is the floor for an operation that does file work
+ * alone.
+ */
+const DEFAULT_LOCK_WAIT_MS = 2_000
+
+/** Options for one {@link withFileLock} acquisition. */
+export interface FileLockOptions {
+  /**
+   * Maximum time to wait for the lock, in milliseconds. State one when the
+   * holder's operation legitimately runs longer than file work — a credential
+   * mutation that refreshes a token performs a network round trip while
+   * holding the lock, and leaving the default in place would fail every other
+   * writer of the same file for the duration. Waiting is productive: a
+   * contender that acquires the lock afterwards re-reads the committed state.
+   */
+  waitMs?: number
+}
 
 /**
  * Hold the cross-process writer lock for `filename` around one operation. The
@@ -100,14 +122,16 @@ const LOCK_TIMEOUT_MS = 2_000
  * action. The parent directory must exist.
  * @param filename - the file whose writers this lock serializes.
  * @param operation - the read-render-commit cycle to run while holding the lock.
+ * @param options - acquisition options; omitted waits {@link DEFAULT_LOCK_WAIT_MS}.
  * @returns the operation's result; the lock releases on both outcomes.
  */
 export async function withFileLock<T>(
   filename: string,
   operation: () => Promise<T>,
+  options?: FileLockOptions,
 ): Promise<T> {
   const lockPath = `${filename}.lock`
-  const deadline = Date.now() + LOCK_TIMEOUT_MS
+  const deadline = Date.now() + (options?.waitMs ?? DEFAULT_LOCK_WAIT_MS)
   let delay = LOCK_RETRY_INITIAL_MS
   for (;;) {
     try {

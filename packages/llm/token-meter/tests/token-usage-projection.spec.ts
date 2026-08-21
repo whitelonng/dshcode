@@ -8,6 +8,7 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import { CompactionId } from '@deepseek-ai/dsh-compaction'
+import type {} from '../src/usage-projection.ts'
 
 const ZERO: TokenUsageProjection = {
   uncachedInputTokens: 0,

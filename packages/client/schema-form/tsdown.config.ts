@@ -1,6 +1,6 @@
-import { clientLibrary } from '../tsdown.client.ts'
+import { staticLinked } from '../tsdown.client.ts'
 
-export default clientLibrary(
+export default staticLinked(
   '@deepseek-ai/dsh-client-schema-form',
   ['lib/types/index.js', 'lib/types/invariant.js'],
 )

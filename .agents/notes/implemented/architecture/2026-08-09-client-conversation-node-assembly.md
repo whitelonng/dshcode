@@ -35,7 +35,7 @@ Registry contributions are Cordis effects. Removing a Definition causes a low-fr
 
 Each [`ConversationNodeDefinition`](../../../../packages/client/runtime/src/client/contract/conversation.ts) independently owns one business object's conversion from Events to State and final view Nodes. A Definition's `kind` is its unique Registry name and the namespace for its business IDs.
 
-One Event may be claimed by several ordinary Definitions. For example, an Assistant Event updates both the Assistant Node and Turn Tail, while a Retry Event updates Retry, Assistant, and Turn Error. The Assembler asks the fallback only when every ordinary Definition returns `null`.
+One Event may be claimed by several ordinary Definitions. For example, an Assistant Event updates both the Assistant Node and Turn Tail, while a Retry Event updates Retry, Assistant, and Turn Tail. The Assembler asks the fallback only when every ordinary Definition returns `null`.
 
 A Definition holds no mutable business data across Sessions. Each Session's Assembler isolates that Session's Contexts, State, dependencies, and View Builders.
 
@@ -146,7 +146,7 @@ A Definition receives the `step` and `turn` scopes separately and may return one
 
 The Assembler verifies `node.key === context.key` and `node.target === target`. Business code may change `anchorSeq`, data, Location, or visibility, but cannot change identity within one lifecycle.
 
-`current` lets a Definition distinguish "never materialized" from "already materialized and now hidden." Assistant retry and Turn Error suppression use it to avoid illegal Node withdrawal.
+`current` lets a Definition distinguish "never materialized" from "already materialized and now hidden." Assistant retry suppression uses it to avoid illegal Node withdrawal.
 
 A Definition owns at most one view target; state-only Definitions omit both `target` and `buildViewNode()`. Chat and Trajectory register separate business Definitions even when they recognize the same durable Event family, while the shared Assembler supplies the same matching, replay, Location, and publication mechanics to both targets.
 
@@ -265,7 +265,7 @@ Page size, the number of history loads, and RAF coalescing affect only when evid
 | Command / `command` | Command ID | `command/run` | `command/done` and compact lifecycle/checkpoint Events carrying a source command ID | Aggregate command outcome and manual-compaction evidence |
 | Automatic Compaction / `compaction` | Compaction ID | `compaction/start` without a source command ID | Summary, end, and replacement checkpoint | Aggregate summary/checkpoint; sufficient checkpoint evidence supports fallback without a start |
 | Retry / `model-retry` | Retry ID | Attempt 1 `llm/retry` | Later `llm/retry` and `llm/retry-started` | Aggregate one RetryId's attempts and scheduled/started state |
-| Turn Error / `turn-error` | Turn number | `turn/start` | Error `turn/end` and Retry Events for that Turn | Aggregate terminal failure and use Retry evidence to decide hiding |
+| Turn Error / `turn-error` | Turn number | `turn/start` | Error `turn/end` | Aggregate the terminal failure; the turn's Retry history renders through Retry and never hides this row |
 | Turn Tail / `turn-tail` | Turn number | `turn/start` | Assistant, Retry, `step/end`, and `turn/end` | Retain turn end, read each Step's Assistant data, and publish Turn data; use complete Matches to choose the visual tail anchor |
 | Deliverables / `deliverables` | Turn number | `turn/start` | Tool calls/results in that Turn | Aggregate successful mutation paths and publish Turn data without producing a view Node |
 | Unknown fallback / `unknown-surface` | Event seq | Append-surface Event unclaimed by any ordinary Definition | None | Retain raw type/data for the JSON fallback |
@@ -281,14 +281,14 @@ Page size, the number of history loads, and RAF coalescing affect only when evid
 | Command | Immediate by default | Ordinary `command` or integrated `manual-compaction` | Checkpoint arrival may change the anchor without changing the Context key |
 | Compaction | Immediate by default | `compaction` marker | A checkpoint may render before start; an older start triggers forward replay |
 | Retry | Immediate by default | One `model-retry` Node containing all attempts | Multiple retries update one key; Location close presents the last scheduled attempt as cancelled |
-| Turn Error | Immediate by default | Visible or hidden `turn-error` | Error end supports fallback without start; later Retry keeps the key and hides it |
+| Turn Error | Immediate by default | `turn-error` on terminal failure | Error end supports fallback without start; the turn's settled Retry chain renders beside it |
 | Turn Tail | Immediate only for `turn/end`; otherwise none | Independent `turn-tail` footer | Compute closing/metrics from Step Assistant data and use same-turn Matches to choose the anchor |
 | Deliverables | Immediate by default | No Node | Tool settlement incrementally updates Turn data; the Turn Tail extension slot reads produced files |
 | Fallback | Immediate by default | `unknown` JSON row | Covers only append-surface Events; an ordinary business that claimed but has not rendered an Event does not duplicate it |
 
 Inbox demonstrates that every Event can be a start-only instantaneous-state Context; not every business requires a start/update pair. Reader links each state to the prior same-kind Context instead of inventing a lifecycle ID for the entire Inbox.
 
-Assistant, Turn Tail, and Turn Error demonstrate independent claims on one Event. Each Definition updates only its own State and produces its own atomic Chat Node.
+Retry, Assistant, and Turn Tail demonstrate independent claims on one Event. Each Definition updates only its own State and produces its own atomic Chat Node.
 
 Assistant, Turn Tail, and Deliverables demonstrate layered Location data composition. Assistant writes `assistant-step` data for each Step; Turn Tail derives `turn-tail` data from those Step values; Deliverables independently maintains `deliverables` data for the same Turn. Consumers read only declaration-merged keys, do not scan another business's Nodes, and cannot obtain the provider's Context State.
 

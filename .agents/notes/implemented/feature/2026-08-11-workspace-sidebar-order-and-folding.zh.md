@@ -24,11 +24,13 @@ Workspace 注册表持有持久 `workspaceIds` 顺序，并提供采用 DOM `ins
 
 组合视图菜单在分组和单列表呈现中都提供**手动排序**和**最近更新**，每个记账各自持有一份浏览器本地持久顺序。真实 Workspace 从 `WorkspaceView.sessionIds` 初始化；Ungrouped 和跨 Workspace 的单列表从最近更新时间顺序初始化，且没有 Host Session 记账。进入最近更新时会执行一次完整的时间排序；后续 user prompt 或 steer 会将对应 Session 置顶一次，拖拽仍可编辑所得顺序。返回手动排序会保留当前顺序，只停用后续活动置顶。真实 Workspace 在手动模式下的拖拽还会写入 Host Session 记账，而 Ungrouped 和单列表的拖拽与活动置顶保留在浏览器本地。单列表没有父级层次，因此不显示空的左侧状态槽；存在可见状态时仍保留该槽。
 
+创建“新会话”并选中空白 Session 时，浏览器会在其分组记账和单列表记账中各置顶一次。这次明确的创建置顶不会推进 `updatedAt`；后续拖拽把空白 Session 当作普通 Session，首条提示词落地也不会撤销手动模式下的拖拽。
+
 ### 拖拽与紧凑界面
 
 Workspace 命中测试使用完整渲染分组区段，包括可见 Session 行。前一分组的下半部与后一分组的上半部共享同一条插入边界，指示器是一条带有相连右向尖角且不影响布局的绝对定位横线。树主体覆盖层会在滚动裁切区外以相同的负偏移绘制第一条边界，因此左侧尖角保持可见，列表位置也不会改变。Workspace 或 Session 拖拽期间，文档级 `dragover` 与 `drop` 处理器会接受原生操作；若在 Workspace 列表外松手，`dragend` 会提交最后一个有效标记。
 
-搜索在折叠时是区头操作，展开后占据标题与尾部操作的空间。查询经清除首尾空白后为空时，点击外部会收起搜索；非空查询则会保留；轨道搜索手势仍在进行期间，外部点击监听器保持未挂载（[轨道搜索自我收起](../bug-fix/2026-08-18-rail-search-outside-click-self-dismissal.md)）。紧凑的 Workspace 与 Session 行、24px 底部渐隐以及取消每个 Workspace 的 Session 数量共同节省纵向空间，同时保留导航入口。
+搜索在折叠时是区头操作，展开后占据标题与尾部操作的空间。查询经清除首尾空白后为空时，点击外部会收起搜索；非空查询则会保留；轨道搜索手势仍在进行期间，外部点击监听器保持未挂载（[轨道搜索自我收起](../bug-fix/2026-08-18-rail-search-outside-click-self-dismissal.zh.md)）。紧凑的 Workspace 与 Session 行、24px 底部渐隐以及取消每个 Workspace 的 Session 数量共同节省纵向空间，同时保留导航入口。
 
 ## 考虑过的替代方案
 
@@ -48,9 +50,10 @@ Workspace 命中测试使用完整渲染分组区段，包括可见 Session 行�
 
 - Workspace 顺序通过 Host 持久并共享；分组方式、打开状态、每个记账的 Session 视图顺序和查询状态仍是浏览器本地呈现偏好。Ungrouped 和单列表支持相同的拖拽与置顶规则，但因没有单一 Workspace 记账，其顺序只保存在浏览器本地。
 - 最近更新模式会在进入时执行完整时间排序，随后保持手动调整，直到 user prompt 或 steer 推进某条 Session 并将其置顶。返回手动排序会保留所有当前位置。
+- 新选中的空白“新会话”行会在分组和单列表顺序中各置顶一次，之后遵循与其他 Session 相同的拖拽和活动规则。
 - 未执行明确的**展开其余**手势时，打开 Workspace 最多显示五条 Session；关闭分组只重置这项临时手势。
-- Host Session 记账继续采用[会话列表浏览与 Workspace 手动排序](2026-07-25-session-list-browsing-and-manual-order.md)确立的手动顺序含义。
+- Host Session 记账继续采用[会话列表浏览与 Workspace 手动排序](2026-07-25-session-list-browsing-and-manual-order.zh.md)确立的手动顺序含义。
 
 ## 测试
 
-领域与 Host 测试覆盖持久 Workspace 移动、无操作与无效锚点、重启恢复、完整顺序 RPC 响应、顺序帧以及每条 Host stream 基线只读取一份 Workspace 快照。运行时测试覆盖乐观顺序、帧／响应优先级、重叠拒绝后恢复 Host 已确认顺序、重连基线以及 New Session 目标优先级。UI 测试覆盖五行折叠、临时展开重置、Workspace 移除后清理持久状态、保持顺序的模式切换、一次性最近更新置顶、浏览器本地 Ungrouped 与单列表拖拽持久化、无层级单列表行左侧间距、当前视图标记、展开区段的 Workspace 命中、未裁切的第一条插入边界、列表外 Workspace 与 Session 松手、搜索收起规则和紧凑 CSS 尺寸。
+领域与 Host 测试覆盖持久 Workspace 移动、无操作与无效锚点、重启恢复、完整顺序 RPC 响应、顺序帧以及每条 Host stream 基线只读取一份 Workspace 快照。运行时测试覆盖乐观顺序、帧／响应优先级、重叠拒绝后恢复 Host 已确认顺序、重连基线以及 New Session 目标优先级。UI 测试覆盖五行折叠、临时展开重置、Workspace 移除后清理持久状态、保持顺序的模式切换、一次性最近更新与“新会话”置顶、首条提示词落地后保留手动拖拽、浏览器本地 Ungrouped 与单列表拖拽持久化、无层级单列表行左侧间距、当前视图标记、展开区段的 Workspace 命中、未裁切的第一条插入边界、列表外 Workspace 与 Session 松手、搜索收起规则和紧凑 CSS 尺寸。

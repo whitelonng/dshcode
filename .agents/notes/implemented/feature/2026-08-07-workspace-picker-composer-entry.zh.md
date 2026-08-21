@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[Session scope 决策](../architecture/2026-07-25-web-client-session-scope-and-provide-channel.md)会在 Workspace 存在前保留同一个常驻编辑器，但 textarea 处于禁用状态，只有较小的 Workspace chip 能打开选择器。用户首次点击最显眼、也最熟悉的输入区域时，界面不会响应，尽管同一界面已有继续操作的入口。
+[Session scope 决策](../architecture/2026-07-25-web-client-session-scope-and-provide-channel.zh.md)会在 Workspace 存在前保留同一个常驻编辑器，但 textarea 处于禁用状态，只有较小的 Workspace chip 能打开选择器。用户首次点击最显眼、也最熟悉的输入区域时，界面不会响应，尽管同一界面已有继续操作的入口。
 
 ## 决策
 

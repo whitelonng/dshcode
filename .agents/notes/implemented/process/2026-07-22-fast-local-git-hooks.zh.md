@@ -12,7 +12,7 @@ agent（智能体）已经会运行能够覆盖自身改动的测试和检查，
 
 ## 决策
 
-[lefthook.yml](../../../../lefthook.yml) 将两个钩子都保留为有界的本地检查点。Pre-commit 按顺序运行：不加载项目的 [Oxlint](2026-07-29-oxlint-linter.md) 配置验证改动过的 JavaScript 和 TypeScript 文件，应用带[一次有界重试](2026-08-09-oxlint-only-fix-workflow.md)的安全修复，并重新暂存这些文件；`git diff --cached --check` 拒绝暂存 diff 中的空白错误，vendor manifest（元数据清单）守卫检查 vendor 源码元数据。Pre-push 运行 `pnpm run typecheck`；该命令会先准备好生成的 Host Typert 约定，再运行 Client 增量类型检查。
+[lefthook.yml](../../../../lefthook.yml) 将两个钩子都保留为有界的本地检查点。Pre-commit 按顺序运行：不加载项目的 [Oxlint](2026-07-29-oxlint-linter.zh.md) 配置验证改动过的 JavaScript 和 TypeScript 文件，应用带[一次有界重试](2026-08-09-oxlint-only-fix-workflow.zh.md)的安全修复，并重新暂存这些文件；`git diff --cached --check` 拒绝暂存 diff 中的空白错误，vendor manifest（元数据清单）守卫检查 vendor 源码元数据。Pre-push 运行 `pnpm run typecheck`；该命令会先准备好生成的 Host Typert 约定，再运行 Client 增量类型检查。
 
 Pre-commit 不运行类型分析、测试、快照、文档检查、构建、`hygiene` 或门禁调度器。Pre-push 只增加仓库类型检查所需的 Host 约定构建。可选运行的 `check:all` 包脚本独立于这些钩子，从 [scripts/run-gates.ts](../../../../scripts/run-gates.ts) 中选择 `check-all` 调度器清单；它是贡献者命令，而非对 agent 的指令。
 
@@ -20,7 +20,7 @@ agent 检查待推送的 diff，并仅运行一次能够覆盖其行为的最小
 
 ## 取代关系
 
-本决策取代[并行 pre-push 门禁](2026-07-06-parallel-pre-push-gates.md)中涉及本地钩子的部分，以及[以机械质量门禁代替文字规范](2026-06-11-quality-gates.md)中关于钩子与 CI 对称性的部分。上述记录中关于 CI 调度器、包门禁与机械化强制执行的决策继续有效。
+本决策取代[并行 pre-push 门禁](2026-07-06-parallel-pre-push-gates.zh.md)中涉及本地钩子的部分，以及[以机械质量门禁代替文字规范](2026-06-11-quality-gates.zh.md)中关于钩子与 CI 对称性的部分。上述记录中关于 CI 调度器、包门禁与机械化强制执行的决策继续有效。
 
 ## 考虑过的替代方案
 

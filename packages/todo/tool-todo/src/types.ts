@@ -13,6 +13,9 @@ import type { TodoItem } from '@deepseek-ai/dsh-session/types'
 export type { TodoItem } from '@deepseek-ai/dsh-session/types'
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    todos: TodoItem[] | null
+  }
   interface SessionProjectionMap {
     /**
      * The agent's current whole todo list (the latest `todo/write` snapshot),

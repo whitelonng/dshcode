@@ -3,6 +3,7 @@
 // hero (blank session) and active phases — same textarea DOM node, machine-
 // owned draft, and the hero workspace picker (switching = retargetWorkspace).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import {
@@ -26,7 +27,7 @@ import type { HeroShellProps } from '../src/client/skeleton/EmptyHero.tsx'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import type {
-  ComposerBarOwnerProps,
+  ComposerBarOwnerProps, ConversationHeaderLineageOwnerProps,
 } from '../src/client/contract/slots.ts'
 import type { ViewTab } from '../src/client/contract/views.ts'
 
@@ -96,6 +97,8 @@ function mount(
     omitSummaryRow?: boolean
     /** Classify the selected child as a subagent instead of an ordinary fork. */
     summaryOrigin?: 'subagent'
+    /** Insert a first-level subagent between the root and selected child. */
+    nestedSubagent?: boolean
     /** A composer block another plugin raised for this session. */
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
@@ -103,16 +106,27 @@ function mount(
   } = {},
 ) {
   const root = sid('root')
+  const parent = sid('parent')
   const rootRow = { id: root, displayTitle: 'Root', running: false, blank: false, updatedAt: 1 }
+  const parentRow = {
+    id: parent, displayTitle: 'Parent', parentId: root, origin: 'subagent' as const,
+    running: false, blank: false, updatedAt: 2,
+  }
   const childRow = {
-    id: SID, displayTitle: 'Child', parentId: root, cwd: '/projects/one',
-    running: false, blank: options.summaryBlank ?? false, updatedAt: 2,
+    id: SID, displayTitle: 'Child', parentId: options.nestedSubagent === true ? parent : root,
+    cwd: '/projects/one', running: false, blank: options.summaryBlank ?? false, updatedAt: 3,
     ...(options.summaryOrigin === undefined ? {} : { origin: options.summaryOrigin }),
   }
   const listed = options.omitSummaryRow !== true
   const sessions = createSnapshotStore<SessionListState>({
-    ids: listed ? [root, SID] : [root],
-    byId: { [root]: rootRow, ...listed && { [SID]: childRow } },
+    ids: listed
+      ? [root, ...options.nestedSubagent === true ? [parent] : [], SID]
+      : [root],
+    byId: {
+      [root]: rootRow,
+      ...listed && options.nestedSubagent === true && { [parent]: parentRow },
+      ...listed && { [SID]: childRow },
+    },
     current: SID,
     phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
   })
@@ -127,6 +141,7 @@ function mount(
   const stop = vi.fn()
   const open = vi.fn()
   const slotCalls: string[] = []
+  const lineageOwners: ConversationHeaderLineageOwnerProps[] = []
   const viewTabs = options.viewTabs ?? [
     { id: 'chat', label: 'Chat' },
     { id: 'trajectory', label: 'Trajectory' },
@@ -139,12 +154,16 @@ function mount(
   /** Owner share handed to the two composer tool-row seats, per render. */
   const seatOwners: { key: string; owner: unknown }[] = []
   let pickerOwner: unknown
-  const renderSlot = ((key: string, owner: object, opts?: { only?: string }) => {
+  const renderSlot = ((key: string, owner: object, opts?: { only?: string; fallback?: ReactNode }) => {
     slotCalls.push(key)
     if (key === 'conversation.input.model' || key === 'conversation.input.plan') {
       seatOwners.push({ key, owner })
     }
     if (key === 'conversation.hero.workspace') { pickerOwner = owner; return null }
+    if (key === 'conversation.session.header.lineage') {
+      lineageOwners.push(owner as ConversationHeaderLineageOwnerProps)
+      return opts?.fallback ?? null
+    }
     if (key === 'conversation.session.header') {
       return (
         <ConversationSessionHeader
@@ -252,7 +271,7 @@ function mount(
   }
   const view = render(<ConversationRoot {...props} />)
   return {
-    view, chat, sink, retargetWorkspace, session, slotCalls, seatOwners, open,
+    view, chat, sink, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open,
     pickerOwner: () => pickerOwner,
     rerender: () => { view.rerender(<ConversationRoot {...props} />) },
   }
@@ -333,6 +352,22 @@ describe('ConversationRoot resident composer', () => {
     expect(b.open).toHaveBeenCalledWith(sid('root'))
   })
 
+  it('keeps intermediate subagent breadcrumbs at the compact title size', () => {
+    const b = mount(conversationSnapshot(), undefined, undefined, {
+      summaryOrigin: 'subagent',
+      nestedSubagent: true,
+    })
+    expect(b.view.getByRole('button', { name: 'Root' }).className).not.toContain('crumbSubagent')
+    expect(b.view.getByRole('button', { name: 'Parent' }).className).toContain('crumbSubagent')
+    expect(b.view.getByRole('button', { name: 'Child' }).className).toContain('crumbSubagent')
+    expect(b.lineageOwners.slice(-2).map(owner => owner.lineageSessionId)).toEqual([
+      sid('parent'),
+      SID,
+    ])
+    expect(b.lineageOwners.at(-2)?.openTitle).toEqual(expect.any(Function))
+    expect(b.lineageOwners.at(-1)?.openTitle).toBeUndefined()
+  })
+
   it('active phase: fixed header outside the scrollport; sticky composer seat inside it', () => {
     const b = mount(conversationSnapshot())
     const host = b.view.container.querySelector('[data-conversation-scroll]')
@@ -346,6 +381,7 @@ describe('ConversationRoot resident composer', () => {
     expect(host?.contains(header)).toBe(false)
     expect(host?.contains(seat)).toBe(true)
     expect(seat?.contains(textarea)).toBe(true)
+    expect(b.slotCalls).toContain('conversation.session.header.lineage')
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
   })

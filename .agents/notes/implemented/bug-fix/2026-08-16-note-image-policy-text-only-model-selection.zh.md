@@ -6,9 +6,9 @@ Status: implemented
 
 ## 问题
 
-describe-image 图片管线（[工具 README](../../../../packages/vision/tool-describe-image/README.md)）通过在 DeepSeek 线路把图片内容块展平为可复制的 `[image attachment …]` 备注，让 DeepSeek 的纯文本模型获得视觉能力；主机也因此在纯文本路由上接收含图提示，使这些备注能到达模型。但配套的 `session.selectModel` 门槛仍假定每条纯文本路由都会拒绝图片内容：只要会话历史（或待处理收件箱）里带着图片，选择任意 DeepSeek 模型或思考等级都会返回 `model-unavailable`（"does not accept image input, but this session already contains images"）。用户可以围绕附加的图片对话，但对话中途切换模型或思考等级就会让会话搁浅。
+describe-image 图片管线（[工具 README](../../../../packages/vision/tool-describe-image/README.zh.md)）通过在 DeepSeek 线路把图片内容块展平为可复制的 `[image attachment …]` 备注，让 DeepSeek 的纯文本模型获得视觉能力；主机也因此在纯文本路由上接收含图提示，使这些备注能到达模型。但配套的 `session.selectModel` 门槛仍假定每条纯文本路由都会拒绝图片内容：只要会话历史（或待处理收件箱）里带着图片，选择任意 DeepSeek 模型或思考等级都会返回 `model-unavailable`（"does not accept image input, but this session already contains images"）。用户可以围绕附加的图片对话，但对话中途切换模型或思考等级就会让会话搁浅。
 
-门槛自身的注释记录了错误的假定："both wire routes reject image content on text-only models"。实际上只有 pi-ai 路由会拒绝；DeepSeek 路由按设计把图片序列化为备注（[multimodal 笔记](../feature/2026-07-22-web-multimodal-image-input-and-durable-attachments.md)记录的是本 fork 后来偏离的那条拒绝行为）。
+门槛自身的注释记录了错误的假定："both wire routes reject image content on text-only models"。实际上只有 pi-ai 路由会拒绝；DeepSeek 路由按设计把图片序列化为备注（[multimodal 笔记](../feature/2026-07-22-web-multimodal-image-input-and-durable-attachments.zh.md)记录的是本 fork 后来偏离的那条拒绝行为）。
 
 ## 决策
 
@@ -30,5 +30,5 @@ describe-image 图片管线（[工具 README](../../../../packages/vision/tool-d
 
 ## Related
 
-- [Web multimodal image input and durable attachments](../feature/2026-07-22-web-multimodal-image-input-and-durable-attachments.md) 拥有图片内容块、模态元数据，以及本管线所偏离的原始纯文本拒绝行为。
-- [Atomic Web image admission](../bug-fix/2026-07-29-atomic-web-image-admission.md) 拥有本修复所修订的接收/选择串行边界。
+- [Web multimodal image input and durable attachments](../feature/2026-07-22-web-multimodal-image-input-and-durable-attachments.zh.md) 拥有图片内容块、模态元数据，以及本管线所偏离的原始纯文本拒绝行为。
+- [Atomic Web image admission](../bug-fix/2026-07-29-atomic-web-image-admission.zh.md) 拥有本修复所修订的接收/选择串行边界。

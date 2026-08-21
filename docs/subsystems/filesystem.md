@@ -283,7 +283,7 @@ type FsErrorCode =
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxfs--filesystem-abstract-seam"></a>
 
@@ -427,7 +427,7 @@ abstract editText( target: FsTarget, edit: FsEditRequest, expected?: { version: 
 
 Types: [SandboxExecutionPolicy](sandbox.md)
 
-Source: [`packages/fs/fs/src/index.ts:86`](../../packages/fs/fs/src/index.ts)
+Source: [`packages/fs/fs/src/index.ts`](../../packages/fs/fs/src/index.ts)
 
 <a id="fs-events"></a>
 
@@ -450,7 +450,7 @@ Single-slot decision for the next FileSystem.editText. Calling `next()` yields a
 'fs/edit-intent'(target: FsTarget, actor: object | undefined, next: () => { version: FsVersion } | undefined | Promise<{ version: FsVersion } | undefined>): Promise<{ version: FsVersion } | undefined>
 ```
 
-Source: [`packages/fs/fs/src/index.ts:66`](../../packages/fs/fs/src/index.ts)
+Source: [`packages/fs/fs/src/index.ts`](../../packages/fs/fs/src/index.ts)
 
 <a id="fsobserved--emit"></a>
 
@@ -471,7 +471,7 @@ Record an authoritative positive or negative observation. Listeners must be sync
 'fs/observed'(target: FsTarget, observation: FsObservation, actor: object | undefined): void
 ```
 
-Source: [`packages/fs/fs/src/index.ts:76`](../../packages/fs/fs/src/index.ts)
+Source: [`packages/fs/fs/src/index.ts`](../../packages/fs/fs/src/index.ts)
 
 <a id="fswrite-intent--waterfall"></a>
 
@@ -491,5 +491,5 @@ Single-slot decision for the next FileSystem.writeText. Calling `next()` yields 
 'fs/write-intent'(target: FsTarget, actor: object | undefined, next: () => FsWriteIntent | undefined | Promise<FsWriteIntent | undefined>): Promise<FsWriteIntent | undefined>
 ```
 
-Source: [`packages/fs/fs/src/index.ts:58`](../../packages/fs/fs/src/index.ts)
+Source: [`packages/fs/fs/src/index.ts`](../../packages/fs/fs/src/index.ts)
 <!-- END GENERATED cordis-surface -->

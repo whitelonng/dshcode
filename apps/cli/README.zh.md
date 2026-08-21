@@ -17,7 +17,7 @@
 
 ## 应用参数
 
-启动器只解析自身的 flag，并将其后的所有内容交给已启动的 profile；注入该 profile 的任意应用插件都可以解析这份共享的不可变快照（[`dsh-cmdline`](../../packages/boot/cmdline/README.md)）。因此，启动器的 flag 必须写在最前面；启动器无法识别的第一个 token 标志着应用参数的开始：
+启动器只解析自身的 flag，并将其后的所有内容交给已启动的 profile；注入该 profile 的任意应用插件都可以解析这份共享的不可变快照（[`dsh-cmdline`](../../packages/boot/cmdline/README.zh.md)）。因此，启动器的 flag 必须写在最前面；启动器无法识别的第一个 token 标志着应用参数的开始：
 
 ```sh
 dsh --profile web --port 8080       # --port belongs to the web app
@@ -26,6 +26,8 @@ dsh --profile headless "run the tests"
 dsh --profile web --help            # the web app's flags, not the launcher's
 dsh --help                          # the launcher's own help
 ```
+
+<a id="profiles"></a>
 
 ## Profile
 
@@ -40,8 +42,8 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 使用 `--dump-default-config` 和 `--dump-config` 可在不启动的情况下检查组合后的配置树。
 
-层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI（命令行界面）行为参考](reference/README.md)为准。
+层的确切优先级、flag、关闭行为、部署默认值和源码执行方式，以 [CLI（命令行界面）行为参考](reference/README.zh.md)为准。
 
 ## 开发
 
-生产运行需要已构建的包与前端产物。请在仓库根目录单独运行 `pnpm run build`，然后使用 `pnpm dsh <args...>` 运行 TypeScript 入口并转发所有参数；模块解析约定以[源码执行参考](reference/README.md#source-execution)为准。
+生产运行需要已构建的包与前端产物。请在仓库根目录单独运行 `pnpm run build`，然后使用 `pnpm dsh <args...>` 运行 TypeScript 入口并转发所有参数；模块解析约定以[源码执行参考](reference/README.zh.md#source-execution)为准。

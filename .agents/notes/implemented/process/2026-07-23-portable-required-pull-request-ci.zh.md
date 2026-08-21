@@ -12,11 +12,11 @@ Status: implemented
 
 ## 决策
 
-[CI](../../../../.github/workflows/ci.yml) 在仅限本仓库使用的企业级 32 核运行器池上运行必需的主 Node 24 作业，以及稳定的 `all checks passed` 聚合流程。该聚合流程不执行代码检出或仓库门禁；但让它与所依赖的实质性作业共用企业级运行器池，可以避免这些作业已经成功后，必需判定结果又引入一项单独的标准托管计费依赖。必需的 Windows 作业在标准 `ubuntu-latest` 上通过 Wine 运行 Windows Node，覆盖阻断性检查范围；一个独立的原生 `windows-2025` 作业会自动启动，但不参与聚合流程（[双 Windows 决策](2026-08-08-native-windows-pull-request-ci.md)）。标准 `ubuntu-latest` 作业保留 Node 22.19、Node 26、Python SDK 单元测试套件与[发布形态的 Linux x64 Python 运行时验证](../testing/2026-08-12-required-python-runtime-pull-request-ci.md)，串行参考流程仍是完整且未分片的跨平台定义。这些标准托管作业让可移植执行边界保持可观测，而不必在每个拉取请求中重复主清单。
+[CI](../../../../.github/workflows/ci.yml)（仅 pull request）在仅限本仓库使用的企业级 32 核运行器池上运行必需的主 Node 24 作业，以及稳定的 `all checks passed` 聚合流程。该聚合流程不执行代码检出或仓库门禁；但让它与所依赖的实质性作业共用企业级运行器池，可以避免这些作业已经成功后，必需判定结果又引入一项单独的标准托管计费依赖。必需的 Windows 作业在标准 `ubuntu-latest` 上通过 Wine 运行 Windows Node，覆盖阻断性检查范围；一个独立的原生 `windows-2025` 作业会自动启动，但不参与聚合流程（[双 Windows 决策](2026-08-08-native-windows-pull-request-ci.zh.md)）。标准 `ubuntu-latest` 作业保留 Node 22.19、Node 26、Python SDK 单元测试套件与[发布形态的 Linux x64 Python 运行时验证](../testing/2026-08-12-required-python-runtime-pull-request-ci.zh.md)，串行参考流程（在 `ci-master.yml` 中）仍是完整且未分片的跨平台定义。这些标准托管作业让可移植执行边界保持可观测，而不必在每个拉取请求中重复主清单。
 
 三项 Linux 主作业、Node 兼容性、Python SDK 单元测试套件、Python 运行时验证和 `windows node 24 / wine blocking` 继续作为 `all checks passed` 的依赖项；`windows node 24 / native complete` 被刻意排除。分支保护继续要求 `e2e` 和 `all checks passed`。剩余的企业级 Linux 运行器标签无法分配运行器时没有自动后备机制：标准作业会继续报告各自的约定，但无法产出缺失的必需结果。
 
-当前主拓扑及其测量结果以[大型运行器决策](2026-07-22-evidence-based-larger-hosted-runners.md)为准。[跨平台串行参考流程](2026-07-21-serial-cross-platform-ci-reference.md)继续作为独立的完整性检查，现由 `master` 上公司自有 `vm-backup`/`dsh-win-ci` 自托管热备通道提供；仅存的托管串行参考是禁用的 `serial-macos`。手动大型运行器套件则保留规格比较，同时不扩大普通必需矩阵。
+当前主拓扑及其测量结果以[大型运行器决策](2026-07-22-evidence-based-larger-hosted-runners.zh.md)为准。[跨平台串行参考流程](2026-07-21-serial-cross-platform-ci-reference.zh.md)继续作为独立的完整性检查，现由 `master` 上公司自有 `vm-backup`/`dsh-win-ci` 自托管热备通道提供；仅存的托管串行参考是禁用的 `serial-macos`。手动大型运行器套件则保留规格比较，同时不扩大普通必需矩阵。
 
 ## 曾考虑的替代方案
 

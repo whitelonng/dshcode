@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-21-continuable-background-subagents.md) | 中文
 
-本记录已由[可继续的 subagent](2026-07-28-continuable-subagent-conversations.md)取代——后者以一个持久 Session 加至多一个进程内 Activation（驻留期）替换了其基于 Task 的 activation 模型、路由、取消和持久性语义。其服务放置与提供方功能策略此前已由[将 subagent 控制合并到 subagent 服务](../simplification/2026-07-26-merge-subagent-control-service.md)和[以意图命名的 subagent 继续执行操作](../simplification/2026-07-27-intent-named-subagent-continuation-operations.md)取代。仅持久 child 会话与 descriptor 的设计依据仍然有效。
+本记录已由[可继续的 subagent](2026-07-28-continuable-subagent-conversations.zh.md)取代——后者以一个持久 Session 加至多一个进程内 Activation（驻留期）替换了其基于 Task 的 activation 模型、路由、取消和持久性语义。其服务放置与提供方功能策略此前已由[将 subagent 控制合并到 subagent 服务](../simplification/2026-07-26-merge-subagent-control-service.zh.md)和[以意图命名的 subagent 继续执行操作](../simplification/2026-07-27-intent-named-subagent-continuation-operations.zh.md)取代。仅持久 child 会话与 descriptor 的设计依据仍然有效。
 
 ## 问题
 
@@ -27,7 +27,7 @@ durable child Session
 
 前台委派保持一次性行为。继续执行覆盖后台的进程内 spawn 和 fork child。每个 `tool-subagent` 实例都会选择 `backgroundMode: 'one-shot' | 'continuable'`；配置为可继续模式时，所挂载提供方必须具备 `resume` 功能，而可恢复的提供方仍可采用一次性后台策略。在下述 ACP（Agent Client Protocol）后续工作完成前，ACP child 仍保持一次性行为。
 
-`ctx.subagents` 是唯一的公开服务。普通 `start` 不感知 child 集合、Activation 与持久化：它校验提供方功能、解析一次性描述符、分发一个 run、观察 run 生命周期，并返回由持有方负责的 run。注入的内部继续执行管理器负责管理稳定的 child id、可继续描述符持久化与查找、Activation 生命周期，以及通过 `startContinuable` 和 `followup` 进行的路由；管理器自行组合 child 之前，提供方通过私有闭包提供准备数据。按提供方绑定的 `@deepseek-ai/dsh-tool-subagent` 插件及面向用户的适配器调用这些意图操作来处理可继续后台工作；前台和一次性后台委派使用普通 `start`。全局命名的模型工具是 `@deepseek-ai/dsh-tool-subagent-control` 中的可选轻量适配器，它是否存在不会决定是否启动可继续工作。parent 到 child 的枚举、一次性／可继续模式共享的描述符身份与 `list_agents` 属于[持久化 subagent 目录](2026-07-22-durable-subagent-catalog-and-list-agents.md)。
+`ctx.subagents` 是唯一的公开服务。普通 `start` 不感知 child 集合、Activation 与持久化：它校验提供方功能、解析一次性描述符、分发一个 run、观察 run 生命周期，并返回由持有方负责的 run。注入的内部继续执行管理器负责管理稳定的 child id、可继续描述符持久化与查找、Activation 生命周期，以及通过 `startContinuable` 和 `followup` 进行的路由；管理器自行组合 child 之前，提供方通过私有闭包提供准备数据。按提供方绑定的 `@deepseek-ai/dsh-tool-subagent` 插件及面向用户的适配器调用这些意图操作来处理可继续后台工作；前台和一次性后台委派使用普通 `start`。全局命名的模型工具是 `@deepseek-ai/dsh-tool-subagent-control` 中的可选轻量适配器，它是否存在不会决定是否启动可继续工作。parent 到 child 的枚举、一次性／可继续模式共享的描述符身份与 `list_agents` 属于[持久化 subagent 目录](2026-07-22-durable-subagent-catalog-and-list-agents.zh.md)。
 
 ### Task 与取消的所有权
 
@@ -35,7 +35,7 @@ durable child Session
 
 后续每个轮次都会创建另一个 Task。该轮 producer 持有的执行资源仅服务于这次激活，不属于 child 会话。它只会到达一次终态、只产生一个结果，也不会重新打开。Task 注册表中当前注册的那个存活 parent agent 实例仍是其 owner：dispose 该实例会取消、等待并移除其 Task。Task API 会授权 session id 与该 owner 匹配的调用方，但 id 相同的替代实例不会成为通知或资源清理目标。这一设计保留 `settleRun()` 约定，并使 Task 所拥有的存活 child 数量受并发工作量限制，而不是随历史会话数量增长。
 
-用户界面适配器打开 child 会话时，只读取持久化 transcript，不会仅为展示而恢复 agent。用户输入通过继续执行管理器，启动或加入与 parent 输入相同的 Task 激活。由用户启动的 Task 会保留当前加载的精确 parent Agent 作为通知目标，`job_output` 仍是唯一结果路径。只要 Task 尚未标记为已报告，现有完成监听器最多注入一条主动通知；`kill`、终态读取或终态等待都可能将其标记为已报告，并抑制这条通知。因此，仅允许在该 parent 实例保持存活时进行用户交互。可以比 parent 存活更久、并将结论显式合并回去的用户自有会话属于[交互式 side session](../../proposed/feature/2026-07-08-interactive-side-sessions.md)，不属于这一由 Task 持有的生命周期。
+用户界面适配器打开 child 会话时，只读取持久化 transcript，不会仅为展示而恢复 agent。用户输入通过继续执行管理器，启动或加入与 parent 输入相同的 Task 激活。由用户启动的 Task 会保留当前加载的精确 parent Agent 作为通知目标，`job_output` 仍是唯一结果路径。只要 Task 尚未标记为已报告，现有完成监听器最多注入一条主动通知；`kill`、终态读取或终态等待都可能将其标记为已报告，并抑制这条通知。因此，仅允许在该 parent 实例保持存活时进行用户交互。可以比 parent 存活更久、并将结论显式合并回去的用户自有会话属于[交互式 side session](../../proposed/feature/2026-07-08-interactive-side-sessions.zh.md)，不属于这一由 Task 持有的生命周期。
 
 如果没有附加任务控制器，`JobRegistry.start()` 会拒绝 producer。因此，接受 child 输入的用户界面适配器必须附加任务控制器，或运行于加载了 `@deepseek-ai/dsh-tool-jobs` 的部署中；仅加载 Task 服务并不足够。这项依赖是 parent 和用户启动的激活共用 Task 结果、取消和通知路径所付出的代价。
 
@@ -103,7 +103,7 @@ Task 记录和活跃 run 关联都位于进程内。持久化使 child 会话可
 
 **在已 dispose 的 run 上保留 `resume?()`。** 如果仅为调用 `resume()` 而保留已 dispose 的 `SubagentRun`，旧 run 会同时充当持久化 child handle，而且进程重启后无法重建该对象。由服务分发、提供方重建，可明确表达持久化边界。
 
-**将控制编排放在 `SubagentRuntime` 上。** 这一服务放置方案即[服务合并决策](../simplification/2026-07-26-merge-subagent-control-service.md)；[意图操作细化](../simplification/2026-07-27-intent-named-subagent-continuation-operations.md)将提供方 start／resume 分发的复用限制在服务内部，同时将可选的 Task 与持久化工作隔离在注入的内部管理器中。
+**将控制编排放在 `SubagentRuntime` 上。** 这一服务放置方案即[服务合并决策](../simplification/2026-07-26-merge-subagent-control-service.zh.md)；[意图操作细化](../simplification/2026-07-27-intent-named-subagent-continuation-operations.zh.md)将提供方 start／resume 分发的复用限制在服务内部，同时将可选的 Task 与持久化工作隔离在注入的内部管理器中。
 
 **增加显式激活阶段。** 公开的 `starting`／`running`／`settling` 状态可以准确描述准入和清理，但会引入实现本身并不需要的生命周期协议。同步安装关联无需暴露这些阶段，即可消除进程内重复的 cold resume。
 

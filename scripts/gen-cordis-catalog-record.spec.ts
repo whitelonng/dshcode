@@ -10,7 +10,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { maybeRecordPair, REGION_BEGIN, REGION_END, spliceRegion } from './gen-cordis-catalog.ts'
+import {
+  localizePageRegion,
+  maybeRecordPair,
+  REGION_BEGIN,
+  REGION_END,
+  spliceRegion,
+} from './gen-cordis-catalog.ts'
 import { blobHash, renderPairMeta } from './translation-pairing.ts'
 
 const PAGE = 'docs/subsystems/fix.md'
@@ -140,5 +146,30 @@ describe('spliceRegion', () => {
     const doubled = `${REGION_BEGIN}\na\n${REGION_END}\n${REGION_BEGIN}\nb\n${REGION_END}\n`
     expect(() => spliceRegion(doubled, `${REGION_BEGIN}\nnew\n${REGION_END}`))
       .toThrow('found 2 BEGIN/2 END')
+  })
+})
+
+describe('localizePageRegion', () => {
+  it('changes only paired Markdown paths for the Chinese generated region', () => {
+    const root = mkdtempSync(join(tmpdir(), 'cordis-region-locale-'))
+    roots.push(root)
+    mkdirSync(join(root, 'docs/subsystems'), { recursive: true })
+    mkdirSync(join(root, 'packages'), { recursive: true })
+    mkdirSync(join(root, 'scripts'), { recursive: true })
+    writeFileSync(join(root, 'docs/subsystems/target.md'), '# Target\n')
+    writeFileSync(join(root, 'docs/subsystems/target.zh.md'), '# 目标\n')
+    writeFileSync(join(root, 'docs/subsystems/excluded.md'), '# Excluded\n')
+    writeFileSync(join(root, 'docs/subsystems/excluded.zh.md'), '# 排除\n')
+    writeFileSync(join(root, 'packages/outside.md'), '# Outside\n')
+    writeFileSync(join(root, 'packages/outside.zh.md'), '# 范围外\n')
+    writeFileSync(join(root, 'scripts/translation-pairing.manifest.json'), JSON.stringify({
+      excluded: ['docs/subsystems/excluded.md'],
+    }))
+    const region = `${REGION_BEGIN}\n[Target](target.md#api) [Excluded](excluded.md) [Outside](../../packages/outside.md)\n${REGION_END}`
+
+    expect(localizePageRegion(region, 'docs/subsystems/page.md', root)).toBe(region)
+    expect(localizePageRegion(region, 'docs/subsystems/page.zh.md', root)).toBe(
+      `${REGION_BEGIN}\n[Target](target.zh.md#api) [Excluded](excluded.md) [Outside](../../packages/outside.md)\n${REGION_END}`,
+    )
   })
 })

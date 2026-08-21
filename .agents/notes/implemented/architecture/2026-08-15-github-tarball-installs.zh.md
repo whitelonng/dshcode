@@ -38,4 +38,4 @@ Status: implemented
 
 ## 相关
 
-- [pnpm 委托、SRI 完整性与插件发现层](2026-08-15-pnpm-delegation-and-plugin-discovery.md) 拥有本变更未触碰的委托路径；[bundle 风格插件安装与 git 身份诊断](2026-08-15-bundle-style-plugin-installs.md) 拥有 tarball 路径仍执行的身份校验。
+- [pnpm 委托、SRI 完整性与插件发现层](2026-08-15-pnpm-delegation-and-plugin-discovery.zh.md) 拥有本变更未触碰的委托路径；[bundle 风格插件安装与 git 身份诊断](2026-08-15-bundle-style-plugin-installs.zh.md) 拥有 tarball 路径仍执行的身份校验。

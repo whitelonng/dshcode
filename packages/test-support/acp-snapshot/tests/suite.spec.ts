@@ -932,6 +932,25 @@ describe('stabilizeRefreshLog', () => {
     ].join('\n'))
   })
 
+  it('reads projected packed fixtures while retaining their data gaps', () => {
+    const fresh = [
+      '{"type":"session","id":"same","createdAt":200}',
+      '{"type":"text-chunks","seq0":2,"time0":200,"data":{"turn":1,"step":1,"index":0,"dt":[5,7],"texts":["new",""," split"]}}',
+      '',
+    ].join('\n')
+    const existing = [
+      '{"type":"session","id":"same","createdAt":100}',
+      '{"type":"text-chunks","data":{"turn":1,"step":1,"index":0,"dt":[1,2],"texts":["old","chunk","shape"]}}',
+      '',
+    ].join('\n')
+
+    expect(stabilize(fresh, existing)).toBe([
+      '{"type":"session","id":"same","createdAt":100}',
+      '{"type":"text-chunks","seq0":2,"time0":0,"data":{"turn":1,"step":1,"index":0,"dt":[1,2],"texts":["new",""," split"]}}',
+      '',
+    ].join('\n'))
+  })
+
   it.each([
     ['the old run is absent', [], 200],
     ['the old run is shorter', [100, 101], 100],
@@ -1069,7 +1088,7 @@ describe('stabilizeRefreshLog', () => {
     const existing = [
       '{"type":"session","id":"old-child","createdAt":100,"cwd":"/old","parentSession":"old-parent","seedLength":5}',
       '{"type":"hook/result","seq":1,"time":11,"data":{"decision":"stale","durationMs":99}}',
-      '{"type":"turn/end","seq":2,"data":{"error":"stale"}}',
+      '{"type":"turn/end","seq":2,"time":12,"data":{"error":"stale"}}',
       '{"type":"assistant/message","seq":3,"time":12,"data":{"text":"different type"}}',
       '{"type":"hook/result","seq":4,"time":13,"data":{"decision":"stale"}}',
       '',
@@ -1082,7 +1101,7 @@ describe('stabilizeRefreshLog', () => {
     ])).toBe([
       '{"type":"session","id":"old-child","createdAt":100,"cwd":"/old","parentSession":"old-parent","seedLength":1}',
       '{"type":"hook/result","seq":1,"time":11,"data":{"decision":"block","durationMs":99}}',
-      '{"type":"turn/end","seq":2,"time":33,"data":{"error":"fresh error"}}',
+      '{"type":"turn/end","seq":2,"time":12,"data":{"error":"fresh error"}}',
       '{"type":"tool/result","seq":3,"time":44,"data":{"text":"old-parent in /old"}}',
       '{"type":"hook/result","seq":4,"time":13,"data":{"decision":"allow","durationMs":5}}',
       '',

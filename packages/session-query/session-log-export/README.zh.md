@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Web Session 日志下载控制，使用 `dsh-host-apiproxy` 拥有的 Host 流式 ZIP 端点。Host 半包注册 `/export`；浏览器半包在 Session Header 中提供 111×32 的 `Session log` 操作，以及一个供该按钮与斜杠命令共用的下载控制器和弹窗。ZIP 生成、原始 JSONL/zstd 读取、子 Session、附件、背压和 HTTP 错误语义仍由 [ApiProxy 下载实现](../../host/apiproxy/README.md)负责。
+Web Session 日志下载控制，使用 `dsh-host-apiproxy` 拥有的 Host 流式 ZIP 端点。Host 半包注册 `/export`；浏览器半包在 Session Header 中提供 111×32 的 `Session log` 操作，以及一个供该按钮与斜杠命令共用的下载控制器和弹窗。ZIP 生成、原始 JSONL/zstd 读取、子 Session、附件、背压和 HTTP 错误语义仍由 [ApiProxy 下载实现](../../host/apiproxy/README.zh.md)负责。
 
 ## 命令约定
 

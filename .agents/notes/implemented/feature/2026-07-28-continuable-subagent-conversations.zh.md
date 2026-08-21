@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-28-continuable-subagent-conversations.md) | 中文
 
-本记录取代[可继续的后台 subagent](../../implemented/feature/2026-07-21-continuable-background-subagents.md)中由 Task 支撑的继续执行管理器。它保留[将 subagent 控制合并到 subagent 服务](../../implemented/simplification/2026-07-26-merge-subagent-control-service.md)确立的单一 `ctx.subagents` 服务，以及[以意图命名的 subagent 继续执行操作](../../implemented/simplification/2026-07-27-intent-named-subagent-continuation-operations.md)确立的 `followup` 操作。
+本记录取代[可继续的后台 subagent](../../implemented/feature/2026-07-21-continuable-background-subagents.zh.md)中由 Task 支撑的继续执行管理器。它保留[将 subagent 控制合并到 subagent 服务](../../implemented/simplification/2026-07-26-merge-subagent-control-service.zh.md)确立的单一 `ctx.subagents` 服务，以及[以意图命名的 subagent 继续执行操作](../../implemented/simplification/2026-07-27-intent-named-subagent-continuation-operations.zh.md)确立的 `followup` 操作。
 
 ## 问题
 
@@ -113,7 +113,7 @@ activation-owner 作用域之所以存在，是因为普通 Cordis owner effect 
 
 ### 报告投递扩展
 
-后来添加的可选 child 作用域 `report(output)` 工具不会改变 Activation 驻留状态，也不会增加另一条队列。它每轮可调用零次或多次，不允许指定接收方，而是推导在线的直接 parent；投递采用静默注入还是唤醒 parent follow-up，由部署配置选择。[report 工具 Agent Note](2026-07-30-continuable-subagent-report-tool.md)规定其权限、确认、设置贡献和投递约定。
+后来添加的可选 child 作用域 `report(output)` 工具不会改变 Activation 驻留状态，也不会增加另一条队列。它每轮可调用零次或多次，不允许指定接收方，而是推导在线的直接 parent；投递采用静默注入还是唤醒 parent follow-up，由部署配置选择。[report 工具 Agent Note](2026-07-30-continuable-subagent-report-tool.zh.md)规定其权限、确认、设置贡献和投递约定。
 
 ### 延后的 steering（中途引导）
 
@@ -131,7 +131,7 @@ activation-owner 作用域之所以存在，是因为普通 Cordis owner effect 
 
 ### 持久性、dispose 与恢复
 
-没有 Task 后，系统不再提供 `job_output`、`job_kill`、Task 状态或逐消息结果 promise。调用方 signal 只能在 inbox 接受消息前中止 start 或 follow-up。消息被接受后，parent 不能通过 `ctx.subagents` 取消已接受的消息或 dispose 激活；唯一的公开停止操作是后来的[当前轮次中断](2026-08-06-continuable-subagent-interrupt.md)，它以 `keepInbox` 取消在线目标的当前轮次，驻留、待处理工作与后代均保持不变。
+没有 Task 后，系统不再提供 `job_output`、`job_kill`、Task 状态或逐消息结果 promise。调用方 signal 只能在 inbox 接受消息前中止 start 或 follow-up。消息被接受后，parent 不能通过 `ctx.subagents` 取消已接受的消息或 dispose 激活；唯一的公开停止操作是后来的[当前轮次中断](2026-08-06-continuable-subagent-interrupt.zh.md)，它以 `keepInbox` 取消在线目标的当前轮次，驻留、待处理工作与后代均保持不变。
 
 宿主和管理器拆卸仍是生命周期停止路径。管理器卸载会全局应用它；宿主只会在自己确切拥有的顶层 Agent 之下应用它。两种形式都会关闭适用的准入作用域，停止选中的可见 Activation，等待该作用域中已获准的物化过程，按 child-first 顺序释放，并保留持久化 Session。
 
@@ -145,7 +145,7 @@ activation-owner 作用域之所以存在，是因为普通 Cordis owner effect 
 
 本版本覆盖可继续的进程内 child，一次性委派保持不变。远程提供方必须具备单独的激活 handle，以及等价的认证控制与 child-first 完全停稳约定，才能支持同样的行为。
 
-它不新增 host-user 继续执行、subagent steering 操作、持久化邮箱、跨进程 lease、中断 inbox 工作的自动回放、团队权限、工作流权限、公开驻留查询、新的在线激活数量或后代总数限制，以及运行时缓存；后来的[当前轮次中断](2026-08-06-continuable-subagent-interrupt.md)在此生命周期之上补充了唯一的公开停止操作。现有委派深度策略保持不变。可选的 child 到 parent 报告是后续消费该生命周期的功能，不属于基础可继续能力。
+它不新增 host-user 继续执行、subagent steering 操作、持久化邮箱、跨进程 lease、中断 inbox 工作的自动回放、团队权限、工作流权限、公开驻留查询、新的在线激活数量或后代总数限制，以及运行时缓存；后来的[当前轮次中断](2026-08-06-continuable-subagent-interrupt.zh.md)在此生命周期之上补充了唯一的公开停止操作。现有委派深度策略保持不变。可选的 child 到 parent 报告是后续消费该生命周期的功能，不属于基础可继续能力。
 
 ## 曾考虑的替代方案
 
@@ -186,7 +186,7 @@ activation-owner 作用域之所以存在，是因为普通 Cordis owner effect 
 - `followup()` 只接受确切的在线直接 parent，并在任何物化之后的最终无 await 的 inbox 准入边界再次检查该身份；持久化消息来源信息不能授权投递。
 - 继续执行消息始终使用 `Agent.followup()` 并共享其 inbox FIFO，包括 child 已有开放轮次的情况。
 - `ctx.subagents.followup()` 及其 `send_message` 适配器只返回已接受的 `MessageId`；继续执行层不接受投递 target，也不定义 subagent 专属路由结果。
-- 调用方 signal 只能在 inbox 接受消息前停止 start 和 follow-up，限定到宿主的拆卸与管理器全局拆卸则保留 child-first 清理；[当前轮次中断](2026-08-06-continuable-subagent-interrupt.md)是唯一的公开停止操作，且不进入拆卸流程。
+- 调用方 signal 只能在 inbox 接受消息前停止 start 和 follow-up，限定到宿主的拆卸与管理器全局拆卸则保留 child-first 清理；[当前轮次中断](2026-08-06-continuable-subagent-interrupt.zh.md)是唯一的公开停止操作，且不进入拆卸流程。
 - 本版本不暴露 subagent steering 操作或当前轮次控制方状态。
 - 带有在线所持 child 的空闲 Agent 会产生 `waiting` 激活，其 `AgentHandle` 继续保留。
 - 向 `waiting` 投递 `next-turn` 会唤醒同一个激活；完成 dispose 后投递消息会冷恢复新激活。

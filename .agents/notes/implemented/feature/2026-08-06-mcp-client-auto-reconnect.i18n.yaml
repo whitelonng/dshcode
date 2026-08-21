@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.md
 2026-08-06-mcp-client-auto-reconnect.md: 99a8aec1abe3713822f8f17c17d8efaca5d61a4d
-2026-08-06-mcp-client-auto-reconnect.zh.md: 8d4dc935e6edee9a05f556774e743e48234ca709
+2026-08-06-mcp-client-auto-reconnect.zh.md: 87acb6901cf3bc03fc5d71e89538e5ec23b2b118

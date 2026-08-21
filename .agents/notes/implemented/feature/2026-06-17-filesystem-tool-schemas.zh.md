@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[文件系统能力 seam Agent Note](../architecture/2026-06-17-filesystem-capability-seam.md) 定义了文件系统能力 seam（`ctx.fs`）、包拆分（`dsh-fs`、`dsh-fs-local`、`dsh-tool-fs`，加上 `dsh-fs-observation-policy` 策略插件），以及针对 read-before-write/edit 检查的已观测文件／陈旧版本策略——[拆分文件系统 seam](../simplification/2026-06-26-fsspec-style-fs-seam.md)和[事件门](../architecture/2026-06-26-file-context-as-event-gate.md) Agent Note 后来将其从 `ctx.fs` 移至 `dsh-fs-observation-policy` 插件的 `fs/*` 事件门上。首次文件系统工具交付剩余的决策是面向模型的 schema：模型在 `read`、`write` 和 `edit` 中看到哪些参数。
+[文件系统能力 seam Agent Note](../architecture/2026-06-17-filesystem-capability-seam.zh.md) 定义了文件系统能力 seam（`ctx.fs`）、包拆分（`dsh-fs`、`dsh-fs-local`、`dsh-tool-fs`，加上 `dsh-fs-observation-policy` 策略插件），以及针对 read-before-write/edit 检查的已观测文件／陈旧版本策略——[拆分文件系统 seam](../simplification/2026-06-26-fsspec-style-fs-seam.zh.md)和[事件门](../architecture/2026-06-26-file-context-as-event-gate.zh.md) Agent Note 后来将其从 `ctx.fs` 移至 `dsh-fs-observation-policy` 插件的 `fs/*` 事件门上。首次文件系统工具交付剩余的决策是面向模型的 schema：模型在 `read`、`write` 和 `edit` 中看到哪些参数。
 
 该 schema 必须足够小，但又要足够稳定，使本地、远程、沙箱文件系统后端不需要改动面向模型的接口，并且必须避免从参考系统中照搬所有选项。Claude Code 和 OpenCode 暴露了类似的核心文件工具，但在命名风格和额外 flag 上有所不同；本决策选择最小的共有接口。
 
@@ -70,7 +70,7 @@ schema 不将 `expected_hash`、`expected_version` 或 `create_only` 作为面�
 
 ## 结果形状
 
-首次实现曾将 `ContentBlock[]` 格式化逻辑放在 `execute` 中。[规范工具输出约定](../architecture/2026-07-20-canonical-tool-output-contract.md)如今将 `ctx.fs` 的结果事实保留为工具经校验的值，并通过 `output.render` 派生相同的模型文本；文件状态的记录/刷新仍归 `ctx.fs` 所有。
+首次实现曾将 `ContentBlock[]` 格式化逻辑放在 `execute` 中。[规范工具输出约定](../architecture/2026-07-20-canonical-tool-output-contract.zh.md)如今将 `ctx.fs` 的结果事实保留为工具经校验的值，并通过 `output.render` 派生相同的模型文本；文件状态的记录/刷新仍归 `ctx.fs` 所有。
 
 默认原生投影：
 

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-委派边界在第一次 await 之前，经由共享的子 agent 辅助函数（`dsh-subagent` 中的 `captureDelegatedPolicyOverrides`／`appendDelegatedPolicyOverrides`）对 `sandboxPolicy.overrideOf(parent.session)` 获取快照；一次性驱动器与[可继续启动](2026-08-10-continuable-subagent-policy-inheritance.md)都会调用这些辅助函数。父级后续的切换属于父级的未来；取消后重新委派会取得新快照。沙箱策略服务为可选，仅复制显式会话覆盖项，绝不复制部署默认值或一次性授权。审批策略不继承：同一次捕获会把每个子 agent 钉定为 `'never'`——[审批钉定决策](2026-08-10-subagent-approval-pinned-never.md)取代了本 note 原先的审批覆盖项继承。
+委派边界在第一次 await 之前，经由共享的子 agent 辅助函数（`dsh-subagent` 中的 `captureDelegatedPolicyOverrides`／`appendDelegatedPolicyOverrides`）对 `sandboxPolicy.overrideOf(parent.session)` 获取快照；一次性驱动器与[可继续启动](2026-08-10-continuable-subagent-policy-inheritance.zh.md)都会调用这些辅助函数。父级后续的切换属于父级的未来；取消后重新委派会取得新快照。沙箱策略服务为可选，仅复制显式会话覆盖项，绝不复制部署默认值或一次性授权。审批策略不继承：同一次捕获会把每个子 agent 钉定为 `'never'`——[审批钉定决策](2026-08-10-subagent-approval-pinned-never.zh.md)取代了本 note 原先的审批覆盖项继承。
 
 每个捕获值都会成为子 agent 工厂在未发布设置阶段追加的一条带来源标记的 `sandbox/mode` 或 `approval/policy` 事件。会话构造函数已将 `Session.firstLiveSeq` 固定为 fork 前缀的长度，因此继承事实会排在 fork 历史之后，在子 agent 公布时进入遥测，同时让 `SessionHeader.seedLength` 保持为此前缀的长度。因此，既有的末事件胜出折叠会让委派快照压过陈旧的 fork 历史，并让子 agent 后续的切换压过该快照。孙代 agent 会折叠其父级已记录的状态，因此无需另一套继承机制即可组合此规则。
 
@@ -18,7 +18,7 @@ Status: implemented
 
 ### 被拦住的子 agent 会经历什么
 
-受限子 agent 会得到普通拒绝标记，升级请求则被子 agent 钉定的 `'never'` 策略确定性拒绝；`subagent:delegation` 运行时上下文声明告知子 agent 上报限制而不是重试，由控制器持有的父 agent 可以放宽自己的会话后重新委派（[审批钉定决策](2026-08-10-subagent-approval-pinned-never.md)）。
+受限子 agent 会得到普通拒绝标记，升级请求则被子 agent 钉定的 `'never'` 策略确定性拒绝；`subagent:delegation` 运行时上下文声明告知子 agent 上报限制而不是重试，由控制器持有的父 agent 可以放宽自己的会话后重新委派（[审批钉定决策](2026-08-10-subagent-approval-pinned-never.zh.md)）。
 
 ## 考虑过的替代方案
 
@@ -27,7 +27,7 @@ Status: implemented
 - **首个提示词监听器**：不予采纳。尽管创建事务已经允许在发布前追加日志，它仍会引入监听器顺序与更晚的时序边界。
 - **复制部署默认值**：不予采纳。默认值仍由运维人员拥有且可能变化；未切换的父级不会记录任何值，因此其子 agent 跟随当前部署。
 - **每次调用时沿 `parentSession` 实时解析**：不予采纳。这会打破「两个会话永远看不到彼此状态」的隔离不变量，要求父会话在子 agent 的整个生命周期内保持加载，还会让父级在子 agent 运行途中做的切换追溯性地改变一个正在运行的子 agent。委派时快照才是本设计的语义：子 agent 保持它被交付时的策略；取消后重新 spawn 即可拿到收紧后的策略。
-- **强制使用 `'never'`**：本 note 当初不作为继承行为采纳，理由是强制值会排除未来的子 agent 应答器；该结论已被[审批钉定决策](2026-08-10-subagent-approval-pinned-never.md)推翻，现行理由归其所有。把 ask 路由到根控制器需要父链所有权与发起 spawn 的 `callId`，仍按[审批 seam Agent Note](2026-07-06-approval-seam.md) 所述延期。
+- **强制使用 `'never'`**：本 note 当初不作为继承行为采纳，理由是强制值会排除未来的子 agent 应答器；该结论已被[审批钉定决策](2026-08-10-subagent-approval-pinned-never.zh.md)推翻，现行理由归其所有。把 ask 路由到根控制器需要父链所有权与发起 spawn 的 `callId`，仍按[审批 seam Agent Note](2026-07-06-approval-seam.zh.md) 所述延期。
 
 ## 后果
 

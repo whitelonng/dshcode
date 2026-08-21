@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[`ctx.goals`](../goal/README.md) 的同会话续行驱动器。它通过公开 `Agent` 与会话服务，把 phase 为 active 且已启用续行的目标转换为连续的 [Goal Round](../../../docs/glossary.md#goal-round)；[同会话驱动器 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-same-session-goal-round-driver.md) 记载竞态与生命周期方面的设计理由。
+[`ctx.goals`](../goal/README.zh.md) 的同会话续行驱动器。它通过公开 `Agent` 与会话服务，把 phase 为 active 且已启用续行的目标转换为连续的 [Goal Round](../../../docs/glossary.zh.md#goal-round)；[同会话驱动器 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-same-session-goal-round-driver.zh.md) 记载竞态与生命周期方面的设计理由。
 
 ## 组合
 
@@ -17,7 +17,7 @@
   name: '@deepseek-ai/dsh-goal-round-driver'
 ```
 
-该插件没有可调配置。`maxGoalRounds` 属于目标定义，面向模型的阻塞阈值则属于 [`dsh-tool-goal`](../tool-goal/README.md)；在驱动器中重复任一数值都可能产生分歧策略。
+该插件没有可调配置。`maxGoalRounds` 属于目标定义，面向模型的阻塞阈值则属于 [`dsh-tool-goal`](../tool-goal/README.zh.md)；在驱动器中重复任一数值都可能产生分歧策略。
 
 ## Round 约定
 

@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-18-sqlite-physical-chunk-row-compression.md
 2026-08-18-sqlite-physical-chunk-row-compression.md: e46adf26ab4ce0a495f3509977ab0835631c16a9
-2026-08-18-sqlite-physical-chunk-row-compression.zh.md: 8e3978c1319545fd09dc668fbd46434a03eb8def
+2026-08-18-sqlite-physical-chunk-row-compression.zh.md: d93aa64a53effa9d456b3eba2e1681b9478c448d

@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-stdio JSON-RPC 对外服务接口（`@deepseek-ai/dsh-sdk-jsonrpc-server`，见[单文件可执行 Agent Note](../architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md)）当时只有一个客户端：Python SDK。想要同样「把 harness 作为子进程驱动」能力的 TypeScript 消费方——仓库测试、自动化，尤其是一个其子进程是*完整 harness 运行时*（而非通用 ACP agent（智能体））的 subagent 后端——没有可导入的内容：请求/通知载荷形状只以匿名对象字面量存在于服务器内部，传输类也躺在服务器插件包里。
+stdio JSON-RPC 对外服务接口（`@deepseek-ai/dsh-sdk-jsonrpc-server`，见[单文件可执行 Agent Note](../architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.zh.md)）当时只有一个客户端：Python SDK。想要同样「把 harness 作为子进程驱动」能力的 TypeScript 消费方——仓库测试、自动化，尤其是一个其子进程是*完整 harness 运行时*（而非通用 ACP agent（智能体））的 subagent 后端——没有可导入的内容：请求/通知载荷形状只以匿名对象字面量存在于服务器内部，传输类也躺在服务器插件包里。
 
 ## 决策
 
@@ -21,7 +21,7 @@ stdio JSON-RPC 对外服务接口（`@deepseek-ai/dsh-sdk-jsonrpc-server`，见[
 
 ## 测试
 
-四层，依[测试政策](../../../../docs/testing.md)：
+四层，依[测试政策](../../../../docs/testing.zh.md)：
 
 - **免密钥单元**——`sdk-client` 通过真实 stdio 驱动脚本化伪运行时（`tests/fake-runtime.ts`，环境变量脚本化、纯协议——即 Python `test_client.py` 的模式）；`subagent-dsh-sdk` 经真实提供方驱动同一伪运行时。三个包全部 100% 逐文件覆盖。
 - **免密钥 Loader 组合**——`subagent-dsh-sdk/tests/loader-composition.e2e.ts` 启动仅测试用 cordis.yml（`examples/jsonrpc-agent/tests/fixtures/subagent/subagent-dsh-sdk/`），其中子进程是真实的第二个 harness 运行时、带自己的 cordis.yml；断言父工具结果与子进程自己持久化的 transcript（文本记录）都携带父会话 cwd。子启动经 `resolveExampleLaunch` 解析，src/lib 两种模式都成立。

@@ -8,7 +8,7 @@ Status: implemented
 
 工具行路径点击已经通过聊天视图注入的 `openFile` 调用 `host.openPath`。inject 吞掉了每一次 Host 或操作系统拒绝，因此缺少桌面打开器、远程或非回环载体、或 Host 无法交接的路径，都会让该行看起来像成功。读者看不到原因，也无法再试一次。
 
-[用系统应用打开文件的决策](../feature/2026-07-28-tool-call-file-open-in-os.md) 仍然拥有链接手势和 Host 交接。本 Agent Note 只拥有拒绝路径。
+[用系统应用打开文件的决策](../feature/2026-07-28-tool-call-file-open-in-os.zh.md) 仍然拥有链接手势和 Host 交接。本 Agent Note 只拥有拒绝路径。
 
 ## 决策
 

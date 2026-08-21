@@ -11,8 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { delimiter as pathDelimiter } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-compaction'
-import { decodeStorageRecord } from '@deepseek-ai/dsh-session'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { decodeStorageRecord, type SessionEvent } from '@deepseek-ai/dsh-session'
 import type {
   ContentBlock,
   GenerateOptions,
@@ -26,6 +25,8 @@ import type {
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
 import { LlmAdapter, LlmError, ReasoningEffortId, assertNever, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+
+const PACKED_CHUNK_ROW_TYPES = new Set(['text-chunks', 'reasoning-chunks', 'tool-call-chunks'])
 
 /**
  * One recorded model call. `throw` may replay prefix chunks before failing;
@@ -165,11 +166,43 @@ export interface SessionScript {
  * @returns every event after the header, in log order.
  */
 export function parseSessionLog(text: string): SessionEvent[] {
-  const lines = text.split('\n').filter(line => line.trim().length > 0)
   const events: SessionEvent[] = []
-  // The JSONL backend guarantees line 0 is the session header.
-  for (let i = 1; i < lines.length; i++) {
-    events.push(...decodeStorageRecord(JSON.parse(lines[i] as string)))
+  let nextSeq = 0
+  let headerSkipped = false
+  // The JSONL backend guarantees line 0 is the session header. Projected
+  // fixtures omit event envelopes; synthesize them while decoding so callers
+  // still receive complete SessionEvent values.
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
+    if (line.trim().length === 0) continue
+    if (!headerSkipped) {
+      headerSkipped = true
+      continue
+    }
+    let value: unknown
+    try {
+      value = JSON.parse(line) as unknown
+    } catch (error) {
+      throw new Error(`session snapshot line ${index + 1} contains invalid JSON`, { cause: error })
+    }
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(`session snapshot line ${index + 1} must be a JSON object`)
+    }
+    const record = value as Record<string, unknown>
+    const packed = PACKED_CHUNK_ROW_TYPES.has(record.type as string)
+    const seqKey = packed ? 'seq0' : 'seq'
+    const timeKey = packed ? 'time0' : 'time'
+    if (!Object.hasOwn(record, seqKey)) record[seqKey] = nextSeq
+    if (!Object.hasOwn(record, timeKey)) record[timeKey] = 0
+    let decoded: SessionEvent[]
+    try {
+      decoded = decodeStorageRecord(record)
+    } catch (error) {
+      /* v8 ignore next -- decodeStorageRecord only throws Error instances; the String arm satisfies unknown narrowing. */
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new Error(`session snapshot line ${index + 1}: ${detail}`, { cause: error })
+    }
+    events.push(...decoded)
+    nextSeq += decoded.length
   }
   return events
 }

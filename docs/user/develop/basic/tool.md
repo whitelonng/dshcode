@@ -2,7 +2,7 @@
 
 English | [中文](tool.zh.md)
 
-This tutorial adds a `greet` tool to the Web UI. Complete [Your first plugin](./) first and keep its `scratch-plugin` directory.
+This tutorial adds a `greet` tool to the Web UI. Complete [Your first plugin](./index.md) first and keep its `scratch-plugin` directory.
 
 ## Create the tool plugin
 
@@ -49,4 +49,4 @@ Open `http://127.0.0.1:3080` and ask: `Use the greet tool to greet Ada.` The mod
 
 - [Plugin configuration](./config.md) — make the greeting configurable.
 - [Tool authoring reference](../../../cookbook/adding-a-tool.md) — look up nested schemas, canonical values, background work, policy hooks, Code Mode, and UI cards.
-- [Capability layering](../practice/) — split a replaceable capability into Service Definition, Service Provider, and Consumer packages.
+- [Capability layering](../practice/index.md) — split a replaceable capability into Service Definition, Service Provider, and Consumer packages.

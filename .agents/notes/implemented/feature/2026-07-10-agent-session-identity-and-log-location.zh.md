@@ -12,7 +12,7 @@ agent（智能体）可以通过 `session.header.cwd` 识别其工作区，但�
 
 ## 决策
 
-在 [`SessionPersistence`](../architecture/2026-06-14-session-persistence.md) seam 上增加同步、无副作用的位置查询：
+在 [`SessionPersistence`](../architecture/2026-06-14-session-persistence.zh.md) seam 上增加同步、无副作用的位置查询：
 
 ```ts
 import type { SessionHeader } from '@deepseek-ai/dsh-session'
@@ -33,7 +33,7 @@ interface SessionPersistence {
 
 注册表会为每次前台和后台 bash `ToolExecution` 重新构建受信任的覆盖层：
 
-- `DSH_HOME` 始终是配置的 Harness home 绝对路径。独立的 [`@deepseek-ai/dsh-home-paths`](../../../../packages/util/home-paths/README.md) 工具库规定其优先级：显式 `dshHome`，其次是环境中的 `$DSH_HOME`，最后是 `~/.dsh`。
+- `DSH_HOME` 始终是配置的 Harness home 绝对路径。独立的 [`@deepseek-ai/dsh-home-paths`](../../../../packages/util/home-paths/README.zh.md) 工具库规定其优先级：显式 `dshHome`，其次是环境中的 `$DSH_HOME`，最后是 `~/.dsh`。
 - `DSH_SHELL=1` 始终存在，用于标识由 DeepSeek Harness 管理、面向模型的 bash 子进程。
 - 执行具有关联 agent 时，`DSH_SESSION_ID` 存在并等于 `agent.session.header.id`。
 - 内置的持久化转换层提供 `DSH_SESSION_JSONL` 的条件是 `ctx.sessionPersistence.locate(header)` 返回 `kind: 'jsonl'`。
@@ -44,7 +44,7 @@ bash seam 导出 `DSH_ENV_PREFIX` 作为唯一的命名空间来源，并派生 
 
 bash 工具说明只讲解持久约定：当前 harness 环境事实通过受管理的 `$DSH_*` 变量提供，可以在需要时查看。它不会枚举持久化专用键，也不会添加永久的系统提示词章节。工具 schema 已记录在请求 header 中，工具输出则记录为 `tool/result`，因此无需新增会话事件。
 
-[Claude Code 和 Codex 钩子桥接层](2026-06-30-hook-bridges.md)在构造 payload 时，从同一持久化 seam 解析 transcript 位置。Codex 使用 `transcript_path: string | null`；Claude Code 保留其字符串字段，并回退为 `''`。钩子查询不会物化或刷写会话。
+[Claude Code 和 Codex 钩子桥接层](2026-06-30-hook-bridges.zh.md)在构造 payload 时，从同一持久化 seam 解析 transcript 位置。Codex 使用 `transcript_path: string | null`；Claude Code 保留其字符串字段，并回退为 `''`。钩子查询不会物化或刷写会话。
 
 ## 同类产品调研
 

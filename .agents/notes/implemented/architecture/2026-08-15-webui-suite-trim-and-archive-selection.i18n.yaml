@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-15-webui-suite-trim-and-archive-selection.md
 2026-08-15-webui-suite-trim-and-archive-selection.md: acce0e6f3f8d2ac39c6580735647d5d8a7770889
-2026-08-15-webui-suite-trim-and-archive-selection.zh.md: 392dc2c6013376f0fbbe570218e118a3363a5304
+2026-08-15-webui-suite-trim-and-archive-selection.zh.md: ce2772e540c678ca684fac35286d3d7a73de024d

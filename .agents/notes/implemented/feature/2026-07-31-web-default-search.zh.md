@@ -26,7 +26,7 @@ DeepSeek 搜索使用与官方会话适配器相同的 `DEEPSEEK_API_KEY` 凭据
 
 **在提供方加载时固定读取 `process.env.DEEPSEEK_API_KEY`。** 不予采纳：Web Models 页面通过 `ctx.credentials` 写入密钥；产品文档规定的首次运行路径必须保证下一次操作无需重启即可生效。
 
-**将 Web 工具保留在 `web.cordis.yml` 中。** 不予采纳：这会保留 TUI 与 Web／无头界面之间无法解释的工具清单差异。这些配置行并非界面特有，因此其唯一归属是 `base.cordis.yml`；[工具清单决策](2026-07-31-even-out-shipped-tool-rosters.md)记录了这一共享组合。
+**将 Web 工具保留在 `web.cordis.yml` 中。** 不予采纳：这会保留 TUI 与 Web／无头界面之间无法解释的工具清单差异。这些配置行并非界面特有，因此其唯一归属是 `base.cordis.yml`；[工具清单决策](2026-07-31-even-out-shipped-tool-rosters.zh.md)记录了这一共享组合。
 
 **提高 `dsh-tool-web` 的提供方无关超时。** 不予采纳：自定义提供方和部署有各自不同的延迟预期；这一部署预算应归已交付的 DeepSeek 组合所有。
 

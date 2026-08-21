@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[仓库 linter 迁移](2026-07-29-oxlint-linter.md)保留了一次仅用于格式化的 ESLint 调用，因为当时认为 Oxlint 的 JavaScript 插件桥接层只能用于校验。固定版本的 Oxlint 工具链能够执行 `@stylistic/eslint-plugin` 提供的安全修复，因此单独的格式化器重复引入了配置边界、命令启动过程，以及对 `eslint` 和 `@typescript-eslint/parser` 的直接依赖。
+[仓库 linter 迁移](2026-07-29-oxlint-linter.zh.md)保留了一次仅用于格式化的 ESLint 调用，因为当时认为 Oxlint 的 JavaScript 插件桥接层只能用于校验。固定版本的 Oxlint 工具链能够执行 `@stylistic/eslint-plugin` 提供的安全修复，因此单独的格式化器重复引入了配置边界、命令启动过程，以及对 `eslint` 和 `@typescript-eslint/parser` 的直接依赖。
 
 单次调用 Oxlint 并不能实现等价替代。相互重叠的插件修复可能先应用一项变更，却留下由此新暴露的诊断；仓库中包含 `semi` 和 `object-curly-spacing` 违规的 fixture（测试前置数据）需要运行第二轮才能完全修复。工作流必须重试这种情况，同时不得打印第一轮中已经失效的诊断。
 

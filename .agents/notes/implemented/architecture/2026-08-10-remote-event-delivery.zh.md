@@ -6,9 +6,9 @@ Status: implemented
 
 ## 问题
 
-[Typert Remote 方法调用](../../implemented/architecture/2026-08-02-typert-remote-method-calls.md)只覆盖「一次请求一个结果」的定向调用，明确把 Session 事件流与有状态交互留在别处；Host 向消费端的**单向事件推送**因此仍然全部压在遗留的 API Proxy 上。
+[Typert Remote 方法调用](../../implemented/architecture/2026-08-02-typert-remote-method-calls.zh.md)只覆盖「一次请求一个结果」的定向调用，明确把 Session 事件流与有状态交互留在别处；Host 向消费端的**单向事件推送**因此仍然全部压在遗留的 API Proxy 上。
 
-Host 拥有 `agent-preset/selected`、`commands/change`、`credentials/updated`、`llm/adapters-updated`、`settings/document-updated` 这五条单向事件；它们既不依赖 AgentScope，载荷也本来就是 JSON。过去每条都要穿过 host cordis 事件、apiproxy 手写帧、client/runtime 手写桥和 Client 事件别名才能抵达 UI，而这些层没有陈述 owner 事件之外的新事实。
+Host 拥有 `agent-preset/selected`、`commands/change`、`credentials/reference-updated`、`llm/adapters-updated`、`settings/document-updated` 这五条单向事件；它们既不依赖 AgentScope，载荷也本来就是 JSON。过去每条都要穿过 host cordis 事件、apiproxy 手写帧、client/runtime 手写桥和 Client 事件别名才能抵达 UI，而这些层没有陈述 owner 事件之外的新事实。
 
 那份重复声明还是**有损**的：client 侧写成 `settings/changed(ns: string)`，brand 类型在这一跳被拍平成裸 `string`，与 Remote 方法侧「消费端类型指向业务包唯一符号」的既有契约相反。
 
@@ -75,7 +75,7 @@ $dispatch(event: string, args: readonly unknown[]): void
 export const API_REMOTE_FORWARDED_EVENTS = [
   'agent-preset/selected',
   'commands/change',
-  'credentials/updated',
+  'credentials/reference-updated',
   'llm/adapters-updated',
   'settings/document-updated',
 ] as const

@@ -135,14 +135,14 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['sessionProjections'], (projectionCtx) => {
     projectionCtx.sessionProjections.register<'todos', TodoItem[] | null>({
       key: 'todos',
-      schema: todosProjectionSchema,
+      stateSchema: todosProjectionSchema,
       init: () => null,
       apply: (state, event) => {
         if (event.type === 'todo/write') return event.data.todos
         if (event.type === 'turn/start') return null
         return state
       },
-      view: state => state,
+      wire: { viewSchema: todosProjectionSchema, view: state => state },
       stateVersion: 2,
     })
   })

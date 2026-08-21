@@ -52,6 +52,14 @@ interface RemoteNamespaceHandle {
   readonly dispose: TypertDisposer
 }
 
+/** One descriptor's mounted variants, for the group disposer to unwind. */
+interface InstalledMethod {
+  readonly descriptor: InvocationDescriptor
+  readonly token: MountToken
+  direct: boolean
+  scoped: boolean
+}
+
 /** Typed Remote service augmented by generated direct namespaces. */
 export type ClientRemote = TypertClientRemote
 
@@ -177,9 +185,17 @@ class ClientRemoteService extends Service implements TypertClientRemote {
   ): Promise<TypertDisposer> {
     this.validateContribution(contribution)
     const disposeRemote = callerCtx.typert.remotes.register(contribution)
+    const groups = new Map<string, InvocationDescriptor[]>()
+    for (const descriptor of contribution.descriptors) {
+      const group = groups.get(descriptor.namespace)
+      if (group === undefined) groups.set(descriptor.namespace, [descriptor])
+      else group.push(descriptor)
+    }
     const installed: TypertDisposer[] = []
     try {
-      for (const descriptor of contribution.descriptors) installed.push(await this.install(descriptor))
+      for (const [namespace, descriptors] of groups) {
+        installed.push(await this.installNamespace(namespace, descriptors))
+      }
     } catch (error) {
       for (const dispose of installed.reverse()) await dispose()
       await disposeRemote()
@@ -235,66 +251,47 @@ class ClientRemoteService extends Service implements TypertClientRemote {
     }
   }
 
-  private async install(descriptor: InvocationDescriptor): Promise<TypertDisposer> {
-    const token: MountToken = { active: true, abort: new AbortController() }
-    const installed: TypertDisposer[] = []
-    try {
-      if (descriptor.invocation.kind === 'direct') {
-        installed.push(await this.installDirect(descriptor, token))
-      }
-      const projection = scopedProjection(descriptor)
-      if (projection !== undefined) installed.push(await this.installScoped(descriptor, projection, token))
-    } catch (error) {
-      token.active = false
-      token.abort.abort()
-      for (const dispose of installed.reverse()) await dispose()
-      throw error
-    }
-    return async () => {
-      /* v8 ignore next -- Cordis effect disposers are idempotent and invoke this cleanup at most once. */
-      if (!token.active) return
-      token.active = false
-      token.abort.abort()
-      for (const dispose of installed.reverse()) await dispose()
-    }
-  }
-
-  private async installDirect(descriptor: InvocationDescriptor, token: MountToken): Promise<TypertDisposer> {
-    const namespace = await this.namespace(descriptor.namespace)
-    try {
-      namespace.service.installDirect(descriptor, token)
-    } catch (error) {
-      await this.disposeNamespace(descriptor.namespace, namespace)
-      throw error
-    }
-    return async () => {
-      namespace.service.remove('direct', descriptor.method, token)
-      await this.disposeNamespace(descriptor.namespace, namespace)
-    }
-  }
-
-  private async installScoped(
-    descriptor: InvocationDescriptor,
-    projection: ScopedProjection,
-    token: MountToken,
+  /**
+   * Mount one namespace's descriptor group with no visibility gap: a fresh
+   * namespace installs its whole group synchronously inside its fiber's
+   * apply, so a plugin parked on the namespace service never observes it
+   * without the methods the same contribution carries; an existing namespace
+   * takes the group in one synchronous step.
+   * @param name - Remote namespace.
+   * @param descriptors - Every contribution descriptor naming that namespace.
+   * @returns disposer unmounting the group and the namespace once empty.
+   */
+  private async installNamespace(
+    name: string,
+    descriptors: readonly InvocationDescriptor[],
   ): Promise<TypertDisposer> {
-    const namespace = await this.namespace(descriptor.namespace)
-    try {
-      namespace.service.installScoped(descriptor, projection, token)
-    } catch (error) {
-      await this.disposeNamespace(descriptor.namespace, namespace)
-      throw error
+    let namespace = this.namespaces.get(name)
+    let installed: InstalledMethod[]
+    if (namespace === undefined) {
+      ({ namespace, installed } = await this.createNamespace(name, descriptors))
+    } else {
+      installed = installMethods(namespace.service, descriptors)
     }
+    const handle = namespace
     return async () => {
-      namespace.service.remove('scoped', descriptor.method, token)
-      await this.disposeNamespace(descriptor.namespace, namespace)
+      for (const method of [...installed].reverse()) {
+        /* v8 ignore next -- Cordis effect disposers are idempotent and invoke this cleanup at most once. */
+        if (!method.token.active) continue
+        method.token.active = false
+        method.token.abort.abort()
+        if (method.scoped) handle.service.remove('scoped', method.descriptor.method, method.token)
+        if (method.direct) handle.service.remove('direct', method.descriptor.method, method.token)
+      }
+      await this.disposeNamespace(name, handle)
     }
   }
 
-  private async namespace(name: string): Promise<RemoteNamespaceHandle> {
-    let namespace = this.namespaces.get(name)
-    if (namespace !== undefined) return namespace
+  private async createNamespace(
+    name: string,
+    descriptors: readonly InvocationDescriptor[],
+  ): Promise<{ namespace: RemoteNamespaceHandle; installed: InstalledMethod[] }> {
     let service: RemoteNamespaceService | undefined
+    let installed: InstalledMethod[] | undefined
     const fiber = this.ownerCtx.plugin({
       name: remoteServiceKey(name),
       apply: (ctx: Context) => {
@@ -303,6 +300,9 @@ class ClientRemoteService extends Service implements TypertClientRemote {
           name,
           (direct, scoped, caller, args) => this.invokeMethod(direct, scoped, caller, args),
         )
+        // Same synchronous window as the service registration: a dependent the
+        // new service unparks runs only after the methods exist.
+        installed = installMethods(service, descriptors)
       },
     })
     try {
@@ -311,11 +311,13 @@ class ClientRemoteService extends Service implements TypertClientRemote {
       await fiber.dispose()
       throw error
     }
-    /* v8 ignore next -- a settled namespace fiber synchronously constructs its Service. */
-    if (service === undefined) throw new Error(`client api: namespace ${JSON.stringify(name)} did not start`)
-    namespace = { service, dispose: fiber.dispose }
+    /* v8 ignore next 3 -- a settled namespace fiber synchronously constructs its Service and installs the group. */
+    if (service === undefined || installed === undefined) {
+      throw new Error(`client api: namespace ${JSON.stringify(name)} did not start`)
+    }
+    const namespace = { service, dispose: fiber.dispose }
     this.namespaces.set(name, namespace)
-    return namespace
+    return { namespace, installed }
   }
 
   private async disposeNamespace(name: string, namespace: RemoteNamespaceHandle): Promise<void> {
@@ -502,6 +504,49 @@ class RemoteNamespaceService extends Service {
     this.methods.delete(method)
     Reflect.deleteProperty(this, method)
   }
+}
+
+/**
+ * Install one descriptor group on a namespace service, unwinding the partial
+ * group when a descriptor is refused.
+ * @param service - Namespace service taking the methods.
+ * @param descriptors - Descriptor group of one contribution.
+ * @returns per-descriptor records for the group disposer.
+ */
+function installMethods(
+  service: RemoteNamespaceService,
+  descriptors: readonly InvocationDescriptor[],
+): InstalledMethod[] {
+  const installed: InstalledMethod[] = []
+  try {
+    for (const descriptor of descriptors) {
+      const method: InstalledMethod = {
+        descriptor,
+        token: { active: true, abort: new AbortController() },
+        direct: false,
+        scoped: false,
+      }
+      installed.push(method)
+      if (descriptor.invocation.kind === 'direct') {
+        service.installDirect(descriptor, method.token)
+        method.direct = true
+      }
+      const projection = scopedProjection(descriptor)
+      if (projection !== undefined) {
+        service.installScoped(descriptor, projection, method.token)
+        method.scoped = true
+      }
+    }
+  } catch (error) {
+    for (const method of [...installed].reverse()) {
+      method.token.active = false
+      method.token.abort.abort()
+      if (method.scoped) service.remove('scoped', method.descriptor.method, method.token)
+      if (method.direct) service.remove('direct', method.descriptor.method, method.token)
+    }
+    throw error
+  }
+  return installed
 }
 
 const REMOTE_NAMESPACE_FIELDS = new Set(['ctx', 'empty', 'invokeRemote', 'methods', 'name', 'namespace'])

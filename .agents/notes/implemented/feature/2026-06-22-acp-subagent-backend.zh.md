@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-subagent seam（[seam Agent Note](2026-06-21-subagent-capability-seam.md)）的设计使多个后端可以按名称共存于 `ctx.subagents`。进程内后端（`-spawn`/`-fork`）将子 agent（智能体）作为第二个 `Agent` 运行在同一个 Cordis 上下文中：开销低，但子 agent 与父 agent 共享进程、模型客户端和工具。seam 的核心意义在于同时支持通过协议到达的进程外子 agent，以证明该抽象可跨进程边界适用。本 Agent Note 添加第一个此类后端：一个 ACP（Agent Client Protocol）客户端。
+subagent seam（[seam Agent Note](2026-06-21-subagent-capability-seam.zh.md)）的设计使多个后端可以按名称共存于 `ctx.subagents`。进程内后端（`-spawn`/`-fork`）将子 agent（智能体）作为第二个 `Agent` 运行在同一个 Cordis 上下文中：开销低，但子 agent 与父 agent 共享进程、模型客户端和工具。seam 的核心意义在于同时支持通过协议到达的进程外子 agent，以证明该抽象可跨进程边界适用。本 Agent Note 添加第一个此类后端：一个 ACP（Agent Client Protocol）客户端。
 
 ## 决策
 
@@ -59,4 +59,4 @@ ACP `StopReason` → harness `SubagentStopReason`：`end_turn`→`completed`、`
 
 ## 兄弟产品提供方
 
-[Codex app-server 与 Claude Code Agent SDK 提供方](2026-08-04-claude-code-and-codex-subagent-backends.md)作为按名称注册的兄弟提供方，采用同样的进程外启动/提示词/结算/取消边界。A2A 仍是未来的兄弟传输方式；ACP 后端证明了 subagent seam 能够支持这项边界，而无需负责产品私有协议。
+[Codex app-server 与 Claude Code Agent SDK 提供方](2026-08-04-claude-code-and-codex-subagent-backends.zh.md)作为按名称注册的兄弟提供方，采用同样的进程外启动/提示词/结算/取消边界。A2A 仍是未来的兄弟传输方式；ACP 后端证明了 subagent seam 能够支持这项边界，而无需负责产品私有协议。

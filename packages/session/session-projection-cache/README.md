@@ -2,12 +2,13 @@
 
 English | [中文](README.zh.md)
 
-The persisted projection cache (`ctx.sessionProjectionCache`): durable checkpoints of every registered projection unit's state, one record per session on the domain data form (`session_projcache` domain — the shipped json backend lands it beside `workspace.json` under the configured storage root). Design authority: the [session-projection RFC](../../../.agents/notes/proposed/architecture/2026-07-27-session-projection-and-command-log.md) (persisted projection cache section).
+The persisted projection cache (`ctx.sessionProjectionCache`): durable checkpoints of every projection unit's state, one record per session on the domain data form (`session_projcache` domain — the shipped json backend lands it beside `workspace.json` under the configured storage root). Design authority: the [session-projection RFC](../../../.agents/notes/proposed/architecture/2026-07-27-session-projection-and-command-log.md) (persisted projection cache section).
 
 A stored row `(key → {ver, seq, val})` is a fold shortcut, never an authority: possibly stale (`seq` says exactly how stale) but never wrong. Consequences the implementation commits to:
 
 - **Every background write is fail-soft.** A failed durable write logs a warning and keeps the cache stale; the next write or cold read self-heals. A crash between writes costs a longer tail replay, never a wrong value.
 - **A `ver` mismatch against the live unit's `stateVersion` discards, never migrates.** A unit bump invalidates its rows at read time; the key refolds from the log.
+- **A row must pass the live unit's `stateSchema`.** A malformed row is omitted from the zero-I/O view and rejected by restore so the cold-read ladder refolds it from the log.
 - **Whole-record writes.** Each write replaces the session's full checkpoint (the registry cut is always complete), snapshotted through the lossless-JSON boundary — a unit state violating the plain-JSON contract fails loud.
 - **Records are bound to a log lifecycle, not just an id.** Each record stores the header identity (`createdAt`, `cwd`) it was folded from; every read validates it (the live or stored header is the witness) before accepting a row, so a deleted-then-recreated id or a persistence store swapped under a surviving cache discards the unrelated record instead of seeding phantom values.
 - **The log leads, the cache follows.** A live checkpoint flushes the session's buffered events durably BEFORE the cache row lands, so a crash can leave the cache behind the log (a longer tail replay) but never ahead of it.
@@ -27,7 +28,7 @@ Both `Config` fields are required (no defaults): flush cadence is a deployment c
 
 ## Listing read (`cachedSnapshot(meta)`)
 
-The zero-I/O rung: whole values viewed straight from the identity-matching stored record (version-matching keys only), returned as a `{asOfSeq, values}` cut — `asOfSeq` is the lowest served-row watermark, so a client seeding its per-session value store under higher-seq-wins can never let a stale list block overwrite a newer push frame. `undefined` when no usable record exists (unknown id, unrelated lifecycle, or no version-matching rows); the api-proxy list carrier turns that into an absent column.
+The zero-I/O rung: client values viewed straight from the identity-matching stored record (version- and state-schema-matching keys only), returned as a `{asOfSeq, values}` cut — `asOfSeq` is the lowest served-row watermark, so a client seeding its per-session value store under higher-seq-wins can never let a stale list block overwrite a newer push frame. Host-only rows are never returned. `undefined` when no usable client row exists (unknown id, unrelated lifecycle, or no usable rows); the api-proxy list carrier turns that into an absent column.
 
 ## Cold read (`coldSnapshot(id, signal?)`)
 

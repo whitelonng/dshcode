@@ -56,6 +56,6 @@
 ## 已知限制与暂缓事项
 
 - **没有观测接口**：没有提供方变更事件或能力状态查询；可用性只能通过执行 `search()`／`fetch()` 并按抛出的 `WebError` code 路由来观测，无提供方失败是通用的 `WEB_PROVIDER_UNAVAILABLE`，不会枚举逐提供方原因（见 [Agent Note](../../../.agents/notes/archived/simplification/2026-07-04-drop-unconsumed-web-observation-surface.md)）。
-- **`WebSearchRequest` 只携带 `query` + `maxResults`**：提供方无关的控制项（新近程度、域名过滤条件、区域提示、搜索深度）暂缓至 Exa 与 Perplexity 都能诚实支持时（见 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.md)）。
+- **`WebSearchRequest` 只携带 `query` + `maxResults`**：提供方无关的控制项（新近程度、域名过滤条件、区域提示、搜索深度）暂缓至 Exa 与 Perplexity 都能诚实支持时（见 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.zh.md)）。
 - **`WebFetchBody` 没有 `pdf` 分支**：可提取文本的 PDF 支持属于明确的暂缓工作；封闭联合会使新增该分支成为三个 web 包中由编译强制执行的变更。
 - **提供方支持的页面提取不属于 `fetch()` 范围**：Firecrawl/Tavily 风格的 `web_extract` 能力暂缓，而不会扩展抓取操作。

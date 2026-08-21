@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-15-bundle-style-plugin-installs.md
 2026-08-15-bundle-style-plugin-installs.md: 7817eb1e5dcdd691cb2e470e3160913546f4b38b
-2026-08-15-bundle-style-plugin-installs.zh.md: a8d3e420ddda657c7834ef0680c4fff0a7d28a79
+2026-08-15-bundle-style-plugin-installs.zh.md: b4b35adc82a9bad6bab0abdeae8d647e03142315

@@ -37,7 +37,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   session/     durable session data: persistence, projection, titles, telemetry
   identity/    anonymous identity
   settings/    user-settings capability + file provider
-  credentials/ credential-reference capability + env/.env provider
+  credentials/ credential/authorization capabilities + env/.env provider
   acp/         automation-only Agent Client Protocol server
   interaction/ approval/interaction capabilities, permission, commands, ask-user
   boot/        shared app-bin glue

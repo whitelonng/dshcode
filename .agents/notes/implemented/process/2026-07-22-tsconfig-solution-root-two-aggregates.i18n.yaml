@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-07-22-tsconfig-solution-root-two-aggregates.md
 2026-07-22-tsconfig-solution-root-two-aggregates.md: 6e8d192b5fea1c7045ade6935fd0e2dc8434c502
-2026-07-22-tsconfig-solution-root-two-aggregates.zh.md: 827b56288fd832a65af6a948651b7e70127a1882
+2026-07-22-tsconfig-solution-root-two-aggregates.zh.md: 6c8ad99168bd566a37b02d602c12328275b9458a

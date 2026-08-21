@@ -58,6 +58,10 @@ describe('translation prompt rendering', () => {
     expect(rendered).toContain('Markdown emphasis markers do not create a word boundary')
     expect(rendered).toContain('Never invent responsibility merely to avoid a passive construction')
     expect(rendered).toContain('Never vary a terminology-table form, defined concept, or contract verb merely for stylistic variety')
+    expect(rendered).toContain('Chinese output uses its `.zh.md` path')
+    expect(rendered).toContain('belongs to the active bilingual corpus')
+    expect(rendered).toContain('a missing counterpart in that corpus is an error')
+    expect(rendered).toContain('exact query/fragment suffix')
     expect(rendered).toContain('Return exactly three raw XML sections')
   })
 

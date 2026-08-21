@@ -5,7 +5,7 @@
 这些测试在进程内启动真实的 web 组合，并用真实 Chromium 通过真实 HTTP 驱动它。该 lane
 的运行机制——模式、fixture、golden，以及与 `dsh web` 之间刻意保留的组合差异——记录在
 [`scaffold.ts`](scaffold.ts) 和
-[浏览器 e2e Agent Note](../../../.agents/notes/implemented/testing/2026-07-24-web-gui-browser-e2e-lane.md)中。
+[浏览器 e2e Agent Note](../../../.agents/notes/implemented/testing/2026-07-24-web-gui-browser-e2e-lane.zh.md)中。
 
 ## 这些是 Host 面的测试
 

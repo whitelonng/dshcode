@@ -12,7 +12,7 @@ Status: implemented
 
 `dsh-subagent` 在 `src/assistant-output.ts` 中拥有唯一的规范选取规则：选取最后一条非空 assistant 消息；没有时选取累积的 `text-delta` 流；忽略空内容消息。增量的 `AssistantOutputFold` 通过 `push(event)` 处理会话事件传输，通过 `pushText(text)` 处理仅分片传输，并通过 `collect()` 完成选取。`finalAssistantOutput(events)` 把规则应用于完整的事件后缀，供进程内 `readResult` 与 Activation capture 使用。SDK 后端折叠通知事件；ACP 后端不暴露完整的 assistant 消息，而是折叠原始分片文本。`SubagentResult.output` 定义结果约定，`subagent/end.lastAssistantMessage` 使用同一规则。子 agent 不产生这两种输出中的任何一种时，一次性与 continuable 运行的生命周期字段都会缺省，而不是空数组。`max-tokens` 或 `aborted` 结果保留实际的终止原因。
 
-前台委派工具使用同一选取规则。非 `completed` 的结果仍是 `isError` 工具结果，但其消息会在终止原因标题之后呈现由[非交互权限决策](../feature/2026-08-15-product-subagent-noninteractive-permissions.md)负责的可选安全提供方诊断，再附上子 agent 的部分文本。父模型会同时收到失败、独立的基础设施说明与已有 assistant 输出，而且不会把它们混为一体。
+前台委派工具使用同一选取规则。非 `completed` 的结果仍是 `isError` 工具结果，但其消息会在终止原因标题之后呈现由[非交互权限决策](../feature/2026-08-15-product-subagent-noninteractive-permissions.zh.md)负责的可选安全提供方诊断，再附上子 agent 的部分文本。父模型会同时收到失败、独立的基础设施说明与已有 assistant 输出，而且不会把它们混为一体。
 
 ## 验证
 

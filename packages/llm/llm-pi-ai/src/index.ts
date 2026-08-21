@@ -61,10 +61,12 @@ import { assertUsableApiKey, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { PiAiAdapter } from './adapter.ts'
-import { catalogProviderIds, catalogProviderTakesApiKey } from './catalog.ts'
+import { authContextFrom, credentialStoreFrom } from './auth.ts'
+import { catalogProviderIds } from './catalog.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
+import { registerPiAiFlows } from './login.ts'
 
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
@@ -79,6 +81,7 @@ export type {
   PiAiThinkingFormat,
   ResolvedPiAiProviderProfile,
 } from './config.ts'
+export { recordKeyFor } from './auth.ts'
 export { supportedProtocols } from './provider.ts'
 
 export const name = 'llm-pi-ai'
@@ -105,15 +108,10 @@ function registrationFacts(profiles: ReadonlyMap<string, ResolvedPiAiProviderPro
 }
 
 /**
- * The configurable-provider directory: every installed catalog route this
- * adapter can authenticate, plus every route the current profiles declare. A
- * hand-declared route has no catalog entry, so without this union it would
- * have no settings address and configuration surfaces could neither show nor
- * edit it.
- *
- * The profile half is unconditional, which is what keeps a route already
- * stored against a withheld provider editable and deletable rather than
- * stranded in the settings document with nothing on the page to remove it.
+ * The configurable-provider directory: every installed catalog route, plus
+ * every route the current profiles declare. A hand-declared route has no
+ * catalog entry, so without this union it would have no settings address and
+ * configuration surfaces could neither show nor edit it.
  * @param profiles - the currently resolved provider profiles.
  * @returns the directory entries in catalog order, declared routes last.
  */
@@ -134,14 +132,7 @@ function directoryEntries(
       declared: !catalog.has(provider),
     })
   }
-  // A provider whose only native method is OAuth leaves this adapter nothing
-  // to authenticate with, so offering it would put a card on the settings page
-  // whose own posture — no key, credentials discovered by the provider — fails
-  // every request. Catalog *membership* is unaffected, so `declare` above still
-  // answers what pi-ai ships.
-  for (const provider of catalog) {
-    if (catalogProviderTakesApiKey(provider)) declare(provider, provider)
-  }
+  for (const provider of catalog) declare(provider, provider)
   for (const [provider, profile] of profiles) declare(provider, profile.displayName)
   return [...entries.values()]
 }
@@ -197,9 +188,14 @@ export function apply(ctx: Context, config: Config): void {
     )
   }
 
+  // One store and one ambient context for the whole plugin instance: both read
+  // through `ctx` per call, so they stay correct across the collection rebuilds
+  // a configuration change causes, and a sign-in survives one.
+  const auth = { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) }
   const adapter = new PiAiAdapter({
     profiles,
     resolveApiKey,
+    auth,
     resolveAttachments: () => ctx.get('attachments'),
     onReplayDegrade: ({ provider, model, reason }) => {
       ctx.logger.warn(
@@ -208,6 +204,12 @@ export function apply(ctx: Context, config: Config): void {
       )
     },
   })
+  // Independent of the route set: signing in is what makes a route worth
+  // adding, so the flows are offered before any profile names their provider.
+  // Scoped to the authorization seam rather than injected outright, because a
+  // composition without it (headless, ACP) simply has no surface to sign in
+  // from, while everything else this plugin does still works.
+  ctx.inject(['authorization'], (authorized) => { registerPiAiFlows(authorized, auth) })
   // The full installed catalog is configurable from the moment the plugin
   // mounts — dormant or not — so configuration surfaces can offer every
   // pi-ai provider before any route exists. Hand-declared routes join it as

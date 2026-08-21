@@ -16,11 +16,11 @@ Status: implemented
 
 该实现在 `packages/context/agent-instructions` 中，包名为 `@deepseek-ai/dsh-agent-instructions`。它是请求上下文扩展，不是核心服务或文件系统后端。共享 demo 主干与 Host Runtime 根据显式的 `{ maxBytes } | false` 部署选择挂载它；`dsh web` 启用 65,536 字节预算，Host Runtime 的 headless 消费方则禁用它。该插件使用 `agent/pre-step`、不可变的 `tools/result` 结果、`session/event` 边界和可选的 `ctx.fs` 功能。
 
-插件不会静态注入 `fs`。因此，不带提供方的产品树仍能正常启动；在文件系统提供方出现之前，插件保持无操作。所有生产读取都通过该提供方完成。候选项探测会解析每个路径并对结果执行 stat，因此会跟随最终路径组件的符号链接至其目标：指向普通文件的链接会被加载，缺失路径或非文件目标则确认为不存在。允许仓库拥有的链接跨越信任边界，是对最初不跟随探测方式的刻意反转；[跟随指令符号链接记录](2026-07-21-follow-instruction-symlinks.md)负责说明该决策及其残余风险。步骤信号与动态工具执行信号会贯穿解析、元数据探测和流式读取，因此取消不会等待无关的文件系统扫描。解析或 stat 异常归类为不可用：它只跳过该候选项，绝不被解释为已经加载的作用域被删除。
+插件不会静态注入 `fs`。因此，不带提供方的产品树仍能正常启动；在文件系统提供方出现之前，插件保持无操作。所有生产读取都通过该提供方完成。候选项探测会解析每个路径并对结果执行 stat，因此会跟随最终路径组件的符号链接至其目标：指向普通文件的链接会被加载，缺失路径或非文件目标则确认为不存在。允许仓库拥有的链接跨越信任边界，是对最初不跟随探测方式的刻意反转；[跟随指令符号链接记录](2026-07-21-follow-instruction-symlinks.zh.md)负责说明该决策及其残余风险。步骤信号与动态工具执行信号会贯穿解析、元数据探测和流式读取，因此取消不会等待无关的文件系统扫描。解析或 stat 异常归类为不可用：它只跳过该候选项，绝不被解释为已经加载的作用域被删除。
 
 ### 文件名与优先级
 
-默认的逐目录候选列表是 `['AGENTS.md', 'CLAUDE.md']`。该列表可通过 `instructionFileCandidates` 配置；`AGENTS.md` 是普通的第一候选项，而不是隐藏优先级。一个目录中只加载第一个存在的普通文件候选项。使用默认值时，`AGENTS.md` 是原生文件，`CLAUDE.md` 是兼容性回退。第二个列表 `localInstructionFileCandidates`（默认为 `['AGENTS.local.md', 'CLAUDE.local.md']`）会在同一目录的基础文件后加载叠加式本地覆盖层；[默认本地覆盖层记录](2026-07-21-local-instruction-overlay.md)负责说明该决策。
+默认的逐目录候选列表是 `['AGENTS.md', 'CLAUDE.md']`。该列表可通过 `instructionFileCandidates` 配置；`AGENTS.md` 是普通的第一候选项，而不是隐藏优先级。一个目录中只加载第一个存在的普通文件候选项。使用默认值时，`AGENTS.md` 是原生文件，`CLAUDE.md` 是兼容性回退。第二个列表 `localInstructionFileCandidates`（默认为 `['AGENTS.local.md', 'CLAUDE.local.md']`）会在同一目录的基础文件后加载叠加式本地覆盖层；[默认本地覆盖层记录](2026-07-21-local-instruction-overlay.zh.md)负责说明该决策。
 
 候选条目必须是同一目录中的文件名。空条目、`.`／`..`，以及包含 `/` 或 `\` 的条目会被忽略。其他同目录名称可以显式选择加入；规则目录和导入语义不属于本约定。
 
@@ -34,7 +34,7 @@ Status: implemented
 
 恢复 agent 会基于持久化历史创建新的 loop 实例。在第一个 `agent/pre-step`，具有当前标识的可见基线仍是权威状态；插件会将其保留的 scope 与当前完整渲染进行比较。未变化和被预算省略的文件不追加任何内容；agent 离线期间新增、编辑、移除或不再属于预算保留集的文件，会在进入步骤的批次中追加 `set`、`replace` 或 `remove` 转换，既不改写也不重复原始基线。不兼容的可见基线会被一条按当前优先级排列的完整基线取代，并以明确措辞说明替换关系；如果当前不存在任何候选文件，一条显式空基线会清除先前的 scope。插件热重挂遵循相同规则。如果压缩（compaction）已遮蔽带类型的基线，下一次进入步骤的 pre-step 会组合一条完整的当前基线，并在同一请求中携带它。
 
-基线是一条 user 角色的 `<system-reminder>`，包含 `Instructions from: <path>` 章节，以及明确的权威性与优先级说明。这种熟悉的模型可见框架避免引入 harness 专用的 XML 词汇。项目路径相对于根目录；使用默认 home 时，用户全局路径为 `~/.dsh/AGENTS.md`，使用已配置 home 时则为 `$DSH_HOME/AGENTS.md`。最终渲染边界会在完成字节核算前，转义指令内容或模型可见的路径、scope 与预算元数据中出现的字面量 `</system-reminder>`。包 README 负责规定当前准确的[提示词形态](../../../../packages/context/agent-instructions/README.md#prompt-shape)。
+基线是一条 user 角色的 `<system-reminder>`，包含 `Instructions from: <path>` 章节，以及明确的权威性与优先级说明。这种熟悉的模型可见框架避免引入 harness 专用的 XML 词汇。项目路径相对于根目录；使用默认 home 时，用户全局路径为 `~/.dsh/AGENTS.md`，使用已配置 home 时则为 `$DSH_HOME/AGENTS.md`。最终渲染边界会在完成字节核算前，转义指令内容或模型可见的路径、scope 与预算元数据中出现的字面量 `</system-reminder>`。包 README 负责规定当前准确的[提示词形态](../../../../packages/context/agent-instructions/README.zh.md#prompt-shape)。
 
 ### 动态发现与刷新
 
@@ -80,10 +80,10 @@ shell 命令不会触发发现。本地 bash 调用会启动全新的 shell，�
 
 工作区指引按会话隔离，并由 demo 入口、Web Host 与每一种工具展示模式共享。初始、嵌套与变更指令都保持持久且可回放。通用的会话／agent 上下文约定通过先在 inbox 中暂存、再持久进入的 user 消息携带带类型的来源数据，而不会把条目展平。
 
-仓库文本仍是不受信任的输入。低权威 user 角色框架、显式优先级说明和分隔符转义可以降低风险，但无法消除提示词注入。跟随候选符号链接到目标，会把该攻击面扩大至树外内容；因此，把 `ctx.fs` 限制在可信根目录内的权限与沙箱层才是真正的边界，它们让系统把工作区文件当作数据而不是权威（[跟随指令符号链接记录](2026-07-21-follow-instruction-symlinks.md)负责说明残余风险）。
+仓库文本仍是不受信任的输入。低权威 user 角色框架、显式优先级说明和分隔符转义可以降低风险，但无法消除提示词注入。跟随候选符号链接到目标，会把该攻击面扩大至树外内容；因此，把 `ctx.fs` 限制在可信根目录内的权限与沙箱层才是真正的边界，它们让系统把工作区文件当作数据而不是权威（[跟随指令符号链接记录](2026-07-21-follow-instruction-symlinks.zh.md)负责说明残余风险）。
 
 系统由事件驱动，而不是文件监视器驱动。除非文件系统变更通过结构化工具完成，否则编辑不会在确切的文件系统变更时刻可见；外部文件变更会在下一次成功的结构化触碰、恢复对账，或恢复被遮蔽的基线时被发现。这使设计保持确定性并且与提供方无关。
 
 ## 延后事项
 
-从 bash 派生路径报告、递归启动扫描、文件监视器、小写默认名称、`.claude/CLAUDE.md`、`.claude/rules/*.md`、导入指令、ACP `additionalDirectories`、信任确认和模型生成摘要均延后处理。项目目录中的 `.local.` 覆盖层现已默认加载（[默认本地覆盖层记录](2026-07-21-local-instruction-overlay.md)负责说明该决策）；用户全局覆盖层、目录规则系统和导入仍需要各自的优先级与信任设计。
+从 bash 派生路径报告、递归启动扫描、文件监视器、小写默认名称、`.claude/CLAUDE.md`、`.claude/rules/*.md`、导入指令、ACP `additionalDirectories`、信任确认和模型生成摘要均延后处理。项目目录中的 `.local.` 覆盖层现已默认加载（[默认本地覆盖层记录](2026-07-21-local-instruction-overlay.zh.md)负责说明该决策）；用户全局覆盖层、目录规则系统和导入仍需要各自的优先级与信任设计。

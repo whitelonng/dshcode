@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-通过 [`ctx.compaction`](../compaction/README.md) 提供面向用户的 `/compact` 压缩（compaction）控制。该插件通过 [`ctx.commands`](../../interaction/commands/README.md) 注册一个全局命令，因此组合中的每个命令适配器都能发现并执行它，无需模型轮次。[排队手动压缩 Agent Note](../../../.agents/notes/implemented/feature/2026-07-30-queued-manual-compaction.md)拥有接纳、锁与持久性决策。
+通过 [`ctx.compaction`](../compaction/README.zh.md) 提供面向用户的 `/compact` 压缩（compaction）控制。该插件通过 [`ctx.commands`](../../interaction/commands/README.zh.md) 注册一个全局命令，因此组合中的每个命令适配器都能发现并执行它，无需模型轮次。[排队手动压缩 Agent Note](../../../.agents/notes/implemented/feature/2026-07-30-queued-manual-compaction.zh.md)拥有接纳、锁与持久性决策。
 
 ## 命令约定
 

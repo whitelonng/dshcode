@@ -9,8 +9,8 @@ import {
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
 import {
-  SubagentCatalogAction, type SubagentCatalogInjected,
-} from '../src/client/SubagentCatalogAction.tsx'
+  SubagentHeaderLineage, type SubagentCatalogInjected,
+} from '../src/client/SubagentHeaderLineage.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
 } from '../src/client/SubagentReadOnlyComposer.tsx'
@@ -57,7 +57,7 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
   ctx.slots.register({
     name: 'root',
     children: {
-      'conversation.session.header.actions': { kind: 'list', scope: 'session' },
+      'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.composer': { kind: 'chain', scope: 'session' },
     },
   } as never, () => null)
@@ -94,8 +94,8 @@ describe('apply', () => {
 
   it('registers catalog actions and selects read-only subagent composers from session facts', async () => {
     const { ctx, face } = await fullBench(FAMILY)
-    const catalogEntry = ctx.slots.entries('conversation.session.header.actions')
-      .find(entry => entry.component === SubagentCatalogAction)!
+    const catalogEntry = ctx.slots.entries('conversation.session.header.lineage')
+      .find(entry => entry.component === SubagentHeaderLineage)!
     const actions = (catalogEntry.inject as unknown as (id: SessionId) => SubagentCatalogInjected)(sid('parent'))
     const address: SubagentAddress = {
       parentSessionId: sid('parent'),

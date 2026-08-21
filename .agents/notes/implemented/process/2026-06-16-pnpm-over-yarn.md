@@ -12,11 +12,12 @@ The switching cost is at its lowest right now. Nothing publishes from this repo 
 
 ## Decision
 
-Adopt **pnpm 11.7.0**, pinned via the `packageManager` field and installed through Corepack (same mechanism Yarn used):
+Adopt **pnpm 11.7.0**, pinned via the `packageManager` field. Contributor setup uses Corepack, while CI installs that pin through `pnpm/action-setup`:
 
 - **Workspaces** move from the `package.json` `workspaces` array + `.yarnrc.yml` to `pnpm-workspace.yaml` (`vendor/*`, `packages/*` — the same globs; `examples/*` stay non-workspace, matching the prior setup and tsdown's explicit globs).
 - **Strict symlinked linker** (pnpm's default) replaces Yarn's hoisted `node-modules` linker. We deliberately add **no** `node-linker=hoisted` / `shamefully-hoist` escape hatch: pnpm's non-flat `node_modules` makes phantom dependencies (importing an undeclared transitive dep) fail loudly, which is a *feature* for a repo whose whole quality story is mechanical gates ([mechanical quality gates](2026-06-11-quality-gates.md)). The gate suite — typecheck, lint, test, build, knip — is the safety net that proves no such phantom imports exist.
 - **Build-script allowlist.** pnpm 10+ does not run dependency lifecycle scripts unless allowlisted. `pnpm-workspace.yaml` carries an explicit `allowBuilds` map (`esbuild`, `lefthook`, `@google/genai`, `protobufjs`) — the same supply-chain-hardening posture the repo already takes toward model/tool output, now applied to install-time code execution. `peerDependencyRules.allowedVersions.typescript: '>=5 <7'` silences benign peer-range warnings for the in-repo TypeScript.
+- **Shell-free package-manager re-entry.** Repository scripts that start another pnpm command resolve `npm_execpath` by file form: `.js`, `.cjs`, and `.mjs` entries run under the current Node executable, while native and shebang executables run directly. Neither path uses a shell, so command paths and arguments retain their literal contents across platforms. The [native Windows pull-request job](2026-08-08-native-windows-pull-request-ci.md) provisions `@pnpm/exe`, so its complete inventory supplies a real PE-entry integration signal.
 - **Constraints become package-manager-independent.** `yarn.config.cjs` (which imported `@yarnpkg/types` and used `Yarn.workspaces()` / `workspace.set()`) is replaced by `scripts/check-workspace-constraints.ts`, a plain tsx script run as `pnpm run constraints`. It enforces the identical invariants — every package `private: true`; `@deepseek-ai/dsh-*` packages declare `cordis` as both a peer- and dev-dependency with matching ranges, use the root `package.json` version, and set `type: module`; vendored packages checked for privacy only — over the same `vendor` + `packages` scope.
 - All `yarn …` verbs across CI, lefthook hooks, `package.json` scripts, and docs become `pnpm …` / `pnpm run …`. `yarn.lock` → `pnpm-lock.yaml` (lockfile v9). `.gitignore` swaps `.yarn/` for `.pnpm-store/`. Vendored READMEs (e.g. `vendor/cordis/README.md`) keep their upstream `yarn` examples untouched per the Vendoring Policy.
 
@@ -25,6 +26,8 @@ Adopt **pnpm 11.7.0**, pinned via the `packageManager` field and installed throu
 - **Keep Yarn 4** — zero churn, but bets on the less-traveled linker mode and a constraints engine tied to one package manager.
 - **npm workspaces** — ubiquitous, but no constraints story and weaker monorepo ergonomics.
 - **pnpm with the hoisted linker** — smoother migration, but throws away the phantom-dependency safety that is the main correctness reason to move.
+- **Always run `npm_execpath` through Node** — works for pnpm's JavaScript distribution but asks Node to parse the ELF, Mach-O, or PE executable supplied by `@pnpm/exe`.
+- **Run re-entry commands through a shell** — accepts more launcher forms but changes quoting, metacharacter expansion, executable resolution, and signal behavior for every child command.
 
 ## Consequences
 

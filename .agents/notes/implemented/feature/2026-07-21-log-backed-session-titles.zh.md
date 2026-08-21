@@ -12,13 +12,13 @@ Status: implemented
 
 ## 决策
 
-[`session-title` 能力包族](../../../../packages/session/README.md)负责标题状态和生成策略。`@deepseek-ai/dsh-session-title` 提供 `ctx.sessionTitle`、确定性的首消息回退方案，以及一个至多接受单个可选异步提供方的注册表。`@deepseek-ai/dsh-session-title-llm` 负责通用的辅助模型请求策略；首消息插件和全部用户消息插件分别选择输入调度方式。共享 agent 主干只挂载回退服务。Web host 会挂载该服务和首消息模型提供方，并显式设置可覆盖的限制，因此新建的 Web 会话会立即获得回退标题，随后在不阻塞主响应的情况下获得模型摘要。其他组合需显式选择任一模型提供方。
+[`session-title` 能力包族](../../../../packages/session/README.zh.md)负责标题状态和生成策略。`@deepseek-ai/dsh-session-title` 提供 `ctx.sessionTitle`、确定性的首消息回退方案，以及一个至多接受单个可选异步提供方的注册表。`@deepseek-ai/dsh-session-title-llm` 负责通用的辅助模型请求策略；首消息插件和全部用户消息插件分别选择输入调度方式。共享 agent 主干只挂载回退服务。Web host 会挂载该服务和首消息模型提供方，并显式设置可覆盖的限制，因此新建的 Web 会话会立即获得回退标题，随后在不阻塞主响应的情况下获得模型摘要。其他组合需显式选择任一模型提供方。
 
 ### 事件归属与折叠
 
 每个已接受的修订都是纯日志 `session/title` 事件。其载荷包含规范化后的非空文本、用于派生标题的所有合格且来源为人类的 `user/message` 的准确 seq，以及回退来源 kind，或已注册的提供方 id 加可选的提供方和模型路由。辅助标题模型发起调用前，共享辅助组件会追加一个纯日志 `session/title-llm-request` 事件，其载荷包含标题提供方 id、准确的源 seq、路由、系统提示词、消息和输出 token 上限；即使后续生成失败，这次请求仍可审计。发送的请求信封经过深度冻结，以确保其与该记录精确一致，但它有意不携带进程本地的 agent loop（智能体循环）请求身份，因此仅针对 agent loop 的重建检查不会将它与主对话请求头进行比较。未进入调用阶段的验证失败不会创建请求事件。`foldSessionTitle()` 选择最新的标题事件，并将该事件的 seq 和时间戳加入 `SessionTitleSnapshot`。这两类事件都不会进入 `session.surface` 或 `deriveMessages()`。
 
-标题服务会在检查当前修订和确切的实时会话后，直接追加 `session/title`；随附模型辅助函数同样会在发起调用前追加其字面量 `session/title-llm-request` 记录。两类记录都可以位于轮次之间，而无需虚构执行边界。持久化会将它们接纳到有界后台批次中，并通过常规检查点和生命周期 teardown 排空；标题发布不会强制逐事件 flush。事件所有方与 `Session.append()` 之间不存在通用标记、类型断言或结算队列。这是[独立纯日志事件决策](../simplification/2026-07-28-remove-synthetic-log-only-turns.md)在特定领域中的应用。
+标题服务会在检查当前修订和确切的实时会话后，直接追加 `session/title`；随附模型辅助函数同样会在发起调用前追加其字面量 `session/title-llm-request` 记录。两类记录都可以位于轮次之间，而无需虚构执行边界。持久化会将它们接纳到有界后台批次中，并通过常规检查点和生命周期 teardown 排空；标题发布不会强制逐事件 flush。事件所有方与 `Session.append()` 之间不存在通用标记、类型断言或结算队列。这是[独立纯日志事件决策](../simplification/2026-07-28-remove-synthetic-log-only-turns.zh.md)在特定领域中的应用。
 
 ### 输入与异步时序
 

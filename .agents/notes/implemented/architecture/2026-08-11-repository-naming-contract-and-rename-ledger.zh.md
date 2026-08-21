@@ -26,7 +26,7 @@ Status: implemented
 
 `SDK` 表示受支持的 Python 和 TypeScript SDK 所使用、基于 JSON-RPC 的客户端／服务器协议。仓库保留 `@deepseek-ai/dsh-sdk-client`、`@deepseek-ai/dsh-sdk-protocol` 和协议身份 `deepseek-harness-sdk-runtime`；JSON-RPC 服务器属于同一系列。DeepSeek Harness 本身不是 SDK，已移除的项目生成器、启动器、辅助工具和启动器遥测包继续保持不存在。
 
-本决策部分取代三项现行决策。它替换[包重新分组决策](2026-07-29-package-regrouping.md)中保留的 `bash/`、`pty/` 和 `self-modification/` 组名，以及两项暂定包名。它只替换[移除 SDK 项目工具链](../simplification/2026-08-11-remove-sdk-project-toolchain.md)中将整个仓库称为 SDK 的说法；后者仍负责说明删除范围和保留的运行时 SDK。它只替换[工具调用超时策略](2026-07-07-tool-call-timeout-policy.md)中的包名理由；超时机制及其 `guard/timeout-policy/` 归属保持不变。
+本决策部分取代三项现行决策。它替换[包重新分组决策](2026-07-29-package-regrouping.zh.md)中保留的 `bash/`、`pty/` 和 `self-modification/` 组名，以及两项暂定包名。它只替换[移除 SDK 项目工具链](../simplification/2026-08-11-remove-sdk-project-toolchain.zh.md)中将整个仓库称为 SDK 的说法；后者仍负责说明删除范围和保留的运行时 SDK。它只替换[工具调用超时策略](2026-07-07-tool-call-timeout-policy.zh.md)中的包名理由；超时机制及其 `guard/timeout-policy/` 归属保持不变。
 
 如果其他已实现说明中的包、路径或类型被重命名，而其边界和理由保持不变，则本决策不会取代这些说明。这些说明使用已实现的事实名称。三项被部分取代的决策都链接回本决策。
 

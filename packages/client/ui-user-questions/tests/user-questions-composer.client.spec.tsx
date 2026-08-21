@@ -204,6 +204,43 @@ describe('QuestionComposer', () => {
     expect(respond).not.toHaveBeenCalled()
   })
 
+  it('answers over multiple lines: both fields grow with the draft and keep Shift+Enter a newline', () => {
+    const { carrier, respond } = wait()
+    render(<QuestionComposer matched={carrier} interactions={[carrier]} {...kit} />)
+
+    // Both question shapes answer into a textarea, so the engine soft-wraps a
+    // long answer and Shift+Enter breaks the line natively.
+    const inline = screen.getByPlaceholderText('输入你的答案')
+    expect(inline.tagName).toBe('TEXTAREA')
+
+    const multiline = '第一行\n第二行'
+    fireEvent.change(inline, { target: { value: multiline } })
+    // The hidden height ruler carries the draft plus the trailing newline the
+    // textarea's own last line needs, so the box is as tall as the answer.
+    expect(inline.previousElementSibling?.textContent).toBe(`${multiline}\n`)
+    // Shift+Enter belongs to the field, never to the flow.
+    fireEvent.keyDown(inline, { key: 'Enter', shiftKey: true })
+    expect(screen.getByText('1 / 3')).toBeTruthy()
+
+    fireEvent.keyDown(inline, { key: 'Enter' })
+    const optionless = screen.getByPlaceholderText('输入你的答案')
+    expect(optionless.tagName).toBe('TEXTAREA')
+    fireEvent.change(optionless, { target: { value: multiline } })
+    expect(optionless.previousElementSibling?.textContent).toBe(`${multiline}\n`)
+    fireEvent.keyDown(optionless, { key: 'Enter', shiftKey: true })
+    expect(screen.getByText('2 / 3')).toBeTruthy()
+
+    fireEvent.keyDown(optionless, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('checkbox', { name: '系统设计' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交' }))
+    // Line breaks reach the model verbatim: nothing along the way flattens them.
+    expect(respond).toHaveBeenCalledWith(answeredEnvelope('question-1', [
+      { id: 'profile', selected: [], custom: multiline },
+      { id: 'detail', selected: [], custom: multiline },
+      { id: 'signals', selected: ['系统设计'] },
+    ]))
+  })
+
   it('surfaces cancellation failures: rejected receipt text and raw transport reasons', async () => {
     const respond = vi.fn()
       .mockResolvedValueOnce({ accepted: false, reason: 'bad-response' })

@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-ChatView 的贴底跟随此前只把滚轮／触控板手势识别为读者输入：钉在底部（floor）期间，一个没有对应滚轮位移的滚动事件会被视为程序化滚动并被拉回底部。因此触控平移、拖动原生滚动条与键盘翻页都无法离开流式 transcript（文本记录）的底部，在手机上尾部实际上被锁死。这种仅认滚轮的输入来源判定是 [sticky-composer 笔记](2026-07-29-sticky-composer-conversation-scroll.md)中有意的暂缓：该笔记拒绝为「此次窄范围修复」建立通用输入状态机，把其余所有滚动来源都留在模型之外。
+ChatView 的贴底跟随此前只把滚轮／触控板手势识别为读者输入：钉在底部（floor）期间，一个没有对应滚轮位移的滚动事件会被视为程序化滚动并被拉回底部。因此触控平移、拖动原生滚动条与键盘翻页都无法离开流式 transcript（文本记录）的底部，在手机上尾部实际上被锁死。这种仅认滚轮的输入来源判定是 [sticky-composer 笔记](2026-07-29-sticky-composer-conversation-scroll.zh.md)中有意的暂缓：该笔记拒绝为「此次窄范围修复」建立通用输入状态机，把其余所有滚动来源都留在模型之外。
 
 ## 决策
 
@@ -18,7 +18,7 @@ ChatView 的贴底跟随此前只把滚轮／触控板手势识别为读者输�
 
 ## 测试
 
-`packages/client/ui-conversation/tests/chat-view.client.spec.tsx` 中的单元测试直接钉住 ledger 约定：`readerScroll` 辅助函数交付一个组件从未写入过的位置，程序化交付落在 ledger 上，流收尾阶段的收缩钳制保持跟随。`apps/web/tests/chat-scroll-contract.e2e.ts` 中的两个场景扩展了[浏览器 e2e 车道](../testing/2026-07-24-web-gui-browser-e2e-lane.md)：在已停稳的 transcript 上做键盘翻页，以及对着按节奏推进的流式输出做一次触控式惯性快滑（momentum fling）；两者在仅认滚轮的实现下均为红、在 ledger 下均为绿。
+`packages/client/ui-conversation/tests/chat-view.client.spec.tsx` 中的单元测试直接钉住 ledger 约定：`readerScroll` 辅助函数交付一个组件从未写入过的位置，程序化交付落在 ledger 上，流收尾阶段的收缩钳制保持跟随。`apps/web/tests/chat-scroll-contract.e2e.ts` 中的两个场景扩展了[浏览器 e2e 车道](../testing/2026-07-24-web-gui-browser-e2e-lane.zh.md)：在已停稳的 transcript 上做键盘翻页，以及对着按节奏推进的流式输出做一次触控式惯性快滑（momentum fling）；两者在仅认滚轮的实现下均为红、在 ledger 下均为绿。
 
 该车道的 Chromium 无法合成任何非滚轮的设备滚动，这限定了 e2e 能真实驱动的范围：触控来源的 `Input.synthesizeScrollGesture` 与手工构造的 `Input.dispatchTouchEvent` 序列都能交付 DOM 事件，却从不移动滚动容器（无头模式与 Xvfb 下的有头模式皆然）；`default` 手势来源合成的是滚轮事件；合成器滚动条则完全无视合成的鼠标输入，且只有移除 `--hide-scrollbars` 后才能看到滚动条槽。键盘是唯一可用的非滚轮原语，因此由它承担真实输入流水线的证明；快滑场景则把触控的特征（组件从未写入过的逐帧衰减位移）直接回放进滚动容器。
 

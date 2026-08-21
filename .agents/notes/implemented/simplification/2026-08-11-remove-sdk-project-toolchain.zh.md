@@ -16,7 +16,7 @@ Status: implemented
 
 删除 SDK 项目工具链。`@deepseek-ai/create-sdk`、`@deepseek-ai/dsh-scripts`、`@deepseek-ai/dsh-helper` 和 `@deepseek-ai/dsh-telemetry` 包及其二进制文件、测试、模板、功能目录、项目编辑模型、包管理器支持、启动器遥测和仓库项目创建 skill 均不提供替代实现或兼容层。与其对应的 workspace、构建、测试、打包、文档生成器、vendor scope 重写和依赖记录也一并移除。
 
-保留运行时 SDK。`@deepseek-ai/dsh-sdk-client`、`@deepseek-ai/dsh-sdk-protocol` 和 `@deepseek-ai/dsh-sdk-jsonrpc-server` 保持原样，从 `packages/scaffold/` 移至 `packages/sdk/`；其 npm 名称和协议交互行为保持不变。消费方继续提供一个可执行文件和一份外置 `cordis.yml`，JSON-RPC 服务器仍是由该配置选择的普通插件。[仓库命名约定](../architecture/2026-08-11-repository-naming-contract-and-rename-ledger.md)负责规定 `SDK` 在仓库中的唯一含义和保留的包名；本说明负责记录已删除的工具链。
+保留运行时 SDK。`@deepseek-ai/dsh-sdk-client`、`@deepseek-ai/dsh-sdk-protocol` 和 `@deepseek-ai/dsh-sdk-jsonrpc-server` 保持原样，从 `packages/scaffold/` 移至 `packages/sdk/`；其 npm 名称和协议交互行为保持不变。消费方继续提供一个可执行文件和一份外置 `cordis.yml`，JSON-RPC 服务器仍是由该配置选择的普通插件。[仓库命名约定](../architecture/2026-08-11-repository-naming-contract-and-rename-ledger.zh.md)负责规定 `SDK` 在仓库中的唯一含义和保留的包名；本说明负责记录已删除的工具链。
 
 被取消的开发者项目、项目编辑和后续能力提案予以删除，而不是保留为活跃或已否决记录。本 Agent Note 保留这些提案共有的动机、不交付该产品的决策、放弃的能力，以及重新考虑这一决定的条件。已冻结的归档 Agent Note 仍是历史快照，不作修改。
 

@@ -1,8 +1,8 @@
 /**
- * Client-safe type surface of the credential-reference seam: the reference
- * brand and the seam's Cordis event declaration. Types only — no runtime code,
- * and nothing here reaches a Host-only symbol, so a Client compilation face
- * reads exactly the signature the Host emits.
+ * Client-safe type surface of the credential seam: the two key brands, the
+ * stored-record union, and the seam's Cordis event declarations. Types only —
+ * no runtime code, and nothing here reaches a Host-only symbol, so a Client
+ * compilation face reads exactly the signature the Host emits.
  *
  * @module @deepseek-ai/dsh-credentials/types
  */
@@ -11,6 +11,52 @@ import type { Branded } from '@deepseek-ai/dsh-brand'
 
 /** Nominal reference to one credential: a POSIX-style environment-variable name. */
 export type CredentialRef = Branded<'CredentialRef'>
+
+/**
+ * Nominal address of one stored credential record: `<scope>/<id>`, where
+ * `scope` is the registered name of the plugin that owns the record and `id`
+ * is that plugin's own addressing unit (an LLM adapter uses its provider route
+ * key).
+ *
+ * The scope is the owner rather than the domain because a record's payload is
+ * written in its owner's format: two plugins serving the same provider name
+ * would otherwise read each other's payload, and a record left behind by an
+ * uninstalled plugin could not be told apart from a live one. The `/` also
+ * keeps this grammar disjoint from {@link CredentialRef}, so the two key
+ * spaces can never collide.
+ */
+export type CredentialKey = Branded<'CredentialKey'>
+
+/**
+ * A credential the harness itself understands: an api key, provider
+ * environment values, or both. Either field may be absent — a record carrying
+ * neither states that the owner confirmed this route authenticates from its
+ * own ambient discovery, which is a different fact from having no record.
+ */
+export interface ApiKeyRecord {
+  /** Discriminant. */
+  readonly kind: 'api-key'
+  /** The non-empty secret value, when this credential is a key at all. */
+  readonly key?: string
+  /** Provider environment values such as `AWS_PROFILE`; names are POSIX identifiers. */
+  readonly env?: Readonly<Record<string, string>>
+}
+
+/**
+ * The product of one authorization grant, kept verbatim for its owner. The
+ * seam never reads, validates, or reshapes {@link payload}: it is written in
+ * the owning plugin's format and only that plugin can interpret it. The single
+ * constraint is that it survives a JSON round trip.
+ */
+export interface GrantRecord {
+  /** Discriminant. */
+  readonly kind: 'grant'
+  /** Owner-defined JSON value; opaque to the seam and to every other plugin. */
+  readonly payload: unknown
+}
+
+/** One durable credential record, tagged by what the seam may do with it. */
+export type CredentialRecord = ApiKeyRecord | GrantRecord
 
 declare module '@deepseek-ai/cordis' {
   interface Events {
@@ -26,6 +72,18 @@ declare module '@deepseek-ai/cordis' {
      * @param ref - the reference whose stored value changed.
      * @mode emit
      */
-    'credentials/updated'(ref: CredentialRef): void
+    'credentials/reference-updated'(ref: CredentialRef): void
+
+    /**
+     * Committed change to a stored credential record: a `modifyRecord` that
+     * wrote, a `deleteRecord` that removed, or an external edit observed in
+     * storage. Separate from `credentials/reference-updated` because the two key
+     * grammars are disjoint — a listener that received both on one event could
+     * not tell which space a subject belongs to. Listener failures are
+     * contained on the same terms as `credentials/reference-updated`.
+     * @param key - the record whose stored value changed.
+     * @mode emit
+     */
+    'credentials/record-updated'(key: CredentialKey): void
   }
 }

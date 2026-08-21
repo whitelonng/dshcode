@@ -12,7 +12,7 @@ The web shell renders `Loading plugins…` before the browser-side plugin tree a
 
 ## Decision
 
-ui-theme's host half transforms each index HTML document through `ctx.webServer.tapIndex()`, inserting a synchronous inline script immediately after the opening `<body>` tag. The transform registers under an optional `httpServer` injection, so compositions without that service still activate ui-theme and install no transform. When the HTML parser executes the script, the body exists, but the shell's module script and framework-free boot page have not yet run.
+ui-theme's host half answers every `webserver/index-inject` collection with one body-placed script row (`bootThemeInjection`), which `renderIndex` renders as a synchronous inline script immediately after the opening `<body>` tag. The subscription is unconditional — a composition without a web server never emits the event, so ui-theme still activates and contributes nothing. When the HTML parser executes the script, the body exists, but the shell's module script and framework-free boot page have not yet run.
 
 The host half registers the [`ui-theme.preference` settings section](2026-08-06-host-backed-web-preferences.md) when a settings provider exists. For each index response, it embeds that schema-validated built-in preference in the inline script; without a settings provider or active registration, it embeds the `system` default. The browser resolves `system` through `prefers-color-scheme`, falling back to light when `matchMedia` is unavailable. It writes only the two pieces of DOM state that ThemePresenter later owns: `document.documentElement.style.colorScheme` and `body[data-ds-dark-theme]`.
 

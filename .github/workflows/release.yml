@@ -1,10 +1,10 @@
-# Pack and publish the dsh release sequence: every package under packages/ plus
-# the apps/ entries, all on one version. The vendored framework and the native
-# packages are separate sequences with their own workflows and version lines.
+# Pack the dsh release sequence: every package under packages/ plus the apps/
+# entries, all on one version. The vendored framework and the native packages are
+# separate sequences with their own workflows and version lines.
 #
 # Pack runs without credentials on every pull request and master push, so a
-# pull request proves the whole publish set still packs. Publication is a
-# manual dispatch from a dsh-v* tag and consumes exactly the packed bytes.
+# pull request proves the whole publish set still packs. Publication is a manual
+# workflow_dispatch of release-publish.yml from a dsh-v* tag.
 name: Release (dsh)
 
 on:
@@ -12,19 +12,12 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish the packed tarballs to npm. Must run from a dsh-v* tag.
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  # Pack runs per ref so concurrent pull requests never displace each
-  # other; the publish job below serializes the shared dist-tag state.
+  # Pack runs per ref so concurrent pull requests never displace each other.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
@@ -70,8 +63,6 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify release version
-        env:
-          RELEASE_PUBLISH: ${{ inputs.publish }}
         run: pnpm run release:verify --family dsh
 
       - name: Build
@@ -105,45 +96,3 @@ jobs:
           path: dist/npm/*
           if-no-files-found: error
           retention-days: 7
-
-  publish:
-    name: Publish to npm
-    if: inputs.publish
-    needs: pack
-    runs-on: ubuntu-24.04
-    # Required reviewers and the allowed tags live on the environment; this is
-    # the only step in the sequence that can write to the registry.
-    environment: npm-publish
-    concurrency:
-      group: Release-publish
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    steps:
-      # Checkout and install carry the release scripts only. There is no build
-      # step: publication uploads the bytes the pack job produced.
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v4
-        with:
-          dest: ${{ runner.temp }}/setup-pnpm
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.PRIMARY_NODE_VERSION }}
-          registry-url: https://registry.npmjs.org
-
-      - name: Install (immutable, no package scripts)
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: dsh-npm-tarballs
-          path: dist/npm
-
-      - name: Publish tarballs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm run release:publish --family dsh --from dist/npm

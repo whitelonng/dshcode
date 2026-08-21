@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-14-desktop-tray-and-close-to-tray.md
 2026-08-14-desktop-tray-and-close-to-tray.md: 460495f18966690255fab33732522b608b8946f6
-2026-08-14-desktop-tray-and-close-to-tray.zh.md: c0080a8743088c950d4fb19e4066df54abcc464b
+2026-08-14-desktop-tray-and-close-to-tray.zh.md: 198dd12707a29e3ba58881034a2275ed4ed19e3c

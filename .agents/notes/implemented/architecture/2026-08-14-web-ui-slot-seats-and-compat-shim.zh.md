@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-14-web-ui-slot-seats-and-compat-shim.md) | 中文
 
-> 范围：社区 dsh-web-ui 功能插件（任务看板、SSH 面板、右侧面板、Git 图谱、鲸鱼娘宠物、移动端远程、实时令牌统计）如何把 GUI 界面挂载到本 shell 上，以及 shell 为什么声明一个槽位和一个实时令牌投影读取。是对 [内置社区插件与 profile 级控制](2026-08-14-built-in-community-plugins-and-controls.md) 的延伸（同一次分发，本记录覆盖 GUI 挂载侧）；遵循[槽位系统标准](2026-07-22-slot-type-chain-implementation.md)。
+> 范围：社区 dsh-web-ui 功能插件（任务看板、SSH 面板、右侧面板、Git 图谱、鲸鱼娘宠物、移动端远程、实时令牌统计）如何把 GUI 界面挂载到本 shell 上，以及 shell 为什么声明一个槽位和一个实时令牌投影读取。是对 [内置社区插件与 profile 级控制](2026-08-14-built-in-community-plugins-and-controls.zh.md) 的延伸（同一次分发，本记录覆盖 GUI 挂载侧）；遵循[槽位系统标准](2026-07-22-slot-type-chain-implementation.zh.md)。
 
 ## 问题
 
@@ -24,7 +24,7 @@ DOM 钩子盖章后还暴露出第二个更隐蔽的缺口：shell 的槽位出�
 
 - `ui-conversation` 声明 `'conversation.input.selector.context'`（`list`、`session-maybe`），在每个会话阶段的输入卡上方渲染（未占用时经 `:empty` 隐藏，空位不占任何布局）。Git 分支芯片与宠物召唤按钮停靠在这里；session-maybe 与插件的冷启动到活跃阶段契约一致。
 
-`ui-sidebar` 同期还声明过专供移动端远程配对入口的 `'sidebar.remote'` 脚部座位；该座位后来被移除，让已发布的插件经其 `sidebar.footer.action` 回退恰好渲染一次——见 [单一侧栏脚部动作座位](2026-08-18-single-sidebar-foot-action-seat.md)。
+`ui-sidebar` 同期还声明过专供移动端远程配对入口的 `'sidebar.remote'` 脚部座位；该座位后来被移除，让已发布的插件经其 `sidebar.footer.action` 回退恰好渲染一次——见 [单一侧栏脚部动作座位](2026-08-18-single-sidebar-foot-action-seat.zh.md)。
 
 实时令牌统计端到端复用现有投影通道：插件的宿主半区已注册 `liveTokenUsage` 会话投影（桶 + `estimated` + `tokensPerSecond`）。`token-meter` 拥有 `LiveTokenUsageProjection` 类型与 `SessionProjectionMap` 条目；会话 `StatsLine` 读取 `useProjection('liveTokenUsage')`——会话运行中时，行首分组显示实时吞吐；运行结束后该分组消失，由已结算的平均解码速度分组接替。
 

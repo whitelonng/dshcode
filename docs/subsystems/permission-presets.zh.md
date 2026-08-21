@@ -2,7 +2,7 @@
 
 [English](permission-presets.md) | 中文
 
-[dsh-permission-presets](../../packages/interaction/permission-presets) 的权限预设层（`ctx.permissionPresets`，`PermissionPresetService`）把两个相互独立的强制执行 knob，即[沙箱模式](sandbox.md)（`sandbox/mode`）与[审批策略](approval.md)（`approval/policy`），捆绑成具名预设，供客户端作为单个权限（Permissions）选择器提供。它是一项可选能力，不属于 agent loop（智能体循环）主干，也不拥有任何强制执行：执行、提示词叙述与回放仍然读取各自 knob的折叠结果，预设切换只记录意图，并通过每个 knob各自的规范 setter 写入。[包 README](../../packages/interaction/permission-presets/README.md) 负责组合状态与限制；[沙箱切换设计](../../.agents/notes/implemented/feature/2026-07-06-sandbox.md)负责决策依据。
+[dsh-permission-presets](../../packages/interaction/permission-presets) 的权限预设层（`ctx.permissionPresets`，`PermissionPresetService`）把两个相互独立的强制执行 knob，即[沙箱模式](sandbox.zh.md)（`sandbox/mode`）与[审批策略](approval.zh.md)（`approval/policy`），捆绑成具名预设，供客户端作为单个权限（Permissions）选择器提供。它是一项可选能力，不属于 agent loop（智能体循环）主干，也不拥有任何强制执行：执行、提示词叙述与回放仍然读取各自 knob的折叠结果，预设切换只记录意图，并通过每个 knob各自的规范 setter 写入。[包 README](../../packages/interaction/permission-presets/README.zh.md) 负责组合状态与限制；[沙箱切换设计](../../.agents/notes/implemented/feature/2026-07-06-sandbox.zh.md)负责决策依据。
 
 源码：[`packages/interaction/permission-presets/src/index.ts`](../../packages/interaction/permission-presets/src/index.ts)
 
@@ -65,7 +65,7 @@ interface PresetOption {
 
 `set(session, name)` 解析预设（未知名称抛出异常），在 `name` 尚不是生效预设时追加一条仅记日志的 `permission/preset` 事件，然后通过各旋钮自己的 setter（[dsh-sandbox-policy](../../packages/sandbox/sandbox-policy) 的 `setSandboxMode` 与 [dsh-user-approval](../../packages/interaction/user-approval) 的 `setApprovalPolicy`）写入，且仅当该 knob的生效值发生变化时才写。同一轮次内，选择事件先于旋钮事件出现；重新选择当前生效的预设则什么都不追加。
 
-`permission/preset` 是持久、仅记日志的用户意图：它不进入模型 transcript（文本记录），模型可见的后果由 knob 事件经各自消费方承担；它存在是为了在两个预设共享同一个旋钮组合时，让 `current()` 仍能保住用户选择的究竟是哪一个预设；`effectivePermissionPreset(events)` 折叠最后一条，回放不需要任何追赶状态。完整事件声明见[持久化日志事件目录](../persistence-catalog.md)；方法签名见生成的[服务目录](#ctxpermissionpresets--permissionpresetservice)。
+`permission/preset` 是持久、仅记日志的用户意图：它不进入模型 transcript（文本记录），模型可见的后果由 knob 事件经各自消费方承担；它存在是为了在两个预设共享同一个旋钮组合时，让 `current()` 仍能保住用户选择的究竟是哪一个预设；`effectivePermissionPreset(events)` 折叠最后一条，回放不需要任何追赶状态。完整事件声明见[持久化日志事件目录](../persistence-catalog.zh.md)；方法签名见生成的[服务目录](#ctxpermissionpresets--permissionpresetservice)。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -73,7 +73,7 @@ interface PresetOption {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxpermissionpresets--permissionpresetservice"></a>
 
@@ -125,7 +125,7 @@ optionOf(name: string): PresetOption
 set(session: Session, name: string): void
 ```
 
-Types: [Session](session.md) · [SessionEvent](session.md)
+Types: [Session](session.zh.md) · [SessionEvent](session.zh.md)
 
-Source: [`packages/interaction/permission-presets/src/index.ts:159`](../../packages/interaction/permission-presets/src/index.ts)
+Source: [`packages/interaction/permission-presets/src/index.ts`](../../packages/interaction/permission-presets/src/index.ts)
 <!-- END GENERATED cordis-surface -->

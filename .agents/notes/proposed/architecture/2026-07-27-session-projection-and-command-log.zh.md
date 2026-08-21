@@ -24,22 +24,27 @@ Status: proposed
 
 ### host 侧投影注册表（`dsh-session-projection`，新包）
 
-一个轻量的 Service Definition 包：merge-extensible 类型表、注册表服务、边界上的 zod 校验。能力 seam 的角色如下：领域 host 插件提供投影单元，载体消费这些单元，两侧互不相识。
+一个轻量的 Service Definition 包：merge-extensible 的 host 状态与客户端视图类型表、注册表服务，以及针对持久状态和客户端值的 zod 校验。能力 seam 的角色如下：领域 host 插件提供投影单元，载体消费这些单元，两侧互不相识。
 
-领域注册的是一个**状态驱动计算单元（state-driven computation unit）**——三个纯函数外加若干声明——绝不是一个不透明的 getter。驱动它是框架的职责（订阅、水位线（watermark）、缓存，以及后续的检查点机制），领域只负责数学本身。投影服务于所有业务领域（会话标题、plan、goal、权限、todos）；命令只是其中一条触发路径，在本约定中没有任何特殊地位。
+领域注册的是一个**状态驱动计算单元（state-driven computation unit）**——纯折叠、若干声明及可选客户端视图——绝不是一个不透明的 getter。驱动它是框架的职责（订阅、水位线（watermark）、缓存，以及后续的检查点机制），领域只负责计算。投影服务于所有业务领域（会话标题、plan、goal、权限、todos）；命令只是其中一条触发路径，在本约定中没有任何特殊地位。
 
 ```ts ignore-check
-export interface SessionProjectionMap {}   // the single type table for the whole chain
+export interface SessionProjectionStateMap {} // host fold states
+export interface SessionProjectionMap {}      // client-visible whole values
 
-export interface ProjectionDefinition<K extends keyof SessionProjectionMap, S> {
+export interface ProjectionDefinition<K extends keyof SessionProjectionStateMap, S> {
   key: K
-  schema: ZodType<SessionProjectionMap[K]>  // validates the payload before it leaves the host
+  stateSchema: ZodType<S>
+  persist?: boolean // host-only units opt in; client-visible units always persist
   /** State for the empty log. */
   init(): S
   /** Pure transition: previous state + one event → next state. The framework drives it; domains hold no subscriptions. */
   apply(state: S, event: SessionEvent): S
-  /** State → wire payload (the read-side projection). */
-  view(state: S): SessionProjectionMap[K]
+  /** Client view; omitted for host-only units. */
+  wire?: K extends keyof SessionProjectionMap ? {
+    viewSchema: ZodType<SessionProjectionMap[K]>
+    view(state: S): SessionProjectionMap[K]
+  } : never
   /** State must be plain JSON (persisted-cache precondition); bump to invalidate persisted rows. */
   stateVersion: number
 }
@@ -49,7 +54,7 @@ declare module 'cordis' {
 }
 ```
 
-- 值就是协议层的 JSON 载荷；同一张类型表经 `import type` 端到端贯通（host 侧单元、协议块、React 钩子）——没有第二张 DTO 表，也没有独立的客户端「views」表。值如何*渲染*是 slot 体系的事，永远不归投影层管。
+- `SessionProjectionStateMap` 描述 host 折叠状态；`SessionProjectionMap` 继续作为协议块和 React 钩子经 `import type` 共享的唯一客户端 DTO 表。单元省略 `wire` 即保持 host-only。客户端值如何*渲染*是 slot 体系的事，永远不归投影层管。状态/视图拆分见[已实现的状态与客户端视图记录](../../implemented/architecture/2026-08-19-session-projection-state-and-client-views.zh.md)。
 - **host 是投影唯一的计算地点。** 框架主动驱动（eager drive）每个已注册的单元：每个已提交的会话事件都经过 `apply`；对某事件不感兴趣的单元返回同一个状态引用，而引用未变（`Object.is`）就不产生任何下游工作。客户端从不折叠领域事件——它们收到的是成品值（基线块 + 下文的推送帧）。这消除了双重实现陷阱（plan 的双事件折叠只在 host 写一遍），也消除了一切客户端侧领域代码。
 - **状态永远靠计算得出，绝不入日志。** 日志只存事件；单元的状态住在框架的按会话水位线缓存里（每单元一份 `{state, observedSeq}`），并在后续阶段进入 domain-KV 存储 seam 上的**持久投影缓存（persisted projection cache）**：形如 `(sessionId, key, ver, seq, val)` 的行（`ver` = 单元的 `stateVersion`，`seq` = 水位线，`val` = 状态 JSON）。一行永远不会是错的，至多是陈旧的——其 `seq` 精确说明陈旧到哪。冷读与活读共用同一套读取配方：取缓存状态（或 `init()`），只对超出其水位线的事件做正向 `apply`，再对结果做 `view`。冷列表（跨全部 workspace 列出每个会话的标题）变成一次索引读，至多外加一小段尾部回放；session-persistence seam 在同一后续阶段为这段尾部补一个按 seq 起读的原语。写入策略：节流（次数/间隔，可配置）外加两个强制点——`turn/end` 与 detach（由活转冷的时刻）。两次写入之间崩溃的代价是尾部回放更长一些，绝不会是值出错。
 - 领域的输入事件集由领域自己选择：todos 只折叠 `todo/write`；plan 折叠 `plan/mode` 外加它自己的 `/plan` `command/run` 记录（见 plan 一节）；goal 折叠 `goal/change` 元数据；会话标题折叠其标题事件（顺带下线专设的 `session/title` 帧与客户端的标题快照表——这是该 seam 收编的第四个手工投影）。
@@ -58,7 +63,7 @@ declare module 'cordis' {
 
 ### 已交付的消费方：subagent 身份单元
 
-注册表的两处既有读法已经服务于本 RFC 协议计划之外的一个已交付消费方：[subagent 列表经投影单元读取身份](../../implemented/architecture/2026-08-06-subagent-list-identity-projection.md)注册了 `subagent` 单元——从 `subagent/descriptor` 按 last-wins 折叠出的持久化 mode/label 身份——`SubagentRuntime.listChildren` 对 live child 经 `snapshot()` 读取（水位缓存，零日志读），对 cold child 则用一次持久化整读的结果调用 `restore({}, events, 0)` 读取。注册表约定不变：没有失败通道、没有新读法——单元永不抛错，值缺席本身就是信号，缺席如何呈现是该消费方自己的决定。
+注册表的两处既有读法已经服务于本 RFC 协议计划之外的一个已交付消费方：[subagent 列表经投影单元读取身份](../../implemented/architecture/2026-08-06-subagent-list-identity-projection.zh.md)注册了 `subagent` 单元——从 `subagent/descriptor` 按 last-wins 折叠出的持久化 mode/label 身份——`SubagentRuntime.listChildren` 对 live child 经 `snapshot()` 读取（水位缓存，零日志读），对 cold child 则用一次持久化整读的结果调用 `restore({}, events, 0)` 读取。注册表约定不变：没有失败通道、没有新读法——单元永不抛错，值缺席本身就是信号，缺席如何呈现是该消费方自己的决定。
 
 ### 协议层：历史尾页上的 projections 块
 
@@ -123,7 +128,7 @@ type UseProjection = {
 'command/done': { commandId: string; kind: 'success' | 'error'; text?: string }
 ```
 
-host 侧命令执行器（`packages/interaction/commands`）在调用处理器前追加 `command/run`，在结算时追加 `command/done`——在接收 agent（智能体）的会话上直接独立追加，与[合成轮次移除](../../implemented/simplification/2026-07-28-remove-synthetic-log-only-turns.md)之后所有插件自有 log-only 事件同一形状：没有轮次包裹它们（轮次只描述模型循环执行），持久化在常规检查点排空它们，run/done 配对由 commands 包自己的 invariant 伴生插件把守。载荷是结构化的——`name` 以及默认携带的 `args` 来自解析器自己的切分（`parseCommand` 的 name 与 rawInput），因此消费方（折叠自己命令记录的投影单元、富命令卡片）永远无需重新解析行文本。当载荷由权威领域事件持有时，命令定义会设置 `recordInput: false`；此时 `command/run` 省略 `args`，而不是重复该载荷。`text` 是处理器的原样结果——与 `tool/result.content` 同一性质的事实数据，不是呈现（版式如何编排仍由客户端在渲染时计算，满足「呈现永不入日志」这条红线）。想让模型知道结果的领域继续做它们今天在做的事（plan 的旁白、goal 的注入）——那是领域自己的决定，保持不变。
+host 侧命令执行器（`packages/interaction/commands`）在调用处理器前追加 `command/run`，在结算时追加 `command/done`——在接收 agent（智能体）的会话上直接独立追加，与[合成轮次移除](../../implemented/simplification/2026-07-28-remove-synthetic-log-only-turns.zh.md)之后所有插件自有 log-only 事件同一形状：没有轮次包裹它们（轮次只描述模型循环执行），持久化在常规检查点排空它们，run/done 配对由 commands 包自己的 invariant 伴生插件把守。载荷是结构化的——`name` 以及默认携带的 `args` 来自解析器自己的切分（`parseCommand` 的 name 与 rawInput），因此消费方（折叠自己命令记录的投影单元、富命令卡片）永远无需重新解析行文本。当载荷由权威领域事件持有时，命令定义会设置 `recordInput: false`；此时 `command/run` 省略 `args`，而不是重复该载荷。`text` 是处理器的原样结果——与 `tool/result.content` 同一性质的事实数据，不是呈现（版式如何编排仍由客户端在渲染时计算，满足「呈现永不入日志」这条红线）。想让模型知道结果的领域继续做它们今天在做的事（plan 的旁白、goal 的注入）——那是领域自己的决定，保持不变。
 
 由于已提交事件会在 mux 流上广播，刷新后仍在、多标签页同步、fork/恢复后可还原这三件事随之全部自动获得。`command.execute` RPC 退化为准入判定——`{ matched, commandId? }`：该行是否匹配命中，以及命中时新铸的配对 id，发起命令的客户端据此把自己的请求与生命周期事件产出的 flow 节点关联起来。一次性通知通道（`runDetached` → `noticeFor`）就此下线。
 
@@ -145,7 +150,7 @@ host 侧命令执行器（`packages/interaction/commands`）在调用处理器�
 
 **不透明的 `get(agent)` 提供方约定**——否决：计算模型藏在领域内部时，框架永远无法为状态做检查点、无法服务冷会话（没有 agent、没有已加载的日志——`get` 无处可跑）、也无法从日志中段续算。注册 `(init, apply, view)` 单元把驱动权交给框架，领域只留纯数学；有 host 侧行为需求的领域，其服务订阅照旧自持，与投影单元互不牵连。
 
-**为 plan 待定意图专设的仅实时叠加钩子（`live?(agent, base)`）**——不予采纳：它存在的唯一理由是用户的 plan *选择*不在日志里。让选择走标准命令通道后，`command/run` 上了账，待定态成为纯回放量，投影约定保持恰好三个纯函数。
+**为 plan 待定意图专设的仅实时叠加钩子（`live?(agent, base)`）**——不予采纳：它存在的唯一理由是用户的 plan *选择*不在日志里。让选择走标准命令通道后，`command/run` 上了账，待定态成为纯回放量，投影继续由纯折叠与可选客户端视图构成。
 
 **把注册 API 命名为 `registerFold`**——已被单元约定取代：注册对象如今确实是一个折叠，但本仓库里 `fold*` 专指纯 `(events) => state` 辅助函数，而该注册表接收的是带 key、带 schema、带版本的单元。投影仍是事件溯源中指称读模型角色的术语，#587 的 Note 标题与 #497 的评论也都已在使用它。
 
@@ -157,7 +162,7 @@ host 侧命令执行器（`packages/interaction/commands`）在调用处理器�
 
 **把注册表挂到 `ctx.apiProxy` 名下**——不予采纳：会话投影并非 web 专属（TUI、ACP（Agent Client Protocol）、headless 都是未来消费方），且领域包不得依赖 apiproxy 包。独立 seam 还顺带删掉了 #587 从 api-proxy 指向 plan 包的 type-only 导入边。
 
-**独立的客户端 `SessionProjectionViews` 类型表**——不予采纳：一张 `SessionProjectionMap` 端到端贯通正是协议直通纪律（不设第二套 DTO 词汇）；值就是 JSON 载荷，渲染归 slot 管。
+**第二张客户端 DTO 类型表**——不予采纳：`SessionProjectionMap` 仍是协议与 UI 共享的唯一客户端词汇。`SessionProjectionStateMap` 不是另一张客户端视图表；它描述 host 折叠状态，使内部状态可以不同于发往客户端的值。
 
 **用事件广播收集、替代注册表遍历**——不予采纳：异步监听器给不出那个单一的同步切面，而正是它让 `asOfSeq` 成为横跨所有 key 的一致快照；注册表才是本仓库承接贡献的通行形状（`ctx.tools`、提示词片段、slot）。
 

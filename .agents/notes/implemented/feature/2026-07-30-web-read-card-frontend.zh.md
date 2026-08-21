@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-[读取后端](2026-07-30-web-read-card.md)给 `ToolResultView` 增加了第四种渲染意图卡片 `card: 'read'`：一次已结算的读取现在会把 `{ path, lines: [{ number, text }], totalLines, lang? }` 作为 `resultView` 带到会话快照上。这份数据能到达浏览器，但 Web 客户端没有消费者。每个读取行都仅从参数派生，详情面板把结果的 content block 摊平进一个 `<pre>`，于是读取显示为带 `N: text` 前缀的纯文本，没有行号栏、没有语法高亮，也没有窗口读取的"显示 N / M"提示。[web 终端卡片](2026-07-28-web-terminal-card.md)确立了消费一个结构化卡片的模式；读取卡片沿用它，只在结果侧。
+[读取后端](2026-07-30-web-read-card.zh.md)给 `ToolResultView` 增加了第四种渲染意图卡片 `card: 'read'`：一次已结算的读取现在会把 `{ path, lines: [{ number, text }], totalLines, lang? }` 作为 `resultView` 带到会话快照上。这份数据能到达浏览器，但 Web 客户端没有消费者。每个读取行都仅从参数派生，详情面板把结果的 content block 摊平进一个 `<pre>`，于是读取显示为带 `N: text` 前缀的纯文本，没有行号栏、没有语法高亮，也没有窗口读取的"显示 N / M"提示。[web 终端卡片](2026-07-28-web-terminal-card.zh.md)确立了消费一个结构化卡片的模式；读取卡片沿用它，只在结果侧。
 
 ## Decision
 
@@ -18,7 +18,7 @@ Status: implemented
 
 聊天行把卡片**常驻**渲染在摘要行之下，上限 `CHAT_READ_MAX_LINES`（8，是 primitive 默认值的一半），与 `BashRow` 对终端卡片的姿态相同 —— block 的内部展开器让长读取不会占据整个消息流。两个渲染点承载它：keyed `ReadRow`（经 `ctx.slots.inject` 以 `read` 键注册，与 bash 样例完全一致），其摘要是作为可打开的宿主链接的文件路径；以及 `GenericToolCard` 对没有自己 keyed 行的读取声明工具（例如归到 `read` 变体的 `web_fetch`）的回退。详情面板以 primitive 自己的全高上限（16）渲染同一张卡片，因为面板是单次调用的阅读界面。
 
-整行折叠/展开（把每个工具调用默认折叠）归[统一展开与检视 note](2026-07-30-web-tool-row-unified-expand-and-inspect.md)所有，它已一次性翻转每张常驻卡片；本 note 的卡片是常驻的，与它旁边的终端卡片一致。
+整行折叠/展开（把每个工具调用默认折叠）归[统一展开与检视 note](2026-07-30-web-tool-row-unified-expand-and-inspect.zh.md)所有，它已一次性翻转每张常驻卡片；本 note 的卡片是常驻的，与它旁边的终端卡片一致。
 
 **读取卡片的语法按需 lazy 加载，只有 boot 三种保持 eager。** `highlight.ts` 是 `ui-primitives` 在每次 Web 启动都加载的平台 seed，其预热会无条件构建 shiki 单例。读取卡片的 `langFromPath` 提示覆盖完整的源码/配置/标记扩展集（python、rust、yaml、html……）；把它们全部 eager 注册会给启动 chunk 增加约 1.6 MB 的语法模块、并把它们的同步初始化摊给每个会话，包括从不打开读取卡片的会话。因此只有每个会话本就渲染的三种语法 —— TypeScript、shell、JSON（markdown 围栏与 `run_code` 语言）—— 在 boot 时加载。每种读取卡片扩展语法置于 `LAZY_GRAMMARS` 中一个动态 `import()` 之后，以其别名解析到的语法 id 为键。对某个 lazy 语言首次调用 `highlightLines`/`highlightToHtml` 时，`ensureGrammar` 启动 import（仅一次）并返回未就绪，于是卡片该帧渲染纯文本；import 解析后用 `loadLanguageSync` 注册该语法、递增一个加载计数、并通知订阅者。`ReadBlock` 与 `CodeBlock` 通过 `useSyncExternalStore(subscribeGrammarLoaded, grammarLoadCount)` 订阅，因此语法就绪的那一刻卡片就重渲染带上高亮。未知/缺省语言仍同步返回 undefined（纯文本，绝不报错）。
 
@@ -48,7 +48,7 @@ Web 聊天里的读取行现在常驻承载文件内容，是相对纯摘要行�
 
 ## Related
 
-- [读取卡片后端](2026-07-30-web-read-card.md) —— 增加本文消费的 `card: 'read'` 结果视图；产出本文渲染的 `lines`/`totalLines`/`lang`。
-- [Web 终端卡片](2026-07-28-web-terminal-card.md) —— 本文遵循的先例：一个 `ui-primitives` block、一个 `contract/*-card-model.ts` 派生、一个 keyed 行，以及让 `GenericToolCard`/`DetailsPanel` 感知卡片。
-- [Web 客户端语法高亮](../process/2026-07-26-web-syntax-highlighting-shiki.md) —— 拥有 `CodeBlock` 与 shiki `highlight.ts` 单例，本文以逐行 token 路径扩展它。
-- [工具调用呈现的标签式渲染意图联合](../architecture/2026-07-02-tool-render-intent-union.md) —— `card` 标签词汇表；Web 客户端现在是 `read` 分支的完整消费者。
+- [读取卡片后端](2026-07-30-web-read-card.zh.md) —— 增加本文消费的 `card: 'read'` 结果视图；产出本文渲染的 `lines`/`totalLines`/`lang`。
+- [Web 终端卡片](2026-07-28-web-terminal-card.zh.md) —— 本文遵循的先例：一个 `ui-primitives` block、一个 `contract/*-card-model.ts` 派生、一个 keyed 行，以及让 `GenericToolCard`/`DetailsPanel` 感知卡片。
+- [Web 客户端语法高亮](../process/2026-07-26-web-syntax-highlighting-shiki.zh.md) —— 拥有 `CodeBlock` 与 shiki `highlight.ts` 单例，本文以逐行 token 路径扩展它。
+- [工具调用呈现的标签式渲染意图联合](../architecture/2026-07-02-tool-render-intent-union.zh.md) —— `card` 标签词汇表；Web 客户端现在是 `read` 分支的完整消费者。

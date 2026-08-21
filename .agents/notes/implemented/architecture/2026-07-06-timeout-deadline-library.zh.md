@@ -103,7 +103,7 @@ export function timeoutOf(x: AbortSignal | { reason?: unknown }, code?: string):
 - `AbortSignal.any` 和 `using`/`Symbol.dispose` 在此首次进入本仓库（Node ≥ 24 基线，已满足）。
 - 模型流现在共享一个可重启的定时器约定，不会把滑动的空闲间隔变成总调用截止时间，也不会计入消费方思考时间。能够观察到带外传输活动的适配器可以对尚未结算的 demand 调用 `pulse()`；被屏蔽的活动对 watchdog 仍不可见。该原语仍然只做通知；适配器测试证明其传输观察到稳定信号并终止。
 
-以下内容不在本次范围内，列出以标明边界：`web_search` 可以在其工具 schema 和快照覆盖规划完成后获得可选的面向模型的 `timeout_ms`；基于 ripgrep 的文件系统发现工具（[打包的 ripgrep 搜索](2026-08-01-packaged-ripgrep-search.md)）通过 `dsh-tool-call-timeout-policy` 和 `exec.signal` 消费同样的提供方自有 deadline 形状；`tools/execute` waterfall（瀑布式事件）中间件可以通过驱动 `exec.signal` 为每次工具调用设置默认 deadline——那将是一个*消费*本库的插件，仍然只做通知，硬终止仍是各能力自己的事。
+以下内容不在本次范围内，列出以标明边界：`web_search` 可以在其工具 schema 和快照覆盖规划完成后获得可选的面向模型的 `timeout_ms`；基于 ripgrep 的文件系统发现工具（[打包的 ripgrep 搜索](2026-08-01-packaged-ripgrep-search.zh.md)）通过 `dsh-tool-call-timeout-policy` 和 `exec.signal` 消费同样的提供方自有 deadline 形状；`tools/execute` waterfall（瀑布式事件）中间件可以通过驱动 `exec.signal` 为每次工具调用设置默认 deadline——那将是一个*消费*本库的插件，仍然只做通知，硬终止仍是各能力自己的事。
 
 ## 曾考虑的替代方案
 

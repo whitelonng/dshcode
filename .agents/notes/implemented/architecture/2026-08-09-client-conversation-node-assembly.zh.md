@@ -35,7 +35,7 @@ Registry 注册是 Cordis effect，Definition 卸载会触发现有 Session 的�
 
 每个 [`ConversationNodeDefinition`](../../../../packages/client/runtime/src/client/contract/conversation.ts) 独立拥有一种业务对象从 Event 到 State 和最终 view Node 的转换。Definition 的 `kind` 是 Registry 内唯一名称，也是业务 ID 的命名空间。
 
-同一个 Event 可以被多个普通 Definition 认领。例如一条 Assistant Event 同时更新 Assistant Node 和 Turn Tail；一条 Retry Event 同时更新 Retry、Assistant 和 Turn Error。Assembler 只有在全部普通 Definition 都返回 `null` 时才询问 fallback。
+同一个 Event 可以被多个普通 Definition 认领。例如一条 Assistant Event 同时更新 Assistant Node 和 Turn Tail；一条 Retry Event 同时更新 Retry、Assistant 和 Turn Tail。Assembler 只有在全部普通 Definition 都返回 `null` 时才询问 fallback。
 
 Definition 不持有跨 Session 的可变业务数据。每个 Session 的 Context、State、依赖和 View Builder 都由该 Session 的 Assembler 隔离持有。
 
@@ -146,7 +146,7 @@ Definition 分别收到 `step` 和 `turn` scope，可以在任一阶段返回一
 
 Assembler 校验 Node `key === context.key` 且 Node `target === target`。业务可以改变 `anchorSeq`、data、Location 或 visibility，但不能在一次生命周期内改变 identity。
 
-`current` 让 Definition 区分“从未生成”与“已经生成后需要隐藏”。Assistant retry 和 Turn Error suppression 使用它避免非法的 Node 撤回。
+`current` 让 Definition 区分“从未生成”与“已经生成后需要隐藏”。Assistant retry suppression 使用它避免非法的 Node 撤回。
 
 一个 Definition 最多拥有一个 view target；仅维护状态的 Definition 同时省略 `target` 与 `buildViewNode()`。即使 Chat 与 Trajectory 识别同一持久 Event 族，它们也分别注册自己的业务 Definition；共享 Assembler 则为两个 target 提供相同的匹配、replay、Location 与发布机制。
 
@@ -265,7 +265,7 @@ Chat `order` 的结构性变化仍可能重排当前可见 key；纯 data 更新
 | Command / `command` | command ID | `command/run` | `command/done`、带 source command ID 的 compact lifecycle/checkpoint | 聚合 command outcome 和手动压缩证据 |
 | Automatic Compaction / `compaction` | compaction ID | 无 source command ID 的 `compaction/start` | summary、end、replacement checkpoint | 聚合 summary/checkpoint；checkpoint 足够时可在缺 start 下 fallback |
 | Retry / `model-retry` | retry ID | attempt 1 的 `llm/retry` | 后续 `llm/retry` 与 `llm/retry-started` | 聚合同一 RetryId 的 attempts 与 scheduled/started 状态 |
-| Turn Error / `turn-error` | turn number | `turn/start` | error `turn/end` 与该 turn Retry Events | 聚合 terminal failure，并用 Retry 证据决定隐藏 |
+| Turn Error / `turn-error` | turn number | `turn/start` | error `turn/end` | 聚合 terminal failure；该 turn 的 Retry 历史经由 Retry 渲染，绝不会隐藏此行 |
 | Turn Tail / `turn-tail` | turn number | `turn/start` | Assistant、Retry、`step/end`、`turn/end` | 保存 turn end，读取各 Step 的 Assistant data，发布 Turn data；完整 Matches 用于选择视觉尾部 anchor |
 | Deliverables / `deliverables` | turn number | `turn/start` | 该 Turn 的 Tool call/result | 聚合成功 mutation paths 并发布 Turn data，不生成 view Node |
 | Unknown fallback / `unknown-surface` | Event seq | 未被普通 Definition 认领的 append-surface Event | 无 | 保存原始 type/data 作为 JSON fallback |
@@ -281,14 +281,14 @@ Chat `order` 的结构性变化仍可能重排当前可见 key；纯 data 更新
 | Command | 默认 immediate | 普通 `command` 或集成 `manual-compaction` | checkpoint 到达可改变 anchor，但不改变 Context key |
 | Compaction | 默认 immediate | `compaction` marker | checkpoint 可先展示，older 补 start 后正序 replay |
 | Retry | 默认 immediate | 一个 `model-retry` Node 内含 attempts | 多次 retry 更新同一 key；Location close 把最后 scheduled 表现为 cancelled |
-| Turn Error | 默认 immediate | `turn-error` visible/hidden | 缺 start 可从 error end fallback；Retry 到达后保留 key 并隐藏 |
+| Turn Error | 默认 immediate | terminal failure 时的 `turn-error` | 缺 start 可从 error end fallback；该 turn 定格的 Retry 链在其旁渲染 |
 | Turn Tail | 仅 `turn/end` immediate，其余 none | 独立 `turn-tail` footer | 从 Step Assistant data 计算 closing/metrics，并通过同 turn Matches 决定 anchor |
 | Deliverables | 默认 immediate | 不生成 Node | Tool 结算增量更新所属 Turn data，Turn Tail 扩展槽读取 produced files |
 | Fallback | 默认 immediate | `unknown` JSON row | 只兜底 append surface，普通业务已认领但暂不可见时不会重复生成 |
 
 Inbox 展示了“每条 Event 都是一个 start-only 瞬间态 Context”，不是所有业务都需要 start/update 配对。它通过 Reader 与前一个同 kind Context 形成连续 fold，而非给整个 Inbox 人工制造生命周期 ID。
 
-Assistant、Turn Tail 和 Turn Error 展示了同一 Event 被多个 Definition 独立认领。每个 Definition 只更新自己的 State，最终分别生成原子 Chat Node。
+Retry、Assistant 和 Turn Tail 展示了同一 Event 被多个 Definition 独立认领。每个 Definition 只更新自己的 State，最终分别生成原子 Chat Node。
 
 Assistant、Turn Tail 和 Deliverables 展示了 Location data 的分层组合。Assistant 负责写好每个 Step 的 `assistant-step` data；Turn Tail 从这些 Step values 计算 `turn-tail` data；Deliverables 独立维护同一 Turn 的 `deliverables` data。消费者只读取声明合并后的 key，不扫描其他业务 Node，也不取得提供方的 Context State。
 
@@ -326,11 +326,11 @@ Assistant streaming 到 final、Tool running 到 settled 只更新同一个 Seat
 
 业务主动把已发布 Node 改成 hidden 时，它会退出 visible order，恢复 visible 时会重新 mount。这是明确的业务撤显语义，与 running→settled 的稳定 Seat 保证不同。
 
-具体 Tool renderer 仍由 [`ui-tool ownership decision`](2026-08-08-client-tool-presentation-ownership.md) 约束。Tool Definition 只交付递归 root/subcall data，`ui-tool` 再按 Tool name keyed slot 分发具体表现。
+具体 Tool renderer 仍由 [`ui-tool ownership decision`](2026-08-08-client-tool-presentation-ownership.zh.md) 约束。Tool Definition 只交付递归 root/subcall data，`ui-tool` 再按 Tool name keyed slot 分发具体表现。
 
 Trajectory 针对与 Chat 相同的 Assembler 和 Session 事件窗口注册自己的 target 与业务 Definition。它的 target builder 保留 stage-oriented read model，既不消费 Chat Builder 的 legacy slice，也不运行独立 history fold。Chat Builder 为 StatsLine 和顶层公共兼容字段保留 legacy slice；target 专属 Definition 不改变共享的 Context、Reader 或 Location 契约。
 
-target 专属 Trajectory Definition、保留的 stage model、Steering 适配、复杂度上界与表现层热点由 [Trajectory Context 组装决策](2026-08-11-trajectory-conversation-context-assembly.md)负责。
+target 专属 Trajectory Definition、保留的 stage model、Steering 适配、复杂度上界与表现层热点由 [Trajectory Context 组装决策](2026-08-11-trajectory-conversation-context-assembly.zh.md)负责。
 
 ## 运行时与渲染链路
 

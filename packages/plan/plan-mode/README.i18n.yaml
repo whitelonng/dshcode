@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/plan/plan-mode/README.md
 README.md: 3eabe2cb3f04b434b7f908f7beca869f1022a59e
-README.zh.md: f7d6a1f8e9f5ba95f8aad9457f3dde5fc415fdcf
+README.zh.md: b3548da880af5d0cacfebba4486294d9d5085626

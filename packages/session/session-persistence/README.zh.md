@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-会话持久化是一项能力 seam。抽象的 `SessionPersistence` 服务（`ctx.sessionPersistence`）是其 Service Definition。它要求持久化后端持久存储、重新加载和列出会话，但不规定具体存储实现。该 seam 采用与 `dsh-shell` 相同的角色划分（见[能力 seam](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md)）：本包负责 Service Definition，同级包负责 Service Provider，Consumer 注入该服务。
+会话持久化是一项能力 seam。抽象的 `SessionPersistence` 服务（`ctx.sessionPersistence`）是其 Service Definition。它要求持久化后端持久存储、重新加载和列出会话，但不规定具体存储实现。该 seam 采用与 `dsh-shell` 相同的角色划分（见[能力 seam](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.zh.md)）：本包负责 Service Definition，同级包负责 Service Provider，Consumer 注入该服务。
 
 持久化单元就是现有 `SessionEvent`（事件溯源模型：日志是唯一真源），因此不存在另一套并行的「持久消息」类型。不属于可回放对话状态的元数据（格式版本、cwd、血缘、种子边界、origin、委托深度）作为 `SessionHeader` 单独传输，该类型归 `dsh-session` 所有，并在此重新导出。
 
@@ -32,13 +32,13 @@
 
 ## 写入协调器
 
-`PersistenceCoordinator` 负责每 id 状态和串行化、每个活动会话各自的有界写入 controller、延迟实体化、崩溃尾部修复、会话接管和完全停稳的 dispose。第一方后端组合一个协调器，实现小型 `PersistenceBackend` 存储钩子接口，并委托其有状态方法。因此 JSONL 和 SQLite 共享生命周期正确性，同时保留不同存储原语；见[协调器 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-18-shared-persistence-write-coordinator.md)、[flush controller 简化](../../../.agents/notes/implemented/simplification/2026-07-23-collapse-persistence-flush-state.md)和[有界批处理决策](../../../.agents/notes/implemented/architecture/2026-08-08-bounded-session-persistence-write-batching.md)。
+`PersistenceCoordinator` 负责每 id 状态和串行化、每个活动会话各自的有界写入 controller、延迟实体化、崩溃尾部修复、会话接管和完全停稳的 dispose。第一方后端组合一个协调器，实现小型 `PersistenceBackend` 存储钩子接口，并委托其有状态方法。因此 JSONL 和 SQLite 共享生命周期正确性，同时保留不同存储原语；见[协调器 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-18-shared-persistence-write-coordinator.zh.md)、[flush controller 简化](../../../.agents/notes/implemented/simplification/2026-07-23-collapse-persistence-flush-state.zh.md)和[有界批处理决策](../../../.agents/notes/implemented/architecture/2026-08-08-bounded-session-persistence-write-batching.zh.md)。
 
 每个 `session/event` 将事件复制到会话 controller。第一个待处理事件会开启固定批处理窗口；后续事件会加入该批次，但不会重置截止时间。配置的 `writeBatchMaxDelayMs` 只限制这段有意等待，而不限制事件循环、初始化、串行化操作或后端延迟。写入期间接纳的事件会形成一个新的有界批次。`session/flush` 会取消等待，并作为共享的完全停稳屏障，排空屏障运行期间接纳的事件。后台写入失败只记录一次日志，保留顺序不变的批次，并暂停自动重试；新事件会开启新的固定窗口，而显式 flush 或后端拆卸会立即重试，并在失败再次发生时向调用方暴露失败。
 
 崩溃修复只适用于冷状态。对于已有活动会话的 id，`load(id)` 为权威内存日志制作快照，等待该快照持久，并只在平衡时返回；活动会话中开放的轮次会被拒绝，而不会收到合成中断 closer。对于冷 id，检查只读取、验证、冻结并构造一次未发布 Session；只有来源修订值仍然是当前值时，重复检查才会复用该对象图。`prepare(id)` 在修复前执行相同校验，预留该 Session 本身，提交任何待处理的撕裂尾部或中断轮次修复，并将其返回用于发布。HMR（热模块替换）接管通过 `loadStored` 读取，应用协调器 cwd 检查，并绝不关闭活动轮次。
 
-后端读取会在验证当前记录前，转换同一格式版本中明确受支持的旧记录。消息标识机制引入前的消息会获得确定性的 id `legacy-message:<session-id>:<event-seq>`；工具结果的内容替换会继承其目标导入后的 id。react-loop 引入前的 `turn/start` 会移除过时的 trigger，已移除的 steering（中途引导）事件 `steering/message` 会转换为同一条带标识的 `user/message`；旧版 `turn/end` 会映射终止原因，但不会虚构旧记录中没有记载的调用方。协调器对 `load`、`inspect`、`readFrom`、无所有者状态的认领和 HMR 前缀接管使用同一份转换后视图。存储仍然仅追加：读取不会重写旧记录，此后追加的事件使用当前格式。这些是[消息标识机制引入前的消息](../../../.agents/notes/implemented/bug-fix/2026-07-28-load-pre-identity-session-messages.md)与 [react-loop 引入前会话](../../../.agents/notes/implemented/bug-fix/2026-08-04-load-pre-react-loop-sessions.md)决策所规定的范围受限的导入例外，并不构成通用的 v0 迁移承诺。
+后端读取会在验证当前记录前，转换同一格式版本中明确受支持的旧记录。消息标识机制引入前的消息会获得确定性的 id `legacy-message:<session-id>:<event-seq>`；工具结果的内容替换会继承其目标导入后的 id。react-loop 引入前的 `turn/start` 会移除过时的 trigger，已移除的 steering（中途引导）事件 `steering/message` 会转换为同一条带标识的 `user/message`；旧版 `turn/end` 会映射终止原因，但不会虚构旧记录中没有记载的调用方。协调器对 `load`、`inspect`、`readFrom`、无所有者状态的认领和 HMR 前缀接管使用同一份转换后视图。存储仍然仅追加：读取不会重写旧记录，此后追加的事件使用当前格式。这些是[消息标识机制引入前的消息](../../../.agents/notes/implemented/bug-fix/2026-07-28-load-pre-identity-session-messages.zh.md)与 [react-loop 引入前会话](../../../.agents/notes/implemented/bug-fix/2026-08-04-load-pre-react-loop-sessions.zh.md)决策所规定的范围受限的导入例外，并不构成通用的 v0 迁移承诺。
 
 活动会话发出 `session/disposed` 时，协调器等待其 controller，以串行方式执行最终 drain，然后释放该精确 `Session` 对象拥有的状态。失败退役会将 controller 保留在活动会话 map 中，使后端拆卸可重试。后端拆卸先停止事件接纳，flush 每个剩余 controller，等待每 id 操作，最后才关闭存储句柄。
 
@@ -57,7 +57,7 @@
 | `list(signal?)` | 列出全部已存储元数据，并遵循可选的取消信号。 |
 | `close?()` | 可选生命周期拆卸（例如关闭 db 句柄），在 dispose drain 后等待其完成。 |
 
-协调器断言已存储 id，并在修复或活动会话接管前比较已存储/活动会话 cwd。其 `inspect()` 路径取得新鲜后端值的所有权，只验证和冻结一次，并在不调用 `commitRepair` 的情况下最多保留配置数量的未发布 Session。只有保留源的修订值仍等于 `readStoredRevision` 时，系统才会复用或修复它；否则协调器会重新读取。该新鲜性校验不会增加跨进程写入排他。持久日志在一次读取与复核往返内保持不变时，修订值重试才能收敛；持续的外部写入可能延迟 `load`、`inspect` 或 `prepare`。`tornMarker` 完全不透明：协调器只测试 `!== undefined`，并将其原样往返给 `commitRepair`，绝不检查值（JSONL 后端使用待截断字节偏移，SQLite 后端使用待删除 seq）。第三方后端可以不用协调器直接实现抽象服务，但必须提供相同的非修改式检查和可信轻量快照修订。详见[写入协调器 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-18-shared-persistence-write-coordinator.md)。
+协调器断言已存储 id，并在修复或活动会话接管前比较已存储/活动会话 cwd。其 `inspect()` 路径取得新鲜后端值的所有权，只验证和冻结一次，并在不调用 `commitRepair` 的情况下最多保留配置数量的未发布 Session。只有保留源的修订值仍等于 `readStoredRevision` 时，系统才会复用或修复它；否则协调器会重新读取。该新鲜性校验不会增加跨进程写入排他。持久日志在一次读取与复核往返内保持不变时，修订值重试才能收敛；持续的外部写入可能延迟 `load`、`inspect` 或 `prepare`。`tornMarker` 完全不透明：协调器只测试 `!== undefined`，并将其原样往返给 `commitRepair`，绝不检查值（JSONL 后端使用待截断字节偏移，SQLite 后端使用待删除 seq）。第三方后端可以不用协调器直接实现抽象服务，但必须提供相同的非修改式检查和可信轻量快照修订。详见[写入协调器 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-18-shared-persistence-write-coordinator.zh.md)。
 
 ## 元数据与位置类型
 

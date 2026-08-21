@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { AttachmentId, AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import { AttachmentId, AttachmentStore, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type {
   ImageAttachmentLimits,
   ImageAttachmentRef,
+  ImageRequestPolicy,
+  RequestImageAttachment,
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
@@ -13,6 +15,7 @@ import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { DEFAULT_MAX_REQUEST_IMAGE_BYTES, resolveProfiles } from '../src/config.ts'
+import { memoryAuth } from './auth-double.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
 
@@ -47,6 +50,7 @@ function adapterOf(
   return new PiAiAdapter({
     profiles: () => resolveProfiles(providers),
     resolveApiKey: () => Promise.resolve(apiKey),
+    auth: memoryAuth(),
   })
 }
 
@@ -71,6 +75,30 @@ describe('PiAiAdapter provider routing', () => {
     expect(result.finish).toEqual({ kind: 'stop' })
     expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 1 })
     expect(server.paths).toEqual(['/chat/completions'])
+  })
+
+  it('keeps prepared model metadata and dispatch on one profile snapshot', async () => {
+    const first = await mockServer([{ events: textEvents }])
+    const second = await mockServer([])
+    let providers: Record<string, LlmPiAi.PiAiProviderProfile> = {
+      deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: first.url },
+    }
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.llm.registerAdapter(['deepseek'], new PiAiAdapter({
+      profiles: () => resolveProfiles(providers),
+      resolveApiKey: () => Promise.resolve('test-key'),
+      auth: memoryAuth(),
+    }))
+
+    const prepared = await ctx.llm.prepareCall({ provider: 'deepseek', model: 'deepseek-v4-flash' })
+    providers = { deepseek: { apiKeyEnv: 'PI_TEST_KEY', baseURL: second.url } }
+    const chunks: unknown[] = []
+    for await (const chunk of prepared.stream({ ...prepared.config, messages: [] })) chunks.push(chunk)
+
+    expect(chunks.length).toBeGreaterThan(0)
+    expect(first.requests).toHaveLength(1)
+    expect(second.requests).toHaveLength(0)
   })
 
   it('merges profile headers with Harness attribution winning', async () => {
@@ -210,6 +238,24 @@ describe('PiAiAdapter provider routing', () => {
     }
     const readImage = vi.fn((_ref: ImageAttachmentRef): Promise<StoredImageAttachment> =>
       Promise.resolve({ ref, data: Uint8Array.of(1) }))
+    const readImageRequest = vi.fn((
+      value: ImageAttachmentRef,
+      _policy: ImageRequestPolicy,
+      _signal?: AbortSignal,
+    ): Promise<RequestImageAttachment> => (
+      Promise.resolve({
+        variantId: ImageVariantId(`sha256:${'b'.repeat(64)}`),
+        attachment: value,
+        data: Uint8Array.of(1),
+        mediaType: value.mediaType,
+        bytes: 1,
+        width: value.width,
+        height: value.height,
+        depth: 'uchar',
+        space: 'srgb',
+        hasAlpha: true,
+      })
+    ))
 
     class LateAttachmentStore extends AttachmentStore {
       readonly imageLimits: ImageAttachmentLimits = {
@@ -232,6 +278,14 @@ describe('PiAiAdapter provider routing', () => {
       readImage(value: ImageAttachmentRef): Promise<StoredImageAttachment> {
         return readImage(value)
       }
+
+      override readImageRequest(
+        value: ImageAttachmentRef,
+        policy: ImageRequestPolicy,
+        signal?: AbortSignal,
+      ): Promise<RequestImageAttachment> {
+        return readImageRequest(value, policy, signal)
+      }
     }
 
     const ctx = new Context()
@@ -251,7 +305,10 @@ describe('PiAiAdapter provider routing', () => {
     })
 
     expect(result.finish.kind).toBe('error')
-    expect(readImage).toHaveBeenCalledWith(ref)
+    expect(readImageRequest).toHaveBeenCalledWith(ref, {
+      maxPixels: 2048 * 2048,
+      maxBytes: 1024 * 1024,
+    }, expect.any(AbortSignal))
     expect(server.paths).toEqual(['/v1/responses'])
   })
 

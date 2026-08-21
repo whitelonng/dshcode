@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-浏览器客户端从模型可见的 surface 构建会话：`FoldAdapter` 在历史窗口上运行核心 `SurfaceManager` 并读取 `surface.nodes`。一次成功的压缩（compaction）会用一个检查点节点替换一段 surface 范围，因此该替换一落地，Web 流就把它所遮蔽的每条消息折叠成一行灰暗的上下文——那是用户已经读过的对话。日志中什么都没丢失；缺陷完全在投影层，而[终端与宿主网关已按同一方式修复](2026-07-29-human-transcript-append-origin.md)，浏览器留给了本次变更。
+浏览器客户端从模型可见的 surface 构建会话：`FoldAdapter` 在历史窗口上运行核心 `SurfaceManager` 并读取 `surface.nodes`。一次成功的压缩（compaction）会用一个检查点节点替换一段 surface 范围，因此该替换一落地，Web 流就把它所遮蔽的每条消息折叠成一行灰暗的上下文——那是用户已经读过的对话。日志中什么都没丢失；缺陷完全在投影层，而[终端与宿主网关已按同一方式修复](2026-07-29-human-transcript-append-origin.zh.md)，浏览器留给了本次变更。
 
 surface 顺序还让另外两个问题成为结构性的。一次替换之后它并非按 seq 升序——`SurfaceManager` 把高 seq 的检查点拼接到它所遮蔽范围的位置上——因此按数值 seq 归并进该数组的仅日志节点（斜杠命令行、被打断的冻结节点）可能被冲刷到检查点之前，再也无法交错回保留下来的尾部。而且由于分页不再为 replacement 副本消耗 `maxMessages` 额度，一页现在可以携带一个 `surfaceOp.start` 落在窗口之外的检查点；核心 fold 拒绝该范围，于是 `nodes()` 退回到一次宽容的线性扫描、打印一条 `console.error`，并发布一个描述该失败的 `foldDegraded` 标志。
 
@@ -20,7 +20,7 @@ surface 顺序还让另外两个问题成为结构性的。一次替换之后它
 
 标记的摘要文本、被替换条目数量和估算的被遮蔽 token 数量都来自检查点引用的 `compaction/summary` 事件，绝不取自成框的检查点载荷——那是为模型撰写的指令信封。窗口切分把该事件留在窗口外时这些字段不可用，与无调用的工具结果同一种软退让；后续补上该事件的分页会解析出它们。
 
-[手动压缩命令](../feature/2026-07-30-queued-manual-compaction.md)会把摘要事件的 seq 作为成功结果的 `CommandResult.sourceEventSeq` 返回，`command/done` 则持久化这项可选引用。Chat 只会配对成功且名称为 `/compact`、其引用恰好等于唯一一个已加载 `CompactionSummaryNode.summaryEventSeq` 的命令。运行中的命令先渲染为 `compact · Compacting context…`；检查点落地后，同一个 React key 会在检查点的消息流位置渲染一条收起的 `compact` 展开项，并显示条目数量和 token 估算值。输入被拒绝、没有可压缩历史、取消和失败时仍使用通用命令行，并保留处理器撰写的完整文本。自动压缩没有命令引用，继续使用独立的上下文已压缩标记。
+[手动压缩命令](../feature/2026-07-30-queued-manual-compaction.zh.md)会把摘要事件的 seq 作为成功结果的 `CommandResult.sourceEventSeq` 返回，`command/done` 则持久化这项可选引用。Chat 只会配对成功且名称为 `/compact`、其引用恰好等于唯一一个已加载 `CompactionSummaryNode.summaryEventSeq` 的命令。运行中的命令先渲染为 `compact · Compacting context…`；检查点落地后，同一个 React key 会在检查点的消息流位置渲染一条收起的 `compact` 展开项，并显示条目数量和 token 估算值。输入被拒绝、没有可压缩历史、取消和失败时仍使用通用命令行，并保留处理器撰写的完整文本。自动压缩没有命令引用，继续使用独立的上下文已压缩标记。
 
 显式事件引用之所以重要，是因为手动压缩允许在异步摘要运行期间注入持久上下文：命令行与检查点行不保证相邻。命令生命周期事件增加一个可选字段，但压缩事务、RPC 信封和模型可见 surface 均不变化；不含该字段的预发布持久日志继续采用原先的两行软退让，无须迁移。
 
@@ -28,7 +28,7 @@ surface 顺序还让另外两个问题成为结构性的。一次替换之后它
 
 识别需要三个条件同时成立，与终端一致：`event.type === 'user/message'`、压缩缝隙的检查点插件来源，**以及** `isReplacementSurfaceEvent(event)`。一条 append 的插件来源 `user/message` 是注入上下文——跨会话引用卡片——不是压缩。
 
-从 `packages/client/*` 程序无法到达的是 `dsh-compaction` 的**根部**，而不是这个包。根部会到达 `dsh-session` 的根部，后者的 cordis `Context` 合并声明了宿主侧 `sessions: SessionStore`，与客户端的 `sessions: ISessions` 冲突——`TS2717`，即 [development.md](../../../../docs/development.md#typescript-project-layout) 中每侧一个 program 的规则；这一点对仅类型导入同样成立，因为该冲突是编译器事实而非打包器事实。
+从 `packages/client/*` 程序无法到达的是 `dsh-compaction` 的**根部**，而不是这个包。根部会到达 `dsh-session` 的根部，后者的 cordis `Context` 合并声明了宿主侧 `sessions: SessionStore`，与客户端的 `sessions: ISessions` 冲突——`TS2717`，即 [development.md](../../../../docs/development.zh.md#typescript-project-layout) 中每侧一个 program 的规则；这一点对仅类型导入同样成立，因为该冲突是编译器事实而非打包器事实。
 
 本仓库对这一情形的既有答案是不含 cordis 的叶子子路径，本次变更就新增了一个：`COMPACT_CHECKPOINT_SOURCE` 与 `isCompactCheckpointSource` 现在住在 `packages/compaction/compaction/src/checkpoint.ts`，它不导入 cordis、也不增强任何模块（即 `dsh-commands/brand` / `dsh-llm/message` 的形状），而包根重新导出两者，因此每个宿主侧消费方——终端的 chat helper、`dsh-session-reference` 的投影——都不需改动。适配器用仅类型导入把它的字面量钉在该声明上：
 

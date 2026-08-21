@@ -438,29 +438,73 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async saveImages(inputs: readonly SaveImageAttachment[]): Promise<readonly ImageAttachmentRef[]>',
-        description: 'Validate one ordered image batch before committing any member. Validation failures start no writes; storage failures return no partial references, although already published content-addressed objects may stay unreachable until a future retention policy collects them.',
-        parameters: [{ name: 'inputs', description: 'encoded images in their owning message order.' }],
-        returns: 'durable references in the exact input order.',
+        description: 'Validate and durably commit one ordered image batch.',
+        parameters: [{ name: 'inputs', description: 'encoded images in owning-message order.' }],
+        returns: 'durable normalized attachment references in the same order after every member succeeds.',
       },
       {
         signature: 'abstract saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef>',
-        description: 'Validate and durably commit one image before its owning session event is appended.',
+        description: 'Validate and durably commit one image before its owning session event is appended. The returned reference describes the persisted normalized image. When normalization reduces the raster, its `originalDimensions` records the orientation-applied input dimensions.',
         parameters: [{ name: 'input', description: 'encoded bytes, declared media type, and optional display name.' }],
-        returns: 'a durable content-addressed reference.',
+        returns: 'the durable content-addressed normalized image reference.',
       },
       {
         signature: 'abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>',
         description: 'Read one image and verify that bytes still match the recorded reference.',
         parameters: [{ name: 'ref', description: 'durable reference from the session log.' }, { name: 'signal', description: 'optional cancellation for backend read and verification work.' }],
-        returns: 'the verified bytes and canonical reference.',
+        returns: 'the verified bytes and normalized attachment reference.',
         throws: ['the signal reason when aborted, or a storage error when verification fails.'],
+      },
+      {
+        signature: 'readImageRequest( ref: ImageAttachmentRef, policy: ImageRequestPolicy, signal?: AbortSignal, ): Promise<RequestImageAttachment>',
+        description: 'Generate or read one deterministic model-request version from the stored normalized image.',
+        parameters: [{ name: 'ref', description: 'durable provider-independent normalized attachment reference.' }, { name: 'policy', description: 'exact route pixel and encoded-byte budget.' }, { name: 'signal', description: 'optional cancellation.' }],
+        returns: 'request bytes and the cache/upload identity covering every transform input.',
+      },
+    ],
+  },
+  {
+    key: 'authorization',
+    summary: '`ctx.authorization`: a registry of credential-obtaining flows, one attempt at a time per key.',
+    description: '`ctx.authorization`: a registry of credential-obtaining flows, one attempt at a time per key.',
+    methods: [
+      {
+        signature: 'registerFlow(flow: AuthorizationFlow): () => void',
+        description: 'Offer a way to obtain one credential. One flow per key: two plugins claiming the same key would each write a record in their own format, and whichever ran last would leave the other reading a payload it cannot parse.',
+        parameters: [{ name: 'flow', description: 'the key it writes, its label, its methods, and its runner.' }],
+        returns: 'Disposer that withdraws this flow.',
+        throws: ['{AuthorizationError} code `DUPLICATE_FLOW` when the key is already claimed.'],
+      },
+      {
+        signature: 'list(): readonly AuthorizationEntry[]',
+        description: 'Every registered flow, for a surface listing what can be authorized.',
+        parameters: [],
+        returns: 'one entry per flow, in registration order.',
+      },
+      {
+        signature: 'describe(key: CredentialKey): AuthorizationEntry | undefined',
+        description: 'One registered flow.',
+        parameters: [{ name: 'key', description: 'the credential record to ask about.' }],
+        returns: 'the entry, or undefined when no flow claims that key.',
+      },
+      {
+        signature: 'cancel(key: CredentialKey): void',
+        description: 'Withdraw the attempt running for a key, if any. Separate from the request\'s own signal because a request/response transport answers a Cancel button on a second call, with no handle on the first one\'s signal.',
+        parameters: [{ name: 'key', description: 'the credential record whose attempt should stop.' }],
+      },
+      {
+        signature: 'async begin(request: AuthorizationRequest): Promise<AuthorizationOutcome>',
+        description: 'Run one attempt to authorize a key, and report how it ended.\n\nOne attempt per key at a time. A second caller is refused rather than joined: the two would be prompting different humans through the same flow, and the second would answer questions the first was asked.',
+        parameters: [{ name: 'request', description: 'the key, the method, the surface, and the cancel signal.' }],
+        returns: '`authorized` once the flow\'s record is committed during this attempt and observed, or `cancelled` when the human declined or the caller withdrew.',
+        throws: ['{AuthorizationError} code `NO_FLOW` when nothing claims the key, `UNKNOWN_METHOD` when the named method is not one the flow offers, `ALREADY_IN_FLIGHT` when an attempt is already running for the key, or `NOT_COMMITTED` when the flow resolved without committing a record during the attempt.'],
       },
     ],
   },
   {
     key: 'clientModules',
-    summary: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index tap.',
-    description: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index tap. Construction runs the activation scan synchronously — a malformed declaration or missing bundle among the already-loaded entries aggregates into one loud throw (FAILED fiber; the boot activation audit reports it).',
+    summary: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index injection rows.',
+    description: 'The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index injection rows. Construction runs the activation scan synchronously — a malformed declaration or missing bundle among the already-loaded entries aggregates into one loud throw (FAILED fiber; the boot activation audit reports it).',
     methods: [
       {
         signature: 'graph(): WebBootGraph',
@@ -577,8 +621,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'credentials',
-    summary: 'Abstract credential service.',
-    description: 'Abstract credential service. Providers implement the four operations over their source layers; one seam-wide rule binds them all: an empty stored value is absent everywhere — `resolve` skips it, `describe` reports it unconfigured — so a blank never masquerades as a configured secret.',
+    summary: 'Abstract credential service over two key spaces that answer two questions.',
+    description: 'Abstract credential service over two key spaces that answer two questions.\n\nA CredentialRef answers "what is behind this environment-variable name", layered over the process environment, the provider-managed store, and `.env` files. One seam-wide rule binds that half: an empty stored value is absent everywhere — `resolve` skips it, `describe` reports it unconfigured — so a blank never masquerades as a configured secret.\n\nA CredentialKey answers "what credential does this plugin hold for this id". Nothing can layer here — an authorization grant has no environment to be read from — so presence of the record is the whole fact, and modifyRecord is the only write path because a correct write depends on the current value (a token refresh is read-decide-replace under one lock).',
     methods: [
       {
         signature: 'abstract resolve(ref: CredentialRef): Promise<ResolvedCredential | undefined>',
@@ -601,6 +645,35 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'abstract unset(ref: CredentialRef): Promise<void>',
         description: 'Remove one reference from the provider-managed writable source; removing an absent reference is a no-op. Rejects while a read-only source shadows the reference, like set.',
         parameters: [{ name: 'ref', description: 'the reference to remove.' }],
+      },
+      {
+        signature: 'abstract readRecord(key: CredentialKey): Promise<CredentialRecord | undefined>',
+        description: 'Read one stored record. The value is returned as its owner wrote it; a GrantRecord payload is not interpreted on the way out.',
+        parameters: [{ name: 'key', description: 'the record to read.' }],
+        returns: 'the record, or `undefined` while none is stored.',
+      },
+      {
+        signature: 'abstract describeRecord(key: CredentialKey): Promise<CredentialRecordInfo>',
+        description: 'Describe one record for configuration surfaces without exposing its value.',
+        parameters: [{ name: 'key', description: 'the record to describe.' }],
+        returns: 'presence, discriminant, and writability.',
+      },
+      {
+        signature: 'abstract listRecords(): Promise<readonly CredentialRecordEntry[]>',
+        description: 'Enumerate every stored record\'s address and tag. Unlike the reference half, which has no enumeration because configuration surfaces learn which references exist from settings schemas, records have no such discovery path: a surface that cannot list them cannot show what a user is authorized for, nor find an orphan left by an uninstalled plugin.',
+        parameters: [],
+        returns: 'every stored record, values excluded.',
+      },
+      {
+        signature: 'abstract modifyRecord( key: CredentialKey, mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>, ): Promise<CredentialRecord | undefined>',
+        description: 'Serialized read-modify-write over one record — the only write path. `mutate` sees the record as it stands at the moment the write is exclusive, and returning `undefined` leaves the entry untouched. Exclusion holds across processes where the backing store supports it, which is what makes a token refresh safe: two processes rotating one refresh token concurrently would otherwise lose whichever wrote first.',
+        parameters: [{ name: 'key', description: 'the record to modify.' }, { name: 'mutate', description: 'receives the current record and returns its replacement, or `undefined` to leave it.' }],
+        returns: 'the record after the write, or the current one when `mutate` declined.',
+      },
+      {
+        signature: 'abstract deleteRecord(key: CredentialKey): Promise<void>',
+        description: 'Remove one record; removing an absent record is a no-op.',
+        parameters: [{ name: 'key', description: 'the record to remove.' }],
       },
     ],
   },
@@ -1207,31 +1280,43 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'sessionProjections',
     summary: '`ctx.sessionProjections`: the projection unit table and its drive.',
-    description: '`ctx.sessionProjections`: the projection unit table and its drive. The service subscribes to `session/event` once; every committed event passes every registered unit\'s `apply` (eager drive), and a changed state reference notifies the change feed with the schema-validated view. Cells build lazily — a unit registered after events flowed, or a session older than the registry, folds `init` over the in-memory log on first touch (event or read). Registration is an effect (disposer rides the calling fiber): an unloaded domain plugin\'s key disappears from snapshots and clients read it as capability absence. Domain plugins register under `ctx.inject([\'sessionProjections\'], …)` so headless assemblies without the registry stay unaffected. Registrants sharing a key share one unit and are counted: the same tool package mounted in N agent presets registers N times, and the key survives until the last one unloads.',
+    description: '`ctx.sessionProjections`: the projection unit table and its drive. The service subscribes to `session/event` once; every committed event passes every registered unit\'s `apply` (eager drive), and a changed state reference in a client-visible unit notifies the change feed with the schema-validated view. Cells build lazily — a unit registered after events flowed, or a session older than the registry, folds `init` over the in-memory log on first touch (event or read). Registration is an effect (disposer rides the calling fiber): an unloaded domain plugin\'s key disappears from snapshots and clients read it as capability absence. Domain plugins register under `ctx.inject([\'sessionProjections\'], …)` so headless assemblies without the registry stay unaffected. Registrants sharing a key share one unit and are counted: the same tool package mounted in N agent presets registers N times, and the key survives until the last one unloads.',
     methods: [
       {
-        signature: 'register<K extends keyof SessionProjectionMap, S>(definition: ProjectionDefinition<K, S>): () => void',
+        signature: 'register< K extends keyof SessionProjectionMap, S extends SessionProjectionStateMap[K], >( definition: Omit<ProjectionDefinition<K, S>, \'wire\'> & { wire: NonNullable<ProjectionDefinition<K, S>[\'wire\']> }, ): () => void',
         description: 'Register one domain\'s unit. The registration is an effect on the calling context\'s fiber: disposing the fiber (or calling the returned disposer) removes the key — and the unit\'s cached cells — from subsequent drives and snapshots.',
+        parameters: [{ name: 'definition', description: 'key, state schema, pure unit functions, and stateVersion.' }],
+        returns: 'the exact disposer that unregisters this unit.',
+      },
+      {
+        signature: 'register< K extends Exclude<keyof SessionProjectionStateMap, keyof SessionProjectionMap>, S extends SessionProjectionStateMap[K], >( definition: Omit<ProjectionDefinition<K, S>, \'wire\'>, ): () => void',
+        description: 'Register one host-only unit. Its state is omitted from client snapshots and always checkpointed like every other unit.',
         parameters: [{ name: 'definition', description: 'key, state schema, pure unit functions, and stateVersion.' }],
         returns: 'the exact disposer that unregisters this unit.',
       },
       {
         signature: 'onChanged(listener: ProjectionChangeListener): () => void',
         description: 'Subscribe to the change feed. The registration is an effect on the calling context\'s fiber.',
-        parameters: [{ name: 'listener', description: 'called once per unit whose state reference changed, per committed event.' }],
+        parameters: [{ name: 'listener', description: 'called once per client-visible unit whose state reference changed, per committed event.' }],
         returns: 'the exact disposer that unsubscribes.',
       },
       {
+        signature: 'stateOf<K extends keyof SessionProjectionStateMap>( session: Session, key: K, ): SessionProjectionStateMap[K] | undefined',
+        description: 'Read one unit\'s current host state without computing unrelated views. The returned value is live; callers must not mutate it.',
+        parameters: [{ name: 'session', description: 'the session whose state is read.' }, { name: 'key', description: 'the registered unit key.' }],
+        returns: 'current state, or `undefined` when the key is not registered.',
+      },
+      {
         signature: 'snapshot(session: Session): ProjectionSnapshot',
-        description: 'One consistent cut over every registered unit for one session, read from the watermark cache (missing cells fold lazily over the in-memory log). Fully synchronous — every value and `asOfSeq` reflect the same log position. Each value passes its unit\'s schema before leaving.',
+        description: 'One consistent cut over every registered client-visible unit for one session, read from the watermark cache (missing cells fold lazily over the in-memory log). Fully synchronous — every value and `asOfSeq` reflect the same log position. Each value passes its unit\'s `viewSchema` before leaving.',
         parameters: [{ name: 'session', description: 'the session whose projection values are read.' }],
-        returns: 'the snapshot; `values` is empty when no unit is registered.',
+        returns: 'the snapshot; `values` is empty when no client-visible unit is registered.',
       },
       {
         signature: 'checkpoint(session: Session): ProjectionCheckpoint',
-        description: 'State-level checkpoint of every registered unit for one session, read from the watermark cache (missing cells fold lazily over the in-memory log). This is the write side of the persisted projection cache: the returned rows are the `(key → {ver, seq, val})` part of the durable `(sessionId, key, ver, seq, val)` rows. Every `val` is a DETACHED structured clone — never the live cell reference: the watermark cache is this registry\'s authoritative mutable state, and a caller reaching the live reference could corrupt every subsequent snapshot and frame through it (plain JSON by the unit contract, so the clone is total).',
+        description: 'State-level checkpoint of every persisted unit for one session, read from the watermark cache (missing cells fold lazily over the in-memory log). This is the write side of the persisted projection cache: the returned rows are the `(key → {ver, seq, val})` part of the durable `(sessionId, key, ver, seq, val)` rows. Every `val` is a DETACHED structured clone — never the live cell reference: the watermark cache is this registry\'s authoritative mutable state, and a caller reaching the live reference could corrupt every subsequent snapshot and frame through it (plain JSON by the unit contract, so the clone is total).',
         parameters: [{ name: 'session', description: 'the session whose unit states are checkpointed.' }],
-        returns: 'one row per registered key; empty when no unit is registered.',
+        returns: 'one row per registered key.',
       },
       {
         signature: 'restoreFloor(checkpoint: ProjectionCheckpoint): number | undefined',
@@ -1241,13 +1326,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'viewCheckpoint(checkpoint: ProjectionCheckpoint): Partial<SessionProjectionMap>',
-        description: 'View a checkpoint\'s rows without any log read: for every registered unit whose row\'s `ver` matches, serve the schema-validated `view` of the stored state; mismatched or absent rows leave their key absent (a cold or listing consumer treats it as not-yet-available and a fuller read path refolds it). The zero-I/O rung of the read ladder — values are as stale as their rows, never wrong.',
+        description: 'View a checkpoint\'s rows without any log read: for every registered client-visible unit whose row\'s `ver` matches, serve the schema-validated `view` of the schema-validated stored state; mismatched, malformed, or absent rows leave their key absent (a cold or listing consumer treats it as not-yet-available and a fuller read path refolds it). The zero-I/O rung of the read ladder — values are as stale as their rows, never wrong.',
         parameters: [{ name: 'checkpoint', description: 'persisted rows for one session (possibly stale or empty).' }],
         returns: 'whole values per key with a usable row; empty when none.',
       },
       {
-        signature: 'restore(checkpoint: ProjectionCheckpoint, events: readonly SessionEvent[], baseSeq: number): { snapshot: ProjectionSnapshot; checkpoint: ProjectionCheckpoint }',
-        description: 'Cold read: fold every registered unit over a stored log suffix, seeding each from its checkpoint row when usable — the one read recipe (cached state + forward tail replay + `view`) applied without a live `Session`. Call with the events returned by a persistence `readFrom(id, restoreFloor(checkpoint))` and that same floor as `baseSeq`; the floor\'s one-below anchor makes the supplied end honest, so a shrunk log is detected here. A row is usable iff its `ver` matches the live unit\'s `stateVersion`, it does not predate `baseSeq` (`seq >= baseSeq - 1`), and it does not claim events past the supplied end (`seq <= endSeq`); an unusable row is discarded and its key refolds from `init` — which is only sound over the full log, so a discarded row with `baseSeq > 0` throws (the caller re-reads from seq 0, e.g. after a crash-repair truncation shrank the log below a row\'s watermark).',
+        signature: 'restore( checkpoint: ProjectionCheckpoint, events: readonly SessionEvent[], baseSeq: number, ): { snapshot: ProjectionSnapshot; checkpoint: ProjectionCheckpoint }',
+        description: 'Cold read: fold every persisted unit over a stored log suffix, seeding each from its checkpoint row when usable — the one read recipe (cached state + forward tail replay + `view`) applied without a live `Session`. Call with the events returned by a persistence `readFrom(id, restoreFloor(checkpoint))` and that same floor as `baseSeq`; the floor\'s one-below anchor makes the supplied end honest, so a shrunk log is detected here. A row is usable iff its `ver` matches the live unit\'s `stateVersion`, it does not predate `baseSeq` (`seq >= baseSeq - 1`), and it does not claim events past the supplied end (`seq <= endSeq`); an unusable row is discarded and its key refolds from `init` — which is only sound over the full log, so a discarded row with `baseSeq > 0` throws (the caller re-reads from seq 0, e.g. after a crash-repair truncation shrank the log below a row\'s watermark).',
         parameters: [{ name: 'checkpoint', description: 'persisted rows for one session (possibly stale or empty).' }, { name: 'events', description: 'the stored events with `seq >= baseSeq`, in seq order.' }, { name: 'baseSeq', description: 'the seq `events` starts at (its first event\'s seq when non-empty).' }],
         returns: 'the snapshot cut at the supplied log end (`asOfSeq` is the last supplied event\'s seq, `baseSeq - 1` for an empty tail) plus the refreshed checkpoint rows at that cut, ready for a durable write-back.',
       },
@@ -2195,13 +2280,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'tapIndex(transform: (html: string) => string): () => void',
-        description: 'Register an index.html transform, applied by the fallback owner to every index response (applyIndexTaps) in registration order.',
+        description: 'Register a raw-HTML index transform, the escape hatch for markup no IndexInjection row expresses: renderIndex applies taps in registration order after rendering the structured rows.',
         parameters: [{ name: 'transform', description: 'pure html-to-html function.' }],
         returns: 'the disposer removing the transform.',
       },
       {
         signature: 'applyIndexTaps(html: string): string',
         description: 'Run an index.html body through the registered taps in registration order — called by the fallback owner on every index response it renders.',
+        parameters: [{ name: 'html', description: 'the raw index.html body.' }],
+        returns: 'the transformed body.',
+      },
+      {
+        signature: 'collectIndexInjections(): IndexInjection[]',
+        description: 'Gather the structured injection table: one `webserver/index-inject` emit, every subscriber pushes its current rows. Fresh per call, so subscribers read live state (module graph, theme preference) at emit time.',
+        parameters: [],
+        returns: 'rows in subscriber activation order.',
+      },
+      {
+        signature: 'renderIndex(html: string): string',
+        description: 'Render one index.html body: the structured injection table first, then the raw `tapIndex` transforms over the result.',
         parameters: [{ name: 'html', description: 'the raw index.html body.' }],
         returns: 'the transformed body.',
       },
@@ -2406,6 +2503,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'req', description: 'the pending decision (agent, tool identity, reason, signal).' }],
   },
   {
+    name: 'authorization/settled',
+    mode: 'emit',
+    signature: '\'authorization/settled\'(key: CredentialKey, settlement: AuthorizationSettlement): void',
+    summary: 'One authorization attempt has finished and released its key.',
+    description: 'One authorization attempt has finished and released its key. Fires for every terminal outcome, failures included, so a surface watching a key it did not start (a second browser tab) learns the attempt is over.',
+    parameters: [{ name: 'key', description: 'the credential record the finished attempt was authorizing.' }, { name: 'settlement', description: 'how it ended, including the `failed` case its caller sees as a thrown error.' }],
+  },
+  {
     name: 'commands/change',
     mode: 'emit',
     signature: '\'commands/change\'(): void',
@@ -2462,9 +2567,17 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'resolved', description: 'request identity and outcome.' }],
   },
   {
-    name: 'credentials/updated',
+    name: 'credentials/record-updated',
     mode: 'emit',
-    signature: '\'credentials/updated\'(ref: CredentialRef): void',
+    signature: '\'credentials/record-updated\'(key: CredentialKey): void',
+    summary: 'Committed change to a stored credential record: a `modifyRecord` that wrote, a `deleteRecord` that removed, or an external edit observed in storage.',
+    description: 'Committed change to a stored credential record: a `modifyRecord` that wrote, a `deleteRecord` that removed, or an external edit observed in storage. Separate from `credentials/reference-updated` because the two key grammars are disjoint — a listener that received both on one event could not tell which space a subject belongs to. Listener failures are contained on the same terms as `credentials/reference-updated`.',
+    parameters: [{ name: 'key', description: 'the record whose stored value changed.' }],
+  },
+  {
+    name: 'credentials/reference-updated',
+    mode: 'emit',
+    signature: '\'credentials/reference-updated\'(ref: CredentialRef): void',
     summary: 'Committed change to a provider-managed credential source: a `set`, an `unset`, or an external edit observed in storage.',
     description: 'Committed change to a provider-managed credential source: a `set`, an `unset`, or an external edit observed in storage. Ambient process-environment changes are not observable and never emit. Listener failures are contained and logged — a sync throw and an async rejection alike — without changing the committed operation\'s outcome, except `INVARIANT`-coded failures, which rethrow after every listener ran; that rethrow reaches the emitter only from synchronous listeners, so invariant checks on this event must not be async functions.',
     parameters: [{ name: 'ref', description: 'the reference whose stored value changed.' }],
@@ -2694,6 +2807,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'exec', description: 'the execution object that traversed the pipeline.' }, { name: 'result', description: 'a deep-frozen snapshot of the final returned result.' }],
   },
   {
+    name: 'webserver/index-inject',
+    mode: 'emit',
+    signature: '\'webserver/index-inject\'(table: IndexInjection[]): void',
+    summary: 'Collect the structured index injection table.',
+    description: 'Collect the structured index injection table. Emitted on every index render and every worker boot-payload request; listeners push their current rows, so a row\'s data is read fresh at emit time.',
+    parameters: [{ name: 'table', description: 'Mutable row table; listeners append in activation order.' }],
+  },
+  {
     name: 'workflow/agent-end',
     mode: 'emit',
     signature: '\'workflow/agent-end\'(info: WorkflowRunInfo, agent: WorkflowAgentEndInfo): void',
@@ -2786,6 +2907,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AgentStatus = \'idle\' | \'running\';',
   },
   {
+    name: 'ApiKeyRecord',
+    declaration: 'export interface ApiKeyRecord {\n    readonly kind: \'api-key\';\n    readonly key?: string;\n    readonly env?: Readonly<Record<string, string>>;\n}',
+  },
+  {
     name: 'ApprovalOutcome',
     declaration: 'export type ApprovalOutcome = \'allowed-once\' | \'rejected\' | \'cancelled\' | \'unavailable\';',
   },
@@ -2848,6 +2973,54 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AttachmentId',
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
+  },
+  {
+    name: 'AuthorizationEntry',
+    declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n}',
+  },
+  {
+    name: 'AuthorizationFlow',
+    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    run(session: AuthorizationSession): Promise<void>;\n}',
+  },
+  {
+    name: 'AuthorizationInteraction',
+    declaration: 'export interface AuthorizationInteraction {\n    notify(notice: AuthorizationNotice): void;\n    prompt(prompt: AuthorizationPrompt): Promise<string>;\n}',
+  },
+  {
+    name: 'AuthorizationMethod',
+    declaration: 'export interface AuthorizationMethod {\n    id: string;\n    label: string;\n}',
+  },
+  {
+    name: 'AuthorizationNotice',
+    declaration: 'export interface AuthorizationNotice {\n    message: string;\n    url?: string;\n    code?: string;\n}',
+  },
+  {
+    name: 'AuthorizationOutcome',
+    declaration: 'export interface AuthorizationOutcome {\n    status: AuthorizationStatus;\n}',
+  },
+  {
+    name: 'AuthorizationPrompt',
+    declaration: 'export type AuthorizationPrompt = {\n    signal?: AbortSignal;\n} & ({\n    kind: \'text\';\n    message: string;\n    placeholder?: string;\n} | {\n    kind: \'secret\';\n    message: string;\n    placeholder?: string;\n} | {\n    kind: \'select\';\n    message: string;\n    options: readonly AuthorizationPromptOption[];\n});',
+  },
+  {
+    name: 'AuthorizationPromptOption',
+    declaration: 'export interface AuthorizationPromptOption {\n    id: string;\n    label: string;\n    description?: string;\n}',
+  },
+  {
+    name: 'AuthorizationRequest',
+    declaration: 'export interface AuthorizationRequest {\n    key: CredentialKey;\n    method?: string;\n    interaction: AuthorizationInteraction;\n    signal?: AbortSignal;\n}',
+  },
+  {
+    name: 'AuthorizationSession',
+    declaration: 'export interface AuthorizationSession {\n    readonly method: string;\n    readonly signal: AbortSignal;\n    notify(notice: AuthorizationNotice): void;\n    prompt(prompt: AuthorizationPrompt): Promise<string>;\n}',
+  },
+  {
+    name: 'AuthorizationSettlement',
+    declaration: 'export type AuthorizationSettlement = AuthorizationStatus | \'failed\';',
+  },
+  {
+    name: 'AuthorizationStatus',
+    declaration: 'export type AuthorizationStatus = \'authorized\' | \'cancelled\';',
   },
   {
     name: 'BackendRegistry',
@@ -3056,6 +3229,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CredentialInfo',
     declaration: 'export interface CredentialInfo {\n    configured: boolean;\n    source?: string;\n    writable: boolean;\n}',
+  },
+  {
+    name: 'CredentialKey',
+    declaration: 'export type CredentialKey = Branded<\'CredentialKey\'>;',
+  },
+  {
+    name: 'CredentialRecord',
+    declaration: 'export type CredentialRecord = ApiKeyRecord | GrantRecord;',
+  },
+  {
+    name: 'CredentialRecordEntry',
+    declaration: 'export interface CredentialRecordEntry {\n    key: CredentialKey;\n    kind: CredentialRecord[\'kind\'];\n}',
+  },
+  {
+    name: 'CredentialRecordInfo',
+    declaration: 'export interface CredentialRecordInfo {\n    configured: boolean;\n    kind?: CredentialRecord[\'kind\'];\n    writable: boolean;\n}',
   },
   {
     name: 'CredentialRef',
@@ -3282,12 +3471,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GoalView extends GoalSnapshot {\n    readonly roundsStarted: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly activation: GoalActivation;\n}',
   },
   {
+    name: 'GrantRecord',
+    declaration: 'export interface GrantRecord {\n    readonly kind: \'grant\';\n    readonly payload: unknown;\n}',
+  },
+  {
     name: 'ImageAttachmentLimits',
     declaration: 'export interface ImageAttachmentLimits {\n    maxImageBytes: number;\n    maxImagesPerMessage: number;\n    maxMessageImageBytes: number;\n    maxImagePixels: number;\n    maxImageDimension: number;\n    mediaTypes: readonly ImageMediaType[];\n}',
   },
   {
     name: 'ImageAttachmentRef',
-    declaration: 'export interface ImageAttachmentRef {\n    attachmentId: AttachmentId;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    name?: string;\n}',
+    declaration: 'export interface ImageAttachmentRef {\n    attachmentId: AttachmentId;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    name?: string;\n    originalDimensions?: {\n        width: number;\n        height: number;\n    };\n}',
   },
   {
     name: 'ImageBlock',
@@ -3296,6 +3489,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageMediaType',
     declaration: 'export type ImageMediaType = \'image/png\' | \'image/jpeg\' | \'image/webp\' | \'image/gif\';',
+  },
+  {
+    name: 'ImageRequestPolicy',
+    declaration: 'export interface ImageRequestPolicy {\n    maxPixels: number;\n    maxBytes: number;\n}',
+  },
+  {
+    name: 'ImageVariantId',
+    declaration: 'export type ImageVariantId = Branded<\'ImageVariantId\'>;',
   },
   {
     name: 'Inbox',
@@ -3308,6 +3509,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'InboxTarget',
     declaration: 'export type InboxTarget = \'next-turn\' | \'next-step\';',
+  },
+  {
+    name: 'IndexInjection',
+    declaration: 'export type IndexInjection = {\n    kind: \'global\';\n    name: string;\n    value: unknown;\n} | {\n    kind: \'script\';\n    placement: IndexInjectionPlacement;\n    text: string;\n} | {\n    kind: \'script-src\';\n    placement: IndexInjectionPlacement;\n    src: string;\n} | {\n    kind: \'style\';\n    text: string;\n} | {\n    kind: \'html\';\n    placement: IndexInjectionPlacement;\n    html: string;\n};',
+  },
+  {
+    name: 'IndexInjectionPlacement',
+    declaration: 'export type IndexInjectionPlacement = \'head\' | \'body\';',
   },
   {
     name: 'InvariantFailure',
@@ -3415,7 +3624,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LlmAdapter',
-    declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export abstract class LlmAdapter {\n    providerInfo(provider: string): LlmProviderInfo;\n    providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;\n    listModels(_provider: string): Promise<readonly LlmModelInfo[]>;\n    resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;\n    async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;\n    abstract stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'LlmCallConfig',
@@ -3642,8 +3851,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
   },
   {
+    name: 'PreparedAdapterCall',
+    declaration: 'export interface PreparedAdapterCall {\n    readonly model: LlmResolvedModelInfo;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+  },
+  {
     name: 'PreparedLlmCall',
-    declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+    declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly inputModalities?: readonly ModelModality[];\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
   {
     name: 'PreparedReferencedMessage',
@@ -3687,7 +3900,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ProjectionDefinition',
-    declaration: 'export interface ProjectionDefinition<K extends keyof SessionProjectionMap, S> {\n    key: K;\n    schema: ZodType<SessionProjectionMap[K]>;\n    init(): S;\n    apply(state: S, event: SessionEvent): S;\n    view(state: S): SessionProjectionMap[K];\n    stateVersion: number;\n}',
+    declaration: 'export interface ProjectionDefinition<K extends keyof SessionProjectionStateMap, S extends SessionProjectionStateMap[K] = SessionProjectionStateMap[K]> {\n    key: K;\n    stateSchema: ZodType<S>;\n    init(): NoInfer<S>;\n    apply(state: NoInfer<S>, event: SessionEvent): NoInfer<S>;\n    wire?: K extends keyof SessionProjectionMap ? {\n        viewSchema: ZodType<SessionProjectionMap[K]>;\n        view(state: NoInfer<S>): SessionProjectionMap[K];\n    } : never;\n    stateVersion: number;\n}',
   },
   {
     name: 'ProjectionSnapshot',
@@ -3752,6 +3965,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RequestHeaderReason',
     declaration: 'export type RequestHeaderReason = \'initial\' | \'resume\' | \'change\';',
+  },
+  {
+    name: 'RequestImageAttachment',
+    declaration: 'export interface RequestImageAttachment {\n    variantId: ImageVariantId;\n    attachment: ImageAttachmentRef;\n    data: Uint8Array;\n    mediaType: ImageMediaType;\n    bytes: number;\n    width: number;\n    height: number;\n    depth: \'uchar\';\n    space: \'srgb\';\n    hasAlpha: boolean;\n}',
   },
   {
     name: 'RequestRunOutcome',
@@ -4012,6 +4229,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionProjectionMap',
     declaration: 'export interface SessionProjectionMap {\n}',
+  },
+  {
+    name: 'SessionProjectionStateMap',
+    declaration: 'export interface SessionProjectionStateMap {\n}',
   },
   {
     name: 'SessionRawArtifact',

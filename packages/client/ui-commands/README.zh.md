@@ -12,7 +12,7 @@
 
 `command.execute` 返回已匹配的命令结果后，当前浏览器会发布本地 `command/executed(sessionId, name, result)`。其他客户端只会通过 Host 事件流收到持久命令节点，不会收到这条确认，因此浏览器专属副作用可以筛选由实际提交命令的客户端收到的成功结果，而不会把 Session 回放当成操作请求。监听器失败会逐项记录并隔离，不会改变已经准入的命令结果，也不会阻止后续监听器运行。
 
-菜单查询会按顺序且不区分大小写地模糊匹配命令名的子序列。前缀排名最高；其余匹配项按分隔符边界优先、相邻字符优先、间隔越短越优先的规则排序，若仍同分，则以目录顺序和贡献项顺序打破平局。此行为只影响命令发现：space 和 Enter 仍要求命令名精确匹配。原理：[Web 斜杠命令模糊发现](../../../.agents/notes/implemented/feature/2026-08-04-web-slash-command-fuzzy-discovery.md)。
+菜单查询会按顺序且不区分大小写地模糊匹配命令名的子序列。前缀排名最高；其余匹配项按分隔符边界优先、相邻字符优先、间隔越短越优先的规则排序，若仍同分，则以目录顺序和贡献项顺序打破平局。此行为只影响命令发现：space 和 Enter 仍要求命令名精确匹配。原理：[Web 斜杠命令模糊发现](../../../.agents/notes/implemented/feature/2026-08-04-web-slash-command-fuzzy-discovery.zh.md)。
 
 `PopupSelectController`（`src/client/popup.ts`）是不含界面的外壳状态：`PopupSelectView` 自行注册进 `conversation.input.overlay`（SlotMap key 归 ui-conversation 所有；本包只以 type-only 导入引入该声明——没有运行时依赖边）。壳是打开期间持有焦点的瞬态层；onSelect 之后的 token 片段消费在两条分支上都经 `consumeTokenSegment` 执行（菜单路径做 span CAS，回车路径做裸 token 相等比较），作用于接线层经 `bindDraft` 绑定的草稿表层。
 

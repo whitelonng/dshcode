@@ -8,7 +8,7 @@ Status: implemented
 
 在侧边栏某个工作区分组的 `+` 上创建会话时，有时会进入一个新会话，但侧边栏把它显示在「未分组」而不是点击的那个工作区下——「进入了新会话，但工作区没有被选中」。故障只出现在注册在 CLI（命令行界面）运行目录（即 `defaults.cwd = process.cwd()`，实际场景里就是 harness 检出目录本身）上的工作区，并且一旦该目录下存在 CLI 创建的空白会话就会出现。
 
-根因：`connectWorkspace` 的空白会话复用扫描只按 `cwd` 相等匹配会话列表镜像。host 自己的成员规则要求**同时**满足：会话 id 在工作区账户（`sessionIds`）中，**且**会话 header 的规范化 cwd 等于工作区路径（[Workspace UI product flow](../feature/2026-07-25-workspace-ui-product-flow.md)）；只有 cwd 匹配而没有账户槽位的恰恰就是「未分组」的情形。复用扫描忽略了账户槽位，因此任何 cwd 匹配的**在线空白**会话都会被选中——包括 CLI/TUI/headless 入口在 host cwd 创建的 `main-session-*` 会话（`session.create({})` 回退到 `defaults.cwd`，从不挂到任何工作区）。当这样的会话在线且空白（尚无 `turn/start`）时，下一次在该路径注册的工作区上点击 `+` 就会复用它，导航打开的是一个任何分组界面都无法显示在该工作区下的会话。其他路径的工作区不受影响，因为那里不会积累未入账的空白会话；而 host-cwd 工作区每次 CLI 运行都会积累一个。
+根因：`connectWorkspace` 的空白会话复用扫描只按 `cwd` 相等匹配会话列表镜像。host 自己的成员规则要求**同时**满足：会话 id 在工作区账户（`sessionIds`）中，**且**会话 header 的规范化 cwd 等于工作区路径（[Workspace UI product flow](../feature/2026-07-25-workspace-ui-product-flow.zh.md)）；只有 cwd 匹配而没有账户槽位的恰恰就是「未分组」的情形。复用扫描忽略了账户槽位，因此任何 cwd 匹配的**在线空白**会话都会被选中——包括 CLI/TUI/headless 入口在 host cwd 创建的 `main-session-*` 会话（`session.create({})` 回退到 `defaults.cwd`，从不挂到任何工作区）。当这样的会话在线且空白（尚无 `turn/start`）时，下一次在该路径注册的工作区上点击 `+` 就会复用它，导航打开的是一个任何分组界面都无法显示在该工作区下的会话。其他路径的工作区不受影响，因为那里不会积累未入账的空白会话；而 host-cwd 工作区每次 CLI 运行都会积累一个。
 
 ## 决策
 

@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-18-product-subagent-failure-facts.md
 2026-08-18-product-subagent-failure-facts.md: 50d8e918f288a6b8a9b90474499b2ed20731643f
-2026-08-18-product-subagent-failure-facts.zh.md: 7dc5a73637c90a1ca1123c86d754f95c68498fd9
+2026-08-18-product-subagent-failure-facts.zh.md: abdbf8c0ebddb1fb30cef3c7e80fcf7040e45d2d

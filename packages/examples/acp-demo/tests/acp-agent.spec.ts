@@ -87,7 +87,7 @@ describe('dsh-acp-demo composition', () => {
       provider: 'mock',
       model: 'mock',
       persona: 'hi',
-      persistenceRoot: '/tmp/dsh-acp-demo-test',
+      persistenceRoot: await mkdtemp(join(tmpdir(), 'dsh-acp-demo-test-')),
       persistenceCompression: 'none',
       skills: await isolatedSkillsConfig(),
       workspaceContext: false,
@@ -143,7 +143,7 @@ describe('dsh-acp-demo composition', () => {
       provider: 'mock',
       model: 'mock',
       persona: 'hi',
-      persistenceRoot: '/tmp/dsh-acp-demo-workspace-context',
+      persistenceRoot: await mkdtemp(join(tmpdir(), 'dsh-acp-demo-workspace-context-')),
       workspaceContext: false,
     })
     expect(ctx.get('agents')).toBeDefined()
@@ -174,7 +174,7 @@ describe('dsh-acp-demo composition', () => {
       provider: 'mock',
       model: 'mock',
       maxParallelToolCalls: 3,
-      persistenceRoot: '/tmp/dsh-acp-demo-test-parallel',
+      persistenceRoot: await mkdtemp(join(tmpdir(), 'dsh-acp-demo-test-parallel-')),
       skills: await isolatedSkillsConfig(),
       workspaceContext: false,
     })
@@ -232,7 +232,7 @@ describe('dsh-acp-demo composition', () => {
       provider: 'mock',
       model: 'mock',
       toolOrder: ['zulu', TOOL_ORDER_REST],
-      persistenceRoot: '/tmp/dsh-acp-demo-test-tool-order',
+      persistenceRoot: await mkdtemp(join(tmpdir(), 'dsh-acp-demo-test-tool-order-')),
       workspaceContext: false,
     })
     // The bundle's own bash tools pend on the absent `ctx.shell` executor in

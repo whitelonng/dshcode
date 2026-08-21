@@ -16,13 +16,13 @@ Status: implemented
 
 每个进程内子 agent 都被告知而非被困住：`applyChildComposition` 注册作用域内的 `subagent:delegation` 运行时上下文声明（order 120，位于 `sandbox:policy` 与 `approval:policy` 语句之后），声明权限范围已在启动时固定、需要审批的操作会被自动拒绝、需要更宽访问的任务应以上报限制收尾而不是重试。该声明是运行时上下文贡献而非系统提示词 section，因此部署的系统提示词在父子之间保持统一（快照测试套件钉住了这一统一性），该事实也随策略语句乘坐同一份持久化快照。
 
-本决策取代[进程内委派策略决策](2026-07-25-subagent-policy-inheritance.md)中的审批一半，并推翻其「强制 `'never'` 会排除未来的子 agent 应答器」的结论：审批继承已经落地，产生的正是上述不可见的受阻状态；未来若要引入子 agent 应答器，必须先推翻本 note。
+本决策取代[进程内委派策略决策](2026-07-25-subagent-policy-inheritance.zh.md)中的审批一半，并推翻其「强制 `'never'` 会排除未来的子 agent 应答器」的结论：审批继承已经落地，产生的正是上述不可见的受阻状态；未来若要引入子 agent 应答器，必须先推翻本 note。
 
 ## 考虑过的替代方案
 
 - **继承父级的审批覆盖项**（先前的行为）：不予采纳。只有已处于 `'never'` 的父级才产生确定性的子 agent；交互式父级种出的子 agent，其 ask 要么等待一个无人在看的提示，要么以 `'unavailable'` 失败关闭，结果取决于当时恰好接入了哪些界面。
 - **受阻状态可见性与逐子级权限调整**（#1723 原有的验收）：延后而非否决。`list_agents` 的受阻标注、经由结算投递 seam 的父级通知、目录树徽标，以及 subagent 专用的权限通道仍是更完整的设计，但每一项都需要独立的 seam 工作；一旦子 agent 不可能进入等待审批的受阻状态，这些都不再是必需。
-- **把子 agent 的 ask 路由到父控制器**：仍按[审批 seam Agent Note](2026-07-06-approval-seam.md) 延后。它需要父链所有权与发起 spawn 的 `callId`。
+- **把子 agent 的 ask 路由到父控制器**：仍按[审批 seam Agent Note](2026-07-06-approval-seam.zh.md) 延后。它需要父链所有权与发起 spawn 的 `callId`。
 - **在 `ApprovalService` 内按会话来源钉定**：不予采纳。这会让审批包耦合委派词汇，并重复一个委派边界已经拥有的决定；委派种入的事件之所以可强制执行，是因为当前不存在任何能切换子会话策略的写入路径（`/permission` 命令要求通用 Host 路由，而 subagent 所有权围栏对子会话拒绝该路由）。
 
 ## 后果

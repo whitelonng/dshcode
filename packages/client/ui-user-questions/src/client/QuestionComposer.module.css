@@ -321,52 +321,81 @@
   border-color: var(--dsw-alias-border-l2);
 }
 
-.customInput {
-  flex: 1;
+/* Auto-growing free-text answer (see AnswerField): mirror and textarea share
+   one grid cell, the mirror sizes it, and the textarea stretches to it. The
+   two layers MUST keep identical type, padding and wrapping — a mismatch
+   makes the box the wrong height for the text the user is typing. */
+.field {
+  display: grid;
   min-width: 0;
-  padding: 0;
+  --dsh-answer-field-padding: 0;
+}
+
+.field > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+  padding: var(--dsh-answer-field-padding);
+  font: inherit;
+  font-size: 14px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* The height ruler, never painted. Growth stops at 6 lines: the card body is
+   capped at 520px and still owes that budget to the title, the option rows and
+   the footer actions, so a long answer scrolls in the textarea instead of
+   pushing the choices it belongs to out of view.
+   content-box overrides the card-wide border-box so the cap counts TEXT lines
+   in both variants: under border-box the block variant's 16px of vertical
+   padding eats two thirds of a line and the sixth one arrives as an 8px sliver.
+   Width is unaffected — a stretched grid item's used width comes from the
+   track, not from this box-sizing. */
+.fieldMirror {
+  box-sizing: content-box;
+  max-height: 144px;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.fieldInput {
+  resize: none;
+  /* The stack's only scrollport: past the mirror's cap the field stops growing
+     and this scrolls. */
+  overflow-y: auto;
   border: none;
   outline: none;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   caret-color: var(--dsw-alias-state-business-primary);
-  font: inherit;
-  font-size: 14px;
-  line-height: 24px;
 }
 
-.customInput::placeholder {
+.fieldInput::placeholder {
   color: var(--dsw-alias-label-caption);
 }
 
-/* Optionless question: the free-form answer is the whole body. The 12px side
-   margins add to the .options 12px padding so both edges align with the
-   title's 24px inset; type matches the option rows, no resize handle. */
-.customTextarea {
-  display: block;
+/* Inline variant: the custom row's copy column, borrowing the row's chrome. */
+.customInline {
+  flex: 1;
+}
+
+/* Optionless question: the free-form answer is the whole body, so it carries
+   its own frame. The 12px side margins add to the .options 12px padding so both
+   edges align with the title's 24px inset; two lines are reserved before the
+   answer starts growing. */
+.customBlock {
   min-height: 64px;
-  max-height: 140px;
   flex-shrink: 0;
   margin: 0 12px;
-  padding: 8px 12px;
-  resize: none;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 10px;
-  outline: none;
   background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-primary);
-  caret-color: var(--dsw-alias-state-business-primary);
-  font: inherit;
-  font-size: 14px;
-  line-height: 24px;
+  --dsh-answer-field-padding: 8px 12px;
 }
 
-.customTextarea:focus {
+.customBlock:focus-within {
   border-color: var(--dsw-alias-state-business-primary);
-}
-
-.customTextarea::placeholder {
-  color: var(--dsw-alias-label-caption);
 }
 
 .footer {

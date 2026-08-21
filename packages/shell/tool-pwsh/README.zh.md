@@ -66,7 +66,7 @@ Non-zero exits are reported as `[exit code: N]` markers; investigate failures be
 
 #### 模型看到的内容
 
-模型看到生成的 [`pwsh` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-pwsh)。按 agent 作用域的工具限制可以移除该 agent 的定义。
+模型看到生成的 [`pwsh` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-pwsh)。按 agent 作用域的工具限制可以移除该 agent 的定义。
 
 #### Token 影响
 
@@ -120,7 +120,7 @@ ack 是固定短行；任务输出按读取有界。
 
 ## 已知限制与暂缓事项
 
-- **Windows 沙箱下的语言模式与 named-pipe 捕获** — 在 [Windows ACL 沙箱](../../sandbox/sandbox-windows-acl/README.md) 下，read-only pwsh 会以 ConstrainedLanguage 启动，因为临时目录写入被拒绝，导致 PowerShell 的 AppLocker 探针失败并按 fail-closed 处理：`Add-Type`、非核心 .NET 静态调用（`[System.IO.*]::`、`[math]::`）、COM 对象与反射都会以“only core types”错误失败，且该模式无法从内部解除。workspace-write 的私有临时目录使探针得以完成，因此除非主机策略另有规定，否则它保持 FullLanguage。两种受限模式都拒绝 named-pipe 打开，因此受限命令内的管道 stdio spawn 以 EPERM 失败。工具描述把这两个约定教给模型；后端 README 负责完整的限制说明。
-- **无持久 shell** — 每次调用都启动全新的 `pwsh -Command`；持久 shell 对应物是 [`@deepseek-ai/dsh-tool-pwsh-persistent`](../tool-pwsh-persistent/README.md)，它在 Windows（ConPTY）以及装有 pwsh 的 POSIX 主机上跨调用保持一个 owner 作用域的 pwsh 存活。
+- **Windows 沙箱下的语言模式与 named-pipe 捕获** — 在 [Windows ACL 沙箱](../../sandbox/sandbox-windows-acl/README.zh.md) 下，read-only pwsh 会以 ConstrainedLanguage 启动，因为临时目录写入被拒绝，导致 PowerShell 的 AppLocker 探针失败并按 fail-closed 处理：`Add-Type`、非核心 .NET 静态调用（`[System.IO.*]::`、`[math]::`）、COM 对象与反射都会以“only core types”错误失败，且该模式无法从内部解除。workspace-write 的私有临时目录使探针得以完成，因此除非主机策略另有规定，否则它保持 FullLanguage。两种受限模式都拒绝 named-pipe 打开，因此受限命令内的管道 stdio spawn 以 EPERM 失败。工具描述把这两个约定教给模型；后端 README 负责完整的限制说明。
+- **无持久 shell** — 每次调用都启动全新的 `pwsh -Command`；持久 shell 对应物是 [`@deepseek-ai/dsh-tool-pwsh-persistent`](../tool-pwsh-persistent/README.zh.md)，它在 Windows（ConPTY）以及装有 pwsh 的 POSIX 主机上跨调用保持一个 owner 作用域的 pwsh 存活。
 - **PowerShell 方言约定** — 模型必须写 PowerShell（原生路径、`$env:` 变量），而不是 bash；没有方言翻译。
 - **会话 cwd 身份不做规范化** — workdir 基座直接取会话头 cwd 原值，不同于 bash 工具经 sandbox-root 规范化的身份。在隔离执行器下，策略的工作区根**会**被规范化（由共享的策略服务完成），因此当原始会话 cwd 与其规范化形态不同时，workdir 与隔离根可能不一致——这一 parity 差距留待共享 shell 工具基座提取时解决。

@@ -18,6 +18,11 @@
   /* Sides = composer clearance + 16px: on narrow viewports the transcript
      stays exactly 32px narrower than the input card (the shared width rule). */
   padding: 16px calc(var(--dsh-composer-side-clearance) + 16px);
+  /* Inline-size query container: wide markdown tables size their breakout
+     against this box's content width (100cqw in AssistantMarkdown's
+     md-table-wide rule) — the CSS stand-in for deepsuite chat's JS-measured
+     --dsl-virtual-list-width. */
+  container-type: inline-size;
 }
 
 :global([data-conversation-scroll]) .root {

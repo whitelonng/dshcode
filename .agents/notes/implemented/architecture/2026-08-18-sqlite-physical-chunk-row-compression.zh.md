@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-标量 [`session-persistence-sqlite`](../../../../packages/session/session-persistence-sqlite/README.md) 后端为每个逻辑 `SessionEvent` 存储一个物理行。提供方流会生成 token 大小的 `assistant/chunk` 事件，并重复轮次、步骤、块、类型和 envelope 字段，因此事务批处理可以减少提交次数，却不能减少行数或重复 JSON payload。逻辑流不能合并，因为分片边界、序列号、时间戳、回放、部分输出、UI 保真度和 `sourceEventSeqs` 仍然可观察。
+标量 [`session-persistence-sqlite`](../../../../packages/session/session-persistence-sqlite/README.zh.md) 后端为每个逻辑 `SessionEvent` 存储一个物理行。提供方流会生成 token 大小的 `assistant/chunk` 事件，并重复轮次、步骤、块、类型和 envelope 字段，因此事务批处理可以减少提交次数，却不能减少行数或重复 JSON payload。逻辑流不能合并，因为分片边界、序列号、时间戳、回放、部分输出、UI 保真度和 `sourceEventSeqs` 仍然可观察。
 
 一个表示多个事件的物理行会影响追加连续性、崩溃修复、后缀定位、schema 所有权、revision 和陈旧写入方。持久解码规则还必须由包版本固定；可配置 codec 集可能导致同一 schema 版本在不同 Cordis 组合下无法读取。
 
@@ -78,4 +78,4 @@ SQLite 在 schema 17 包内拥有分片编码和验证。字段完全匹配的�
 
 代价是不迁移旧的预发布 SQLite schema，以及取决于时序的物理行数。SQLite 与 Zstandard 都是同步操作：每个连接以配置的 `busyTimeoutMs` 等待竞争锁，该等待期间会阻塞其 JavaScript 线程，大型行的编码与解码也在该线程上执行。冷打开会在 journal-mode 切换立即返回 `SQLITE_BUSY` 后让出执行，并在从打开时计算的重试截止点后不再发起新尝试；正在执行的同步调用可能更晚才完成。外部 SQL 工具必须使用提供方解码器，而不能假定每个物理 `events.type` 都是逻辑事件类型或每个 payload 列都是文本。
 
-[JSONL 打包行决策](2026-07-26-packed-chunk-rows-by-default.md)、[有界持久化批处理](2026-08-08-bounded-session-persistence-write-batching.md)和原始[会话持久化决策](2026-06-14-session-persistence.md)继续保持 active：它们分别负责 JSONL 格式、写入调度以及后端无关的服务语义。
+[JSONL 打包行决策](2026-07-26-packed-chunk-rows-by-default.zh.md)、[有界持久化批处理](2026-08-08-bounded-session-persistence-write-batching.zh.md)和原始[会话持久化决策](2026-06-14-session-persistence.zh.md)继续保持 active：它们分别负责 JSONL 格式、写入调度以及后端无关的服务语义。

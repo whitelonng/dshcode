@@ -101,6 +101,14 @@ describe('renderBlocks over hand-built trees', () => {
     expect(container.querySelector('td')?.textContent).toBe('short')
   })
 
+  it('renders a rowless align-less table as an empty fill wrapper', () => {
+    // Zero columns is below the wide threshold, so the fill arm applies.
+    const container = renderNodes([{ type: 'table', children: [] }])
+    const wrapper = container.querySelector('table')?.parentElement
+    expect(wrapper?.className).not.toContain('md-table-wide')
+    expect(container.querySelector('table')?.childElementCount).toBe(0)
+  })
+
   it('pads rows against the alignment width with empty cells', () => {
     const container = renderNodes([
       {

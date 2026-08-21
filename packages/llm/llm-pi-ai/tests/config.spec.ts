@@ -78,3 +78,26 @@ describe('capability schema boundary', () => {
     expect(configWith({ capabilities: { imageUnderstanding: 'yes' } })).toThrow(/expected/)
   })
 })
+
+describe('request image policy bounds', () => {
+  it.each([
+    ['requestImagePixelBudget', 0, /requestImagePixelBudget must be a positive safe integer/],
+    ['requestImagePixelBudget', Number.MAX_SAFE_INTEGER + 1, /requestImagePixelBudget must be a positive safe integer/],
+    ['requestImageMaxBytes', 0, /requestImageMaxBytes must be a positive safe integer/],
+    ['requestImageMaxBytes', 1.5, /requestImageMaxBytes must be a positive safe integer/],
+  ] as const)('rejects %s=%s at service resolution', (field, value, message) => {
+    const programmatic = {
+      providers: {
+        'acme-gateway': {
+          api: 'openai-completions',
+          baseURL: 'https://acme.test',
+          models: [{ id: 'm' }],
+          [field]: value,
+        },
+      },
+    } as unknown as Config
+    expect(() => {
+      assertServiceable(programmatic)
+    }).toThrow(message)
+  })
+})

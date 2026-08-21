@@ -14,7 +14,7 @@ assistant IconActions 此前只从已定稿的 transcript（文本记录）推�
 
 `assistantActionsSeqs` 接收 `ConversationSnapshot.turnEnds`，只在事件窗口中存在该轮次 `turn/end` 时才授予该行。已完成轮次内部的归属不变，仍是其最后一条含内容文本的 assistant。仍在产出步骤的轮次不授予任何座位，因此其叙述不会挂载该行；轮次关闭时，座位在已定稿答案下方一次性出现。
 
-这与分支控件和运行时长标签使用的完成事实相同，因此同一行的三个部分现在口径一致。轮次是否完成读自持久的 `turn/end` 事件，而不是从 `running`、流式 partial 或在途工具调用推断，与[已完成轮次尾部决策](2026-08-02-message-fork-actions-require-completed-turn-tail.md)一致。任何结束原因类别都会关闭轮次，因此已中止轮次冻结的尾部保留其操作栏，而崩溃遗留的开放轮次会在加载时由日志修复补上 `turn/end`。
+这与分支控件和运行时长标签使用的完成事实相同，因此同一行的三个部分现在口径一致。轮次是否完成读自持久的 `turn/end` 事件，而不是从 `running`、流式 partial 或在途工具调用推断，与[已完成轮次尾部决策](2026-08-02-message-fork-actions-require-completed-turn-tail.zh.md)一致。任何结束原因类别都会关闭轮次，因此已中止轮次冻结的尾部保留其操作栏，而崩溃遗留的开放轮次会在加载时由日志修复补上 `turn/end`。
 
 `hasContentText` 移入 `chat-flow.ts`，由 `AssistantMarkdown` 导入，使归属门控与挂载门控无法各自漂移。
 

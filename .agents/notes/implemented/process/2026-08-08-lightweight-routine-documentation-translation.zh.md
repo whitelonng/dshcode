@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-日常双语编辑会自动选用完整的[翻译 skill（技能）](../../../skills/dsh-translate-docs/SKILL.md)。即使经过[基于简报的更新优化](2026-07-26-briefed-minimal-translation-updates.md)，一次小的文档改动仍可能加载专用工作流、生成简报、把行文翻译委派给 subagent，并另行执行一轮核验。这种编排耗费的时间、上下文和模型 token 比直接翻译改动文本本身还多，而且 skill 的自动发现机制还会在普通文档处理轮次中暴露该工作流。
+日常双语编辑会自动选用完整的[翻译 skill（技能）](../../../skills/dsh-translate-docs/SKILL.md)。即使经过[基于简报的更新优化](2026-07-26-briefed-minimal-translation-updates.zh.md)，一次小的文档改动仍可能加载专用工作流、生成简报、把行文翻译委派给 subagent，并另行执行一轮核验。这种编排耗费的时间、上下文和模型 token 比直接翻译改动文本本身还多，而且 skill 的自动发现机制还会在普通文档处理轮次中暴露该工作流。
 
 ## 决策
 

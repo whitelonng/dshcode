@@ -468,6 +468,72 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByText('新会话')).toBeNull()
   })
 
+  it('promotes the blank selected by New Session in its grouped and flat orders', async () => {
+    const items = [
+      summary('old', 100),
+      summary('blank', 150, { blank: true }),
+      summary('mid', 200),
+    ]
+    const startSession = vi.fn()
+    const b = mount({
+      useSessions: hook(sessionState(items)),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['old', 'blank', 'mid'])])),
+      startSession,
+    })
+    await waitFor(() => {
+      expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['old', 'blank', 'mid'])
+    })
+    startSession.mockImplementation(() => {
+      rerender(b, { useSessions: hook(sessionState(items, { current: sid('blank') })) })
+    })
+    fireEvent.click(screen.getByRole('button', { name: '在“alpha”中新建会话' }))
+    expect(startSession).toHaveBeenCalledWith(wid('alpha'))
+    await waitFor(() => {
+      expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['blank', 'old', 'mid'])
+      expect(b.store.getSnapshot().sessionOrderByAccount[FLAT_SESSION_ORDER_KEY]).toEqual(['blank'])
+    })
+    b.store.actions.setGroupBy('flat')
+    await waitFor(() => {
+      expect(b.store.getSnapshot().sessionOrderByAccount[FLAT_SESSION_ORDER_KEY]).toEqual(['blank', 'mid', 'old'])
+    })
+  })
+
+  it('does not repeat blank promotion after a manual drag or the first prompt', async () => {
+    const insertSessionBefore = vi.fn(async () => {})
+    const b = mount({
+      useSessions: hook(sessionState([
+        summary('old', 100),
+        summary('blank', 150, { blank: true }),
+        summary('mid', 200),
+      ], { current: sid('blank') })),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['old', 'blank', 'mid'])])),
+      insertSessionBefore,
+    })
+    await waitFor(() => {
+      expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['blank', 'old', 'mid'])
+    })
+    const blank = screen.getByText('新会话').closest('[role="treeitem"]') as HTMLElement
+    const mid = screen.getByText('mid').closest('[role="treeitem"]') as HTMLElement
+    mid.getBoundingClientRect = () => ({
+      top: 150, bottom: 184, left: 0, right: 200, width: 200, height: 34, x: 0, y: 150, toJSON: () => ({}),
+    })
+    fireEvent.dragStart(blank, { dataTransfer: dragData() })
+    fireDrag(mid, 'drop', 180)
+    expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['old', 'mid', 'blank'])
+    expect(insertSessionBefore).toHaveBeenCalledWith(wid('alpha'), sid('blank'), undefined)
+
+    rerender(b, {
+      useSessions: hook(sessionState([
+        summary('old', 100),
+        summary('blank', 150),
+        summary('mid', 200),
+      ], { current: sid('blank') })),
+    })
+    await waitFor(() => {
+      expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['old', 'mid', 'blank'])
+    })
+  })
+
   it('shows local metadata matches immediately, then clears back to the grouped tree', async () => {
     vi.useFakeTimers()
     try {

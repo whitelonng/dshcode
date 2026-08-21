@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-由模型挂载的动态包在 host 侧的那一半：定义注册表、host 半所用的 `node:vm` 沙箱与 fiber 生命周期、invoke handler 表，以及由某个浏览器页面执行的 run 往返。以 `ctx.dynamicCordisRunner` 提供。面向模型的工具在 [`@deepseek-ai/dsh-tool-cordis`](../tool-cordis/README.md) 中；浏览器半由 [`@deepseek-ai/dsh-cordis-client-runner`](../cordis-client-runner/README.md) 装载。
+由模型挂载的动态包在 host 侧的那一半：定义注册表、host 半所用的 `node:vm` 沙箱与 fiber 生命周期、invoke handler 表，以及由某个浏览器页面执行的 run 往返。以 `ctx.dynamicCordisRunner` 提供。面向模型的工具在 [`@deepseek-ai/dsh-tool-cordis`](../tool-cordis/README.zh.md) 中；浏览器半由 [`@deepseek-ai/dsh-cordis-client-runner`](../cordis-client-runner/README.zh.md) 装载。
 
 ## 功能
 
@@ -21,7 +21,7 @@
 
 别的会话登记的定义读起来是不存在，而不是被禁止，因此不会跨会话泄漏任何东西。`invoke` 与 `resolveRequestRun` 完全不携带会话：组件的一次调用和页面的一次作答都是页面全局的事实，不属于某一个会话。
 
-本功能拥有四条转发事件，由本包在其 client-safe 的 [`./types`](src/types.ts) 子路径上声明，并由 [`@deepseek-ai/dsh-api-remotes`](../../api/remotes/README.md) 的白名单准许投递——正是这一点让浏览器能经 `ctx.remote.$on` 收到它们：`cordis/request-run`（`{requestId, agentId, id, name, purpose}`——只有元数据，绝无代码）、`cordis/request-run-resolved`（`{requestId, outcome}`）、`dynamicCordisRunner/package`（`{id, name, rev}`），以及 `dynamicCordisRunner/retract`（`{id, rev}`）。后两者是对称的一对运行状态播报：每次全新启动与每次停止都播，与该包有没有浏览器半无关。
+本功能拥有四条转发事件，由本包在其 client-safe 的 [`./types`](src/types.ts) 子路径上声明，并由 [`@deepseek-ai/dsh-api-remotes`](../../api/remotes/README.zh.md) 的白名单准许投递——正是这一点让浏览器能经 `ctx.remote.$on` 收到它们：`cordis/request-run`（`{requestId, agentId, id, name, purpose}`——只有元数据，绝无代码）、`cordis/request-run-resolved`（`{requestId, outcome}`）、`dynamicCordisRunner/package`（`{id, name, rev}`），以及 `dynamicCordisRunner/retract`（`{id, rev}`）。后两者是对称的一对运行状态播报：每次全新启动与每次停止都播，与该包有没有浏览器半无关。
 
 ## 存储立场
 
@@ -29,7 +29,9 @@
 
 ## 信任立场
 
-vm 沙箱隔离全局变量，但不是安全边界：Node 全局变量不存在，或重定向到 Cordis 服务（`ctx.fs`、`ctx.web`、`ctx.bash` 以及定时器 helper），host 半收到的是不含框架内部机制的 façade，但它声明的服务仍会触达存活运行时。应当像对待 bash 访问一样对待动态包，参见[自引用工具集 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md)。
+vm 沙箱隔离全局变量，但不是安全边界：Node 全局变量不存在，或重定向到 Cordis 服务（`ctx.fs`、`ctx.web`、`ctx.bash` 以及定时器 helper），host 半收到的是不含框架内部机制的 façade，但它声明的服务仍会触达存活运行时。应当像对待 bash 访问一样对待动态包，参见[自引用工具集 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.zh.md)。
+
+<a id="config"></a>
 
 ## 配置
 
@@ -59,6 +61,8 @@ vm 沙箱隔离全局变量，但不是安全边界：Node 全局变量不存在
 
 注册工具的 host 半会改变下一次请求的工具视图，从第一个变化的 schema token 起使前缀复用失效；运行或停止一个不注册任何工具的包对前缀不产生影响。
 
+<a id="known-limitations-and-deferred-work"></a>
+
 ## 已知限制与暂缓事项
 
 - **run 成功不等于 UI 渲染成功。** 只要作答页面**已装载**浏览器半，`run` 就会返回；React 是随后才渲染的，因此一个抛异常的组件根本不可能出现在 run 的回执里。该失败经 `reportRenderFailure` 浮现，并通过 `cordis_inspect what:"temporary"` 读回；run 的结果会把这一点说出来，而不是暗示成功。
@@ -67,6 +71,6 @@ vm 沙箱隔离全局变量，但不是安全边界：Node 全局变量不存在
 - 挂起的 run 请求**没有超时**：它一直等人，直到提问的那一轮次被取消，因此无人值守的自动化用不了带浏览器半的包。
 - `vmTimeoutMs` 只约束同步求值；async 的 host 半函数体会逃出该上限，这与该工具集基于协作的信任立场一致。
 - `runHostHalf` 不携带 request id，因此「这个 host 半是哪次请求求值的」由 host 侧归因到该定义最近一次挂起的请求；若同一个定义出现多个并发 run 请求，这条规则需要重新审议。
-- 命名了已被取代版本的成功结论会被拒绝（`accepted: false`）并让该请求继续挂起，因此模型这次调用只能靠一次有效作答或自身被取消才结束。要把它结算掉，需要对着存活版本重新走一遍编排，而当前没有任何页面会这么做——[浏览器半](../cordis-client-runner/README.md)不读这个 ack——所以这类请求实际上由别的页面作答、或由调用方取消来收尾。
+- 命名了已被取代版本的成功结论会被拒绝（`accepted: false`）并让该请求继续挂起，因此模型这次调用只能靠一次有效作答或自身被取消才结束。要把它结算掉，需要对着存活版本重新走一遍编排，而当前没有任何页面会这么做——[浏览器半](../cordis-client-runner/README.zh.md)不读这个 ack——所以这类请求实际上由别的页面作答、或由调用方取消来收尾。
 - 浏览器半声明的 `inject` 是从它在页面里返回的插件上读出的，因此播报完全不携带服务声明字段。
 - **`zod` 是生成的 TypeRT 契约面的运行时依赖，不是 `src` 的依赖。** `./typert` 与 `./remote` 解析到 `lib/typert.*.js`，`tsc` 以不打包的形式产出它们，其中带有裸的 `import { z } from 'zod'`，所以本包必须声明它（沿用 `@deepseek-ai/dsh-goal` 的先例），而 `knip.json` 必须在这个 workspace 里忽略它：knip 读的是源码，而这些契约面是构建产物。`src` 里没有任何代码 import zod。

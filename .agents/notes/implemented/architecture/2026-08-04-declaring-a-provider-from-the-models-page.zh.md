@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-下面两层已经让 pi-ai 路由变成[一份声明](2026-08-03-pi-ai-declared-provider-catalog.md)，并给了 host [询问草稿端点](2026-08-04-draft-provider-endpoint-interrogation.md)的能力。但两者都没有抵达不编辑 YAML 的人：Models 页仍然只为每个提供方提供一个 API 密钥输入框和一个装着 API 地址的折叠区，因此接入一个网关意味着打开 `$DSH_HOME/settings.yaml` 并知道 profile 的形状，更正一个陈旧的上下文窗口也是如此。能力已经存在，界面却没有暴露它。
+下面两层已经让 pi-ai 路由变成[一份声明](2026-08-03-pi-ai-declared-provider-catalog.zh.md)，并给了 host [询问草稿端点](2026-08-04-draft-provider-endpoint-interrogation.zh.md)的能力。但两者都没有抵达不编辑 YAML 的人：Models 页仍然只为每个提供方提供一个 API 密钥输入框和一个装着 API 地址的折叠区，因此接入一个网关意味着打开 `$DSH_HOME/settings.yaml` 并知道 profile 的形状，更正一个陈旧的上下文窗口也是如此。能力已经存在，界面却没有暴露它。
 
 缺的是两件事，而它们的形状并不相同。编辑既有路由的模型，是一张已经存在的卡片上的一个*字段*；声明一条路由则是一次*创建*：路由 id 正在此处被选定，而在选定之前根本没有可编辑的 settings 地址。
 

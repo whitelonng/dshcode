@@ -12,7 +12,7 @@ Status: implemented
 
 手动、压力、溢出和显式范围入口点还需要共享同一项互斥事实。仅使用进程本地标志无法解释一份崩溃恢复后的日志，而先摘要再记录的事务在开销较大的等待期间不会留下持久证据。反过来，把标记对视为排他容器又会禁止有效的空闲注入，尽管注入按定义不会唤醒，并且会在轮次之间立即执行。
 
-本 Agent Note 扩展[压缩能力 seam](2026-06-18-compaction-capability-seam.md)、[会话 end-seed 边界](../architecture/2026-07-30-session-end-seed-log-boundary.md)和[移除纯日志事件的合成轮次](../simplification/2026-07-28-remove-synthetic-log-only-turns.md)。三者均保持活动状态，并拥有各自更广泛的决策；重叠仅是部分的。
+本 Agent Note 扩展[压缩能力 seam](2026-06-18-compaction-capability-seam.zh.md)、[会话 end-seed 边界](../architecture/2026-07-30-session-end-seed-log-boundary.zh.md)和[移除纯日志事件的合成轮次](../simplification/2026-07-28-remove-synthetic-log-only-turns.zh.md)。三者均保持活动状态，并拥有各自更广泛的决策；重叠仅是部分的。
 
 ## 决策
 

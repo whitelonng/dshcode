@@ -1,6 +1,6 @@
-English | [中文](README.zh.md)
-
 # dsh-host-plugin-installer
+
+English | [中文](README.zh.md)
 
 Loopback-only plugin installation and updates for the current profile. The gateway (`/plugin-installer`) is registered on the Connection channel with `authority: 'loopback'` and exposes:
 

@@ -12,9 +12,9 @@ Web 壳在浏览器侧插件树激活前呈现 `Loading plugins…`。ui-theme �
 
 ## 决策
 
-ui-theme 的主机侧通过 `ctx.webServer.tapIndex()` 转换每份 index HTML，在 `<body>` 起始标签后紧接一段同步内联脚本。该转换通过可选的 `httpServer` 注入注册，因此不含该服务的组合仍会激活 ui-theme，但不会安装转换。HTML 解析器执行该脚本时，body 已存在，而壳的模块脚本与不依赖框架的启动页尚未运行。
+ui-theme 的主机侧以一条 body 定位的 script 行（`bootThemeInjection`）回应每次 `webserver/index-inject` 收集，`renderIndex` 把它渲染为 `<body>` 起始标签后紧接的一段同步内联脚本。订阅是无条件的——没有 web server 的组合根本不会 emit 该事件，ui-theme 照常激活且不贡献任何行。HTML 解析器执行该脚本时，body 已存在，而壳的模块脚本与不依赖框架的启动页尚未运行。
 
-settings provider 存在时，主机侧会注册 [`ui-theme.preference` settings 分节](2026-08-06-host-backed-web-preferences.md)。它为每份 index 响应把经过 schema 校验的内建偏好嵌入内联脚本；不存在 settings provider 或有效注册时则嵌入默认值 `system`。浏览器通过 `prefers-color-scheme` 解析 `system`，不支持 `matchMedia` 时回退为浅色。脚本只写 ThemePresenter 后续拥有的两项 DOM 状态：`document.documentElement.style.colorScheme` 与 `body[data-ds-dark-theme]`。
+settings provider 存在时，主机侧会注册 [`ui-theme.preference` settings 分节](2026-08-06-host-backed-web-preferences.zh.md)。它为每份 index 响应把经过 schema 校验的内建偏好嵌入内联脚本；不存在 settings provider 或有效注册时则嵌入默认值 `system`。浏览器通过 `prefers-color-scheme` 解析 `system`，不支持 `matchMedia` 时回退为浅色。脚本只写 ThemePresenter 后续拥有的两项 DOM 状态：`document.documentElement.style.colorScheme` 与 `body[data-ds-dark-theme]`。
 
 引导逻辑只认识内建的 `light`、`dark`、`system` 语义，不注册监听器，也不解析第三方主题或 token 覆盖。浏览器侧插件树激活后，ThemeRuntime 仍是主题状态的权威来源，ThemePresenter 会把完整解析结果重新写入同一组 DOM 状态并负责后续更新与释放。
 

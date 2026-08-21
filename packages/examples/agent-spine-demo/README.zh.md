@@ -49,7 +49,7 @@
 - **非本地 skill 提供方**：组合包交付 skill 注册表、本地文件系统提供方和 `skill` 工具；部署可以把嵌入式目录或远程目录等其他提供方作为同级插件添加。
 - **入口与各应用基础设施**：无头、ACP（Agent Client Protocol）和 JSON-RPC 应用包负责传输、stdout 与重新加载选择。`timer` 保留在主干中，因为它是共有组件且不写 stdout。
 
-这里在组合层应用 [Service Definition／Service Provider／Consumer 的职责分离](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md)：组合包拥有共享主干，叶节点拥有后端，应用包拥有入口。
+这里在组合层应用 [Service Definition／Service Provider／Consumer 的职责分离](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.zh.md)：组合包拥有共享主干，叶节点拥有后端，应用包拥有入口。
 
 ## 配置
 
@@ -61,7 +61,7 @@ import type { Config } from '@deepseek-ai/dsh-agent-spine-demo'
 
 组合包将每个字段转发给拥有它的子节点。应用包提供预创建的 agent：无头和 JSON-RPC 组合会创建 `main`，ACP 应用则在 `session/new` 按需创建 agent。`includeRuntimeContext: false` 会转发给 `dsh-system-prompt`，为新建会话抑制所有动态上下文快照，但不禁用其策略服务。提示词、工具、标题、skill、工作区上下文、不变式、目标和任务设置沿用其所属包记录的 schema 与默认值；`jobs.maxConcurrentJobsPerOwner` 配置本地 Service Provider，并与面向模型的 `toolJobs` 控制工具相互独立。`pickSpineConfig()` 只复制该组合包拥有的字段，`dshHome` 值冲突会在组合时失败。
 
-例如，`{ invariants: { enabled: true, package_allowlist: ['^@deepseek-ai/dsh-'], package_blocklist: ['agent-loop$'] } }` 会让包拥有的配套插件保持挂载，但抑制被阻止的拥有者。Blocklist 匹配优先于 allowlist 匹配；正则表达式与生命周期规则见 [`dsh-invariants`](../../runtime-diagnostics/invariants/README.md)。
+例如，`{ invariants: { enabled: true, package_allowlist: ['^@deepseek-ai/dsh-'], package_blocklist: ['agent-loop$'] } }` 会让包拥有的配套插件保持挂载，但抑制被阻止的拥有者。Blocklist 匹配优先于 allowlist 匹配；正则表达式与生命周期规则见 [`dsh-invariants`](../../runtime-diagnostics/invariants/README.zh.md)。
 
 ## 为何使用代码组合包，而非共享 YAML include
 

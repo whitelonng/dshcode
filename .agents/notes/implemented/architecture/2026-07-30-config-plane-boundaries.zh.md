@@ -4,9 +4,9 @@ Status: implemented
 
 [English](2026-07-30-config-plane-boundaries.md) | 中文
 
-> 范围：对 [Web 配置面](2026-07-30-web-config-plane.md)的边界加固——哪些 namespace 能抵达协议、哪些调用方能抵达它们，以及一个只持有局部且可能陈旧的视图的编辑器该如何写入，才不会毁掉它看不见的东西。
+> 范围：对 [Web 配置面](2026-07-30-web-config-plane.zh.md)的边界加固——哪些 namespace 能抵达协议、哪些调用方能抵达它们，以及一个只持有局部且可能陈旧的视图的编辑器该如何写入，才不会毁掉它看不见的东西。
 
-> 调用方边界、脱敏与 revision 设栅依然有效。把「哪些 namespace 能抵达协议」限制为可配置提供方目录这一条，已被[由插件自己拥有的设置表层](2026-08-12-plugin-owned-settings-surface.md)取代——后者服务每一个已注册的 namespace。
+> 调用方边界、脱敏与 revision 设栅依然有效。把「哪些 namespace 能抵达协议」限制为可配置提供方目录这一条，已被[由插件自己拥有的设置表层](2026-08-12-plugin-owned-settings-surface.zh.md)取代——后者服务每一个已注册的 namespace。
 
 ## 问题
 

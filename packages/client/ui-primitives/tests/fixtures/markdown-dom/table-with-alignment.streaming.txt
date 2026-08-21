@@ -1,5 +1,5 @@
 <div class="_markdown_404681">
-  <div class="_tableScroll_404681">
+  <div class="_tableScroll_404681 md-table-wide" tabindex="0">
     <table>
       <thead>
         <tr>

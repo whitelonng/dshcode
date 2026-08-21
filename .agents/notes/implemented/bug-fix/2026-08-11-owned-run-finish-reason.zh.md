@@ -10,7 +10,7 @@ Python SDK 消费方需要简洁地判断自有活动区间如何进入 idle。�
 
 ## 决策
 
-`RunResult.finish_reason` 是从已提交消息进入持久 inbox 的回执开始、到整个 agent 下一次进入 idle 为止所收集的根会话最后一个 `turn/end` 的字符串 `kind`。如果该区间没有 `turn/end`，字段为 `None`。缺少字符串 `data.reason.kind` 的 `turn/end` 会抛出 `SdkProtocolError`，而不会报告为区间内没有轮次结束。该字段描述自有运行区间；它不会把这个结束原因归属于已提交的提示词。[自有运行边界决策](../architecture/2026-07-30-followup-enqueue-and-owned-runs.md)仍禁止提示词级结果归因。
+`RunResult.finish_reason` 是从已提交消息进入持久 inbox 的回执开始、到整个 agent 下一次进入 idle 为止所收集的根会话最后一个 `turn/end` 的字符串 `kind`。如果该区间没有 `turn/end`，字段为 `None`。缺少字符串 `data.reason.kind` 的 `turn/end` 会抛出 `SdkProtocolError`，而不会报告为区间内没有轮次结束。该字段描述自有运行区间；它不会把这个结束原因归属于已提交的提示词。[自有运行边界决策](../architecture/2026-07-30-followup-enqueue-and-owned-runs.zh.md)仍禁止提示词级结果归因。
 
 该字段只公开 kind，因为调用方需要稳定的分类，完整的结构化原因仍可从 `RunResult.events` 取得。传输丢失、超时和协议故障仍会抛出异常，而不会生成结束原因。
 

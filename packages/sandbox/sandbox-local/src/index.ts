@@ -66,7 +66,7 @@ export interface Config {
 
 /** Probe whether `bwrap` can create the profile; the provider caches the bounded result. */
 function defaultProbeBwrap(timeoutMs: number): boolean {
-  const probe = spawnSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--die-with-parent', '--', 'true'], {
+  const probe = spawnSync('bwrap', [...bwrapProfileArgs({ mode: 'read-only', workspaceRoot: '/' }), '--', 'true'], {
     timeout: timeoutMs,
     stdio: 'ignore',
   })

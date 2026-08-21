@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-10-telemetry-default-off.md
 2026-08-10-telemetry-default-off.md: 3f56817c9c23ec55f2173b66fa915ab05646b2a7
-2026-08-10-telemetry-default-off.zh.md: aa7b640f292713aa4e598f5ea1194f806dd6ae0d
+2026-08-10-telemetry-default-off.zh.md: ea89ea94dfea3106886e555e172ad8a6ab39305b

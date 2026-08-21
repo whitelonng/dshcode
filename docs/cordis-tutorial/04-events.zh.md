@@ -89,7 +89,7 @@ export function apply(ctx: Context) {
 | bail | `ctx.bail(name, ...args)` | serial 的同步版本。 |
 | waterfall（瀑布式事件） | `ctx.waterfall(name, ...args, next)` | 环绕中间件，见下文。 |
 
-每个 harness 事件都会在其所属[子系统页面](../subsystems/core.md)自动生成的参考文档中记录其模式。
+每个 harness 事件都会在其所属[子系统页面](../subsystems/core.zh.md)自动生成的参考文档中记录其模式。
 
 ## waterfall：转换或短路
 
@@ -135,10 +135,10 @@ HELLO
 
 按顺序看第二行如何产生：监听器 1 先运行并调用 `next()`，从而调用监听器 2；监听器 2 看到 `blocked` 后直接返回而不调用 `next()`，因此最内层默认逻辑（传给 `ctx.waterfall` 的函数）从未运行；返回途中，监听器 1 再把替换消息转换为大写。
 
-由此得到一项纪律：**只负责观察或标注的 waterfall 监听器必须调用 `next()`**；不调用就直接返回代表有意短路。如果日志监听器忘记调用 `next()`，会悄无声息地吞掉所有下游的默认行为。这是本仓库的常设规则（[waterfall 语义](../cordis-primer.md#cordis-waterfall-semantics)）。
+由此得到一项纪律：**只负责观察或标注的 waterfall 监听器必须调用 `next()`**；不调用就直接返回代表有意短路。如果日志监听器忘记调用 `next()`，会悄无声息地吞掉所有下游的默认行为。这是本仓库的常设规则（[waterfall 语义](../cordis-primer.zh.md#cordis-waterfall-semantics)）。
 
-harness 使用 waterfall 处理协作插件可以包装或回答的决策：[`agent/request`](../subsystems/core.md#agentrequest--waterfall) 允许插件替换模型调用配置，[`approval/request`](../subsystems/approval.md#approvalrequest--waterfall) 允许策略代替用户作答。
+harness 使用 waterfall 处理协作插件可以包装或回答的决策：[`agent/request`](../subsystems/core.zh.md#agentrequest--waterfall) 允许插件替换模型调用配置，[`approval/request`](../subsystems/approval.zh.md#approvalrequest--waterfall) 允许策略代替用户作答。
 
-下一章：[配置](05-config.md)：来自 `cordis.yml` 的插件选项。
+下一章：[配置](05-config.zh.md)：来自 `cordis.yml` 的插件选项。
 
 [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

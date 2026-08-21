@@ -2,7 +2,7 @@
 
 [English](cordis-primer.md) | 中文
 
-Cordis 是 DeepSeek Harness 底层以 vendor 方式引入的插件框架。本文介绍 harness 插件作者在阅读[子系统页面](subsystems/core.md)上生成的服务/事件参考之前需要了解的 Cordis 核心概念；[Cordis 教程](cordis-tutorial/index.md)则通过实践逐一讲解这些概念。vendor 源码与同步流程见 [vendor/README.md](../vendor/README.md)。
+Cordis 是 DeepSeek Harness 底层以 vendor 方式引入的插件框架。本文介绍 harness 插件作者在阅读[子系统页面](subsystems/core.zh.md)上生成的服务/事件参考之前需要了解的 Cordis 核心概念；[Cordis 教程](cordis-tutorial/index.zh.md)则通过实践逐一讲解这些概念。vendor 源码与同步流程见 [vendor/README.md](../vendor/README.md)。
 
 ## 五个核心概念
 

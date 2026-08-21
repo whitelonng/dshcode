@@ -4,16 +4,16 @@ import SessionStore from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SubagentRuntime from '../src/index.ts'
-import { subagentTimingProjectionDefinition } from '../src/projection.ts'
+import { subagentTimingProjectionDefinition, type TimingState } from '../src/projection.ts'
 
 function event(type: SessionEvent['type'], seq: number, time: number): SessionEvent {
   return { type, seq, time, data: {} } as SessionEvent
 }
 
 function fold(events: SessionEvent[]) {
-  let state = subagentTimingProjectionDefinition.init()
+  let state: TimingState = subagentTimingProjectionDefinition.init()
   for (const item of events) state = subagentTimingProjectionDefinition.apply(state, item)
-  return subagentTimingProjectionDefinition.view(state)
+  return subagentTimingProjectionDefinition.wire.view(state)
 }
 
 describe('subagent timing projection', () => {

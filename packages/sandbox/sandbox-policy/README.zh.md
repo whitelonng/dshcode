@@ -2,11 +2,11 @@
 
 [English](README.md) | 中文
 
-沙箱策略解析的唯一归属位置：部署默认 [`SandboxMode`](../sandbox/README.md) 与回退根目录，加上每个会话的持久模式覆盖和不可变工作区根目录。每项负责强制执行的能力在每次调用时都会收到一项解析完成的模式与根目录策略；模型在每次请求前会收到当前策略，而不会另收一份能力清单。
+沙箱策略解析的唯一归属位置：部署默认 [`SandboxMode`](../sandbox/README.zh.md) 与回退根目录，加上每个会话的持久模式覆盖和不可变工作区根目录。每项负责强制执行的能力在每次调用时都会收到一项解析完成的模式与根目录策略；模型在每次请求前会收到当前策略，而不会另收一份能力清单。
 
 ## 为何需要共享归属位置
 
-文件系统工具、一次性 bash 命令和终端会话可以用不同组合强制执行同一套模式词汇。如果各自解析 `mode` + `workspaceRoot`，就可能漂移成分裂世界，正是[沙箱 Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md)所警告的情况。每个强制执行后端都会消费归属方解析出的完整策略，而当前上下文只说明该策略对于任何受 DSH 文件沙箱强制执行的可用操作有何含义。[跨家族 fs 沙箱 Agent Note](../../../.agents/notes/implemented/feature/2026-07-14-cross-family-fs-sandbox.md)记录了共享策略决策。
+文件系统工具、一次性 bash 命令和终端会话可以用不同组合强制执行同一套模式词汇。如果各自解析 `mode` + `workspaceRoot`，就可能漂移成分裂世界，正是[沙箱 Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.zh.md)所警告的情况。每个强制执行后端都会消费归属方解析出的完整策略，而当前上下文只说明该策略对于任何受 DSH 文件沙箱强制执行的可用操作有何含义。[跨家族 fs 沙箱 Agent Note](../../../.agents/notes/implemented/feature/2026-07-14-cross-family-fs-sandbox.zh.md)记录了共享策略决策。
 
 ## 配置
 

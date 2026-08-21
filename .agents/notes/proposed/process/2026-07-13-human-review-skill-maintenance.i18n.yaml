@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/process/2026-07-13-human-review-skill-maintenance.md
 2026-07-13-human-review-skill-maintenance.md: b741c8b595fcd36613cb246af483863d1e056697
-2026-07-13-human-review-skill-maintenance.zh.md: 9191a4ed24002c533d139637501fe56afbd34c34
+2026-07-13-human-review-skill-maintenance.zh.md: b43e05c79b60056f3f38eabb00dd5af9a3611c6e

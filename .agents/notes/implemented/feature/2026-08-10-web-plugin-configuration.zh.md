@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-10-web-plugin-configuration.md) | 中文
 
-> 三个分节、分层解析与暂存保存表单依然有效。Host 白名单与无键卡片列表已被[由插件自己拥有的设置表层](../architecture/2026-08-12-plugin-owned-settings-surface.md)取代：每一个已注册的命名空间都被服务，卡片以它所编辑的命名空间为键。
+> 三个分节、分层解析与暂存保存表单依然有效。Host 白名单与无键卡片列表已被[由插件自己拥有的设置表层](../architecture/2026-08-12-plugin-owned-settings-surface.zh.md)取代：每一个已注册的命名空间都被服务，卡片以它所编辑的命名空间为键。
 
 ## 问题
 
@@ -33,7 +33,7 @@ Status: implemented
 ## 备选方案
 
 - **用注册期的暴露声明取代白名单。** 这才是诚实的形状——命名空间的拥有方声明自己的暴露，在本仓库之外分发的插件也无需改动 `packages/host/apiproxy` 就能呈现自己的配置。之所以暂缓，是因为它会同时改变 seam 契约、全部现有注册点与防枚举语义；而且插件要暴露任意 schema，还得先有 fail-closed 的脱敏路径：目前只能经由 union 或 transform 抵达的 secret 会被原样返回。
-- **通用 schema 驱动的表单渲染器。** 再次否决，理由与 [web-config-plane 笔记](../architecture/2026-07-30-web-config-plane.md)所记一致：没有呈现词汇的字段真值产出的是无法使用的卡片。三个插件的手写控件成本相当而可读性更好，且该 slot 让第四个插件无需与本包协商。
+- **通用 schema 驱动的表单渲染器。** 再次否决，理由与 [web-config-plane 笔记](../architecture/2026-07-30-web-config-plane.zh.md)所记一致：没有呈现词汇的字段真值产出的是无法使用的卡片。三个插件的手写控件成本相当而可读性更好，且该 slot 让第四个插件无需与本包协商。
 - **在本页编辑 preset 挂载的插件。** 超出范围，而且不只是「尚未实现」：preset 的行把配置内联在 `agent.cordis.yml` 中，且根本无法注册 settings 命名空间——同一 preset 挂载第二个会话时会因重复注册而失败。跨 preset 共享的用户层还会覆盖 preset 用来定义其 agent 身份的字段——人设文本、委派接线——而这些字段按设计就是各 preset 各自的。
 - **按执行器包各取一个命名空间，而非按能力命名的 `bash`。** 否决，因为被组装的执行器随平台不同，而设置文档不随平台不同：在 macOS 上设过超时的用户，到 Windows 上会悄无声息地失去它。
 - **把搜索密钥写进 settings 分节。** 否决，因为那样字面值就必须搭乘 `describe` 响应才能被渲染。卡片只报告是否已配置密钥，并按分节所命名的引用经由 credentials 领域写入。

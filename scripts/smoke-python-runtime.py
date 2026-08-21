@@ -1182,12 +1182,16 @@ def build_snapshot_files(
     files = {
         "result.json": json.dumps(normalized_result, indent=2, ensure_ascii=False) + "\n",
         "session.jsonl": render_jsonl(
-            [normalize_snapshot_value(record, replacements) for record in logs[SNAPSHOT_SESSION_ID]]
+            project_session_snapshot([
+                normalize_snapshot_value(record, replacements) for record in logs[SNAPSHOT_SESSION_ID]
+            ])
         ),
     }
     for index, child_id in enumerate(child_ids, start=1):
         files[f"session.{index}.jsonl"] = render_jsonl(
-            [normalize_snapshot_value(record, replacements) for record in logs[child_id]]
+            project_session_snapshot([
+                normalize_snapshot_value(record, replacements) for record in logs[child_id]
+            ])
         )
     return files
 
@@ -1277,6 +1281,15 @@ def render_jsonl(records: list[object]) -> str:
         json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
         for record in records
     )
+
+
+def project_session_snapshot(records: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Omit storage sequence/time envelopes from snapshot body records."""
+    projected = [dict(record) for record in records]
+    for record in projected[1:]:
+        for key in ("seq", "time", "seq0", "time0"):
+            record.pop(key, None)
+    return projected
 
 
 def compare_snapshot_files(

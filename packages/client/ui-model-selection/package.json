@@ -55,10 +55,7 @@
     "@deepseek-ai/dsh-client-ui-input-trigger": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
-    "clsx": "^2.1.1",
-    "react": "^18.2.0"
+    "clsx": "^2.1.1"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-api-remotes": "workspace:^",

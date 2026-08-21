@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-15-copy-skins-into-desktop-package.md
 2026-08-15-copy-skins-into-desktop-package.md: e33f6b60c4549091447154e7f7087df691a2d9c6
-2026-08-15-copy-skins-into-desktop-package.zh.md: b49012414c8fd8afb0c837b099bd50c995008079
+2026-08-15-copy-skins-into-desktop-package.zh.md: 85e9d0315d68a15c0f8e56b181bdde3203e6ea52

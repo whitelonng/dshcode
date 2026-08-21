@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-`apps/cli/config/tui.cordis.yml` 新增了 `@deepseek-ai/dsh-tui/prompt` 配置项，却没有对应的 tsconfig `paths` 映射。通用的 `@deepseek-ai/dsh-*` 通配符会把 `tui/prompt` 整体代入其 `<group>/*/src` 候选路径，而这些路径全都不存在，因此 [tsx 源码启动](../architecture/2026-07-29-dsh-source-launch-tsx-esm.md) 会回退到包的 `exports`，解析出产物面文件 `lib/prompt.js`。任何带有已构建 `lib/` 的环境（开发者目录树运行 `pnpm build` 后）都能正常启动，而 e2e 工作流以 `lib` 模式（`DSH_EXAMPLE_MODE=lib`，构建产物 bin 在普通 Node 下运行）执行无密钥 TUI PTY 冒烟测试，因此 CI 根本不会经过源码启动向量——与此同时，所有干净检出环境中的 `pnpm dsh` 都会在启动时失败，并报错 `plugin(s) failed to load: @deepseek-ai/dsh-tui/prompt`。当时没有门禁检查源码面，因此该故障未被发现便进入发布版本，仅在新的 worktree 中暴露。
+`apps/cli/config/tui.cordis.yml` 新增了 `@deepseek-ai/dsh-tui/prompt` 配置项，却没有对应的 tsconfig `paths` 映射。通用的 `@deepseek-ai/dsh-*` 通配符会把 `tui/prompt` 整体代入其 `<group>/*/src` 候选路径，而这些路径全都不存在，因此 [tsx 源码启动](../architecture/2026-07-29-dsh-source-launch-tsx-esm.zh.md) 会回退到包的 `exports`，解析出产物面文件 `lib/prompt.js`。任何带有已构建 `lib/` 的环境（开发者目录树运行 `pnpm build` 后）都能正常启动，而 e2e 工作流以 `lib` 模式（`DSH_EXAMPLE_MODE=lib`，构建产物 bin 在普通 Node 下运行）执行无密钥 TUI PTY 冒烟测试，因此 CI 根本不会经过源码启动向量——与此同时，所有干净检出环境中的 `pnpm dsh` 都会在启动时失败，并报错 `plugin(s) failed to load: @deepseek-ai/dsh-tui/prompt`。当时没有门禁检查源码面，因此该故障未被发现便进入发布版本，仅在新的 worktree 中暴露。
 
 ## 决策
 

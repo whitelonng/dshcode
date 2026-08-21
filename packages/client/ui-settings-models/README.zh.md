@@ -1,6 +1,6 @@
-[English](README.md) | 中文
-
 # @deepseek-ai/dsh-client-ui-settings-models
+
+[English](README.md) | 中文
 
 模型设置与产品引导插件。同一个 client Cordis 插件注册「模型」页与两个有序首启对话框：带版本的内测通知与条件性的官方 DeepSeek 凭据步骤。两者共用同一弹窗外壳，由 `settings.onboarding` 排序。模型平面把三个线域并入同一共享快照——`llm.providers`（可配置 provider 目录，含每个路由的活动/休眠状态）、`settings.describe`（序列化 schema、分层脱敏值、密钥槽）与 `credentials.describe`（不含值的已配置/来源/可写徽标）——每次渲染一个 provider 行加一个编辑器卡片，不把路由活跃度呈现为 provider 状态。
 
@@ -8,7 +8,7 @@
 
 通知步骤在 `src/onboarding-copy.ts` 持有其精确文案与版本。在回环上通过既有 settings API 比较并写入 `ui-onboarding.welcomeNoticeVersion`；只有显式 Continue 记录当前版本。非回环浏览器无法使用该 Host 专属命名空间，因此确认仅进程内，通知在重载后再次出现。DeepSeek 步骤从同一合并快照投影首启就绪：任何已可达 provider 都不渲染地结束它；只有全无的用户才被询问官方 DeepSeek 密钥。
 
-每次编辑都以 `settings.mutate` 路径操作落盘——变更字段一次 set、清空字段一次 unset、删除 provider 行一次 unset。DeepSeek 的 `models` 是整值替换数组：首次模型编辑把完整数组物化到用户层之前，编辑器显示继承的有效行；reset 取消该覆盖。容量以带可选 `K`/`M` 后缀的数字键入（`256K`、`1M`）并按普通计数存储，以最短可往返形式回拼。空 id、重复 id、空显式名称与不可读、非正或小数的容量在任何写入前失败。键入的 API key 按字段自身判断：去空白后必须非空且每个字符为可打印 ASCII（`[\x21-\x7E]`）——与 `@deepseek-ai/dsh-llm` 的 `normalizeApiKey` 同构。每次 settings 写入携带卡片当前 `revision`，并发写入或外部 `settings.yaml` 编辑以 `settings-conflict` 拒绝；settings 提交后卡片先采纳返回的脱敏用户子树与 revision 再存凭据。删除仅在 profile 命名页面派生的 `<ROUTE>_API_KEY` 目标时移除已配置、可写的凭据，然后 unset profile；两者幂等，部分失败留在可识别的确认对话框内重试。页面订阅 `settings/document-updated`、`credentials/updated`、`llm/adapters-updated` 与本地 `connection/reset`，外部编辑与第二标签页无需轮询即可收敛。
+每一次编辑都以 `settings.mutate` 的路径 op 落到已存分节上——每个变更字段一条 set、每个清空字段一条 unset、删除提供方行则是单独一条 unset。页面自始至终只持有**脱敏后**的 descriptor，因此它只修改自己看得见的字段，而不重建分节。DeepSeek 的 `models` 是一个按值整体替换的数组：编辑器会显示继承而来的生效模型行，直到第一次模型编辑将完整数组具化到用户层；重置则会取消该覆盖。每个模型行承载模型 ID 与显示名称，其上下文窗口与最大输出 token 数则收在该行自己的折叠区里，使用与 pi-ai 提供方表单相同的字段。两项容量都按数值键入，可带十进制的 `K` 或 `M` 后缀（`256K`、`1M`；`1M` 即 1000K），存储为纯数值，回显时写成能够往返的最短形式。空 ID、重复 ID、显式填写的空名称，以及无法读取、非正数或非整数的容量都会在写入前失败。键入的 API 密钥同样在它自己的字段上被判定：trim 之后必须非空，且每个字符都是可打印 ASCII（`[\x21-\x7E]`）——这正是 HTTP 标头值所能承载的范围，是 `@deepseek-ai/dsh-llm` 中 `normalizeApiKey` 的孪生体，因源码平面分割禁止直接引入而在此镜像。与整行粘贴的 `NAME=value` 环境变量匹配或首尾成对引号包裹的值，会以同一条格式失败被拒绝；这项粘贴行检查只在浏览器中运行，因为 resolver 中的一次误判会连带让环境变量这条路也拒绝该密钥。只含空白的输入框会失败而不是被静默丢弃；留空则完全不是失败：在编辑卡片上意味着保持已存储的密钥，在新建卡片上则意味着以其他方式鉴权。被拒绝的密钥会同时拦截写入与端点探测，因此页面不会白花一次往返去换取字段上已经写明的答案。每次 settings 写入都携带卡片当前的 `revision`，因此来自另一个标签页或对 `settings.yaml` 的外部编辑所产生的并发写入会以 `settings-conflict` 被拒绝；settings 提交成功后，卡片会在存储凭据前采用响应返回的脱敏用户子树与 revision，因此凭据阶段失败时，重试只会重复该阶段。删除操作只会在 profile 指向页面派生的 `<ROUTE>_API_KEY` 目标时清除已配置且可写的凭据，随后取消设置 profile；两项操作都具备幂等性，部分失败会停留在点名目标的确认对话框中供重试。环境凭据、自定义引用和无法识别目标的凭据保持不变。页面加载完成后会直接订阅转发的 owner 事件 `settings/document-updated`、`credentials/reference-updated`、`llm/adapters-updated`，以及本地 `connection/reset`，因此外部的 `settings.yaml` 编辑、第二个标签页或 settings 新生的路由都无需轮询即可收敛。
 
 ## 模型列表与端点询问
 
@@ -32,8 +32,8 @@ pi-ai profile 的 `models` 列表在卡片上编辑：每行一个模型，显�
 
 ## 已知限制与暂缓事项
 
-- **卡片只编辑 API key 与精选折叠字段**——手写编辑器以 mockup 布局换取 schema 泛型字段覆盖（[Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md)）。两个家族暴露 `baseURL` 与模型 `id`/`name`/`contextWindow`/`maxTokens`；pi-ai 行还暴露能力复选框（`input`/`output`/`capabilities`）与推理等级复选框，DeepSeek 行暴露 `off`/`high`/`max` 等级组，手工声明的 pi-ai 路由还暴露 `displayName` 与 `api`。重试策略、超时、DeepSeek 模型描述等高级字段留在 `settings.yaml`；编辑器不显示的既有模型字段被保留。
-- **凭据清理刻意收窄**——删除行仅在引用恰为页面派生的 `<ROUTE>_API_KEY` 目标时移除已配置、可写凭据。自定义引用、环境凭据与不可识别目标被保留。
-- **只有 pi-ai 路由可手工声明**——自定义 provider 卡片写入 `llm-pi-ai`。
-- **询问覆盖 OpenAI 兼容端点**——适配器只读该模型列表响应格式，其他协议的网关报告无法询问，其模型手工录入。
-- **未声明的活跃路由无处呈现**——无可配置 provider 声明的路由没有 settings 地址；它在选择器中可见但不在此页行中。
+- **卡片上可编辑的只有 API 密钥与精选折叠区字段**：手写编辑器用 schema 通用的字段覆盖面换来了设计稿上的布局（[Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md)）。两个家族都公开 `baseURL` 与模型的 `id`/`name`/`contextWindow`/`maxTokens`；手工声明的 pi-ai 路由还公开 `displayName` 与 `api`。重试策略、超时、DeepSeek 模型说明及其他进阶字段仍留在 `settings.yaml` 中；编辑器未展示的现有模型字段会予以保留。不带这些约定字段的 profile schema 只渲染该提示，两套精选布局则以 `llm-deepseek`/`llm-pi-ai` 这两个 namespace 的名字为键。
+- **凭据清理范围刻意保持狭窄**：删除一行时，仅当其引用与页面派生的 `<ROUTE>_API_KEY` 目标完全一致，才会清除已配置且可写的凭据。自定义引用、环境凭据和无法识别的目标会保留，因为该行无法证明自己拥有它们。
+- **只有 pi-ai 路由可以手工声明**：自定义提供方卡片写入 `llm-pi-ai`——唯一一个其 profile 描述整个提供方的 namespace。`llm-deepseek` 路由是组合面的事实，不是本页能创建的东西。
+- **询问只覆盖 OpenAI 兼容端点**：适配器只读这种模型列表响应格式，因此讲其他协议的网关会报告自己无法被询问，其模型需手工填写。
+- **未声明的存活路由无处渲染**：未附带可配置提供方声明即注册的路由没有 settings 地址；它在各选择器中仍然可见，但不会出现在本页的行里。

@@ -5,7 +5,7 @@ description: Use when publishing, updating, moving, or removing DeepSeek Harness
 
 # Synchronizing the DeepSeek Harness Documentation Site
 
-Keep repository Markdown as the only editable content source. Treat the website as a tested projection: [website/docs.ts](../../../website/docs.ts) selects public pages, [scripts/project-doc-site.ts](../../../scripts/project-doc-site.ts) rewrites them into the disposable `website/.generated/` tree, and VitePress builds that tree.
+Keep repository Markdown as the only editable content source. Treat the website as a tested projection: [website/docs.ts](../../../website/docs.ts) selects public pages, [scripts/project-doc-site.ts](../../../scripts/project-doc-site.ts) rewrites them into the disposable `website/.generated/` tree, and VitePress builds that tree. The build additionally emits a raw-Markdown twin of every route (page URL minus any trailing slash, plus `.md`; index routes also get a parent-level alias) and a root `llms.txt` index; both derive from the same manifest and projector, so publishing, moving, or removing a page updates them automatically and `docs:build` fails when one is missing.
 
 Repository translations follow the sibling pairing contract: English `foo.md`, Chinese `foo.zh.md`, and `foo.i18n.yaml` live together. Never create `zh-CN/` or other locale directories for website content. The site route trees are independent of that source layout: `foo.zh.md` projects to the root route and `foo.md` projects to the matching `/en/` route.
 

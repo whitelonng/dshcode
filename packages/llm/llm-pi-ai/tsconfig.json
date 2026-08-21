@@ -30,6 +30,9 @@
       "path": "../../credentials/credentials"
     },
     {
+      "path": "../../credentials/authorization"
+    },
+    {
       "path": "../../settings/settings"
     },
     {

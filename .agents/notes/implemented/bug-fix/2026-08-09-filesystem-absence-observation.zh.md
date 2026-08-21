@@ -31,6 +31,6 @@ Status: implemented
 
 尚未观测到外部删除时，第一次变更仍以 `FS_STALE_VERSION` 失败；用户或模型必须遵循现有的重新读取恢复指令。该次针对缺失目标的重新读取会返回 `FS_NOT_FOUND` 并同时改变策略状态，此后 edit 仍被禁止，而 write 可以重新创建该路径。如果另一个写入方赢得创建竞态，本次重试会返回 `FS_NOT_OBSERVED`，并保留获胜方写入的文件；若竞态目标是目录、特殊条目或悬空符号链接，则改为返回 `FS_NOT_REGULAR_FILE`，且不会要求再次读取。
 
-观测载荷是由包拥有的事件约定变更，因此所有生产方、监听器、不变式、生成的 Cordis 目录、子系统文档以及两套文件系统工具都必须同步更新。策略保留[事件门禁决策](../architecture/2026-06-26-file-context-as-event-gate.md)确立的 read 一次 `stat`、write/edit 零次 `stat` 预算、所有者隔离、dispose 行为和可选部署边界。
+观测载荷是由包拥有的事件约定变更，因此所有生产方、监听器、不变式、生成的 Cordis 目录、子系统文档以及两套文件系统工具都必须同步更新。策略保留[事件门禁决策](../architecture/2026-06-26-file-context-as-event-gate.zh.md)确立的 read 一次 `stat`、write/edit 零次 `stat` 预算、所有者隔离、dispose 行为和可选部署边界。
 
-组装后的文件系统快照固定面向模型的恢复链；提供方测试则在暂存后注入一个创建者，以证明发布不会覆盖竞争目标。[带防护变更恢复指令决策](../feature/2026-08-03-fs-tool-error-remedy.md)仍然拥有面向模型的恢复措辞；本 Agent Note 使其中的删除路径能够生效。
+组装后的文件系统快照固定面向模型的恢复链；提供方测试则在暂存后注入一个创建者，以证明发布不会覆盖竞争目标。[带防护变更恢复指令决策](../feature/2026-08-03-fs-tool-error-remedy.zh.md)仍然拥有面向模型的恢复措辞；本 Agent Note 使其中的删除路径能够生效。

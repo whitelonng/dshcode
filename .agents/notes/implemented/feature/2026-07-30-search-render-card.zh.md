@@ -6,9 +6,9 @@ Status: implemented
 
 ## 问题
 
-`grep` 与 `glob` 返回结构化的 canonical 值——`grep` 是扁平的 `{ matches: [{ path, lineNumber, line }] }`，`glob` 是 `{ paths: string[] }`——但每个 UI 只见过它们面向模型的渲染文本：`grep` 把匹配按文件头分组、每行 `Line N:`，`glob` 打印换行连接的路径列表，两者在内联上限（`grepMaxMatches`，默认 250；`globMaxResults`，默认 100）把后续结果落到 spill 文件时都追加一个 spill 脚注。想把搜索结果渲染成可展开的按文件匹配组、或可选择的路径列表的 Web 前端，只能去重新解析那段文本。两个工具都已声明调用时的[渲染意图](../architecture/2026-07-02-tool-render-intent-union.md)（`GenericCallView`，`kind: 'search'`），但没有结果阶段视图，所以已完成的调用回退到渲染原始文本的 generic 卡片。
+`grep` 与 `glob` 返回结构化的 canonical 值——`grep` 是扁平的 `{ matches: [{ path, lineNumber, line }] }`，`glob` 是 `{ paths: string[] }`——但每个 UI 只见过它们面向模型的渲染文本：`grep` 把匹配按文件头分组、每行 `Line N:`，`glob` 打印换行连接的路径列表，两者在内联上限（`grepMaxMatches`，默认 250；`globMaxResults`，默认 100）把后续结果落到 spill 文件时都追加一个 spill 脚注。想把搜索结果渲染成可展开的按文件匹配组、或可选择的路径列表的 Web 前端，只能去重新解析那段文本。两个工具都已声明调用时的[渲染意图](../architecture/2026-07-02-tool-render-intent-union.zh.md)（`GenericCallView`，`kind: 'search'`），但没有结果阶段视图，所以已完成的调用回退到渲染原始文本的 generic 卡片。
 
-结构化 canonical 值不通过协议传输：只有面向模型的渲染文本、以及当工具声明了 `output.presentationMeta` 时的一份 JSON 元数据，会经 `tool/result` 事件到达客户端（[canonical-output 约定](../architecture/2026-07-20-canonical-tool-output-contract.md)）。因此携带结构化数据的结果时视图必须把数据投影进 `presentationMeta`，再在 `presentResult` 里读回——与 `write`/`edit` 的 diff 卡片走同一条路。
+结构化 canonical 值不通过协议传输：只有面向模型的渲染文本、以及当工具声明了 `output.presentationMeta` 时的一份 JSON 元数据，会经 `tool/result` 事件到达客户端（[canonical-output 约定](../architecture/2026-07-20-canonical-tool-output-contract.zh.md)）。因此携带结构化数据的结果时视图必须把数据投影进 `presentationMeta`，再在 `presentResult` 里读回——与 `write`/`edit` 的 diff 卡片走同一条路。
 
 ## 决定
 
@@ -56,6 +56,6 @@ Status: implemented
 
 ## 相关
 
-- [工具调用呈现的带标签渲染意图联合](../architecture/2026-07-02-tool-render-intent-union.md)——本变更用 `search` 结果标签扩展的 `card` 标签词汇。
-- [Canonical 工具输出约定](../architecture/2026-07-20-canonical-tool-output-contract.md)——本投影所依托的 value/render/`presentationMeta` 划分；结构化值留在执行本地，卡片通过 `meta` 传递。
-- [Web terminal 卡片](2026-07-28-web-terminal-card.md)——本变更在后端所仿照的先例：工具把结果投影进 `presentationMeta` 与一个 `presentResult` 视图；搜索卡片的 Web 消费方是与之类比的后续。
+- [工具调用呈现的带标签渲染意图联合](../architecture/2026-07-02-tool-render-intent-union.zh.md)——本变更用 `search` 结果标签扩展的 `card` 标签词汇。
+- [Canonical 工具输出约定](../architecture/2026-07-20-canonical-tool-output-contract.zh.md)——本投影所依托的 value/render/`presentationMeta` 划分；结构化值留在执行本地，卡片通过 `meta` 传递。
+- [Web terminal 卡片](2026-07-28-web-terminal-card.zh.md)——本变更在后端所仿照的先例：工具把结果投影进 `presentationMeta` 与一个 `presentResult` 视图；搜索卡片的 Web 消费方是与之类比的后续。

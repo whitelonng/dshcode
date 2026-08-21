@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-16-model-capability-checkboxes.md) | 中文
 
-> Scope：模型设置页的模型行编辑器、它写入的 pi-ai 与 DeepSeek 模型条目，以及 composer 模型选择器渲染的模型元数据。[推理等级声明笔记](../architecture/2026-08-14-third-party-model-reasoning-efforts.md) 拥有最初的文本字段编辑器；本笔记在其之上新增复选框组，以及文本字段无法表达的能力声明。
+> Scope：模型设置页的模型行编辑器、它写入的 pi-ai 与 DeepSeek 模型条目，以及 composer 模型选择器渲染的模型元数据。[推理等级声明笔记](../architecture/2026-08-14-third-party-model-reasoning-efforts.zh.md) 拥有最初的文本字段编辑器；本笔记在其之上新增复选框组，以及文本字段无法表达的能力声明。
 
 ## Problem
 

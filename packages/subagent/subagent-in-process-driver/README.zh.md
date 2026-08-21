@@ -20,7 +20,7 @@
 
 该结果边界成立，是因为提供方拥有从发布到完全停稳的隔离子 agent 生命周期。在该生命周期内提交的 steering（中途引导）属于子运行；提供方不会声称输出只归初始 follow-up 所有。
 
-驱动器通过共享的子 agent 辅助函数应用该 seam 的[委派策略](../subagent/README.md#delegated-policy)：它会在创建子 agent 前捕获父级的显式沙箱覆盖项与 `'never'` 审批钉定，并在未发布的设置阶段追加带来源标记的事件，使其位于所有 fork 历史之后、会话发布之前。参见[委派策略决策](../../../.agents/notes/implemented/feature/2026-07-25-subagent-policy-inheritance.md)。
+驱动器通过共享的子 agent 辅助函数应用该 seam 的[委派策略](../subagent/README.zh.md#delegated-policy)：它会在创建子 agent 前捕获父级的显式沙箱覆盖项与 `'never'` 审批钉定，并在未发布的设置阶段追加带来源标记的事件，使其位于所有 fork 历史之后、会话发布之前。参见[委派策略决策](../../../.agents/notes/implemented/feature/2026-07-25-subagent-policy-inheritance.zh.md)。
 
 ## 取消与所有权
 
@@ -66,7 +66,7 @@
 
 #### 模型看到的内容
 
-结构化运行会添加下方的结构化输出指令。它还会添加子 agent 作用域的 `structured_output` 定义，其精确描述为 `Report your final structured result. Call this exactly once, when your answer is complete; the arguments must match this tool's parameter schema exactly.`，参数使用请求的 schema。该仅运行时存在的定义不在已生成并随产品发布的[工具包索引](../../../docs/tool-catalog.md#tool-package-map)中。其规范确认值是 `{ recorded: true }`，渲染为 `Structured output recorded.`；后续调用会变为 ``Error: structured output already recorded: the run is complete, so `<tool>` is not executed``。
+结构化运行会添加下方的结构化输出指令。它还会添加子 agent 作用域的 `structured_output` 定义，其精确描述为 `Report your final structured result. Call this exactly once, when your answer is complete; the arguments must match this tool's parameter schema exactly.`，参数使用请求的 schema。该仅运行时存在的定义不在已生成并随产品发布的[工具包索引](../../../docs/tool-catalog.zh.md#tool-package-map)中。其规范确认值是 `{ recorded: true }`，渲染为 `Structured output recorded.`；后续调用会变为 ``Error: structured output already recorded: the run is complete, so `<tool>` is not executed``。
 
 ##### 结构化输出指令
 

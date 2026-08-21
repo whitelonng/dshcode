@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-当 pi-ai 路由变成[一份声明而非 catalog 查表](2026-08-03-pi-ai-declared-provider-catalog.md)之后，要接入一个 OpenAI 兼容网关的人，必须先知道它的模型 id 才能完成配置。适配器不再把人限制在已安装 catalog 里——这正是那次改动的目的——但也意味着没有任何东西告诉用户该端点究竟服务什么，而这类端点大多在 `GET /models` 上公布了这份列表。
+当 pi-ai 路由变成[一份声明而非 catalog 查表](2026-08-03-pi-ai-declared-provider-catalog.zh.md)之后，要接入一个 OpenAI 兼容网关的人，必须先知道它的模型 id 才能完成配置。适配器不再把人限制在已安装 catalog 里——这正是那次改动的目的——但也意味着没有任何东西告诉用户该端点究竟服务什么，而这类端点大多在 `GET /models` 上公布了这份列表。
 
 显而易见的答案——后台刷新的运行时动态 catalog——已随下层一并被拒绝：它会把路由的模型列表变成需要缓存、失效语义与离线路径的外部可变状态，而产品需求要窄得多。真正需要的是*一次性询问*，其答案由用户采纳进 `settings.yaml`，从而让 `settings.yaml` 始终是决定路由服务内容的唯一真源。
 

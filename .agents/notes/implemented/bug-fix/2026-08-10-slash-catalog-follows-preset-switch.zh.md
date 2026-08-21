@@ -40,4 +40,4 @@ preset 把决定 `/` 菜单内容的那些行搬走了。Web 组装禁用了宿�
 
 ## Related
 
-第二次切换能否到达宿主是另一个缺陷，有各自的成因与修复：[会话行的标识判定](2026-08-10-session-row-identity-covers-the-preset.md)。在它落地之前，`agent-preset-selection.e2e.ts` 只能演练第一次切换——这里的失效边对方向无感，但它所响应的那次切换必须真的发生。
+第二次切换能否到达宿主是另一个缺陷，有各自的成因与修复：[会话行的标识判定](2026-08-10-session-row-identity-covers-the-preset.zh.md)。在它落地之前，`agent-preset-selection.e2e.ts` 只能演练第一次切换——这里的失效边对方向无感，但它所响应的那次切换必须真的发生。

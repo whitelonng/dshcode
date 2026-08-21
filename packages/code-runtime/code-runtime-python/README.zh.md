@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[`@deepseek-ai/dsh-code-runtime`](../code-runtime/README.md) seam 的 CPython 子进程实现。与 [`@deepseek-ai/dsh-code-runtime-worker-thread`](../code-runtime-worker-thread/README.md) 配套；以全新的 `python3` 子进程取代 Node worker 线程，让模型代码从 TypeScript 换成 Python。
+[`@deepseek-ai/dsh-code-runtime`](../code-runtime/README.zh.md) seam 的 CPython 子进程实现。与 [`@deepseek-ai/dsh-code-runtime-worker-thread`](../code-runtime-worker-thread/README.zh.md) 配套；以全新的 `python3` 子进程取代 Node worker 线程，让模型代码从 TypeScript 换成 Python。
 
 本包持有该 seam 的 wire protocol：host 侧的帧编解码，以及 Python 侧对同一套消息词汇的镜像。
 
@@ -17,7 +17,7 @@ host 与 CPython 子进程在子进程的 fd 3 上交换一个无版本号的 JS
 
 ## Model Experience
 
-经由 [`dsh-tools`](../../core/tools/README.md) 里的 Code Mode 间接生效：Code Mode 把本后端的精确完成值（放得下时）或一个明确的 `invalid-output` / `output-limit` 失败，连同精确的 `[dsh-code-runtime-python] log capture truncated at <maxLogBytes> bytes` 日志标记，渲染进一个保留的 `run_code` 结果。
+经由 [`dsh-tools`](../../core/tools/README.zh.md) 里的 Code Mode 间接生效：Code Mode 把本后端的精确完成值（放得下时）或一个明确的 `invalid-output` / `output-limit` 失败，连同精确的 `[dsh-code-runtime-python] log capture truncated at <maxLogBytes> bytes` 日志标记，渲染进一个保留的 `run_code` 结果。
 
 #### KV Cache effect
 

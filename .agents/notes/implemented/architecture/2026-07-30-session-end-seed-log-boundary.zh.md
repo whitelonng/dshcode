@@ -52,4 +52,4 @@ Status: implemented
 
 `session/end-seed` 加入了落盘词汇表。在预发布立场下（`SESSION_FORMAT_VERSION` 固定为 `0`，不作兼容承诺），更旧的日志只是没有它，而没有边界的日志会正确地判定没有任何内容属于构造种子历史。
 
-[排队手动压缩决策](../feature/2026-07-30-queued-manual-compaction.md)如今提供了第一个消费方。其尾部扫描会分别查找未匹配的 `compaction/start` 与最新 end-seed，只把位于该边界之后的 start 视为存活，并在同一个回放转换上清除不变量追踪状态。该谓词仍位于压缩功能所在的包中，不会成为通用核心辅助函数。
+[排队手动压缩决策](../feature/2026-07-30-queued-manual-compaction.zh.md)如今提供了第一个消费方。其尾部扫描会分别查找未匹配的 `compaction/start` 与最新 end-seed，只把位于该边界之后的 start 视为存活，并在同一个回放转换上清除不变量追踪状态。该谓词仍位于压缩功能所在的包中，不会成为通用核心辅助函数。

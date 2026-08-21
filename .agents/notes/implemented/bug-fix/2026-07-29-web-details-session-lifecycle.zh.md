@@ -10,9 +10,9 @@ Status: implemented
 
 ## 决策
 
-`AppFrame` 从权威会话投影读取当前会话 id 及其摘要中的 `blank` 标志。它只在该会话能够拥有详情时记录最后一个选中的非 blank 会话 id，因此 hero 和其他未选中状态既不会触发关闭，也不会替换最后一个会话 owner；这些状态下，详情栏轨道的渲染宽度派生为零，但存储的首选宽度不变。首个会话保留布局 store 的初始首选值，其[已归档的可见性默认值决策](../../archived/bug-fix/2026-07-30-web-details-default-closed.md)选择关闭；返回同一会话时恢复其当前宽度；选择不同会话时，系统会先通过布局 store 关闭根作用域存储的详情栏首选宽度，再进行绘制。逐会话的聊天选中项继续由 [slot 体系标准](../architecture/2026-07-22-slot-type-chain-implementation.md)所述的会话作用域 store 拥有。
+`AppFrame` 从权威会话投影读取当前会话 id 及其摘要中的 `blank` 标志。它只在该会话能够拥有详情时记录最后一个选中的非 blank 会话 id，因此 hero 和其他未选中状态既不会触发关闭，也不会替换最后一个会话 owner；这些状态下，详情栏轨道的渲染宽度派生为零，但存储的首选宽度不变。首个会话保留布局 store 的初始首选值，其[已归档的可见性默认值决策](../../archived/bug-fix/2026-07-30-web-details-default-closed.md)选择关闭；返回同一会话时恢复其当前宽度；选择不同会话时，系统会先通过布局 store 关闭根作用域存储的详情栏首选宽度，再进行绘制。逐会话的聊天选中项继续由 [slot 体系标准](../architecture/2026-07-22-slot-type-chain-implementation.zh.md)所述的会话作用域 store 拥有。
 
-布局 store 是瞬时状态，详情栏在启动时保持关闭。它既不读取也不写入 `localStorage`，因此重新加载会恢复侧边栏默认值，并使详情栏保持关闭，无需会话基线例外。在同一个未变化的会话内手动关闭和重新打开详情栏，仍保持原有行为。该生命周期 effect 不改变 [Workspace 拥有的 New Session 动线](../feature/2026-07-25-workspace-ui-product-flow.md)、composer 草稿、会话导航或让步链缩放。
+布局 store 是瞬时状态，详情栏在启动时保持关闭。它既不读取也不写入 `localStorage`，因此重新加载会恢复侧边栏默认值，并使详情栏保持关闭，无需会话基线例外。在同一个未变化的会话内手动关闭和重新打开详情栏，仍保持原有行为。该生命周期 effect 不改变 [Workspace 拥有的 New Session 动线](../feature/2026-07-25-workspace-ui-product-flow.zh.md)、composer 草稿、会话导航或让步链缩放。
 
 ## 考虑过的替代方案
 

@@ -20,7 +20,7 @@ workflow 包通过 `@deepseek-ai/dsh-workflow/types` 提供浏览器安全的运
 
 `ui-workflow-run` 注册一个 `workflow-run` Conversation Definition 和一个 keyed Chat renderer。每条事件都能独立给出同一 `runId`；run-start 初始化 State，后续事件按日志顺序更新；只有 update 的历史尾页会保持 pending，直到 prepend 补入唯一 start。最终节点保留引擎拥有的 key，并以 run-start 锚定在原工具调用之后，从运行中到终态始终保留同一个 React 父级。
 
-renderer 为每一层分配不同视觉职责。运行使用 32 像素 module-platform 背景行，常驻向右／向下 chevron，并以内联状态点加状态文字表达结局，不使用胶囊。阶段使用 32 像素 disclosure 行，在可伸缩主区显示标题与成员数，在固定尾部精确显示聚合状态且不重复状态点。成员使用 16 像素状态点槽、可省略名称区和固定 64 像素状态列。阶段只在成员真正开始时出现，并按精确阶段字符串分组；字段缺省与空字符串保留不同身份和本地化名称。成员结算只改变状态，不删除或重排成员。所属 Turn 或 Step 关闭时，缺少运行或成员终点会显示为已中断；存在持久终点时仍以它为权威。[状态驱动的工作流 disclosure](2026-08-11-workflow-run-status-driven-disclosure.md)拥有这些事实变化时运行与阶段内容的可见性。
+renderer 为每一层分配不同视觉职责。运行使用 32 像素 module-platform 背景行，常驻向右／向下 chevron，并以内联状态点加状态文字表达结局，不使用胶囊。阶段使用 32 像素 disclosure 行，在可伸缩主区显示标题与成员数，在固定尾部精确显示聚合状态且不重复状态点。成员使用 16 像素状态点槽、可省略名称区和固定 64 像素状态列。阶段只在成员真正开始时出现，并按精确阶段字符串分组；字段缺省与空字符串保留不同身份和本地化名称。成员结算只改变状态，不删除或重排成员。所属 Turn 或 Step 关闭时，缺少运行或成员终点会显示为已中断；存在持久终点时仍以它为权威。[状态驱动的工作流 disclosure](2026-08-11-workflow-run-status-driven-disclosure.zh.md)拥有这些事实变化时运行与阶段内容的可见性。
 
 导航从两个当前权威派生，不写入持久记录。只有持久成员状态仍为运行中，且当前普通 Session 列表包含同一 id、`origin: 'subagent'`、`parentId` 等于当前父 Session、`running: true` 时，成员行才可交互。带下划线的成员文字是唯一可见提示；键盘聚焦时，名称区显示 2 像素 business-primary 焦点环，固定状态列继续只表达生命周期，而不写动作说明。renderer 只调用注入的普通 `sessions.open(id)` 回调。仅地址化、远程、父级不符或终态成员继续可见，但保持静态。
 

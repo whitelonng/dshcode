@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-DeepSeek Harness SDK 运行时的共享协议格式（wire format）：一个按换行分帧的 JSON-RPC 2.0 传输类，加上协议两端共同使用的具名请求、结果与通知类型。包根枚举协议消费方接口；源模块不支持深层导入。服务端是 [`dsh-sdk-jsonrpc-server`](../server/README.md) 插件；客户端是 [`dsh-sdk-client`](../client/README.md)（TypeScript）与 [Python SDK](../../../python/README.md)（后者复现这些结构但不导入它们）。纯库——无插件、无 Config、无注册。
+DeepSeek Harness SDK 运行时的共享协议格式（wire format）：一个按换行分帧的 JSON-RPC 2.0 传输类，加上协议两端共同使用的具名请求、结果与通知类型。包根枚举协议消费方接口；源模块不支持深层导入。服务端是 [`dsh-sdk-jsonrpc-server`](../server/README.zh.md) 插件；客户端是 [`dsh-sdk-client`](../client/README.zh.md)（TypeScript）与 [Python SDK](../../../python/README.zh.md)（后者复现这些结构但不导入它们）。纯库——无插件、无 Config、无注册。
 
 ## 传输
 
@@ -26,7 +26,7 @@ DeepSeek Harness SDK 运行时的共享协议格式（wire format）：一个按
 
 ## 模型体验
 
-无，因为此包定义面向客户端的协议格式；模型可见接口属于组合在对外服务入口 [`dsh-sdk-jsonrpc-server`](../server/README.md) 后方的运行时插件。
+无，因为此包定义面向客户端的协议格式；模型可见接口属于组合在对外服务入口 [`dsh-sdk-jsonrpc-server`](../server/README.zh.md) 后方的运行时插件。
 
 #### KV Cache 影响
 
@@ -35,5 +35,5 @@ DeepSeek Harness SDK 运行时的共享协议格式（wire format）：一个按
 ## 已知限制与暂缓事项
 
 - **无协议版本协商**——握手只携带 `serverInfo.version`（`0.0.1`，客户端不校验）；处于预发布阶段，无兼容承诺。
-- **无取消与会话关闭方法**——客户端放弃轮次的方式是关闭运行时进程；见 [`dsh-sdk-jsonrpc-server` README](../server/README.md)。
+- **无取消与会话关闭方法**——客户端放弃轮次的方式是关闭运行时进程；见 [`dsh-sdk-jsonrpc-server` README](../server/README.zh.md)。
 - **server→client 请求是未使用的功能**——传输层支持，但服务器从不发送；Python SDK 的应答接口为未来审批流程预留。

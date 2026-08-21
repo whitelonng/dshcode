@@ -18,7 +18,7 @@
 |---|---|---|
 | `root` | 私有 0700 临时目录 | spill 文件的根目录。设置后可将这些文件保存在已知位置。 |
 
-`saveText` 在发生真实存储故障（权限、ENOSPC）时返回拒绝；spill 策略会按尽力而为原则处理该拒绝，并保留内联结果。词汇见 seam README，设计见[工具输出 spill Agent Note](../../../.agents/notes/implemented/architecture/2026-07-08-tool-output-spill-files.md)。
+`saveText` 在发生真实存储故障（权限、ENOSPC）时返回拒绝；spill 策略会按尽力而为原则处理该拒绝，并保留内联结果。词汇见 seam README，设计见[工具输出 spill Agent Note](../../../.agents/notes/implemented/architecture/2026-07-08-tool-output-spill-files.zh.md)。
 
 ## 模型体验
 

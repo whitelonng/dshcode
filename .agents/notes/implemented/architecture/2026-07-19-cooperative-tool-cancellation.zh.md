@@ -42,7 +42,7 @@ Status: implemented
 
 工具主体一旦启动，注册表就会等待它完成。取消通过融合信号到达工具主体，但注册表不会与其 promise 竞速或丢弃该 promise。协作式实现会停止自身工作或继续转发取消，并在所持有的工作完全停稳后完成；不协作的同进程实现可能让注册表无限期保持等待。进程、worker、网络和提供方层仍负责各自的终止机制。
 
-这项决策只要求工具调用边界携带取消信号。让工具主体可达的异步能力也必须接收信号，属于另一项迁移，见提议中的[工具可达能力 seam 中的必填取消](../../proposed/architecture/2026-07-19-required-cancellation-through-tool-capability-seams.md)。
+这项决策只要求工具调用边界携带取消信号。让工具主体可达的异步能力也必须接收信号，属于另一项迁移，见提议中的[工具可达能力 seam 中的必填取消](../../proposed/architecture/2026-07-19-required-cancellation-through-tool-capability-seams.zh.md)。
 
 ## 验证
 
@@ -62,7 +62,7 @@ Status: implemented
 
 **禁止环绕包装层替换信号。** 不予采纳，因为截止时间和嵌套操作作用域需要词法派生信号。捕获并融合调用方信号既保留组合能力，也不允许切断调用方取消。
 
-**让工具 promise 与取消竞速。** 不予采纳，因为这种方式会在副作用仍可能存活时报告完成，违反[dispose（资源释放）必须完全停稳的规则](../../../../docs/defensive-patterns.md#dispose-must-reach-quiescence-not-just-request-it)。
+**让工具 promise 与取消竞速。** 不予采纳，因为这种方式会在副作用仍可能存活时报告完成，违反[dispose（资源释放）必须完全停稳的规则](../../../../docs/defensive-patterns.zh.md#dispose-must-reach-quiescence-not-just-request-it)。
 
 ## 后果
 

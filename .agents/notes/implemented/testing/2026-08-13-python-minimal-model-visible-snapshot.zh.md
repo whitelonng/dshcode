@@ -30,4 +30,4 @@ mock 模型不再断言极简场景的工具与系统提示词——该面由快
 
 assistant 与 tool 消息文本不再参与比对，运行时上下文快照则完全不参与比对。持久 shell 状态、编辑器输出与最终响应仍由该场景自身的断言拥有；被排除的那条消息由 [#2488](https://github.com/deepseek-harness/deepseek-harness/issues/2488) 负责，直到其平台差异得到解决。
 
-[AGENTS.md](../../../../AGENTS.md) 与[测试政策](../../../../docs/testing.md)现已点明两个 SDK 都是 agent loop、会话生命周期与 `SessionEventMap` 的独立投影，因此改动其中任何一项都要连带更新两侧的期望输出，而不只是贡献者恰好会运行的那一侧。
+[AGENTS.md](../../../../AGENTS.md) 与[测试政策](../../../../docs/testing.zh.md)现已点明两个 SDK 都是 agent loop、会话生命周期与 `SessionEventMap` 的独立投影，因此改动其中任何一项都要连带更新两侧的期望输出，而不只是贡献者恰好会运行的那一侧。

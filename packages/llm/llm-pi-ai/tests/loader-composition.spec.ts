@@ -49,7 +49,7 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
   root = await mkdtemp(join(tmpdir(), 'dsh-pi-composition-'))
   const settingsPath = join(root, 'settings.yaml')
   await writeFile(settingsPath, '# personal settings\n')
-  await writeFile(join(root, '.credentials.yaml'), 'PI_COMPOSITION_KEY: key-from-store\n', { mode: 0o600 })
+  await writeFile(join(root, '.credentials.yaml'), 'version: 1\nrefs:\n  PI_COMPOSITION_KEY: key-from-store\n', { mode: 0o600 })
 
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [

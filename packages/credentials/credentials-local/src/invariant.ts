@@ -16,7 +16,7 @@ export const inject = ['invariants']
 
 /**
  * No runtime invariant: the Service Definition companion (`dsh-credentials/invariant`) owns the
- * `credentials/updated` lifecycle contract; this provider's file/environment layering is
+ * `credentials/reference-updated` lifecycle contract; this provider's file/environment layering is
  * asynchronous I/O pinned by its unit suite.
  */
 const install: InvariantInstaller = () => {}

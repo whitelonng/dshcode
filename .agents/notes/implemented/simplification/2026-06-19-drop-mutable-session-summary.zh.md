@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[会话持久化 seam](../architecture/2026-06-14-session-persistence.md) 将会话的日志外元数据拆分为 `dsh-session` 拥有的两种类型：一个不可变的 `SessionHeader`（`version`、`id`、`createdAt`、`cwd?`、`parentSession?`），在创建时一次性写入；一个可变的 `SessionSummary`（`updatedAt`、`title?`、`firstPrompt?`），「可在不触碰仅追加日志的情况下更新」。二者合并为 `SessionMeta = SessionHeader & SessionSummary`，抽象的 `SessionPersistence` 服务为此多出第七个方法 `update(id, summary)`，用于重写摘要。各后端各自实现可变存储：JSONL 在日志旁先写入临时文件再重命名，并以尽力而为的方式原子发布一个独立的 `.summary.json` **伴随文件**；SQLite 则使用 `updated_at`/`title`/`first_prompt` **列**，并在追加事务内更新其中的时间列。
+[会话持久化 seam](../architecture/2026-06-14-session-persistence.zh.md) 将会话的日志外元数据拆分为 `dsh-session` 拥有的两种类型：一个不可变的 `SessionHeader`（`version`、`id`、`createdAt`、`cwd?`、`parentSession?`），在创建时一次性写入；一个可变的 `SessionSummary`（`updatedAt`、`title?`、`firstPrompt?`），「可在不触碰仅追加日志的情况下更新」。二者合并为 `SessionMeta = SessionHeader & SessionSummary`，抽象的 `SessionPersistence` 服务为此多出第七个方法 `update(id, summary)`，用于重写摘要。各后端各自实现可变存储：JSONL 在日志旁先写入临时文件再重命名，并以尽力而为的方式原子发布一个独立的 `.summary.json` **伴随文件**；SQLite 则使用 `updated_at`/`title`/`first_prompt` **列**，并在追加事务内更新其中的时间列。
 
 摘要是为未来的会话选择器设计的（通过 `updatedAt` 排序近期会话，用 `title`/`firstPrompt` 做预览）。该选择器从未实现。对整个仓库的审计表明，`SessionSummary` 的整套相关接口都只是在维护**无用状态**：
 
@@ -22,7 +22,7 @@ Status: implemented
 
 摘要原本要提供的一切，在消费方真正需要时都**可从仅追加日志中派生**（`firstPrompt` = 第一条 `user/message`；近期度 = 最后一个事件的 `time` 或文件 mtime），或者已经存在于不可变 header 中（`createdAt`、`cwd`）。唯一*不可*派生的是用户*手动编辑*的标题，但它从未实现，纯属 YAGNI；如果未来真有功能需要，它可以作为独立的日志事件或 header 字段回归。
 
-这次移除同时收窄两个后端的公开服务约定和磁盘格式；摘要是有意为未来设计的结果，而非意外；如今原 Agent Note 描述 `SessionMeta` 之处已是 `SessionHeader`，这就是摘要消失的原因。它还为[共享持久化写入协调器](../architecture/2026-06-18-shared-persistence-write-coordinator.md)扫清障碍：不再有可变摘要后，协调器的钩子接口不需要 `updateSummary` 钩子，JSONL 伴随文件与 SQLite 列之间的持久性分歧也随之消失，使两个后端的写入路径趋于一致。
+这次移除同时收窄两个后端的公开服务约定和磁盘格式；摘要是有意为未来设计的结果，而非意外；如今原 Agent Note 描述 `SessionMeta` 之处已是 `SessionHeader`，这就是摘要消失的原因。它还为[共享持久化写入协调器](../architecture/2026-06-18-shared-persistence-write-coordinator.zh.md)扫清障碍：不再有可变摘要后，协调器的钩子接口不需要 `updateSummary` 钩子，JSONL 伴随文件与 SQLite 列之间的持久性分歧也随之消失，使两个后端的写入路径趋于一致。
 
 ## 无需迁移
 

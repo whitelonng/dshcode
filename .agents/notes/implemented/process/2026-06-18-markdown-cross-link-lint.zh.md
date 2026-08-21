@@ -20,11 +20,11 @@ Status: implemented
 
 检查范围与其他门禁一致，并额外包含 AGENTS.md 文件对以及 `.agents/skills/` 下仓库自有的 agent skill（智能体技能） Markdown（这些 skill 文件会交叉链接到 docs 目录树，因此本次重组也改写了其中的链接）：`README.md`、`docs/**/*.md`、`packages/*/README.md`、`AGENTS.md`、`packages/AGENTS.md`、`.agents/skills/**/*.md`。系统按真实路径去重（`CLAUDE.md` symlink 会解析到 AGENTS.md 文件）。该检查接入 `doc-sync`，因此相关文档变更与 CI 执行同一套断链检查。
 
-本门禁现在也检查 Markdown 目标上的 `#fragment` 锚点——包括同文件锚点——对照标题 slug 与显式 `<a id>`；该机制与 slug 规则由 [fragment 锚点决定](2026-08-09-md-fragment-anchor-gate.md)规定。
+本门禁现在也检查 Markdown 目标上的 `#fragment` 锚点——包括同文件锚点——对照标题 slug 与显式 `<a id>`；该机制与 slug 规则由 [fragment 锚点决定](2026-08-09-md-fragment-anchor-gate.zh.md)规定。
 
 ## 曾考虑的替代方案
 
-**锚点级有效性检查**：当时以更重且价值更低为由推迟（实际发生过的问题是文件级死链），把 `#fragment` 验证留给作者人工完成。该人工规则没有守住；[fragment 锚点决定](2026-08-09-md-fragment-anchor-gate.md)后来补上了这项检查。
+**锚点级有效性检查**：当时以更重且价值更低为由推迟（实际发生过的问题是文件级死链），把 `#fragment` 验证留给作者人工完成。该人工规则没有守住；[fragment 锚点决定](2026-08-09-md-fragment-anchor-gate.zh.md)后来补上了这项检查。
 
 ## 后果
 

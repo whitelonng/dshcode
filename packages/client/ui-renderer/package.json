@@ -61,7 +61,8 @@
     "@types/react-dom": "~18.3.0",
     "@deepseek-ai/cordis": "workspace:^",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "@deepseek-ai/dsh-client-modules": "workspace:^"
   },
   "files": [
     "lib/index.js",

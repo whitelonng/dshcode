@@ -10,15 +10,15 @@ harness 为模型提供了 bash 和 subagent 工具，却没有办法记录结�
 
 ## 决策
 
-新增一个面向模型的 `todo_write(todos: [{ content, status }])` 工具，其整列表状态作为新的 `todo/write` `SessionEventMap` 变体存储在事件溯源的会话日志上。交互式宿主从持久事件渲染：TUI 直接折叠它，web 客户端将其投影进 `ConversationSnapshot.todos`（[web todo 展示](2026-07-23-web-todo-display.md)），而[仅面向自动化的 ACP（Agent Client Protocol）桥接层](../simplification/2026-07-23-acp-automation-only-protocol.md)有意省略 todo 展示。
+新增一个面向模型的 `todo_write(todos: [{ content, status }])` 工具，其整列表状态作为新的 `todo/write` `SessionEventMap` 变体存储在事件溯源的会话日志上。交互式宿主从持久事件渲染：TUI 直接折叠它，web 客户端将其投影进 `ConversationSnapshot.todos`（[web todo 展示](2026-07-23-web-todo-display.zh.md)），而[仅面向自动化的 ACP（Agent Client Protocol）桥接层](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)有意省略 todo 展示。
 
 ### 整列表替换，三态 status
 
-模型每次调用发送完整列表；新列表替换旧列表（回放时 last-write-wins）。这是 claude-code V1、opencode 和 codex `update_plan` 共同采用的形状，也是模型训练最多的形状——没有逐项 id，没有 delta 协议。`status` 恰好是 `pending | in_progress | completed`，与 codex `update_plan` 相同的三元组；在 bridge 还把 todo 列表投影为 `plan` 更新时，它也与 ACP `PlanEntryStatus` 1:1 对应，该映射已随[仅面向自动化的 ACP 约定](../simplification/2026-07-23-acp-automation-only-protocol.md)退役。
+模型每次调用发送完整列表；新列表替换旧列表（回放时 last-write-wins）。这是 claude-code V1、opencode 和 codex `update_plan` 共同采用的形状，也是模型训练最多的形状——没有逐项 id，没有 delta 协议。`status` 恰好是 `pending | in_progress | completed`，与 codex `update_plan` 相同的三元组；在 bridge 还把 todo 列表投影为 `plan` 更新时，它也与 ACP `PlanEntryStatus` 1:1 对应，该映射已随[仅面向自动化的 ACP 约定](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)退役。
 
 ### 状态在会话日志上，而非服务
 
-列表作为 `todo/write` 事件追加到日志，携带完整的 `{ todos }` 快照。harness 是事件溯源的——LLM（大语言模型）历史、工具调用和轮次结构都在日志上——所以 todo 列表也在那里。这免费获得了持久性、回放和恢复重建：重新打开的会话从「其后没有更晚 `turn/start`」的最近一次 `todo/write` 重新推导当前计划（[计划条生命周期](2026-07-28-todo-plan-clears-on-next-turn.md)），无需独立的持久化后端、无需重新恢复状态的内存服务、无需额外接线。一个内存中的 `ctx.todos` 服务需要重新发明以上所有。（全量 log 消费方直接获得这份重建；web 客户端的分页窗口则从尾页 history 中由宿主计算的投影获得——见 [web todo 展示说明](2026-07-23-web-todo-display.md)。）
+列表作为 `todo/write` 事件追加到日志，携带完整的 `{ todos }` 快照。harness 是事件溯源的——LLM（大语言模型）历史、工具调用和轮次结构都在日志上——所以 todo 列表也在那里。这免费获得了持久性、回放和恢复重建：重新打开的会话从「其后没有更晚 `turn/start`」的最近一次 `todo/write` 重新推导当前计划（[计划条生命周期](2026-07-28-todo-plan-clears-on-next-turn.zh.md)），无需独立的持久化后端、无需重新恢复状态的内存服务、无需额外接线。一个内存中的 `ctx.todos` 服务需要重新发明以上所有。（全量 log 消费方直接获得这份重建；web 客户端的分页窗口则从尾页 history 中由宿主计算的投影获得——见 [web todo 展示说明](2026-07-23-web-todo-display.zh.md)。）
 
 ### 不是 surface 事件
 
@@ -34,7 +34,7 @@ claude-code V1 的条目是 `{ content, status, activeForm }`；后来（V2）�
 
 ### 校验：低成本的中间路线
 
-schema 强制 type/required/enum。在此之上，`execute` 拒绝为空或重复的 `content`，并在 `allowParallelInProgress` 为 `false` 时拒绝超过一个活跃任务。排序和保持列表最新仍通过工具描述交给模型。被拒绝的写入返回 `isError` 结果，使模型自行修正。必须采用的部署策略，以及持久不变式独立于该策略这一点，均由[并行 in-progress Agent Note](2026-07-26-todo-parallel-in-progress.md)负责。
+schema 强制 type/required/enum。在此之上，`execute` 拒绝为空或重复的 `content`，并在 `allowParallelInProgress` 为 `false` 时拒绝超过一个活跃任务。排序和保持列表最新仍通过工具描述交给模型。被拒绝的写入返回 `isError` 结果，使模型自行修正。必须采用的部署策略，以及持久不变式独立于该策略这一点，均由[并行 in-progress Agent Note](2026-07-26-todo-parallel-in-progress.zh.md)负责。
 
 ## 为何没有 cordis-catalog 条目 / 没有 `@mode`
 

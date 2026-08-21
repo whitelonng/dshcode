@@ -52,7 +52,7 @@ flowchart TD
 
 ### 机制所在位置
 
-工具源码、适配器二进制文件、提供方凭据和预期的每日调度器保存在维护者机器上，不会提交到本仓库。本文规定协议，参考实现属于私有基础设施。该机制只服务于由单个运维方维护的一项 skill，因此，持续通过仓库评审审查机制改动的成本高于提交工具及其历史的收益。如果该机制将来移交给第二位维护者，移交工作需要一篇后续 Agent Note 来修订本决策；任何接手者都应从运维文档 [docs/cookbook/maintaining-dsh-code-review.md](../../../../docs/cookbook/maintaining-dsh-code-review.md) 入手。
+工具源码、适配器二进制文件、提供方凭据和预期的每日调度器保存在维护者机器上，不会提交到本仓库。本文规定协议，参考实现属于私有基础设施。该机制只服务于由单个运维方维护的一项 skill，因此，持续通过仓库评审审查机制改动的成本高于提交工具及其历史的收益。如果该机制将来移交给第二位维护者，移交工作需要一篇后续 Agent Note 来修订本决策；任何接手者都应从运维文档 [docs/cookbook/maintaining-dsh-code-review.md](../../../../docs/cookbook/maintaining-dsh-code-review.zh.md) 入手。
 
 ## 考虑过的替代方案
 

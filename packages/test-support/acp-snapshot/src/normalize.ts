@@ -1,6 +1,6 @@
 /**
  * Pure ACP transcript and session-log normalizers. They scrub session ids, run cwd, RPC ids,
- * timestamps, and hook duration while preserving deterministic event sequence numbers.
+ * timestamps and hook duration while preserving event payloads.
  * Request-header scrubbers stay composable so one scenario per header class can pin prompt and
  * tool-schema sidecars.
  * @module @deepseek-ai/dsh-acp-snapshot/normalize
@@ -12,6 +12,18 @@ const SYSTEM = '{{system}}'
 const TOOLS = '{{tools}}'
 const EVENT_TIME = '{{eventTime}}'
 const EVENT_OMITTED_BYTES = '{{eventOmittedBytes}}'
+const PACKED_CHUNK_ROW_TYPES = new Set(['text-chunks', 'reasoning-chunks', 'tool-call-chunks'])
+
+function isPackedFixtureRow(record: Record<string, unknown>): boolean {
+  return typeof record.type === 'string' && PACKED_CHUNK_ROW_TYPES.has(record.type)
+}
+
+function omitFixtureEnvelope(record: Record<string, unknown>): void {
+  delete record.seq
+  delete record.time
+  delete record.seq0
+  delete record.time0
+}
 
 /** A cwd-rooted path after volatile cwd replacement, through its last separator-delimited segment. */
 const CWD_ROOTED_PATH_RE = /\{\{cwd\}\}(?:[\\/][^\s<>"'`]+)+/g
@@ -282,10 +294,10 @@ export function normalizeStdout(
 
 /**
  * Normalize a session JSONL log into a stable expected output: the header line's
- * volatile fields (`createdAt`, `id`, `cwd`) and every event's `time` are
- * zeroed/scrubbed, all volatile strings scrubbed, and `seq` is LEFT INTACT
- * (deterministic by contract). A packed chunk row's timing (`time0`, the `dt`
- * gaps) zeroes just like an event `time`; its `seq0` stays, like `seq`.
+ * volatile fields (`createdAt`, `id`, `cwd`) are zeroed/scrubbed, ordinary
+ * event `time` and packed-row `time0` values are zeroed, and all volatile
+ * strings are scrubbed. Projected inputs remain projected. Packed `data.dt`
+ * gaps are normalized even when the projected row omits its `time0` anchor.
  * Output is JSONL in the same shape as the input — one compact record per
  * line.
  *
@@ -303,30 +315,42 @@ export function normalizeSessionLog(
   const lines = rawLog.split('\n').filter(line => line.trim().length > 0)
   const records = lines.map((line) => {
     const record = JSON.parse(line) as Record<string, unknown>
-    // Header line: { type: 'session', createdAt, id, cwd, … }.
     if (record.type === 'session') {
       if ('createdAt' in record) record.createdAt = 0
-    } else if ('time0' in record) {
-      // Packed chunk row: zero the anchor timestamp and every member gap.
-      record.time0 = 0
+    } else if (isPackedFixtureRow(record)) {
+      if ('time0' in record) record.time0 = 0
       const data = record.data
       if (data !== null && typeof data === 'object' && Array.isArray((data as { dt?: unknown }).dt)) {
         (data as { dt: unknown[] }).dt = (data as { dt: unknown[] }).dt.map(() => 0)
       }
     } else if ('time' in record) {
-      // Event line: zero the epoch-ms timestamp; keep seq (deterministic).
       record.time = 0
-      // A hook/result carries the hook's wall-clock runtime (`data.durationMs`),
-      // which is run-to-run noise like `time` — zero it so the expected output reflects
-      // the hook's decision/exit, not how long the shell took.
-      if (record.type === 'hook/result' && record.data !== null && typeof record.data === 'object') {
-        const data = record.data as Record<string, unknown>
-        if ('durationMs' in data) data.durationMs = 0
-      }
+    }
+    if (record.type === 'hook/result' && record.data !== null && typeof record.data === 'object') {
+      const data = record.data as Record<string, unknown>
+      if ('durationMs' in data) data.durationMs = 0
     }
     return scrubValue(record, ctx, cwdPathMode) as Record<string, unknown>
   })
   return records.map(r => JSON.stringify(r)).join('\n') + '\n'
+}
+
+/**
+ * Normalize and project persisted session JSONL for a committed fixture.
+ * This composes ordinary log normalization with request-header scrubbing and
+ * persistence-envelope projection.
+ *
+ * @param rawLog - persisted or already-projected session JSONL.
+ * @param ctx - the run's volatile values to scrub.
+ * @param options - separator output controls.
+ * @returns normalized committed session snapshot JSONL.
+ */
+export function normalizeSessionSnapshot(
+  rawLog: string,
+  ctx: NormalizeContext,
+  options: NormalizeOptions = {},
+): string {
+  return scrubSessionSnapshot(normalizeSessionLog(rawLog, ctx, options))
 }
 
 /**
@@ -371,6 +395,30 @@ export function scrubToolSchemas(rawLog: string): string {
  */
 export function scrubRequestHeaders(rawLog: string): string {
   return scrubHeaderContent(rawLog, { system: true, tools: true })
+}
+
+/**
+ * Project a persisted session log while tokenizing all request-header bulk.
+ * Each non-empty line is parsed at most once; the session header stays
+ * byte-identical. Body records omit their persistence-only envelopes, and
+ * request-header payloads are tokenized.
+ *
+ * @param rawLog - persisted or already-projected session JSONL.
+ * @returns committed snapshot JSONL with request headers tokenized.
+ */
+export function scrubSessionSnapshot(rawLog: string): string {
+  const scrubbed = scrubRequestHeaders(rawLog)
+  let recordIndex = 0
+  return scrubbed.split('\n').map((line) => {
+    if (line.trim().length === 0) return line
+    const record = JSON.parse(line) as Record<string, unknown>
+    if (recordIndex++ === 0) {
+      if (record.type !== 'session') throw new Error('session snapshot must start with a session header')
+      return line
+    }
+    omitFixtureEnvelope(record)
+    return JSON.stringify(record)
+  }).join('\n')
 }
 
 /** Which independent request-header payloads a scrubber replaces. */

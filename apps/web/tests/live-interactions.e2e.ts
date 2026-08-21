@@ -1,13 +1,14 @@
 // Web e2e scenarios: live-turn interactions — cancellation, error surfacing,
-// and transient-retry recovery, all through the real composition and wire.
-// The model adapter is dsh-llm-replay with override sidecars: `hang` (+ a
-// readyFile marker) makes mid-stream cancel deterministic by construction,
-// `throw` entries express provider failures by stable code, and `{ patches }`
-// augmentation injects a transient throw before the recorded success so
-// llm-retry's recovery is proven end-to-end in the browser. Sidecar CONTENT
-// is authored here (single-sourced against the fixture via deriveReplayScript
-// — no committed copy of recorded chunks); the file is a per-run artifact in
-// the temp workspace. One recorded base fixture serves all three scenarios.
+// transient-retry recovery, and retry exhaustion, all through the real
+// composition and wire. The model adapter is dsh-llm-replay with override
+// sidecars: `hang` (+ a readyFile marker) makes mid-stream cancel
+// deterministic by construction, `throw` entries express provider failures by
+// stable code, and `{ patches }` augmentation injects transient throws before
+// (or instead of) the recorded success so llm-retry's recovery and exhaustion
+// are proven end-to-end in the browser. Sidecar CONTENT is authored here
+// (single-sourced against the fixture via deriveReplayScript — no committed
+// copy of recorded chunks); the file is a per-run artifact in the temp
+// workspace. One recorded base fixture serves every scenario.
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -16,8 +17,9 @@ import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterEach, describe, expect, it, onTestFailed } from 'vitest'
+import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { deriveReplayScript, parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
-import type { ReplayOverrideDoc } from '@deepseek-ai/dsh-llm-replay'
+import type { ReplayEntry, ReplayOverrideDoc } from '@deepseek-ai/dsh-llm-replay'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
@@ -27,13 +29,14 @@ import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './suppor
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/live-interactions', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
-// One golden pins the stable mid-turn loading state; the other three capture
+// One golden pins the stable mid-turn loading state; the other four capture
 // what the user is left looking at after cancel, after a non-retryable failure,
-// and after retry recovery.
+// after retry recovery, and after retry exhaustion.
 const CANCEL_EXPECTED = join(SNAPSHOT_DIR, 'cancel.expected.md')
 const LOADING_EXPECTED = join(SNAPSHOT_DIR, 'loading.expected.md')
 const ERROR_EXPECTED = join(SNAPSHOT_DIR, 'error-auth.expected.md')
 const RETRY_EXPECTED = join(SNAPSHOT_DIR, 'retry.expected.md')
+const RETRY_EXHAUSTED_EXPECTED = join(SNAPSHOT_DIR, 'retry-exhausted.expected.md')
 const MODE = webSnapshotMode()
 const AUTH_PROVIDER_MESSAGE = 'Authentication Fails, Your api key: sk-preview-secret is invalid'
 
@@ -74,7 +77,10 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
   })
 
   /** Boot scaffold + page with an optional override doc materialized per run. */
-  async function launch(buildOverride?: (sidecarHome: string) => ReplayOverrideDoc): Promise<void> {
+  async function launch(
+    buildOverride?: (sidecarHome: string) => ReplayOverrideDoc,
+    retryPolicy?: RetryPolicyConfig,
+  ): Promise<void> {
     sessionEvents = []
     let overridePath: string | undefined
     if (buildOverride !== undefined) {
@@ -88,6 +94,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     scaffold = await launchWebScaffold({
       replayFixture: FIXTURE,
       ...(overridePath === undefined ? {} : { replayOverride: overridePath }),
+      ...(retryPolicy === undefined ? {} : { replayRetryPolicy: retryPolicy }),
     })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
@@ -239,9 +246,43 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     expect(tripwire.warnings).toEqual([])
   }, 120_000)
 
+  it.skipIf(MODE === 'record')('surfaces the terminal turn error after transient retries exhaust', async () => {
+    // A whole-script replacement: three throw entries cover the first request
+    // plus both budgeted retries (patches cannot reach past the one-call
+    // derived script). The scenario-owned policy keeps exhaustion fast and
+    // jitter-free instead of walking the shared default's five backed-off
+    // attempts.
+    const failure: ReplayEntry = { kind: 'throw', chunks: [], message: 'upstream 503', code: 'SERVER' }
+    await launch(
+      () => [failure, failure, failure],
+      { mode: 'normal', maxRetries: 2, retryableCodes: ['SERVER'], backoff: { initialDelayMs: 25, maxDelayMs: 50, jitterRatio: 0 } },
+    )
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-retry-exhausted'))
+    const { settled } = await sendPrompt(60_000)
+    await settled
+    expect(turnEndReasons(sessionEvents).at(-1)).toBe('error')
+    expect(sessionEvents.filter(e => e.type === 'llm/retry').length).toBe(2)
+    await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: 10_000 }).toBe(true)
+    expect(await page.locator('[data-streaming="true"]').count()).toBe(0)
+    // The terminal error row must render even though the turn owns a retry
+    // chain: exhausted recovery shares the failing turn, so suppressing the
+    // row by retry history would leave the failure invisible.
+    const errorStatus = page.getByRole('status').filter({ hasText: 'This turn failed' })
+    await errorStatus.waitFor({ timeout: 10_000 })
+    expect(await errorStatus.textContent()).toContain('upstream 503')
+    expect(await errorStatus.textContent()).toContain('SERVER')
+    // The settled retry chain stays alongside the terminal row as recovery
+    // context; the golden pins both.
+    const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold!.workspaceCwd)
+    await compareOrRefreshGolden(RETRY_EXHAUSTED_EXPECTED, snapshot, MODE)
+    expect(tripwire.pageErrors).toEqual([])
+    expect(tripwire.warnings).toEqual([])
+  }, 120_000)
+
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'session.jsonl', 'cancel.expected.md', 'loading.expected.md', 'error-auth.expected.md', 'retry.expected.md',
+      'retry-exhausted.expected.md',
     ])
   })
 })

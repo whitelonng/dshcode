@@ -458,6 +458,91 @@ describe('Client Typert API', () => {
     await disposeContext()
   })
 
+  it('unwinds an already-installed namespace when a later namespace fails to install', async () => {
+    const ctx = await bench(vi.fn<ConnectionHandle['rpc']['call']>())
+    const { scope: _scope, ...probe } = directDescriptor()
+    const vault: InvocationDescriptor = {
+      ...probe,
+      id: '@fixture/vault#vault/seal',
+      service: 'vault',
+      namespace: 'vault',
+      method: 'seal',
+    }
+    const defineProperty = Object.defineProperty
+    const spy = vi.spyOn(Object, 'defineProperty').mockImplementation((target, key, attributes) => {
+      if (key === 'seal') throw new Error('fixture later-namespace failure')
+      return defineProperty(target, key, attributes)
+    })
+    try {
+      await expect(ctx.remote.$mount({ package: '@fixture/two-namespaces', descriptors: [probe, vault] }))
+        .rejects.toThrow('fixture later-namespace failure')
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect((ctx.remote as unknown as Record<string, unknown>).probe).toBeUndefined()
+    expect((ctx.remote as unknown as Record<string, unknown>).vault).toBeUndefined()
+    await vi.waitFor(() => { expect(ctx.typert.remotes.list()).toEqual([]) })
+  })
+
+  it('rolls back an earlier scoped projection when a later descriptor fails to install', async () => {
+    const ctx = await bench(vi.fn<ConnectionHandle['rpc']['call']>())
+    const { scope: _scope, ...direct } = directDescriptor()
+    const failing: InvocationDescriptor = {
+      ...direct,
+      id: '@fixture/probe#probe/archive',
+      method: 'archive',
+    }
+    const defineProperty = Object.defineProperty
+    const spy = vi.spyOn(Object, 'defineProperty').mockImplementation((target, key, attributes) => {
+      if (key === 'archive') throw new Error('fixture trailing failure')
+      return defineProperty(target, key, attributes)
+    })
+    try {
+      await expect(ctx.remote.$mount({
+        package: '@fixture/scoped-then-failing',
+        descriptors: [contextDescriptor(), failing],
+      })).rejects.toThrow('fixture trailing failure')
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect((ctx.remote as unknown as Record<string, unknown>).probe).toBeUndefined()
+    await vi.waitFor(() => { expect(ctx.typert.remotes.list()).toEqual([]) })
+  })
+
+  it('keeps a namespace another contribution still populates when a group leaves', async () => {
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+      .mockResolvedValue({ ok: true, value: { renamed: true } })
+    const ctx = await bench(call)
+    const { scope: _scope, ...direct } = directDescriptor()
+    const disposeDirect = await ctx.remote.$mount({ package: '@fixture/direct-owner', descriptors: [direct] })
+    const disposeScoped = await ctx.remote.$mount({ package: '@fixture/scoped-owner', descriptors: [contextDescriptor()] })
+
+    await disposeDirect()
+    // The namespace survives its first group: the second contribution still owns methods on it.
+    const surviving = ctx.get('remote.probe') as unknown as Record<string, unknown> | undefined
+    expect(surviving).toBeDefined()
+    expect(surviving?.create).toBeUndefined()
+    await disposeScoped()
+    expect(ctx.get('remote.probe')).toBeUndefined()
+  })
+
+  it('unparks a namespace dependent only after its contribution methods exist', async () => {
+    const ctx = await bench(vi.fn<ConnectionHandle['rpc']['call']>())
+    const { scope: _scope, ...direct } = directDescriptor()
+    let observed: string | undefined
+    // Parked before the mount: the unpark moment is the observation — the
+    // atomic-visibility guarantee says the service never appears methodless.
+    const parked = ctx.inject(['remote.probe'], (probeCtx) => {
+      observed = typeof (probeCtx.get('remote.probe') as { create?: unknown } | undefined)?.create
+    })
+    const dispose = await ctx.remote.$mount({ package: '@fixture/atomic-visibility', descriptors: [direct] })
+    await parked
+    expect(observed).toBe('function')
+    await dispose()
+  })
+
   it('rejects weak parameter and Context codecs plus malformed scope projections', async () => {
     const ctx = await bench(vi.fn<ConnectionHandle['rpc']['call']>())
     const direct = directDescriptor()

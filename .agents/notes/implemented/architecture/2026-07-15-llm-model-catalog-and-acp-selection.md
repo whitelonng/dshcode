@@ -24,7 +24,7 @@ ACP selection must also preserve the provider dimension. The same model id may a
 
 Catalog membership is advisory. It drives selectors and diagnostics but never changes `stream()` routing and never rejects an otherwise valid request. Provider ownership remains exclusive and lifecycle-bound; model ids remain request-time adapter input.
 
-`dsh-llm-pi-ai` maps the configured provider's installed `getModels(provider)` entries into the neutral catalog. Its existing request-time catalog lookup remains authoritative and still rejects unknown models with `UNKNOWN_MODEL`. `dsh-llm-deepseek` accepts an optional `models` config containing display entries, defaulting to `deepseek-v4-flash` named `DeepSeek-V4-Flash` and `deepseek-v4-pro` named `DeepSeek-V4-Pro`. An explicit list replaces those defaults and an empty list disables discovery. The entries improve selector UX for known public or private models, while every unlisted model id continues to pass through unchanged.
+`dsh-llm-pi-ai` maps the configured provider's installed `getModels(provider)` entries into the neutral catalog. Its existing request-time catalog lookup remains authoritative and still rejects unknown models with `UNKNOWN_MODEL`. `dsh-llm-deepseek` accepts an optional `models` config containing display entries, defaulting to `deepseek-v4-flash` named `DeepSeek-V4-Flash`, `deepseek-v4-pro` named `DeepSeek-V4-Pro`, and image-capable `deepseek-v4-flash-vision-exp` named `DeepSeek-V4-Flash-Vision-Exp`. An explicit list replaces those defaults and an empty list disables discovery. The entries improve selector UX for known public or private models, while every unlisted model id continues to pass through unchanged.
 
 ### Per-session selection in the front end
 

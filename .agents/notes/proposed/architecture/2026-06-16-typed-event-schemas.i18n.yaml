@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-06-16-typed-event-schemas.md
 2026-06-16-typed-event-schemas.md: 5082608f2ef4eb1d03d83e93de2814147a3a0b26
-2026-06-16-typed-event-schemas.zh.md: 291799807cef3be02af846af0caa235e487143ca
+2026-06-16-typed-event-schemas.zh.md: 1a25827b9126c973c193312e7bbd6fd7b4388600

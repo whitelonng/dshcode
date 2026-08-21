@@ -14,9 +14,11 @@ Status: implemented
 
 任何 GitHub id 与 VitePress id 不同的 fragment 目标标题都会带有与 GitHub 兼容的显式别名。英文手写页面和翻译页面会在标题前添加别名；翻译页面使用双语对侧文件共享的英文 id。生成的配置、工具和持久化目录由所属生成器输出别名。源码 Markdown 校验保持独立，仍会拒绝在仓库渲染规则下无法解析的链接。
 
+目标存在配对文件时，文件路径按照[双语文档链接本地化决策](2026-08-18-localized-bilingual-links.zh.md)跟随源文档 locale；配对两侧仍使用完全相同的 query 与 fragment 后缀。
+
 ## Alternatives considered
 
-**使用各语言专属的 fragment。** 双语对侧文件会刻意保留相同的链接目标。语言专属 fragment 会使两侧源码不一致，还会要求每个链接生成方都了解目标语言翻译后的标题。
+**使用各语言专属的 fragment。** 配对文件路径会跟随源文档 locale，但双语两侧仍刻意保留相同的 fragment 后缀。语言专属 fragment 会要求每个链接生成方都了解目标语言翻译后的标题。
 
 **依赖 VitePress 标题 id。** 这些 id 取决于渲染后的标点与本地化标题文本，无法保留仓库链接和生成引用已经使用的 GitHub id。
 

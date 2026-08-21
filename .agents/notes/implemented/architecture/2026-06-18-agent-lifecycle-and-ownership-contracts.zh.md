@@ -14,7 +14,7 @@ ACP（Agent Client Protocol）与 tool-bash 的若干限制是同一个所有权
 
 ### 1. 队列感知的 `Agent.cancel(cause?)`
 
-`Agent` 接口新增 `cancel()` 动词——唯一的公开停止原语。（它最初与范围更窄、仅作用于步骤的 `abort()` 一同交付；后者后来因无人使用而移除，使 `cancel()` 成为唯一公开的停止工作方式。）它清空 inbox 的 queued + steering FIFO，在存在活跃轮次时中止它，并保留一个不带 cause 的 pre-run 标记，使在被领取前被取消的提示词永不运行，而后来的提示词仍保持独立。有效调用会在清空或中止前发出 `agent/cancel-requested`，携带类型化的 `user | parent` cause；空闲取消不发出任何事件，也不会使下一条提示词搁浅。`whenIdle()` 会在取消后达到完全停稳，ACP 的 `session/cancel` 映射到 `user`。[显式轮次取消决策](2026-07-16-explicit-turn-cancellation.md)规定了当前的 cause、signal 生命周期与协作式结算约定。
+`Agent` 接口新增 `cancel()` 动词——唯一的公开停止原语。（它最初与范围更窄、仅作用于步骤的 `abort()` 一同交付；后者后来因无人使用而移除，使 `cancel()` 成为唯一公开的停止工作方式。）它清空 inbox 的 queued + steering FIFO，在存在活跃轮次时中止它，并保留一个不带 cause 的 pre-run 标记，使在被领取前被取消的提示词永不运行，而后来的提示词仍保持独立。有效调用会在清空或中止前发出 `agent/cancel-requested`，携带类型化的 `user | parent` cause；空闲取消不发出任何事件，也不会使下一条提示词搁浅。`whenIdle()` 会在取消后达到完全停稳，ACP 的 `session/cancel` 映射到 `user`。[显式轮次取消决策](2026-07-16-explicit-turn-cancellation.zh.md)规定了当前的 cause、signal 生命周期与协作式结算约定。
 
 ### 2. `AgentHandle` 异步释放器
 
@@ -43,7 +43,7 @@ bash 所有者 token 比较依赖共享的 `Agent.id`/`SessionId` 在存活 agen
 
 - **公开的 `BashTask.owner` 字段**而非 `ShellExecutor.ownerOf(id)` Service Definition 方法：否决。一条读取路径即可，无需冗余 API。
 - **为 agent 的会话生命周期使用兄弟 Cordis effect**：否决。fiber 卸载时并发释放兄弟 effect（`Promise.all`），store 拥有的 append 发布钩子的移除与循环的关闭 `session/flush` 产生竞争；单一复合 effect 的有序 LIFO 链才能在两条释放路径上都捕获关闭的 `turn/end`。
-- **在 `cancel()` 之外另设一个仅中止步骤的 `abort()`**：最初发布过，后因无人使用而移除；`cancel()` 是唯一的公开停止原语（见[公开停止接口 Agent Note](../simplification/2026-06-20-public-agent-stop-api.md)）。
+- **在 `cancel()` 之外另设一个仅中止步骤的 `abort()`**：最初发布过，后因无人使用而移除；`cancel()` 是唯一的公开停止原语（见[公开停止接口 Agent Note](../simplification/2026-06-20-public-agent-stop-api.zh.md)）。
 
 ## 后果
 

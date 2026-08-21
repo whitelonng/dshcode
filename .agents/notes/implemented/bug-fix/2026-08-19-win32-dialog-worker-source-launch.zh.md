@@ -28,7 +28,7 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 凡是命名类型的相对导入都必须标注，用 `import type` 或行内 `type` 修饰符。`tsconfig.base.json` 设置了 `verbatimModuleSyntax: false`，未标注的类型导入会在构建时被消除，`typecheck` 与打包都不会报错，而 Node 剥离模式会保留该导入并在加载时以 `does not provide an export named` 失败。因此即使没有任何编译器或 lint 规则强制，这里也必须标注。
 
-`packages/code-runtime/code-runtime-worker-thread/src/index.ts` 已经在同样这两个前提下以这种方式加载它的源码 worker，[测试子进程启动方式](../../../../docs/testing.md#test-subprocess-launch-modes)也允许可擦除的 `.ts` 子进程直接由 Node 运行，不经 tsx 或根路径映射。
+`packages/code-runtime/code-runtime-worker-thread/src/index.ts` 已经在同样这两个前提下以这种方式加载它的源码 worker，[测试子进程启动方式](../../../../docs/testing.zh.md)也允许可擦除的 `.ts` 子进程直接由 Node 运行，不经 tsx 或根路径映射。
 
 打包分支继续由纯 node 启动 `worker.cjs`。两个分支都由 `new URL(import.meta.url).pathname.endsWith('.ts')` 选择，模块 URL 上的查询串无法把源码模块误判为构建产物。
 
@@ -47,7 +47,7 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 ## 相关启动路径
 
-`dsh` CLI 的源码启动保留 tsx ESM hook，因为它的源码图需要 Node 已不再提供的 transform 模式，见[源码启动决策](../architecture/2026-07-29-dsh-source-launch-tsx-esm.md)；那条约束针对的是 CLI 源码图，而不是说 engines 范围内没有原生剥离。
+`dsh` CLI 的源码启动保留 tsx ESM hook，因为它的源码图需要 Node 已不再提供的 transform 模式，见[源码启动决策](../architecture/2026-07-29-dsh-source-launch-tsx-esm.zh.md)；那条约束针对的是 CLI 源码图，而不是说 engines 范围内没有原生剥离。
 
 `packages/sandbox/sandbox-local/src/index.ts` 为 windows-acl runner 的源码分支拼出同样的 argv，而 `packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts` 正是在 win32 上跑这套 argv，因此这里不把它记作本故障的第二例。它的源码图同样包内闭合且可擦除，所以这套启动方式适合它——作为一次简化，并需一并改写 `packages/sandbox/sandbox-local/tests/local.spec.ts` 中的 `--import tsx/esm` 断言——而不是作为修复。
 
@@ -65,7 +65,7 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 - Windows 源码启动（`pnpm dsh web`）直接由 Node 原生类型剥离运行 worker，启动不再取决于 loader 链如何解析 worker 路径。
 - 打包宿主保持不变的 CJS worker 分支，`NODE_OPTIONS` 不被改写。
-- 源码分支依赖 engines 范围、包内闭合且只含可擦除语法的依赖图、标注过的类型导入，以及移除继承的类型剥离禁用 flag；[包 README](../../../../packages/host/directory-picker-native/README.md) 为使用者写明了这些前提。
+- 源码分支依赖 engines 范围、包内闭合且只含可擦除语法的依赖图、标注过的类型导入，以及移除继承的类型剥离禁用 flag；[包 README](../../../../packages/host/directory-picker-native/README.zh.md) 为使用者写明了这些前提。
 - 即使模块运行器给 URL 附加查询串，Win32 冒烟测试也能进入真实的源码启动。
 
 ## 验证

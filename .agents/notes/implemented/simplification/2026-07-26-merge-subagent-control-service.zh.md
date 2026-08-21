@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-26-merge-subagent-control-service.md) | 中文
 
-公开操作集合由[以意图命名的 subagent 继续执行操作](2026-07-27-intent-named-subagent-continuation-operations.md)进一步细化，并由[可继续的 subagent](../feature/2026-07-28-continuable-subagent-conversations.md)再次细化——后者保留这一个合并后的服务，同时移除提供方 `resume` 派发和基于 Task 的继续执行生命周期。
+公开操作集合由[以意图命名的 subagent 继续执行操作](2026-07-27-intent-named-subagent-continuation-operations.zh.md)进一步细化，并由[可继续的 subagent](../feature/2026-07-28-continuable-subagent-conversations.zh.md)再次细化——后者保留这一个合并后的服务，同时移除提供方 `resume` 派发和基于 Task 的继续执行生命周期。
 
 ## 问题
 

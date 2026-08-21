@@ -12,9 +12,9 @@ Web 会话把分支操作挂到每个轮次中最后一个文本非空的 assist
 
 `ConversationSnapshot.turnEnds` 保留原始事件窗口中的已完成轮次边界。会话视图按各边界遍历 transcript（文本记录）节点，仅当边界的最后一个节点是用户消息、持久 steering（中途引导）消息或含内容的 assistant 消息时才启用分支操作。开放轮次没有符合条件的消息；如果后面还有工具结果、只有推理内容的中断、轮次错误或其他 transcript 节点，较早消息上的分支操作会保持不可用。不可用的控件仍然可见、可聚焦、可悬停；`aria-disabled`、tooltip 与 `aria-describedby` 会说明已完成尾部这一要求，且不会发送 Host 请求。复制和时钟仍可在既有消息 chrome 下使用，Host 按已完成轮次 fork 的语义保持不变。
 
-本资格判定中消息气泡的那一半已被 [user 气泡分支移除决策](../simplification/2026-08-06-user-bubbles-drop-the-branch-action.md)取代：user 与 steering 气泡不再渲染该控件，因此只有含内容的 assistant 尾部可以 fork；assistant 侧门禁及其可见但不可用的呈现保持有效。
+本资格判定中消息气泡的那一半已被 [user 气泡分支移除决策](../simplification/2026-08-06-user-bubbles-drop-the-branch-action.zh.md)取代：user 与 steering 气泡不再渲染该控件，因此只有含内容的 assistant 尾部可以 fork；assistant 侧门禁及其可见但不可用的呈现保持有效。
 
-本决策收紧了较早的 [Web 会话 fork 操作决策](../feature/2026-07-27-web-session-fork-actions.md)所定义的消息资格。Session 行 fork 仍选择最新的已完成轮次；符合条件的消息操作仍通过共享 client 运行时操作传递其事件 seq。
+本决策收紧了较早的 [Web 会话 fork 操作决策](../feature/2026-07-27-web-session-fork-actions.zh.md)所定义的消息资格。Session 行 fork 仍选择最新的已完成轮次；符合条件的消息操作仍通过共享 client 运行时操作传递其事件 seq。
 
 ## 考虑过的替代方案
 

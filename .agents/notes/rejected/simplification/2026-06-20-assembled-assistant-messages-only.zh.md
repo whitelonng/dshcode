@@ -6,7 +6,7 @@ Status: rejected — 高保真分片回放、失败流的部分输出与快照�
 
 ## 问题
 
-当前的规范会话日志会持久化模型流式输出的每一个 `assistant/chunk`。[会话持久化 Agent Note](../../implemented/architecture/2026-06-14-session-persistence.md)选择这一方案是为了 token 级回放保真度和连续的 `seq`，但其代价日益增长：JSONL fixture（测试前置数据）被大量微小的增量记录占据，快照场景通过对分片事件分组来回放模型，ACP（Agent Client Protocol）加载时从分片重建先前的 assistant 输出，而任何未来的日志读取方都必须区分持久的消息历史与 token 级追踪。
+当前的规范会话日志会持久化模型流式输出的每一个 `assistant/chunk`。[会话持久化 Agent Note](../../implemented/architecture/2026-06-14-session-persistence.zh.md)选择这一方案是为了 token 级回放保真度和连续的 `seq`，但其代价日益增长：JSONL fixture（测试前置数据）被大量微小的增量记录占据，快照场景通过对分片事件分组来回放模型，ACP（Agent Client Protocol）加载时从分片重建先前的 assistant 输出，而任何未来的日志读取方都必须区分持久的消息历史与 token 级追踪。
 
 对于成功组装出完整内容的步骤，agent loop（智能体循环）已经追加了一条 `assistant/message`。这正是 `deriveMessages()` 用来构造下一次模型请求的事件。换言之，正常的可恢复会话状态无需分片即已具备；分片是实时渲染和确定性测试的产物，不是必需的会话历史。失败或中止的流则不同：部分 assistant 输出可能仅以分片形式存在，而空的 max-token 步骤可能根本不产生 `assistant/message`。
 
@@ -19,7 +19,7 @@ ACP `session/load` 可以将先前的 assistant 消息作为完整内容块回�
 ## 验收标准
 
 - `SessionEventMap` 移除 `assistant/chunk`，或在需要过渡性实时事件时将其标记为非持久化。
-- [会话持久化文档](../../../../packages/session/session-persistence/README.md)不再要求逐字存储每个流式分片。
+- [会话持久化文档](../../../../packages/session/session-persistence/README.zh.md)不再要求逐字存储每个流式分片。
 - `llm-replay` 和 ACP 快照使用显式的回放 fixture 格式或伴随文件来存储模型分片。
 - `session/load` 从 `assistant/message` 渲染已完成的 assistant 消息。
 - 存储的日志大幅缩小，且删除分片后仍保持 `seq` 连续，不留下序号缺口。
@@ -31,6 +31,6 @@ ACP `session/load` 可以将先前的 assistant 消息作为完整内容块回�
 
 ## 相关
 
-本 Agent Note 取代 [会话持久化](../../implemented/architecture/2026-06-14-session-persistence.md) 中关于分片持久化的决策，并影响 [ACP 快照测试](../../implemented/testing/2026-06-19-acp-snapshot-tests.md)——其当前的回放插件从 `assistant/chunk` 事件派生脚本。
+本 Agent Note 取代 [会话持久化](../../implemented/architecture/2026-06-14-session-persistence.zh.md) 中关于分片持久化的决策，并影响 [ACP 快照测试](../../implemented/testing/2026-06-19-acp-snapshot-tests.zh.md)——其当前的回放插件从 `assistant/chunk` 事件派生脚本。
 
 <!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->

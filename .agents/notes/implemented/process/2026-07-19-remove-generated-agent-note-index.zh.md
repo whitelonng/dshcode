@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-按生命周期／类别组织的文件系统目录树就是 Agent Note 清单。[README.md](../../README.md) 继续作为人工维护的入口和约定，普通的目录树浏览与仓库搜索负责内容发现。
+按生命周期／类别组织的文件系统目录树就是 Agent Note 清单。[README.md](../../README.zh.md) 继续作为人工维护的入口和约定，普通的目录树浏览与仓库搜索负责内容发现。
 
 `scripts/agent-note-tree.ts` 持有封闭的生命周期／类别集合与结构遍历器。`verify-agent-note-classification` 校验该目录树，并拒绝旧目录和根目录中的 `INDEX.md`，但不会渲染集中式清单或检查其新鲜度。
 

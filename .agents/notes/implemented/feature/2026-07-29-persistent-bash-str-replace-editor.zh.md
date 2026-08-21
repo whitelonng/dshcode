@@ -18,7 +18,7 @@ Status: implemented
 
 两个插件都进入 Python runtime 闭包。持久 Bash 的闭包还包含 PTY 服务／本地后端，以及该后端要求的沙箱服务。由于 `node-pty` 在 macOS 上会执行原生 `spawn-helper`，每个打包后的 macOS 运行时可执行文件都会携带一个 `-spawn-helper` 伴随文件；Linux 直接使用 `forkpty`。固定版本的 `node-pty` 补丁会先检查 `DSH_NODE_PTY_SPAWN_HELPER`，因此对当前提供非伴随 helper 的外部消费方而言，该变量仍是真正的覆盖项。未设置该覆盖时，补丁会在打包可执行文件的伴随文件存在时解析它，否则在普通 Node 运行中保留上游查找方式。若 helper 缺失或不可执行，macOS 构建器会在发布前失败。
 
-随附的 [`minimal` agent preset](../../../../apps/cli/config/agent-presets/minimal/agent.cordis.yml) 会组合这两个插件，以满足与 Claude SWE 兼容的 RL 约定。其 entry 本地 PTY realm 持有注册表、本地后端和持久 Bash 工具；编辑器在该 realm 旁注册，并使用宿主文件系统。preset 会固定完整系统提示词、跟随部署的工具呈现模式，省略其他所有面向模型的消费方，并将浏览器、Workspace、持久化、沙箱与权限服务留在共享 Web 宿主上。本地 PTY 后端会在创建 shell 时解析会话的有效沙箱模式。只要该所有者仍有打开的 shell 或仍在进行中的 spawn，另一种权限模式就会在对应的会话事件提交前遭到拒绝；编辑器则继续经由 Web 文件系统沙箱运行。这一组合边界由 [minimal-preset 决策](../bug-fix/2026-08-10-minimal-preset-owns-rl-composition.md)负责说明。
+随附的 [`minimal` agent preset](../../../../apps/cli/config/agent-presets/minimal/agent.cordis.yml) 会组合这两个插件，以满足与 Claude SWE 兼容的 RL 约定。其 entry 本地 PTY realm 持有注册表、本地后端和持久 Bash 工具；编辑器在该 realm 旁注册，并使用宿主文件系统。preset 会固定完整系统提示词、跟随部署的工具呈现模式，省略其他所有面向模型的消费方，并将浏览器、Workspace、持久化、沙箱与权限服务留在共享 Web 宿主上。本地 PTY 后端会在创建 shell 时解析会话的有效沙箱模式。只要该所有者仍有打开的 shell 或仍在进行中的 spawn，另一种权限模式就会在对应的会话事件提交前遭到拒绝；编辑器则继续经由 Web 文件系统沙箱运行。这一组合边界由 [minimal-preset 决策](../bug-fix/2026-08-10-minimal-preset-owns-rl-composition.zh.md)负责说明。
 
 ## 考虑过的替代方案
 

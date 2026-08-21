@@ -4,7 +4,7 @@
 
 把 agent（智能体）人设做成一个可组装的行：它既可以遮蔽部署级人设，也可以拥有完整系统提示词。
 
-[`dsh-system-prompt`](../../core/system-prompt/README.md) 以自身配置持有部署级人设，并且无条件注册该段落，因此一个进程只有一份。[agent preset](../agent-presets/README.md) 无法自行挂载提示词注册表——若没有属于自己的行，preset 能改变 agent 的工具，却永远改不了它的身份。本包就是那一行。
+[`dsh-system-prompt`](../../core/system-prompt/README.zh.md) 以自身配置持有部署级人设，并且无条件注册该段落，因此一个进程只有一份。[agent preset](../agent-presets/README.zh.md) 无法自行挂载提示词注册表——若没有属于自己的行，preset 能改变 agent 的工具，却永远改不了它的身份。本包就是那一行。
 
 ## 仅限 scope 内使用
 

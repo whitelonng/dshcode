@@ -11,7 +11,7 @@
 | `includeHarnessIdentity` | `true` | 是否包含顺序为 −100 的固定开场白 `You are an AI agent powered by DeepSeek Harness.`。仅当兼容性部署拥有完整系统提示词时设为 false。 |
 | `includeRuntimeContext` | `true` | 是否在组装中包含有序动态上下文。设为 false 时不会求值上下文提供方，并会在 waterfall 后丢弃 `system-prompt/assemble` 监听器添加的上下文；其他服务及其强制机制仍然生效。 |
 | `persona` | `''` | 全局部署 persona 默认值：唯一由配置提供的提示词片段，渲染为顺序为 0 的 `deployment:persona` 段，除非 agent 作用域的贡献将其遮蔽。它是模板，完整的 `{{…}}` 组会严格按已注册变量解释（随附循环注册 `{{model}}`/`{{cwd}}`），目前没有表达字面量花括号的转义语法。为空 ⇒ 渲染时删除该段。 |
-| `toolOrder` | 无 | 显式指定面向模型的工具顺序。该列表由 `ToolSchema.name` 组成，并且必须恰好包含一个 `'<unlisted-tools>'` 其余项标记（`TOOL_ORDER_REST`）：已列工具按列表位置排列，未列工具则按名称字典序插入该标记所在的位置。缺席 ⇒ 直接按名称字典序排列。该顺序会在 `system-prompt/assemble` waterfall（瀑布式事件）之前应用于已收集的工具。与段的 `order` 排序一样，它会规范化注册表贡献的内容；注册顺序只是插件加载时序的产物。修改列表的 waterfall 监听器对其输出的确定性负责。配置错误会明确失败：列表没有恰好一个其余项或存在重复项，会在加载时抛出；已列名称没有对应已注册工具，会使每次 `assemble()` 被拒绝；工具提供方返回保留的其余项名称也会被拒绝。在随附循环下，轮次会在任何模型请求前失败。为何采用中心列表而非每插件权重，见[显式面向模型工具顺序](../../../.agents/notes/implemented/feature/2026-07-06-explicit-tool-order.md)。 |
+| `toolOrder` | 无 | 显式指定面向模型的工具顺序。该列表由 `ToolSchema.name` 组成，并且必须恰好包含一个 `'<unlisted-tools>'` 其余项标记（`TOOL_ORDER_REST`）：已列工具按列表位置排列，未列工具则按名称字典序插入该标记所在的位置。缺席 ⇒ 直接按名称字典序排列。该顺序会在 `system-prompt/assemble` waterfall（瀑布式事件）之前应用于已收集的工具。与段的 `order` 排序一样，它会规范化注册表贡献的内容；注册顺序只是插件加载时序的产物。修改列表的 waterfall 监听器对其输出的确定性负责。配置错误会明确失败：列表没有恰好一个其余项或存在重复项，会在加载时抛出；已列名称没有对应已注册工具，会使每次 `assemble()` 被拒绝；工具提供方返回保留的其余项名称也会被拒绝。在随附循环下，轮次会在任何模型请求前失败。为何采用中心列表而非每插件权重，见[显式面向模型工具顺序](../../../.agents/notes/implemented/feature/2026-07-06-explicit-tool-order.zh.md)。 |
 
 ## 服务：`SystemPrompt`（ctx 键：`systemPrompt`）
 
@@ -28,7 +28,7 @@
 
 ### 实时事件
 
-普通段以 `system-prompt/assemble` 的返回结果为准；complete 段则会在 waterfall 之后作为最终提示词约束生效。替换条目的监听器必须保留任何已启用的 Code Mode 或结构化输出协议。筛选需要在呈现、查找与执行之间保持一致时，应使用 [`ToolRuntime.restrict()`](../tools/README.md)。注册表变更通知不经过筛选。[system-prompt.md](../../../docs/subsystems/system-prompt.md#cordis-surface) 的生成区块拥有事件签名和分发约定。
+普通段以 `system-prompt/assemble` 的返回结果为准；complete 段则会在 waterfall 之后作为最终提示词约束生效。替换条目的监听器必须保留任何已启用的 Code Mode 或结构化输出协议。筛选需要在呈现、查找与执行之间保持一致时，应使用 [`ToolRuntime.restrict()`](../tools/README.zh.md)。注册表变更通知不经过筛选。[system-prompt.md](../../../docs/subsystems/system-prompt.zh.md#cordis-surface) 的生成区块拥有事件签名和分发约定。
 
 ### 关键类型
 
@@ -46,7 +46,7 @@
 - 工具 schema 提供方：`ToolRuntime` 自动将自身注册为工具提供方。
 - [`system-prompt/assemble` waterfall](#live-events)：按调用方协作式修改或替换组装结果，之后再实施 complete 段约束。
 
-设计原理：[提示词变量 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-05-prompt-variables-and-tool-guidance-ownership.md)。
+设计原理：[提示词变量 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-05-prompt-variables-and-tool-guidance-ownership.zh.md)。
 
 ## 模型体验
 
@@ -74,7 +74,7 @@ You are an AI agent powered by DeepSeek Harness.
 
 #### 模型看到的内容
 
-对于已交付工具，模型会收到[生成工具 schema](../../../docs/tool-catalog.md#tool-package-map) 中对每个 agent 可见的子集；限制与组装拦截完成后，按配置或字典序排列。扩展可以通过同一注册表贡献其他定义。段与 schema 提供方是独立的组装输入，因此工具限制不会移除独立注册的引导。
+对于已交付工具，模型会收到[生成工具 schema](../../../docs/tool-catalog.zh.md#tool-package-map) 中对每个 agent 可见的子集；限制与组装拦截完成后，按配置或字典序排列。扩展可以通过同一注册表贡献其他定义。段与 schema 提供方是独立的组装输入，因此工具限制不会移除独立注册的引导。
 
 #### Token 影响
 

@@ -8,7 +8,7 @@ Status: implemented
 
 外部报告 dsh-external/issues#107（内部聚类为 deepseek-harness#1406）测得视口宽度在 760px 到 850px 之间时 Plan 控件与模型选择器发生重叠，模型选择器覆盖 Plan 控件的点击区域，导致在 800×720 下无法用鼠标退出 Plan 模式。其验收清单要求增加浏览器回归测试，断言 Plan 中心命中 Plan 按钮。
 
-浏览器回归测试在当前 master 上复现了报告：800×720 下 Plan chip 与模型 trigger 重叠 36.9px，chip 中心命中 trigger 的 label。composer 控制行是 `display: flex; justify-content: space-between` 且 `.trailing { flex: none }`：当控件总宽超过卡片时，可收缩的 `.tools` 组把流内子项留在 `min-width: 0` 的盒内，于是 chip——溢出前最后一个流内子项——被绘制到 trailing 组上方。报告以来 Plan 控件形态已变（select → chip，`c20b988166`/`fe91919346`），控制行也获得过自适应能力（`c8c75ec891`，[web-composer-shared-width-axis](../feature/2026-08-04-web-composer-shared-width-axis.md)），但该行没有换行，重叠在两次重构后依然存在。
+浏览器回归测试在当前 master 上复现了报告：800×720 下 Plan chip 与模型 trigger 重叠 36.9px，chip 中心命中 trigger 的 label。composer 控制行是 `display: flex; justify-content: space-between` 且 `.trailing { flex: none }`：当控件总宽超过卡片时，可收缩的 `.tools` 组把流内子项留在 `min-width: 0` 的盒内，于是 chip——溢出前最后一个流内子项——被绘制到 trailing 组上方。报告以来 Plan 控件形态已变（select → chip，`c20b988166`/`fe91919346`），控制行也获得过自适应能力（`c8c75ec891`，[web-composer-shared-width-axis](../feature/2026-08-04-web-composer-shared-width-axis.zh.md)），但该行没有换行，重叠在两次重构后依然存在。
 
 ## 决策
 

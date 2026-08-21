@@ -8,7 +8,7 @@ The boot page uses plain DOM and local CSS, so client-bundle and plugin-activati
 
 `PLATFORM_MODULES` (src/platform.ts) is the single source of truth for shell-seeded shared modules. Together with `PRELOADED_CLIENT_EXTERNALS`, it defines the implicit external baseline for every dynamic bundle; `dsh.client.external` adds only exact non-baseline requests.
 
-The optional override parameter `seams` forwards the module system's `loadBundle` transport override (`BootSeams`) for environments where external `<script>` execution cannot reach the page context; ordinary browser callers omit it.
+The optional override parameter `seams` forwards the module system's `loadBundle` transport override (`BootSeams`) for environments where external `<script>` execution cannot reach the page context; ordinary browser callers omit it. A pre-injected page transport is the default ahead of it: when `globalThis.__DSH_TRANSPORT__` (the connection package's `ClientTransportHooks`) carries `loadBundle`, the module stage adopts it as the bundle transport and skips the immediate-tier HTTP prefetch — explicit `seams` still win.
 
 ## Model Experience
 

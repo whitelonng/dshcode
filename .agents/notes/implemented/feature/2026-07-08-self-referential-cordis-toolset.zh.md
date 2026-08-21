@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-该工具集以 [`@deepseek-ai/dsh-tool-cordis`](../../../../packages/extensions/tool-cordis/README.md) 发布，并由 `examples/web-cordis` 演示。它为模型提供三个工具，用于操作当前 DSH 进程中的活跃 Cordis 运行时：检查该运行时、挂载一个仅存于内存的临时插件，再将该插件卸载至完全停稳。
+该工具集以 [`@deepseek-ai/dsh-tool-cordis`](../../../../packages/extensions/tool-cordis/README.zh.md) 发布，并由 `examples/web-cordis` 演示。它为模型提供三个工具，用于操作当前 DSH 进程中的活跃 Cordis 运行时：检查该运行时、挂载一个仅存于内存的临时插件，再将该插件卸载至完全停稳。
 
 vm 隔离了意外的全局污染，上下文门面隐藏了框架内部细节。但二者都不限制已暴露服务的权限：临时插件可以调用 `ctx.shell` 以宿主执行器的权限运行命令，也能访问真实的文件系统和网络服务。它运行在共享 DSH 运行时中，可能影响同一进程的其他会话。这是一个需要显式启用的开发工具，信任等级与 bash 相当，不是安全边界，也不是产品默认配置。
 
@@ -24,7 +24,7 @@ vm 隔离了意外的全局污染，上下文门面隐藏了框架内部细节�
 | `cordis_mount` | 立即在 `node:vm` 沙箱中把 `code` 作为异步 JavaScript 函数体求值，且不保存到任何位置。返回的插件挂在内部 `cordis-dynamic` 分组下，并用新的进程内 id（`dyn-1`、`dyn-2`……）跟踪。 |
 | `cordis_unmount` | 按 id 卸载一个 `cordis_mount` 临时插件，并只在其自有工具、监听器、服务、定时器和其他 effect 完全停稳后返回。它不能删除 Loader、已配置或已安装的插件。 |
 
-`cordis_inspect` 的小节是 `services`（每个已提供的 ctx 服务及所属 fiber）、`plugins`（全部存活插件 fiber）、`tools`（模型可调用的工具）、`temporary`（`cordis_mount` 子集，包含 id、running／pending 状态、提供与等待的服务和生命周期）、`api`（活跃服务签名及其引用类型）和 `events`（harness 事件及分发模式和签名）。临时插件可跨后续轮次保持活跃，并在 `cordis_unmount`、工具集卸载或 DSH 重启后消失；系统绝不会自动恢复它们。宽泛的 `api` 和 `events` 报告省略完整 JSDoc；精确 `name` 返回一个服务或事件及其原始 JSDoc。其他小节不能搭配 name，未知目标会失败，而 API 目标必须处于活跃状态。面向模型的工具描述包含调用时所需的操作规则；[生成的工具目录](../../../../docs/tool-catalog.md)是这些规则的完整呈现。
+`cordis_inspect` 的小节是 `services`（每个已提供的 ctx 服务及所属 fiber）、`plugins`（全部存活插件 fiber）、`tools`（模型可调用的工具）、`temporary`（`cordis_mount` 子集，包含 id、running／pending 状态、提供与等待的服务和生命周期）、`api`（活跃服务签名及其引用类型）和 `events`（harness 事件及分发模式和签名）。临时插件可跨后续轮次保持活跃，并在 `cordis_unmount`、工具集卸载或 DSH 重启后消失；系统绝不会自动恢复它们。宽泛的 `api` 和 `events` 报告省略完整 JSDoc；精确 `name` 返回一个服务或事件及其原始 JSDoc。其他小节不能搭配 name，未知目标会失败，而 API 目标必须处于活跃状态。面向模型的工具描述包含调用时所需的操作规则；[生成的工具目录](../../../../docs/tool-catalog.zh.md)是这些规则的完整呈现。
 
 ### 沙箱语义
 
@@ -32,7 +32,7 @@ vm 隔离了意外的全局污染，上下文门面隐藏了框架内部细节�
 
 沙箱全局变量刻意精简：一个带标签的直写 `console`（在宿主 stdout/stderr 上输出 `[cordis:<id>] …`，这样在挂载调用之后很久才触发的监听器输出仍能落到用户可见的地方）、`harness.defineTool`／`harness.registerTool` 注册对、新 vm 上下文缺少的编码原语（`btoa`／`atob` 作为基于 `Buffer` 的宿主闭包——这是一个明确允许的例外，`Buffer` 本身从不暴露——加上 `TextEncoder`／`TextDecoder`），以及对未暴露的 Node API 设置的可调用陷阱（`require`、`setTimeout`／`setInterval`／`setImmediate`／`clearTimeout`／`clearInterval`、`fetch`），这些陷阱会抛出一条重定向消息指明 cordis 替代方案。只有函数形态的全局变量才设陷阱；`process` 和 `Buffer` 保持 `undefined`，这样 `typeof` 特性探测仍然无害，而不会触发会抛出异常的访问器。
 
-挂载代码通过三道控制跨越 vm 边界。双 realm `instanceof` 同时识别宿主和 vm 对象。`harness.defineTool` 在宿主 realm 中重建输出 schema／投影器，将工具体返回值快照为宿主自有的 JSON，并让注册表在观测前强制执行[规范工具输出约定](../architecture/2026-07-20-canonical-tool-output-contract.md)。挂载的插件接收的是一个白名单上下文门面，而非原始或透传的 `Context`；框架内部机制和以上下文为值的返回会被拒绝。服务读取需要声明 `inject`，保留 Cordis 的激活与卸载语义。`ctx.tools.get` 仅暴露 schema 视图，因此挂载代码无法绕过 `ToolRuntime.execute` 直接调用定义。
+挂载代码通过三道控制跨越 vm 边界。双 realm `instanceof` 同时识别宿主和 vm 对象。`harness.defineTool` 在宿主 realm 中重建输出 schema／投影器，将工具体返回值快照为宿主自有的 JSON，并让注册表在观测前强制执行[规范工具输出约定](../architecture/2026-07-20-canonical-tool-output-contract.zh.md)。挂载的插件接收的是一个白名单上下文门面，而非原始或透传的 `Context`；框架内部机制和以上下文为值的返回会被拒绝。服务读取需要声明 `inject`，保留 Cordis 的激活与卸载语义。`ctx.tools.get` 仅暴露 schema 视图，因此挂载代码无法绕过 `ToolRuntime.execute` 直接调用定义。
 
 边界将无歧义的 JSON Schema 形式规范化为 `ParameterSchemaSpec`，同时保留 `integer`、原始对象开放性和 required 数组。直接使用 DSL 的对象节点必须声明 `additionalProperties`；无效词汇会报错并给出可接受的替代方案。解析错误、TypeScript 错误、缺少 return、Node API 误用和重复工具名等错误信息包含相关源码行或纠正性约定，不叙述实现内部细节。
 
@@ -54,7 +54,7 @@ vm 隔离了意外的全局污染，上下文门面隐藏了框架内部细节�
 
 ### 配置、渲染与可观测性
 
-该插件暴露一个配置字段，由 schemastery 校验并记录在[配置目录](../../../../docs/config-catalog.md)中：`vmTimeoutMs`（默认 5000），代码同步求值部分的毫秒上限。当前面向模型的名称是 `cordis_inspect`、`cordis_mount` 和 `cordis_unmount`；内部 `cordis-dynamic` 分组名和 `dyn-` id 前缀仍是结构性词汇。三个工具均按[工具实操手册](../../../../docs/cookbook/adding-a-tool.md)渲染为 `generic` 卡片：inspect 为 `read`，mount 为携带代码 `rawInput` 的 `execute`，unmount 为 `delete`。Web 对话行保留这些通用机制，同时为各工具设置操作标题 `Inspect`、`Mount temporary Plugin` 和 `Unmount temporary Plugin` 以及统一的 Cordis 强调色；mount 行仍使用共用的 JavaScript 展开视图和语法高亮。
+该插件暴露一个配置字段，由 schemastery 校验并记录在[配置目录](../../../../docs/config-catalog.zh.md)中：`vmTimeoutMs`（默认 5000），代码同步求值部分的毫秒上限。当前面向模型的名称是 `cordis_inspect`、`cordis_mount` 和 `cordis_unmount`；内部 `cordis-dynamic` 分组名和 `dyn-` id 前缀仍是结构性词汇。三个工具均按[工具实操手册](../../../../docs/cookbook/adding-a-tool.zh.md)渲染为 `generic` 卡片：inspect 为 `read`，mount 为携带代码 `rawInput` 的 `execute`，unmount 为 `delete`。Web 对话行保留这些通用机制，同时为各工具设置操作标题 `Inspect`、`Mount temporary Plugin` 和 `Unmount temporary Plugin` 以及统一的 Cordis 强调色；mount 行仍使用共用的 JavaScript 展开视图和语法高亮。
 
 「模型可见 ⟺ 已记录」成立，且无需新的会话事件类型：mount 与 unmount 通过已记录的 `tool/call`／`tool/result` 对可见，当步骤之间的 schema 发生变化时，系统发出的完整 request header 会记录工具集的任何变化。临时插件属于进程内存，而非会话状态：恢复持久化会话只会重建对话历史，绝不会重新创建它们。
 
@@ -81,4 +81,4 @@ vm 隔离了意外的全局污染，上下文门面隐藏了框架内部细节�
 
 ## 后果
 
-该工具集是刻意的显式启用设计，具有完整权限的 `ctx`，因此部署方采用它的意识程度应与 bash 工具相当。以下几个事实由工具描述直接告知模型：一个 waterfall（瀑布式事件）监听器（如 `tools/pre-execute`）如果不调用 `next()` 就返回，会短路整条链，因此一个挂载的监听器可以阻止 agent 自身的工具分发（[waterfall 语义](../../../../docs/cordis-primer.md#cordis-waterfall-semantics)）；挂载代码在当前轮次的工具调用内运行，因此 await 任何只在该轮次结束后才 resolve 的东西会导致死锁；`vmTimeoutMs` 仅约束同步执行；挂载不会在会话恢复后存活。
+该工具集是刻意的显式启用设计，具有完整权限的 `ctx`，因此部署方采用它的意识程度应与 bash 工具相当。以下几个事实由工具描述直接告知模型：一个 waterfall（瀑布式事件）监听器（如 `tools/pre-execute`）如果不调用 `next()` 就返回，会短路整条链，因此一个挂载的监听器可以阻止 agent 自身的工具分发（[waterfall 语义](../../../../docs/cordis-primer.zh.md#cordis-waterfall-semantics)）；挂载代码在当前轮次的工具调用内运行，因此 await 任何只在该轮次结束后才 resolve 的东西会导致死锁；`vmTimeoutMs` 仅约束同步执行；挂载不会在会话恢复后存活。

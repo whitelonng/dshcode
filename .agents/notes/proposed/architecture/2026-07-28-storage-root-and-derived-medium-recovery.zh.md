@@ -6,7 +6,7 @@ Status: proposed
 
 ## 问题
 
-持久投影缓存（[决策记录](2026-07-27-session-projection-and-command-log.md)，已作为 `dsh-session-projection-cache` 落地）暴露了它所依托的存储基座的两个缺口。二者都是 domain-KV 栈（[设计](2026-07-24-domain-kv-storage-and-workspace.md)）的属性而非缓存自身的问题，且都首先咬到缓存——因为它是这条栈上第一个*派生*介质。
+持久投影缓存（[决策记录](2026-07-27-session-projection-and-command-log.zh.md)，已作为 `dsh-session-projection-cache` 落地）暴露了它所依托的存储基座的两个缺口。二者都是 domain-KV 栈（[设计](2026-07-24-domain-kv-storage-and-workspace.zh.md)）的属性而非缓存自身的问题，且都首先咬到缓存——因为它是这条栈上第一个*派生*介质。
 
 **文件到底存在哪（根错位已收口，resolve-once 残余仍开放）。** 共享 base 将会话存储默认为全局 harness home（`$DSH_HOME/sessions`，默认 `~/.dsh/sessions`），而出厂 Web overlay 曾给 json 后端相对根 `./.storages`：`workspace.json` 和 `session_projcache.json` 落在 `<启动目录>/.storages/` 下——从两个不同目录启动，会话相同，工作区注册表和投影缓存却各是一份，而缓存存在的意义恰恰是跨会话冷列表，凡上次在别的启动目录下缓存过的会话全部 miss。这一错位已消除：overlay 现以与会话根同一段 `!!js` 表达式把 `storage-json.root` 锚定到 `$DSH_HOME/storages`（`apps/cli/config/web.cordis.yml`）。残余隐患：`JsonStorageBackend` 仍从不 resolve 根——每次打开 unit 都把路径 join 到当时的 `process.cwd()` 上（packages/storage/storage-json/src/index.ts）；出厂 overlay 的根已是绝对路径不受影响，但任何相对根（裸 Loader 启动、测试）仍会被后续 cwd 变化劈开，JSONL 会话后端用「构造时 resolve 一次」防住的正是它（"later process.cwd() changes cannot split one backend across roots"，packages/session/session-persistence-jsonl/src/index.ts）。
 

@@ -6,7 +6,7 @@
 
 ## 问题
 
-当 `dsh` 启动时配置树校验失败，进程以 13 退出（未结算的顶层 await），不输出任何诊断，并把 TUI 的终端状态残留在 shell 上——这正是 [fail-loud release](2026-07-31-fail-loud-releases-the-terminal.md) 修复过的症状，在[事务化配置重载](2026-07-20-config-hot-reload-resilience.md)之后经由另一条机制重新出现。
+当 `dsh` 启动时配置树校验失败，进程以 13 退出（未结算的顶层 await），不输出任何诊断，并把 TUI 的终端状态残留在 shell 上——这正是 [fail-loud release](2026-07-31-fail-loud-releases-the-terminal.zh.md) 修复过的症状，在[事务化配置重载](2026-07-20-config-hot-reload-resilience.zh.md)之后经由另一条机制重新出现。
 
 两个缺陷叠加：
 

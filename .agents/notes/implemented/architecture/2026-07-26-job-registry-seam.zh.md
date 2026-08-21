@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[后台任务运行时](2026-06-20-generic-long-running-tool-runtime.md)交付时把 `JobRegistry` 做成了单个具体包：`@deepseek-ai/dsh-jobs` 既拥有每个生产方和控制器面向编程的 `ctx.jobs` 约定，也拥有进程内 Service Provider（内存存储、结算簿记、所有者清理 effect、拆除）。这种捆绑重新耦合了仓库[能力 seam 规则](2026-06-13-capability-seams.md)本要分离的两种变化速率：一旦替换注册表的存储或生命周期后端，被搅动的就是同一个包，而生产方（`dsh-tool-bash`、`dsh-tool-terminal`、`dsh-tool-subagent`）、控制器（`dsh-tool-jobs`）和 `JobKindMap` 扩展方正是从这个包导入类型与 `ctx.jobs` API。harness 中其余每项可替换能力——bash、pty、fs、skill（技能）、subagent、web、会话持久化——都已具备 Service Definition / Service Provider / Consumer 三分；任务注册表曾是仅剩的 `core` 模式例外，仅由一条 `TODO(job-service-backend)` 注释把守。
+[后台任务运行时](2026-06-20-generic-long-running-tool-runtime.zh.md)交付时把 `JobRegistry` 做成了单个具体包：`@deepseek-ai/dsh-jobs` 既拥有每个生产方和控制器面向编程的 `ctx.jobs` 约定，也拥有进程内 Service Provider（内存存储、结算簿记、所有者清理 effect、拆除）。这种捆绑重新耦合了仓库[能力 seam 规则](2026-06-13-capability-seams.zh.md)本要分离的两种变化速率：一旦替换注册表的存储或生命周期后端，被搅动的就是同一个包，而生产方（`dsh-tool-bash`、`dsh-tool-terminal`、`dsh-tool-subagent`）、控制器（`dsh-tool-jobs`）和 `JobKindMap` 扩展方正是从这个包导入类型与 `ctx.jobs` API。harness 中其余每项可替换能力——bash、pty、fs、skill（技能）、subagent、web、会话持久化——都已具备 Service Definition / Service Provider / Consumer 三分；任务注册表曾是仅剩的 `core` 模式例外，仅由一条 `TODO(job-service-backend)` 注释把守。
 
 ## 决策
 

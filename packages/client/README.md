@@ -42,6 +42,7 @@ The browser side of the dsh web GUI: shell boot, browser-host communication, sha
 | [`ui-settings/`](ui-settings/README.md) | Hosts the settings interface and its extension areas. |
 | [`ui-settings-general/`](ui-settings-general/README.md) | Provides the general settings section. |
 | [`ui-settings-models/`](ui-settings-models/README.md) | Provides model-provider configuration and DeepSeek onboarding. |
+| [`ui-settings-plugin-inventory/`](ui-settings-plugin-inventory/README.md) | Contributes a read-only Host Loader inventory tab to the Plugins settings. |
 | [`ui-settings-plugin-installer/`](ui-settings-plugin-installer/README.md) | Contributes the merged Plugins list tab (user plugins, preset products, read-only built-ins). |
 | [`ui-notifications/`](ui-notifications/README.md) | Raises OS notifications for approval waits and task completion, with a Notifications settings section. |
 

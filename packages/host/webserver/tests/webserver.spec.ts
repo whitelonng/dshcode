@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import HttpServer from '../src/index.ts'
+import HttpServer, { renderIndexInjections } from '../src/index.ts'
 
 let root: string | undefined
 let context: Context | undefined
@@ -198,6 +198,54 @@ describe('real Loader composition', () => {
     expect(upgradedServerClosed).toBe(true)
     upgraded.destroy()
     await expect(request(port, '/probe')).rejects.toThrow()
+  })
+
+  it('collects injection rows fresh per render and layers taps over the rendered rows', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const server = loaded.webServer
+    let flag = 'dark'
+    loaded.on('webserver/index-inject', (table) => {
+      table.push(
+        { kind: 'script', placement: 'head', text: 'window.__Q__=1' },
+        { kind: 'script-src', placement: 'head', src: '/plugins/a.js?rev="1"&x=<y>' },
+        { kind: 'global', name: '__DSH_BOOT__', value: { rev: '</script><b>' } },
+        { kind: 'style', text: 'body{margin:0}' },
+        { kind: 'html', placement: 'head', html: '<meta name="probe">' },
+        { kind: 'script', placement: 'body', text: `window.__P__=${JSON.stringify(flag)}` },
+      )
+    })
+
+    const html = server.renderIndex('<html><head></head><body>shell</body></html>')
+    // Head rows land right after the opening head tag in table order; the body
+    // row lands right after the opening body tag.
+    const order = [
+      '<head>',
+      '<script>window.__Q__=1</script>',
+      '<script src="/plugins/a.js?rev=&quot;1&quot;&amp;x=&lt;y&gt;"></script>',
+      'globalThis["__DSH_BOOT__"] = {"rev":"\\u003c/script>\\u003cb>"}',
+      '<style>body{margin:0}</style>',
+      '<meta name="probe">',
+      '<body>',
+      '<script>window.__P__="dark"</script>',
+      'shell',
+    ].map(part => html.indexOf(part))
+    expect(order).toEqual([...order].sort((a, b) => a - b))
+    expect(order.every(at => at !== -1)).toBe(true)
+
+    // Fresh collection per render: the listener reads live state at emit time.
+    flag = 'light'
+    expect(server.renderIndex('<head></head><body></body>')).toContain('window.__P__="light"')
+
+    // Raw taps still run, over the already-rendered rows.
+    const untap = server.tapIndex(h => h.replace('window.__Q__=1', 'window.__Q__=2'))
+    expect(server.renderIndex('<head></head><body></body>')).toContain('window.__Q__=2')
+    untap()
+
+    // Tag-less fragments: head rows prepend, body rows append.
+    expect(renderIndexInjections('<main>x</main>', [
+      { kind: 'script', placement: 'head', text: 'H' },
+      { kind: 'script', placement: 'body', text: 'B' },
+    ])).toBe('<script>H</script><main>x</main><script>B</script>')
   })
 
   it('fails the fiber when the port is already taken (fail-loud at activation)', { timeout: 60_000 }, async () => {

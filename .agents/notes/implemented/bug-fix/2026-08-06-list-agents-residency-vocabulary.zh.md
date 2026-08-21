@@ -8,7 +8,7 @@ Status: implemented
 
 `list_agents` 把可继续 child 的进程驻留状态投影为 `running | idle | complete`。`complete` 读起来像一项终态工作，且结果就在某处，但底层事实只表示没有驻留的 Activation：对话完好无损，`send_message` 可以继续它，而且它对 child 的结果不作任何断言。读到 `complete` 的模型会合理地寻找可收集结果，或向一个它以为已经结束的对话发送替代工作。
 
-这个词与[由管理器负责的结算投递](../feature/2026-08-06-manager-owned-subagent-settlement-delivery.md)同时出现时尤其容易误导。完成会以通知到达 parent；列表用于回忆持久化对话，而不是轮询该通知。
+这个词与[由管理器负责的结算投递](../feature/2026-08-06-manager-owned-subagent-settlement-delivery.zh.md)同时出现时尤其容易误导。完成会以通知到达 parent；列表用于回忆持久化对话，而不是轮询该通知。
 
 ## 决策
 
@@ -30,7 +30,7 @@ Status: implemented
 
 **完全移除状态。** parent 决定是否发送更多工作时，驻留状态依然有用。移除它只是用没有信号替代一个误导性状态。
 
-**重命名服务活动值。** `running | inactive` 在服务层是正确的，并且有非模型消费方。为了修复一个适配器的呈现而搅动通用契约并不合理；[持久化目录 Agent Note](../feature/2026-07-22-durable-subagent-catalog-and-list-agents.md) 继续拥有该服务词汇。
+**重命名服务活动值。** `running | inactive` 在服务层是正确的，并且有非模型消费方。为了修复一个适配器的呈现而搅动通用契约并不合理；[持久化目录 Agent Note](../feature/2026-07-22-durable-subagent-catalog-and-list-agents.zh.md) 继续拥有该服务词汇。
 
 ## 后果
 

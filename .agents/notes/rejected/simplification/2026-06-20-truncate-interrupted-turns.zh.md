@@ -21,7 +21,7 @@ Status: rejected — 单个轮次可以包含大量真实工作，包括多个�
 - `TurnEndReasonMap` 移除 `interrupted` 变体。
 - `interruptedTurnClosers()` 及其测试删除。
 - 持久化协调器的修复钩子截断后端特有的撕裂或未关闭的尾部状态，不追加关闭事件。
-- [会话持久化文档](../../../../packages/session/session-persistence/README.md)说明加载返回最后一个已完成的轮次，不包含部分最终轮次。
+- [会话持久化文档](../../../../packages/session/session-persistence/README.zh.md)说明加载返回最后一个已完成的轮次，不包含部分最终轮次。
 - 快照与约定测试随其所固定的行为一同更新。
 - 会话格式版本与记录的 fixture（测试前置数据）刷新；按预发布格式策略，非当前版本的存储日志被拒绝，不提供迁移路径。
 
@@ -31,6 +31,6 @@ Status: rejected — 单个轮次可以包含大量真实工作，包括多个�
 
 ## 相关
 
-本提案是对[会话持久化](../../implemented/architecture/2026-06-14-session-persistence.md)与历史上的[通用轮次封闭规则](../../archived/architecture/2026-06-15-turn-enclosure-invariant.md)的直接简化。它还移除了持久化步骤边界事件的大部分动机，使[移除持久化步骤边界事件](2026-06-20-drop-durable-step-boundaries.md)的改动更小。
+本提案是对[会话持久化](../../implemented/architecture/2026-06-14-session-persistence.zh.md)与历史上的[通用轮次封闭规则](../../archived/architecture/2026-06-15-turn-enclosure-invariant.md)的直接简化。它还移除了持久化步骤边界事件的大部分动机，使[移除持久化步骤边界事件](2026-06-20-drop-durable-step-boundaries.zh.md)的改动更小。
 
 <!-- agent-note-format: alternatives-not-recorded (pre-format Agent Note) -->

@@ -34,7 +34,7 @@ agent 按 `cordis_mount` 自身文档所述的方式够到 roster 服务：挂�
 
 指导保留 `${DSH_HOME:-$HOME/.dsh}/.agent-presets/` 作为「我的 preset 在哪」的答案，同时把 agent 实际读取或编辑的路径改走 `list()` 或 `resolve()`。写出该路径对人讲是对的，喂给文件工具是错的：部署可以配置其他根目录，而 `list()` 无法揭示一个尚且为空的用户根。
 
-该路径如今是本包的属性，而非某个启动器的属性。除非 `includeUserRoot` 为 false，`AgentPresets` 自行推导 `<dshHome>/.agent-presets` 作为 `user` 根，正如 [`dsh-skill-filesystem`](../../../../packages/skill/skill-filesystem/README.md) 推导 `<dshHome>/skills`；`apps/cli` 只提供**随附**根——那是唯有已安装 app 才能解析的路径。它取代的那种不对称曾付出过代价：两个根都由单一启动器补入时，`dsh run` 启动的 roster 一个根都没有，解析 `standard` 直接失败（当时的修法是让每个启动器都执行该 patch）。推导出的根追加在全部已配置根之后，因此随附 id 仍会遮蔽占用它的家目录目录，而 `writableRoot()` 仍优先选择显式配置的 `user` 根。它在构造时解析一次：若根目录集合在一次 `list()` 与依据其答案执行的 `copy()` 之间发生变化，写入的将是调用方从未见过的目录。
+该路径如今是本包的属性，而非某个启动器的属性。除非 `includeUserRoot` 为 false，`AgentPresets` 自行推导 `<dshHome>/.agent-presets` 作为 `user` 根，正如 [`dsh-skill-filesystem`](../../../../packages/skill/skill-filesystem/README.zh.md) 推导 `<dshHome>/skills`；`apps/cli` 只提供**随附**根——那是唯有已安装 app 才能解析的路径。它取代的那种不对称曾付出过代价：两个根都由单一启动器补入时，`dsh run` 启动的 roster 一个根都没有，解析 `standard` 直接失败（当时的修法是让每个启动器都执行该 patch）。推导出的根追加在全部已配置根之后，因此随附 id 仍会遮蔽占用它的家目录目录，而 `writableRoot()` 仍优先选择显式配置的 `user` 根。它在构造时解析一次：若根目录集合在一次 `list()` 与依据其答案执行的 `copy()` 之间发生变化，写入的将是调用方从未见过的目录。
 
 禁止改动随发布安装的约束，从创作步骤中的一段提升为顶部的 `## Off-limits` 一节，并扩展到禁止改宿主组装绕行。新增的自校验调用不削弱它：`copy()` 拒绝任何根已提供的 id，`remove()` 拒绝随部署发布的 preset。
 
@@ -63,11 +63,11 @@ skill 自带的 `cordis_mount` 代码片段经工具注册表逐字执行：它�
 
 ## 后果
 
-- 校验成功会留下一个永不回收的常驻代际，这是 roster 按代际本就承担的[常驻挂载](../architecture/2026-08-08-per-preset-standing-mounts.md)代价——由 agent 在编辑收尾时付一次，而不是由用户在首次会话时付。
+- 校验成功会留下一个永不回收的常驻代际，这是 roster 按代际本就承担的[常驻挂载](../architecture/2026-08-08-per-preset-standing-mounts.zh.md)代价——由 agent 在编辑收尾时付一次，而不是由用户在首次会话时付。
 - skill 现在依赖 `cordis_inspect` 生成的 API 目录对 `agentPresets` 保持最新；`doc-sync` 中的 `verify-cordis-api` 是守住这一点的门禁。
 - 有两个示例现在是对 `standard` 组装的引用。若该文件的 `delegation` 组发生变化它们会漂移，而 `web-agent-presets` e2e 捕捉不到。
 - 被修正的四条陈述原本是该 skill 对 realm 规则仅有的具体图示。选择替换而非删除，规则才仍然可教；替换后的示例读一个已发布文件即可核验。
 
 ## Related
 
-取代[破损 preset 是 roster 行](2026-08-09-broken-preset-roster-rows.md)中关于创作模式指导的那一条，其健康检查决策依然有效——本篇只推翻它「agent 起不了会话；设置页的红色标记是用户的检查手段」这一结论。创作的 copy-only 形态由[copy-only preset 创作](../simplification/2026-08-08-copy-only-preset-authoring.md)负责。
+取代[破损 preset 是 roster 行](2026-08-09-broken-preset-roster-rows.zh.md)中关于创作模式指导的那一条，其健康检查决策依然有效——本篇只推翻它「agent 起不了会话；设置页的红色标记是用户的检查手段」这一结论。创作的 copy-only 形态由[copy-only preset 创作](../simplification/2026-08-08-copy-only-preset-authoring.zh.md)负责。

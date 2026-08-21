@@ -10,4 +10,4 @@ Schedule 家族负责管理提醒，其持久状态保存在原 Session 日志�
 
 本包有意不公开 Schedule service 或可变数据库。工具与 runtime 向 Session stream 追加事件；到期工作通过 Agent 的普通 follow-up 队列进入同一对话。
 
-有关持久记录、转换、视图与交付约定，请参阅[仅限 Session 内的 Schedule](../../docs/subsystems/schedule.md)。
+有关持久记录、转换、视图与交付约定，请参阅[仅限 Session 内的 Schedule](../../docs/subsystems/schedule.zh.md)。

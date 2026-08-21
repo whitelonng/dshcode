@@ -6,9 +6,9 @@
 
 | 包 | 职责 |
 |---|---|
-| [`brand/`](brand/README.md) | 提供带名义品牌的类型 |
-| [`paths/`](home-paths/README.md) | 解析 Harness 数据根目录和共享路径 |
-| [`timeout/`](timeout/README.md) | 提供截止时间和超时分类原语 |
-| [`retention/`](output-retention/README.md) | 限制保留文本和项集合的大小 |
-| [`atomic-write/`](atomic-write/README.md) | 以原子方式替换文件 |
-| [`native-command/`](native-command/README.md) | 不经 shell 运行宿主原生命令 |
+| [`brand/`](brand/README.zh.md) | 提供带名义品牌的类型 |
+| [`paths/`](home-paths/README.zh.md) | 解析 Harness 数据根目录和共享路径 |
+| [`timeout/`](timeout/README.zh.md) | 提供截止时间和超时分类原语 |
+| [`retention/`](output-retention/README.zh.md) | 限制保留文本和项集合的大小 |
+| [`atomic-write/`](atomic-write/README.zh.md) | 以原子方式替换文件 |
+| [`native-command/`](native-command/README.zh.md) | 不经 shell 运行宿主原生命令 |

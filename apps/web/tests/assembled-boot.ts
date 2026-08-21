@@ -13,7 +13,7 @@ import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { act, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
-import { injectBootManifest, orderByModuleGraph } from '@deepseek-ai/dsh-client-modules'
+import { bootInjections, orderByModuleGraph } from '@deepseek-ai/dsh-client-modules'
 import type { ClientModuleLoaderTarget, WebBootEntry } from '@deepseek-ai/dsh-client-modules/client'
 import { AppWebEntry } from '@deepseek-ai/dsh-client-web'
 
@@ -194,10 +194,9 @@ export function mountAssembledApp(search = '?fixture'): void {
   root.id = 'root'
   document.body.appendChild(root)
   win.__DSH_BOOT__ = { rev: 'fx', version: '1.0.0', entries: PLUGINS.map(({ bundlePath: _bundlePath, ...plugin }) => plugin) }
-  const html = injectBootManifest('<head></head>', win.__DSH_BOOT__)
-  const facadeSource = /<head><script>([\s\S]*?)<\/script>/.exec(html)?.[1]
-  if (facadeSource === undefined) throw new Error('missing injected ModuleLoader facade')
-  ;(0, eval)(facadeSource)
+  const [facadeRow] = bootInjections(win.__DSH_BOOT__)
+  if (facadeRow?.kind !== 'script') throw new Error('missing injected ModuleLoader facade row')
+  ;(0, eval)(facadeRow.text)
   // Mirror the blocking Host-injected scripts before the Vite entry calls create().
   for (const id of ['@deepseek-ai/dsh-client-modules', '@deepseek-ai/dsh-client-runtime']) {
     const plugin = PLUGINS.find(candidate => candidate.id === id)

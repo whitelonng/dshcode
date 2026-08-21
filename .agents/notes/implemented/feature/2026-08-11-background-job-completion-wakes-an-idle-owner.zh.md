@@ -10,15 +10,15 @@ Status: implemented
 
 这个缺口被记为一条限制，而不是被推敲过，于是退路成了 `job_output(wait: true)`——同一段提示词并不鼓励的阻塞等待。
 
-本决策取代[后台任务运行时决策](../architecture/2026-06-20-generic-long-running-tool-runtime.md)中的一条事实——完成永不唤醒空闲所有者——并把 teardown 加为 `reported` 的置位方。那份 note 仍拥有其余全部任务运行时决策，因此就地更新而非替换。
+本决策取代[后台任务运行时决策](../architecture/2026-06-20-generic-long-running-tool-runtime.zh.md)中的一条事实——完成永不唤醒空闲所有者——并把 teardown 加为 `reported` 的置位方。那份 note 仍拥有其余全部任务运行时决策，因此就地更新而非替换。
 
-交付机制从来不是障碍。自[统一 send 决策](../architecture/2026-07-22-unified-send-and-coalesced-user-messages.md)起，`Agent.send(message, target, wakeup)` 就覆盖了 `target` × `wakeup` 矩阵，`wakeDriver()` 也已经处理 idle、maintenance 和已取消未收敛三种相位。缺的是「一次完成走哪条通道」这一策略选择，以及该选择所需的界。
+交付机制从来不是障碍。自[统一 send 决策](../architecture/2026-07-22-unified-send-and-coalesced-user-messages.zh.md)起，`Agent.send(message, target, wakeup)` 就覆盖了 `target` × `wakeup` 矩阵，`wakeDriver()` 也已经处理 idle、maintenance 和已取消未收敛三种相位。缺的是「一次完成走哪条通道」这一策略选择，以及该选择所需的界。
 
 ## 决策
 
 尚未报告的完成按所有者当时在做什么来选择通道。繁忙的所有者走注入，保持原样。空闲的所有者用 `followup()` 唤醒。
 
-这采纳了[延续管理器](2026-08-06-manager-owned-subagent-settlement-delivery.md)已经为 subagent 结算所采用的交付规则，那里写着「用 steer 而非 inject 是刻意的……这是一条正确性规则，不是部署偏好」。两条路径不重叠：`tool-subagent` 只为一次性后台子 agent 注册 Task，而 continuable 分支在抵达那段代码之前就已返回，因此一个子 agent 恰好由两种机制中的一种交付。
+这采纳了[延续管理器](2026-08-06-manager-owned-subagent-settlement-delivery.zh.md)已经为 subagent 结算所采用的交付规则，那里写着「用 steer 而非 inject 是刻意的……这是一条正确性规则，不是部署偏好」。两条路径不重叠：`tool-subagent` 只为一次性后台子 agent 注册 Task，而 continuable 分支在抵达那段代码之前就已返回，因此一个子 agent 恰好由两种机制中的一种交付。
 
 ### 繁忙的所有者保留注入
 
@@ -60,7 +60,7 @@ Status: implemented
 
 - 默认行为改变：空闲所有者现在每次完成会花掉一次模型请求，按所有者、在两次用户消息之间由 `maxConsecutiveWakes` 封顶。想要旧行为的部署设置 `completionDelivery: quiet`。
 - `tool-jobs` 的提示词段落无需改动；「任务完成时你会在会话内收到通知」从愿景变成了事实。
-- `JobSnapshot.reported` 新增 teardown 作为第四个置位方，记录在 Service Definition 与[子系统参考](../../../../docs/subsystems/jobs.md)中。
+- `JobSnapshot.reported` 新增 teardown 作为第四个置位方，记录在 Service Definition 与[子系统参考](../../../../docs/subsystems/jobs.zh.md)中。
 - `settle()` 在提交记录并发布可见集变更之后才宣布完成。任何依赖「在释放等待方之前或在 `onJobsChanged` 之前运行」的监听器现在都排在两者之后。
 - `tool-bash` 的 real-composition 测试去掉了第二条用户消息：仅靠结算就能把通知带入一个收集输出的轮次。它断言持久结果而非轮次边界，因为命令是否活得比它的轮次久是一场竞态；通道选择改由 `tool-jobs` 单元测试钉住。
 - 单元覆盖钉住：空闲唤醒、繁忙注入、quiet 交付、预算耗尽、用户输入恢复预算、插件通知不恢复预算，以及 teardown 静默。
@@ -69,7 +69,7 @@ Status: implemented
 
 已花掉的预算只由用户输入恢复。耗尽预算的无人值守 agent 要等到其他原因开启轮次时才收走剩余通知，在此期间没有任何机制为它重新充能。
 
-在 `quiet` 下待领于空闲所有者的通知仍会随该所有者释放而消亡，与此前一致：释放时的取消会清空未领取的 inbox，日志保留插入/取消这一对作为记录。[结算交付 note](2026-08-06-manager-owned-subagent-settlement-delivery.md) 承载这需要的离线信箱讨论。
+在 `quiet` 下待领于空闲所有者的通知仍会随该所有者释放而消亡，与此前一致：释放时的取消会清空未领取的 inbox，日志保留插入/取消这一对作为记录。[结算交付 note](2026-08-06-manager-owned-subagent-settlement-delivery.zh.md) 承载这需要的离线信箱讨论。
 
 对短命任务而言，完成究竟是延长运行中的轮次还是开启新轮次是一场真实竞态，因此没有哪份编写的 transcript 能同时容纳两种顺序。组装态覆盖断言结果；通道选择由单元测试钉住。
 

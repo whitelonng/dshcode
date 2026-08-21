@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-应用自有命令行（[笔记](2026-08-06-app-owned-command-line.md)）交付时带着三条比其消费者所需更宽的接缝：一台 vendored 的内存行激活状态机（`Entry.enableRuntime`，外加从 `dsh-cmdline` 导出的 `enableRow` —— 一个命令行包拥有了 Loader 概念），其唯一用途是 `--dev` 条件重载行、一个只有 Include 一个实现者的 vendored `EntryConfigResolver` 协议符号，以及仍然识别 `headless-runner` 行的启动器 —— 用它选择 SIGTERM 退出码、门控用户 patch 监视，并提供与 `ctx.appExit` 重复的 `headlessIo` 接缝。
+应用自有命令行（[笔记](2026-08-06-app-owned-command-line.zh.md)）交付时带着三条比其消费者所需更宽的接缝：一台 vendored 的内存行激活状态机（`Entry.enableRuntime`，外加从 `dsh-cmdline` 导出的 `enableRow` —— 一个命令行包拥有了 Loader 概念），其唯一用途是 `--dev` 条件重载行、一个只有 Include 一个实现者的 vendored `EntryConfigResolver` 协议符号，以及仍然识别 `headless-runner` 行的启动器 —— 用它选择 SIGTERM 退出码、门控用户 patch 监视，并提供与 `ctx.appExit` 重复的 `headlessIo` 接缝。
 
 ## 决策
 

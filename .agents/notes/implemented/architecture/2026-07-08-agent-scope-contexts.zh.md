@@ -16,7 +16,7 @@ Status: implemented
 
 每个存活的 agent 拥有一个扁平的注册层，通过 `agent.ctx` 暴露。代码通过拥有某项贡献的上下文进行注册；具备作用域感知的服务将部署全局注册与恰好一个匹配的 agent 层合并；操作从其真实 agent 选择该层；该层在 agent 的完整发布生命周期内存在。
 
-Cordis 是 SDK 底层的插件框架。Cordis **上下文**是插件用来访问服务和注册效果的对象，效果的清理跟随该上下文。[Cordis 入门](../../../../docs/cordis-primer.md)对该框架有更详细的说明。
+Cordis 是 SDK 底层的插件框架。Cordis **上下文**是插件用来访问服务和注册效果的对象，效果的清理跟随该上下文。[Cordis 入门](../../../../docs/cordis-primer.zh.md)对该框架有更详细的说明。
 
 对大多数贡献者而言，完整约定是四条规则：
 
@@ -45,7 +45,7 @@ flowchart LR
 
 缺失的交叉边即隔离规则：Agent A 的本地注册不会进入 Agent B 的视图，父级的注册也不会仅因父级拥有子级的生命周期就进入子级。
 
-配套的[运行时设计 Agent Note](2026-07-12-agent-scope-runtime-design.md) 阐述了实现与正确性推理。[subagent 组合控制 Agent Note](../feature/2026-07-12-subagent-persona-tool-filter-and-depth.md) 负责独立的 `persona`、`toolFilter` 和 `maxDepth` 功能。
+配套的[运行时设计 Agent Note](2026-07-12-agent-scope-runtime-design.zh.md) 阐述了实现与正确性推理。[subagent 组合控制 Agent Note](../feature/2026-07-12-subagent-persona-tool-filter-and-depth.zh.md) 负责独立的 `persona`、`toolFilter` 和 `maxDepth` 功能。
 
 ### 注册来源决定可见性与清理
 
@@ -104,7 +104,7 @@ setup 接收一个完整的受信 Cordis 上下文，因此可以组合普通插
 
 在 Cordis 层面，`Scoped<T>` 是一个不透明的路由接收器。它携带用于选择监听器的过滤器，但本身不是领域对象。因此事件签名将真实的 `Agent`、工具执行、审批请求或其他主体作为显式参数保留，供监听器检查。
 
-以 `{ global: true }` 注册的监听器有意绕过上下文受众过滤，但其清理仍跟随注册上下文。注册表成员变更通知保持不过滤，因为它们描述的是共享注册表状态而非某个 agent 的操作。详尽的事件参考是各[子系统页面](../../../../docs/subsystems/core.md)上生成的 `cordis-surface` 区块的集合——每个事件作用域在其所属页面上（`agent/*` 与 `agent-loop/*` 在 core.md 本页）。
+以 `{ global: true }` 注册的监听器有意绕过上下文受众过滤，但其清理仍跟随注册上下文。注册表成员变更通知保持不过滤，因为它们描述的是共享注册表状态而非某个 agent 的操作。详尽的事件参考是各[子系统页面](../../../../docs/subsystems/core.zh.md)上生成的 `cordis-surface` 区块的集合——每个事件作用域在其所属页面上（`agent/*` 与 `agent-loop/*` 在 core.md 本页）。
 
 ### 创建最后发布，dispose 最后撤销
 
@@ -138,6 +138,8 @@ flowchart TB
   detach --> revoke["Dispose the agent scope"]
 ```
 
+<a id="security-and-authority-are-non-goals"></a>
+
 ## 安全与权限是非目标
 
 agent 作用域组合的是受信的同进程注册。它不沙箱化插件、不定义父到子的权限格、不在创建时冻结授权、也不保证子级不能做超出父级的事。
@@ -145,6 +147,8 @@ agent 作用域组合的是受信的同进程注册。它不沙箱化插件、�
 父级可以拥有一个可见工具比自身更广的子级，因为生命周期所有权不赠予也不限制注册。持有 Cordis 上下文的插件同样运行在同一进程中，可以直接调用可用服务。
 
 需要非升权保证的部署需要独立的权限表示、传播规则和执行检查。父级子集授权、创建时授权快照、显式未来授权 API，以及通用的能力/输出/终止标签均不在本决策范围内。
+
+<a id="alternatives-considered"></a>
 
 ## 曾考虑的替代方案
 

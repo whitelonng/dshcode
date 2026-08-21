@@ -12,7 +12,7 @@ Web `minimal` preset 与独立 JSON-RPC minimal 组合对外提供持久 `bash` 
 
 ## 决策
 
-两种随附 minimal profile 都只对外提供持久 `bash` 与 `str_replace_editor`，不挂载上下文压缩提供方，为新建会话抑制每个 `dsh-system-prompt` runtime-context 贡献，并让编辑器使用 `@deepseek-ai/dsh-fs-local`。Web preset 在 agent entry 内隔离 `ctx.fs`，将 `fs-local` 与编辑器一起挂载，因此其他 Web agent 仍使用宿主文件系统提供方。其 persona 继续采用较早的 [minimal preset 组合决策](../bug-fix/2026-08-10-minimal-preset-owns-rl-composition.md)所拥有的固定 complete 提示词，并仅为该 agent 作用域实施 runtime-context 抑制。独立 spine 将同一设置转发给其进程拥有的 system-prompt 服务。沙箱与批准服务仍保持挂载并强制其策略；只有它们面向模型的动态上下文缺席。
+两种随附 minimal profile 都只对外提供持久 `bash` 与 `str_replace_editor`，不挂载上下文压缩提供方，为新建会话抑制每个 `dsh-system-prompt` runtime-context 贡献，并让编辑器使用 `@deepseek-ai/dsh-fs-local`。Web preset 在 agent entry 内隔离 `ctx.fs`，将 `fs-local` 与编辑器一起挂载，因此其他 Web agent 仍使用宿主文件系统提供方。其 persona 继续采用较早的 [minimal preset 组合决策](../bug-fix/2026-08-10-minimal-preset-owns-rl-composition.zh.md)所拥有的固定 complete 提示词，并仅为该 agent 作用域实施 runtime-context 抑制。独立 spine 将同一设置转发给其进程拥有的 system-prompt 服务。沙箱与批准服务仍保持挂载并强制其策略；只有它们面向模型的动态上下文缺席。
 
 独立的 [`minimal.cordis.yml`](../../../../examples/jsonrpc-agent/minimal.cordis.yml) 仍是完整的 JSON-RPC 进程组合。它挂载 `dsh-sdk-jsonrpc-server`、持久 Bash 所需的本地 PTY 和子进程服务、`fs-local`、两个工具消费方，以及未压缩的 JSONL 持久化。它不挂载 `token-meter`、`compaction-basic`、`fs-sandbox` 或 `fs-observation-policy`。持久 Bash 仍消费部署的 danger-full-access 沙箱策略；编辑器不受该策略限制。
 

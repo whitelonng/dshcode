@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/compaction/command-compact/README.md
 README.md: b491df8bf08f85cc602bf3e9248624502e873f13
-README.zh.md: 0104215ca92d3906aa17fdfe113a08b9acefa93d
+README.zh.md: 3cd4cacb86926f59408c6e06ac0b5497547bf540

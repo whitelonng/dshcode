@@ -6,7 +6,7 @@
 
 ## 问题
 
-issue #2248 的第二步对齐，接在[附件展示 note](2026-08-11-web-attachment-display-alignment.md) 之后（其附件栏、toast 与原子组件包的决策继续有效；本 note 取代其中历史画廊几何与灯箱 backdrop 的具体规格）。与 DeepSeek Chat 相比剩下的差距：图片只能拖到 composer 卡片上——拖到聊天记录区会让浏览器直接导航到文件；灯箱关闭钮是裸 `×` 文本字符（button 不继承字体，且该字形的墨迹在行框中心之上，因此明显偏斜），backdrop 用 `color-mix(label-primary 74%)`，dark 下反转成刺眼的白色蒙层；一条消息的多张图各自以最大 240px 的块竖着堆叠，因为画廊容器本身被钉在 240px；客户端完全不执行也不展示图片限额——用户可以攒 50 张图，直到提交后收到原始的 `attachment-error (TOO_MANY_IMAGES)` toast，眼看附件栏清空又回滚。
+issue #2248 的第二步对齐，接在[附件展示 note](2026-08-11-web-attachment-display-alignment.zh.md) 之后（其附件栏、toast 与原子组件包的决策继续有效；本 note 取代其中历史画廊几何与灯箱 backdrop 的具体规格）。与 DeepSeek Chat 相比剩下的差距：图片只能拖到 composer 卡片上——拖到聊天记录区会让浏览器直接导航到文件；灯箱关闭钮是裸 `×` 文本字符（button 不继承字体，且该字形的墨迹在行框中心之上，因此明显偏斜），backdrop 用 `color-mix(label-primary 74%)`，dark 下反转成刺眼的白色蒙层；一条消息的多张图各自以最大 240px 的块竖着堆叠，因为画廊容器本身被钉在 240px；客户端完全不执行也不展示图片限额——用户可以攒 50 张图，直到提交后收到原始的 `attachment-error (TOO_MANY_IMAGES)` toast，眼看附件栏清空又回滚。
 
 ## 决策
 
@@ -16,7 +16,7 @@ issue #2248 的第二步对齐，接在[附件展示 note](2026-08-11-web-attach
 
 **历史缩略图（DeepSeek Chat 规则）。** 一条消息仅有的一张图长边 240px、展示比例钳制在 [0.25, 4]，`cover` 裁切，特别高的图锚定顶部、特别宽的锚定左侧，从不放大；多张图渲染为固定 64px 方块，单个可换行的横排（10px 间距，用户消息右对齐）。assistant 连续的 `image` 块合并进同一个画廊，平铺而不是各占一行。
 
-**上限对齐并投影。** 默认值为每条消息 20 张、单图 3.5 MiB、总量 100 MiB（`attachment-local`），HTTP 载体上限提为唯一共享的 `DEFAULT_MAX_REQUEST_BODY_BYTES = 160 MiB`（http-bridge，原先是两个独立的 32 MiB 字面量），以满足加载时的容量断言（总量 × 4/3 加余量 ≈ 134.3 MiB）。消费级产品集中在 10 到 20 个附件（ChatGPT 10、Gemini 10、Claude 20；DeepSeek Chat 的 50 是例外），且视觉模型一张图约 1300 到 4800 token，因此 50 张图可在一条消息中填满 200k 上下文。3.5 MiB 编码文件包括 base64 填充在内最多占 4.67 MiB，在 5 MiB 路由检查下保留 0.33 MiB 余量。仅使用较大上限路由的部署可以覆盖该值。512 MiB 总量无法通过当前传输，因为 base64 进 JSON 需要一个超过 V8 约 512 MiB 字符串上限的单个 JSON 字符串。限额以 `imageLimits` 会话投影到达客户端。它是每次启动恒定的单元（`apply` 返回同一状态引用，因此只靠基线携带、不存在变更帧），由 **apiproxy** 而非 attachment Service Definition 注册：`dsh-llm` 依赖 `dsh-attachment`（`ImageBlock` → `ImageAttachmentRef`），seam 包引用 `dsh-session-projection`（其图谱经 `dsh-session` 到达 `dsh-llm`）会闭合 project-reference 环，而该值描述的每消息数量与总量规则本来就是 proxy 自己的准入检查。`SessionProjectionMap` 合并放在 proxy 的 sessions 协议文件里，每个客户端程序都经载体的类型再导出包含它。
+**上限对齐并投影。** 输入默认值是每条消息 20 张、每个源文件 32 MiB、源文件总量 100 MiB、每张图片一亿解码像素，以及源文件任一边 16384px。附件后端另行生成长边 2048px、独立安全上限 4 MiB 的持久主版本。模型请求使用各路由自己的像素和编码字节预算，因此源文件准入不采用提供方请求限制。HTTP 载体统一使用 `DEFAULT_MAX_REQUEST_BODY_BYTES = 160 MiB`，满足 100 MiB 总量经过 base64 和请求封装扩张后的加载时容量断言。512 MiB 总量无法通过当前传输，因为 base64 进入 JSON 后会需要一个接近 V8 字符串大小上限的 JSON 字符串。输入上限通过 `imageLimits` 会话投影到达客户端。它是每次启动恒定的单元，由 **apiproxy** 而非 attachment Service Definition 注册。`dsh-llm` 依赖 `dsh-attachment`，而 `dsh-session-projection` 经 `dsh-session` 到达 `dsh-llm`；在 seam 包注册投影会形成 project-reference 环。每条消息的数量和总量规则也由 proxy 强制执行。`SessionProjectionMap` 合并继续放在 proxy 的 sessions 协议文件中，客户端已经通过载体类型再导出使用它。
 
 **加入预检与错误文案。** 两种加入手势汇合到 InputBar 的一个 `intakeImages` 包装：在 `addImages` 之前按投影检查数量、单图字节与总字节，违规的一批整体拒收（DeepSeek Chat 语义）并立刻弹出点名上限的横幅——不再有提交时的回滚戏码。宿主检查保留，兜底绕过 composer 的调用方。横幅文案遵循用户定下的一条原则：用户能解决的原因（模型不支持视觉、数量、大小、分辨率、格式——格式改为正面列出支持列表而不是回显被拒的 MIME 类型）用点明出路的产品句子；用户无法解决的原因（base64 损坏、引用丢失、读取失败）折叠为一条保留原因码的发送失败句子，因为产品当前面向开发者，可上报的码好过死胡同。非附件错误码保留原文加错误码的展示。
 

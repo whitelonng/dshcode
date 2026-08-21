@@ -5,11 +5,11 @@
 
 [English](persistence-catalog.md) | 中文
 
-会话持久事件日志中可能出现的所有事件类型：完整持久化的 `SessionEvent` 信封，以及可通过合并扩展的 `SessionEventMap` 中的每个成员，包括 `@deepseek-ai/dsh-session` 所属的词汇和本仓库中每个插件对 `@deepseek-ai/dsh-session/types` 的声明合并，并附有源 JSDoc、完整 payload 声明、surface 标记和声明位置。本文档是 [session.md](subsystems/session.md)（surface 排序与 `deriveMessages()` 投影）、[persistence.md](subsystems/persistence.md)（如何让日志持久化）和 [session.md](subsystems/session.md#cordis-surface) 中生成区域（实时总线接线；日志事件**不是** cordis 事件，它通过唯一的 `session/event` emit 到达监听器）的补充。
+会话持久事件日志中可能出现的所有事件类型：完整持久化的 `SessionEvent` 信封，以及可通过合并扩展的 `SessionEventMap` 中的每个成员，包括 `@deepseek-ai/dsh-session` 所属的词汇和本仓库中每个插件对 `@deepseek-ai/dsh-session/types` 的声明合并，并附有源 JSDoc、完整 payload 声明、surface 标记和声明位置。本文档是 [session.md](subsystems/session.zh.md)（surface 排序与 `deriveMessages()` 投影）、[persistence.md](subsystems/persistence.zh.md)（如何让日志持久化）和 [session.md](subsystems/session.zh.md#cordis-surface) 中生成区域（实时总线接线；日志事件**不是** cordis 事件，它通过唯一的 `session/event` emit 到达监听器）的补充。
 
 英文源文件根据源码生成（`scripts/gen-persistence-catalog.ts`），并由 `pnpm run verify-persistence-catalog`（`doc-sync`（文档同步门禁）的一部分）验证新鲜度；本中文文件作为经评审对侧通过双语配对维护。声明块保留源码声明和嵌套属性的 JSDoc，只移除其所在接口／模块带来的缩进，并使用 `ts persistence-catalog` 围栏（doc-typecheck 会跳过这些围栏，因为声明引用了其所属模块中的类型）。payload 中的类型名称会链接到记录该类型的页面。参见 [persistence-log-catalog Agent Note](../.agents/notes/archived/process/2026-07-04-persistence-log-catalog.md)。
 
-以下信封声明组合了每个事件的 `type`、单调递增的 `seq`、以 epoch 毫秒表示的 `time`、`data`、可选的未知类型跳过标记 `ignorable`，以及条件字段 `surfaceOp`／`sourceEventSeqs`。**surface** 表示 `SurfaceEventType` 成员：它会生成一条 LLM（大语言模型）消息，并声明该事件如何加入 surface 列表。**log-only** 表示其他所有事件：这类记录可持久化、可回放，但不参与派生历史。每个 payload 均可进行 JSON 序列化（在 `Session.append` 处强制执行），整个格式固定为 `SESSION_FORMAT_VERSION = 0`：这是预发布格式，不暗示任何兼容性（参见[版本立场](subsystems/persistence.md)）。范围仅限本仓库中的包；下游插件可以继续合并其他事件类型，而这些类型按设计不属于本目录。
+以下信封声明组合了每个事件的 `type`、单调递增的 `seq`、以 epoch 毫秒表示的 `time`、`data`、可选的未知类型跳过标记 `ignorable`，以及条件字段 `surfaceOp`／`sourceEventSeqs`。**surface** 表示 `SurfaceEventType` 成员：它会生成一条 LLM（大语言模型）消息，并声明该事件如何加入 surface 列表。**log-only** 表示其他所有事件：这类记录可持久化、可回放，但不参与派生历史。每个 payload 均可进行 JSON 序列化（在 `Session.append` 处强制执行），整个格式固定为 `SESSION_FORMAT_VERSION = 0`：这是预发布格式，不暗示任何兼容性（参见[版本立场](subsystems/persistence.zh.md)）。范围仅限本仓库中的包；下游插件可以继续合并其他事件类型，而这些类型按设计不属于本目录。
 
 ## 事件信封
 
@@ -167,7 +167,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-类型：[CallId](subsystems/core.md)
+类型：[CallId](subsystems/core.zh.md)
 
 来源：[`packages/interaction/user-approval/src/index.ts:44`](../packages/interaction/user-approval/src/index.ts)
 
@@ -222,7 +222,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'assistant/chunk': { turn: number; step: number; chunk: StreamChunk }
 ```
 
-类型：[StreamChunk](subsystems/llm-streaming.md)
+类型：[StreamChunk](subsystems/llm-streaming.zh.md)
 
 来源：[`packages/core/session/src/types.ts:266`](../packages/core/session/src/types.ts)
 
@@ -244,7 +244,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'assistant/message': { turn: number; step: number; message: AssistantMessage; usage?: TokenUsage; interrupted?: true }
 ```
 
-类型：[TokenUsage](subsystems/llm-streaming.md)
+类型：[TokenUsage](subsystems/llm-streaming.zh.md)
 
 来源：[`packages/core/session/src/types.ts:277`](../packages/core/session/src/types.ts)
 
@@ -398,7 +398,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 )
 ```
 
-类型：[ContentBlock](subsystems/core.md) · [TokenUsage](subsystems/llm-streaming.md)
+类型：[ContentBlock](subsystems/core.zh.md) · [TokenUsage](subsystems/llm-streaming.zh.md)
 
 来源：[`packages/compaction/compaction/src/types.ts:33`](../packages/compaction/compaction/src/types.ts)
 
@@ -560,7 +560,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'plan/mode': { active: boolean }
 ```
 
-来源：[`packages/plan/plan-mode/src/index.ts:54`](../packages/plan/plan-mode/src/index.ts)
+来源：[`packages/plan/plan-mode/src/index.ts:53`](../packages/plan/plan-mode/src/index.ts)
 
 ### `request/*`
 
@@ -629,7 +629,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'schedule/change': ScheduleChange
 ```
 
-类型：[ScheduleChange](subsystems/schedule.md)
+类型：[ScheduleChange](subsystems/schedule.zh.md)
 
 来源：[`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/schedule/src/types.ts)
 
@@ -679,7 +679,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'session/title': SessionTitleEventData
 ```
 
-类型：[SessionTitleEventData](subsystems/session-title.md)
+类型：[SessionTitleEventData](subsystems/session-title.zh.md)
 
 来源：[`packages/session/session-title/src/index.ts:100`](../packages/session/session-title/src/index.ts)
 
@@ -692,7 +692,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'session/title-llm-request': SessionTitleLlmRequestEventData
 ```
 
-类型：[SessionTitleLlmRequestEventData](subsystems/session-title.md)
+类型：[SessionTitleLlmRequestEventData](subsystems/session-title.zh.md)
 
 来源：[`packages/session/session-title-llm/src/index.ts:43`](../packages/session/session-title-llm/src/index.ts)
 
@@ -750,7 +750,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'team/member': { version: 1; teamId: TeamId; member: TeamMemberSnapshot }
 ```
 
-类型：[TeamId](subsystems/agent-team.md) · [TeamMemberSnapshot](subsystems/agent-team.md)
+类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMemberSnapshot](subsystems/agent-team.zh.md)
 
 来源：[`packages/experimental/agent-team/src/types.ts:206`](../packages/experimental/agent-team/src/types.ts)
 
@@ -768,7 +768,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-类型：[TeamId](subsystems/agent-team.md) · [TeamMessageId](subsystems/agent-team.md)
+类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageId](subsystems/agent-team.zh.md)
 
 来源：[`packages/experimental/agent-team/src/types.ts:212`](../packages/experimental/agent-team/src/types.ts)
 
@@ -781,7 +781,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'team/message/queued': { version: 1; teamId: TeamId; message: TeamMessageSnapshot }
 ```
 
-类型：[TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/agent-team.md)
+类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageSnapshot](subsystems/agent-team.zh.md)
 
 来源：[`packages/experimental/agent-team/src/types.ts:210`](../packages/experimental/agent-team/src/types.ts)
 
@@ -794,7 +794,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'team/task': { version: 1; teamId: TeamId; task: TeamTaskSnapshot }
 ```
 
-类型：[TeamId](subsystems/agent-team.md) · [TeamTaskSnapshot](subsystems/agent-team.md)
+类型：[TeamId](subsystems/agent-team.zh.md) · [TeamTaskSnapshot](subsystems/agent-team.zh.md)
 
 来源：[`packages/experimental/agent-team/src/types.ts:208`](../packages/experimental/agent-team/src/types.ts)
 
@@ -809,7 +809,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'todo/write': { todos: TodoItem[] }
 ```
 
-类型：[TodoItem](subsystems/session.md)
+类型：[TodoItem](subsystems/session.zh.md)
 
 来源：[`packages/core/session/src/types.ts:312`](../packages/core/session/src/types.ts)
 
@@ -828,7 +828,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'tool/call': { turn: number; step: number; callId: CallId; name: string; arguments: string }
 ```
 
-类型：[CallId](subsystems/core.md)
+类型：[CallId](subsystems/core.zh.md)
 
 来源：[`packages/core/session/src/types.ts:283`](../packages/core/session/src/types.ts)
 
@@ -983,7 +983,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'turn/end': { turn: number; reason: TurnEndReason }
 ```
 
-类型：[TurnEndReason](subsystems/session.md)
+类型：[TurnEndReason](subsystems/session.zh.md)
 
 来源：[`packages/core/session/src/types.ts:252`](../packages/core/session/src/types.ts)
 

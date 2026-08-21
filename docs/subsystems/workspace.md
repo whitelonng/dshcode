@@ -131,7 +131,7 @@ Sessions get their cwd at create time from whoever creates them, not from this r
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxdirectorypicker--directorypicker-abstract-seam"></a>
 
@@ -147,7 +147,7 @@ Abstract directory-picking service. Subclass, implement `capability()`, and load
 abstract capability(): DirectoryPickerCapability
 ```
 
-Source: [`packages/host/directory-picker/src/index.ts:131`](../../packages/host/directory-picker/src/index.ts)
+Source: [`packages/host/directory-picker/src/index.ts`](../../packages/host/directory-picker/src/index.ts)
 
 <a id="ctxworkspaceregistry--workspaceregistry"></a>
 
@@ -242,5 +242,5 @@ async resolveByPath(path: string): Promise<Workspace | undefined>
 
 Types: [SessionId](core.md)
 
-Source: [`packages/workspace/workspace/src/index.ts:92`](../../packages/workspace/workspace/src/index.ts)
+Source: [`packages/workspace/workspace/src/index.ts`](../../packages/workspace/workspace/src/index.ts)
 <!-- END GENERATED cordis-surface -->

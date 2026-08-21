@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-这个浏览器插件把持久化的顶层工作流运行重建为独立 Chat 节点。它消费由 [`dsh-tool-workflow`](../../workflow/tool-workflow/README.md) 拥有的四类 `tool-workflow/*` Session 事件，注册一个 `ConversationNodeDefinition`，并通过 keyed `conversation.chat.node` slot 渲染，不改变现有工作流工具卡。
+这个浏览器插件把持久化的顶层工作流运行重建为独立 Chat 节点。它消费由 [`dsh-tool-workflow`](../../workflow/tool-workflow/README.zh.md) 拥有的四类 `tool-workflow/*` Session 事件，注册一个 `ConversationNodeDefinition`，并通过 keyed `conversation.chat.node` slot 渲染，不改变现有工作流工具卡。
 
 ## 持久状态与回放
 

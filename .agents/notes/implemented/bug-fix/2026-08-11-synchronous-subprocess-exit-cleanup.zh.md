@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-本地 subprocess provider拥有普通 detached进程树和 terminal session，但此前只能通过异步 Cordis dispose触及它们。致命 launcher可能在 dispose完成前调用 `process.exit()`：[fail-loud release](2026-07-31-fail-loud-releases-the-terminal.md)最多等待两秒，而本地进程可以拥有更长的终止宽限期。Node进入同步退出阶段后，待处理的 Promise与升级 timer不会继续执行，因此忽略 TERM的子进程可能比宿主存活更久，继续占用 CPU、内存或端口。部分 ACP、JSON-RPC和 SDK入口也没有 root release回调。
+本地 subprocess provider拥有普通 detached进程树和 terminal session，但此前只能通过异步 Cordis dispose触及它们。致命 launcher可能在 dispose完成前调用 `process.exit()`：[fail-loud release](2026-07-31-fail-loud-releases-the-terminal.zh.md)最多等待两秒，而本地进程可以拥有更长的终止宽限期。Node进入同步退出阶段后，待处理的 Promise与升级 timer不会继续执行，因此忽略 TERM的子进程可能比宿主存活更久，继续占用 CPU、内存或端口。部分 ACP、JSON-RPC和 SDK入口也没有 root release回调。
 
 公共 subprocess seam在正常 dispose期间承诺等待完全停稳，这项承诺是正确的。缺陷属于 seam之下另一条最终宿主退出路径，不应削弱正常生命周期，也不应让每个 launcher重复保存进程所有权。
 
@@ -20,7 +20,7 @@ Status: implemented
 - Terminal handle同步向全部已捕获及当前可观察的后代发送 SIGKILL，终止 PTY root，然后再扫描一次并终止在该边界期间变得可观察的成员。
 - 服务分别包含每个目标的失败并继续处理其余 handle。回调不会创建 Promise或 timer，不写诊断，也不改变原始退出码或错误。
 
-正常 dispose继续使用[subprocess seam](../architecture/2026-07-26-subprocess-seam.md)的先终止再等待退出路径：普通进程树先接收 TERM，经过配置的宽限期后再接收 KILL，并等待每个普通或 terminal清理达到完全停稳。同步路径只请求最终终止，不发布完成结果，也不声称回调返回时 OS进程树已经消失。远程 provider继续由其 sandbox独立拥有，不继承本地 Node listener。
+正常 dispose继续使用[subprocess seam](../architecture/2026-07-26-subprocess-seam.zh.md)的先终止再等待退出路径：普通进程树先接收 TERM，经过配置的宽限期后再接收 KILL，并等待每个普通或 terminal清理达到完全停稳。同步路径只请求最终终止，不发布完成结果，也不声称回调返回时 OS进程树已经消失。远程 provider继续由其 sandbox独立拥有，不继承本地 Node listener。
 
 | 宿主路径 | 本地 provider动作 | 完成证据 |
 | --- | --- | --- |

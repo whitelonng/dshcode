@@ -20,4 +20,4 @@
 
 - **重建 schema 会执行所收到的封装**——`rehydrateSchema` 会重建一个活的 schemastery 校验器，而 schemastery 通过 `new Function` 复活序列化过的回调函数，因此 schema 信封是可执行内容，而不是不可执行数据。只有该封装来自提供该页面的同一受信任宿主时才安全；该协议没有跨信任边界使用的不可执行表示。
 - **校验是草稿级的，而非逐字段**——`validateDraft` 报告 schemastery 的第一条失败消息及其 `$.path`；它不会把错误映射到各个控件。
-- **没有通用渲染器**——消费方在这些辅助函数上构建功能专用表单。[Web 配置面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md) 记录该权衡。
+- **没有通用渲染器**——消费方在这些辅助函数上构建功能专用表单。[Web 配置面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md) 记录该权衡。

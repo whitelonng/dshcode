@@ -2,11 +2,11 @@
 
 [English](README.md) | 中文
 
-本包（package）注册由 Profile 命名、默认名称为 `claude-code` 的 Claude Code subagent 提供方。每次接受运行请求后，它都会在发起委托的会话工作区中调用官方 Claude Agent SDK，让锁定版本的 SDK 选择随包安装的平台 CLI，提交一个自包含的文本任务，并通过共享的 [`dsh-subagent`](../subagent/README.md) 结果约定返回严格的最终答案或独立的安全失败诊断。
+本包（package）注册由 Profile 命名、默认名称为 `claude-code` 的 Claude Code subagent 提供方。每次接受运行请求后，它都会在发起委托的会话工作区中调用官方 Claude Agent SDK，让锁定版本的 SDK 选择随包安装的平台 CLI，提交一个自包含的文本任务，并通过共享的 [`dsh-subagent`](../subagent/README.zh.md) 结果约定返回严格的最终答案或独立的安全失败诊断。
 
 ## 启动与所有权
 
-`start(request)` 只接受非空的文本块序列，并根据父会话确定子级 cwd。它会创建一个私有 `AbortController`，调用官方 SDK 的 `query()`，并仅在 SDK 的 `spawnClaudeCodeProcess` 钩子已经提供由 [`dsh-subprocess`](../../subprocess/subprocess/README.md) 管理的活动 CLI 句柄后发布此次运行。若在发布前发生失败或取消，它会关闭 query、终止所有已取得的进程树并等待其退出，然后拒绝 `start()` 调用。
+`start(request)` 只接受非空的文本块序列，并根据父会话确定子级 cwd。它会创建一个私有 `AbortController`，调用官方 SDK 的 `query()`，并仅在 SDK 的 `spawnClaudeCodeProcess` 钩子已经提供由 [`dsh-subprocess`](../../subprocess/subprocess/README.zh.md) 管理的活动 CLI 句柄后发布此次运行。若在发布前发生失败或取消，它会关闭 query、终止所有已取得的进程树并等待其退出，然后拒绝 `start()` 调用。
 
 SDK 接收由文本块原样拼接成的任务。提供方会完整迭代 SDK 消息流，而且只接受满足以下条件的 `result` 消息：其 `subtype: "success"`、`is_error: false` 且 `result` 非空白，之后迭代器还须正常结束。所有失败仍映射为 `error`：Agent SDK 0.3.220 的四种错误子类型保留准确类别；标记为错误或内容空白的成功消息成为 `invalid-success`；缺失结果成为 `missing-result`；未分类的 query 失败成为 `unknown`；CLI 提前退出成为 `process-exit`。诊断还会注明当前 `query-start`、`query-run`、`process` 或 `teardown` 阶段，并分别保留已观测到的退出码与信号。该提供方不会产生 `max-tokens` 或 `refusal`。
 
@@ -29,7 +29,7 @@ SDK 接收由文本块原样拼接成的任务。提供方会完整迭代 SDK �
 | `providerName` | `claude-code` | `ctx.subagents` 中的非空注册名称；每个已挂载实例都需要唯一值。 |
 | `env` | `{}` | 显式指定的 SDK/CLI 环境，叠加在由共享机制清除凭证后的父环境之上。 |
 | `permissionMode` | `dontAsk` | 为该提供方实例的每次运行固定原生非交互权限策略。 |
-| `disposeGraceMs` | `3000` | 共享进程树责任方各终止层级之间的宽限期，单位为毫秒且须为正有限值，并不得大于仓库共享的 [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.md)；随后资源释放会等待整棵进程树退出。 |
+| `disposeGraceMs` | `3000` | 共享进程树责任方各终止层级之间的宽限期，单位为毫秒且须为正有限值，并不得大于仓库共享的 [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.zh.md)；随后资源释放会等待整棵进程树退出。 |
 
 | `permissionMode` 值 | 原生行为 |
 |---|---|

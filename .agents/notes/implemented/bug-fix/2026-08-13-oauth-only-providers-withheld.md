@@ -38,6 +38,8 @@ Resolution is untouched. A profile naming `apiKeyEnv` on an OAuth-only route sti
 
 Two adjacent gaps remain and are recorded in the package README: a route naming no credential still resolves through the catalog provider's own discovery, which reads process environment variables only — not `~/.aws/credentials`, and not the harness credential seam — and the resulting failure is still the catch-all `PI_AI_ERROR`.
 
+The withholding has since been retired: [credential records and authorization flows](../architecture/2026-08-13-credential-records-and-authorization-flows.md) gave the adapter a durable credential store and a login flow, so `openai-codex` is offered again and `catalogProviderTakesApiKey` is gone. The two boundaries below are what kept that reversal to one predicate and one directory filter.
+
 ## Testing
 
 Package tests pin both halves of the union: the withheld route is absent from `listConfigurableProviders()` while `anthropic` and `openai` stay, and a stored `openai-codex` profile still produces a full entry with `declared: false`. The existing resolution tests are unchanged and still pass, which is what shows the withholding did not narrow what a hand-written profile can serve. The `models-settings` and `onboarding-usable-provider` web e2e goldens lost exactly the `openai-codex` option line, recorded against the real assembled application.

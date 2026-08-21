@@ -11,14 +11,12 @@ import {
   resolveClientBuildEnvironment,
   writeClientBuildRecord,
 } from './client-build-environment.ts'
+import { pnpmInvocation } from './pnpm-invocation.ts'
 
 /** Run one package script through the package manager that invoked this build. */
 function runScript(script: string, environment: NodeJS.ProcessEnv): void {
-  const packageManager = process.env.npm_execpath
-  if (packageManager === undefined || packageManager === '') {
-    throw new Error('build: npm_execpath is unavailable; invoke the build through a package script')
-  }
-  const result = spawnSync(process.execPath, [packageManager, 'run', script], {
+  const invocation = pnpmInvocation(['run', script], environment)
+  const result = spawnSync(invocation.command, invocation.args, {
     cwd: resolve(import.meta.dirname, '..'),
     env: environment,
     stdio: 'inherit',

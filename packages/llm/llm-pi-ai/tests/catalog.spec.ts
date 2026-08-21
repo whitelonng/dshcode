@@ -15,6 +15,7 @@ import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-wo
 import { resolveProfiles } from '../src/config.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
 import { assemble } from './assemble.ts'
+import { memoryAuth } from './auth-double.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
 
 const homes: string[] = []
@@ -1142,6 +1143,7 @@ describe('resolution snapshots', () => {
       // Credential resolution is the real await inside a stream call, and the
       // window a configuration change has to land in.
       resolveApiKey: async () => { await held; return 'k' },
+      auth: memoryAuth(),
     })
 
     const chunks: StreamChunk[] = []
@@ -1170,7 +1172,11 @@ describe('resolution snapshots', () => {
     const first = await mockServer([{ events: textEvents }])
     const second = await mockServer([{ events: textEvents }])
     let current = resolveProfiles({ deepseek: { baseURL: `${first.url}/v1` } })
-    const adapter = new PiAiAdapter({ profiles: () => current, resolveApiKey: () => Promise.resolve('k') })
+    const adapter = new PiAiAdapter({
+      profiles: () => current,
+      resolveApiKey: () => Promise.resolve('k'),
+      auth: memoryAuth(),
+    })
     const drain = async (): Promise<void> => {
       for await (const _chunk of adapter.stream({
         provider: 'deepseek', model: 'deepseek-v4-flash', messages: [],
@@ -1237,30 +1243,22 @@ describe('configurable-provider directory', () => {
     expect(ctx.llm.listConfigurableProviders()).toHaveLength(catalogOnly)
   })
 
-  it('withholds a catalog route this adapter cannot authenticate', async () => {
+  it('offers every installed catalog route, including one that only signs in', async () => {
     const ctx = await harness({})
     const offered = ctx.llm.listConfigurableProviders().map(entry => entry.provider)
 
     // `openai-codex` is the one installed provider that authenticates through
-    // OAuth alone. pi-ai resolves OAuth only from a *stored* credential, this
-    // adapter constructs its collection with no credential store, and nothing
-    // here runs a login flow — so every request on such a route fails with
-    // `Provider is not configured` before it goes out. Offering it would put a
-    // provider on the settings page that no amount of configuration can make
-    // work.
-    expect(offered).not.toContain('openai-codex')
-    // A provider that offers OAuth *beside* an api-key method keeps its entry:
-    // the key is a path this adapter can serve.
+    // OAuth alone. It is offered like any other because the collection now
+    // carries a durable credential store and a login flow writes into it, so
+    // the route has a posture that works rather than only one that fails.
+    expect(offered).toContain('openai-codex')
     expect(offered).toContain('anthropic')
     expect(offered).toContain('openai')
   })
 
-  it('still lists a withheld route a stored profile names, as a catalog route', async () => {
-    // Withholding the offer must not strand a profile someone already stored:
-    // the route keeps its entry so a configuration surface can edit or delete
-    // it, and `declared` still answers catalog membership rather than the
-    // offer, so the page does not mislabel it as a route this deployment
-    // invented.
+  it('lists a route a stored profile names as a catalog route, not a declared one', async () => {
+    // `declared` answers catalog membership, so a profile stored against a
+    // route pi-ai ships is not mislabelled as one this deployment invented.
     const ctx = await harness({ providers: { 'openai-codex': { apiKeyEnv: KEY_ENV } } })
 
     expect(ctx.llm.listConfigurableProviders()).toContainEqual({

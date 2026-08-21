@@ -241,7 +241,7 @@ All implement the same abstract `SessionPersistence` (locate/create/append/prepa
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxsessionpersistence--sessionpersistence-abstract-seam"></a>
 
@@ -391,5 +391,5 @@ abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot
 
 Types: [SessionEvent](session.md) · [SessionId](core.md)
 
-Source: [`packages/session/session-persistence/src/index.ts:98`](../../packages/session/session-persistence/src/index.ts)
+Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
 <!-- END GENERATED cordis-surface -->

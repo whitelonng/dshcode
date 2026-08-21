@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-想要扇出的模型会把多个 `subagent` 调用合并进同一条 assistant 消息：这个批次本身就是并行意图。委派工具此前没有声明 `isConcurrencySafe` 分类器，按安全侧原则设计的调度器（[并行工具调用 Agent Note](2026-07-10-parallel-tool-call-execution.md)）便把每个前台委派都当作独占屏障：GUI 里显示九张卡片，却只有一个子 agent（智能体）在运行，其余八个要在它的整个运行期间排在其后等待。
+想要扇出的模型会把多个 `subagent` 调用合并进同一条 assistant 消息：这个批次本身就是并行意图。委派工具此前没有声明 `isConcurrencySafe` 分类器，按安全侧原则设计的调度器（[并行工具调用 Agent Note](2026-07-10-parallel-tool-call-execution.zh.md)）便把每个前台委派都当作独占屏障：GUI 里显示九张卡片，却只有一个子 agent（智能体）在运行，其余八个要在它的整个运行期间排在其后等待。
 
 最初的保守立场（一元分类器无法证明同级委派的工作区效果互不相交）已经不再保护任何东西：`run_in_background: true` 和可继续委派本来就会与其后的每个调用重叠执行，包括写入；`dsh-workflow-worker-thread` 也早已通过同样的 `ctx.subagents.start()` 提供方在共享工作区上并发运行子 agent，数量可达其并发上限。只有前台形态被串行化。
 
@@ -42,6 +42,6 @@ Status: implemented
 
 同一条消息中的两个一次性后台委派按分发竞态顺序获得各自模型可见的 job id（`subagent-<n>`）。这些 id 已被记录，因此回放仍然有效；但需要区分后台子 agent 的快照场景会继承与孪生子会话相同的确定性约束。
 
-有序提交可能让快速子 agent 的结果排在更早的缓慢同级之后等待，这是[调度器 Agent Note](2026-07-10-parallel-tool-call-execution.md)已经接受的取舍；实时界面仍会展示每个子 agent 各自的进度。
+有序提交可能让快速子 agent 的结果排在更早的缓慢同级之后等待，这是[调度器 Agent Note](2026-07-10-parallel-tool-call-execution.zh.md)已经接受的取舍；实时界面仍会展示每个子 agent 各自的进度。
 
 使用不同提示词的并发子 agent 快照场景仍需要回放 harness 的支持（确定性的子脚本绑定与收集排序）；在此之前，此类场景必须使用可互换的孪生委派。

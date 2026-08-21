@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-08-bounded-session-persistence-write-batching.md
 2026-08-08-bounded-session-persistence-write-batching.md: 6d77ef90276dcf143bb63019f801379b702b43b2
-2026-08-08-bounded-session-persistence-write-batching.zh.md: 762e1f37e92814a89e000d428468e660f49e04a0
+2026-08-08-bounded-session-persistence-write-batching.zh.md: e773f20ade706e97a5f84d4a4cc15cc9d3b2d836

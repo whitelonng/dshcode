@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-`web_search` 和 `web_fetch` 工具声明了 `card: 'web'` result view（[web result card](2026-07-30-web-result-card.md)）：一个 `kind` 标签联合,携带结构化的被引用 sources 加可选的 provider answer（`kind: 'search'`),或抓取的 URL 及其 HTTP 状态（`kind: 'fetch'`）。该视图早已抵达浏览器 —— host、connection、runtime 将它作为 `resultView` 投递到 `ConversationSnapshot` —— 但 Web 客户端忽略了它:一次已完成的 web 调用只渲染为摊平的模型可见文本,正是约定笔记所解释的、结构化视图要替代的那种有损渲染。`web_search` 到达读者时是每个 source 一行自由文本 markdown,而非可点击 source 的引用列表;`web_fetch` 是它的 markdown 正文,没有检索摘要。
+`web_search` 和 `web_fetch` 工具声明了 `card: 'web'` result view（[web result card](2026-07-30-web-result-card.zh.md)）：一个 `kind` 标签联合,携带结构化的被引用 sources 加可选的 provider answer（`kind: 'search'`),或抓取的 URL 及其 HTTP 状态（`kind: 'fetch'`）。该视图早已抵达浏览器 —— host、connection、runtime 将它作为 `resultView` 投递到 `ConversationSnapshot` —— 但 Web 客户端忽略了它:一次已完成的 web 调用只渲染为摊平的模型可见文本,正是约定笔记所解释的、结构化视图要替代的那种有损渲染。`web_search` 到达读者时是每个 source 一行自由文本 markdown,而非可点击 source 的引用列表;`web_fetch` 是它的 markdown 正文,没有检索摘要。
 
 ## Decision
 
@@ -16,7 +16,7 @@ Status: implemented
 
 **链接的安全性沿用 MarkdownText 对不受信任的 assistant 链接所用 allowlist 的 http(s) 子集。** MarkdownText 还允许 `mailto:`，此处刻意排除，因为检索 URL 绝不会是邮件地址。一个 source 或 fetch URL 仅当其协议为 `http:` 或 `https:` 时才成为可导航锚点，带 `target="_blank"` 和 `rel="noopener noreferrer"`；`javascript:`/`data:`/`file:`/`mailto:` URL 或无法解析的字符串渲染为纯文本、无 href。web 工具返回的 result content 是模型创作的,未经验证抵达本组件,因此像 assistant markdown 一样被当作不受信任处理。标签从标题回退到主机名再回退到原始 URL,因此即便标题缺失且 URL 无法解析,source 也总能读作某个东西。
 
-**几何镜像 CodeBlock/TerminalBlock**（12px 圆角、code-block 表面、16px 垂直外边距）,使 web 卡片与它们读作一家。整份 source 列表渲染在单个 `<ol>` 里,由 `max-height: 320px` 与 `overflow-y: auto` 约束,因此高于该值的列表在原地纵向滚动,而不是把卡片撑高（[来源滚动](2026-08-03-web-search-source-scroll.md)）。source 列表是散文而非按列对齐的输出,所以它正常换行,而不像终端卡片的输出那样横向滚动 —— 这是与 TerminalBlock 唯一刻意的分歧。
+**几何镜像 CodeBlock/TerminalBlock**（12px 圆角、code-block 表面、16px 垂直外边距）,使 web 卡片与它们读作一家。整份 source 列表渲染在单个 `<ol>` 里,由 `max-height: 320px` 与 `overflow-y: auto` 约束,因此高于该值的列表在原地纵向滚动,而不是把卡片撑高（[来源滚动](2026-08-03-web-search-source-scroll.zh.md)）。source 列表是散文而非按列对齐的输出,所以它正常换行,而不像终端卡片的输出那样横向滚动 —— 这是与 TerminalBlock 唯一刻意的分歧。
 
 卡片在 chat 行中**常驻**于摘要行之下,与 `BashRow` 所用的同一常驻姿态。两个渲染点展示同一份完整的 source 列表,仅由卡片自身的滚动高度约束,而没有行与面板两级的 source 上限。键控行把一个 `WebRow` 组件注册在 `web_search` 与 `web_fetch` 两个键下;行仅根据工具名判别以选取其图标（search 对 browse）与标题（`Search`/`Fetch`）。没有自己键控行的 web 声明工具落到 `GenericToolCard`,它长出同一张常驻卡片。详情面板渲染该卡片,并在其下方渲染摊平的模型可见结果内容:`web_fetch` 卡片只携带 URL 与状态,因此其抓取正文只在此处可读。
 
@@ -24,7 +24,7 @@ Status: implemented
 
 `WebBlock` 只读 web view 的字段,因此它是渲染意图所携带内容的纯函数 —— 无会话查找,与产出该视图的 presenter 一样回放安全,且不同于终端卡片它不需要 cwd 解析,因为 web view 不携带路径。没有 `web` 能力的 UI（TUI）仍得到约定的回退 `content`;工具的 result 形状没有任何改变。answer 复用 `MarkdownText`,因此 answer 自身的不受信任链接处理与 GFM 渲染免费获得。
 
-每张常驻卡片（terminal、diff、web）共用的整行折叠/展开交互归[统一展开与检视 note](2026-07-30-web-tool-row-unified-expand-and-inspect.md)所有;本卡片遵循常驻约定,而非抢先做那套交互。
+每张常驻卡片（terminal、diff、web）共用的整行折叠/展开交互归[统一展开与检视 note](2026-07-30-web-tool-row-unified-expand-and-inspect.zh.md)所有;本卡片遵循常驻约定,而非抢先做那套交互。
 
 ## Alternatives considered
 
@@ -44,7 +44,7 @@ fixture（`packages/client/connection/src/client/fixture.ts`）添加 turn 66（
 
 ## Related
 
-- [Web result card](2026-07-30-web-result-card.md) —— 添加 `card: 'web'` result 支路并让两个工具发出它的后端契约;其前端消费方归本 note 所有。
-- [Web search 来源卡片改为滚动而非折叠](2026-08-03-web-search-source-scroll.md) —— 用定高滚动容器替换本笔记的 source 列表头/尾折叠,并移除 `CHAT_WEB_MAX_SOURCES` 与原语自身的 source 上限;本笔记的其余决策依然成立。
-- [Web terminal card](2026-07-28-web-terminal-card.md) —— 本条所镜像的先例:一个 `ui-primitives` block、一处 card-model 派生、键控与兜底 chat 行、以及一个详情面板支路,用于 `terminal` 渲染意图。
-- [工具调用呈现的标签化 render-intent union](../architecture/2026-07-02-tool-render-intent-union.md) —— `card` 标签词汇;Web 客户端现在是 `web` 支路的完整消费者。
+- [Web result card](2026-07-30-web-result-card.zh.md) —— 添加 `card: 'web'` result 支路并让两个工具发出它的后端契约;其前端消费方归本 note 所有。
+- [Web search 来源卡片改为滚动而非折叠](2026-08-03-web-search-source-scroll.zh.md) —— 用定高滚动容器替换本笔记的 source 列表头/尾折叠,并移除 `CHAT_WEB_MAX_SOURCES` 与原语自身的 source 上限;本笔记的其余决策依然成立。
+- [Web terminal card](2026-07-28-web-terminal-card.zh.md) —— 本条所镜像的先例:一个 `ui-primitives` block、一处 card-model 派生、键控与兜底 chat 行、以及一个详情面板支路,用于 `terminal` 渲染意图。
+- [工具调用呈现的标签化 render-intent union](../architecture/2026-07-02-tool-render-intent-union.zh.md) —— `card` 标签词汇;Web 客户端现在是 `web` 支路的完整消费者。

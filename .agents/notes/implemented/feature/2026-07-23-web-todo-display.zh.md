@@ -14,7 +14,7 @@ Status: implemented
 
 ### 副作用通道，与窗口回放收敛
 
-`applyEventSideEffects` 新增一个 `todo/write` 分支（整份列表，后写覆盖先写），并在 `turn/start` 清空（[按轮次界定的计划生命周期](2026-07-28-todo-plan-clears-on-next-turn.md)）。`rebuildDerivedFromWindow` 从空计划扫过窗口，仅当窗口从未判定计划（无 `todo/write` 且无 `turn/start`）时恢复尾页种子；否则以窗口内写入／`turn/start` 折叠为准。`installWindow` 的每个调用方都是尾页请求（`doOpen`、其补洞重拉、`repairGap`；`loadOlder` 只往前拼接、不再播种），而 host 对尾页请求要么带上投影、要么在没有当前有效的计划时省略——因此字段缺失就是权威的空列表，直接照此赋值。这个区分在回滚场景上要紧：若 host 在持久化实时写入前崩溃，log 里就是空的，此时保留旧值会让已回滚的计划永远留在屏幕上。`ConversationSnapshot.todos` 是读取面。这遵循事件自身的约定（「仅存在于日志中的 UI 状态；绝不纳入派生历史」）：把每次写入作为对话节点呈现，会让已被取代的列表看起来仍然有效。
+`applyEventSideEffects` 新增一个 `todo/write` 分支（整份列表，后写覆盖先写），并在 `turn/start` 清空（[按轮次界定的计划生命周期](2026-07-28-todo-plan-clears-on-next-turn.zh.md)）。`rebuildDerivedFromWindow` 从空计划扫过窗口，仅当窗口从未判定计划（无 `todo/write` 且无 `turn/start`）时恢复尾页种子；否则以窗口内写入／`turn/start` 折叠为准。`installWindow` 的每个调用方都是尾页请求（`doOpen`、其补洞重拉、`repairGap`；`loadOlder` 只往前拼接、不再播种），而 host 对尾页请求要么带上投影、要么在没有当前有效的计划时省略——因此字段缺失就是权威的空列表，直接照此赋值。这个区分在回滚场景上要紧：若 host 在持久化实时写入前崩溃，log 里就是空的，此时保留旧值会让已回滚的计划永远留在屏幕上。`ConversationSnapshot.todos` 是读取面。这遵循事件自身的约定（「仅存在于日志中的 UI 状态；绝不纳入派生历史」）：把每次写入作为对话节点呈现，会让已被取代的列表看起来仍然有效。
 
 ### TodoPanel：持久化列表作为一条常驻横条
 

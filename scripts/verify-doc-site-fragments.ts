@@ -1,15 +1,17 @@
 /**
- * Verify fragment links against the HTML emitted by VitePress. Markdown and
- * VitePress use different heading-slug algorithms, so source-link validation
- * alone cannot prove that a published fragment exists.
+ * Verify fragment links against the HTML emitted by VitePress, and that the
+ * build carries the raw-Markdown twin of every route plus llms.txt. Markdown
+ * and VitePress use different heading-slug algorithms, so source-link
+ * validation alone cannot prove that a published fragment exists.
  *
  * This runs as part of `docs:build` and can also run directly after a build
  * with `tsx scripts/verify-doc-site-fragments.ts`.
  */
 
-import { globSync, readFileSync } from 'node:fs'
+import { existsSync, globSync, readFileSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import { JSDOM } from 'jsdom'
+import { rawMarkdownFiles } from './project-doc-site.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -138,18 +140,40 @@ export function inspectSiteFragments(distRoot: string): SiteFragmentReport {
   return { checked, broken }
 }
 
+/**
+ * Expected files a build did not emit.
+ *
+ * @param distRoot - Directory containing the built site.
+ * @param expected - Site-relative files the build must carry.
+ * @returns The absent files, in the given order.
+ */
+export function missingSiteFiles(distRoot: string, expected: readonly string[]): string[] {
+  return expected.filter(file => !existsSync(resolve(distRoot, file)))
+}
+
 function main(): number {
   const distRoot = resolve(root, 'website/.dist')
   const report = inspectSiteFragments(distRoot)
-  if (report.broken.length === 0) {
-    console.log(`verify-doc-site-fragments: ${report.checked} internal fragment reference(s) resolve.`)
+  const expected = rawMarkdownFiles()
+  const missing = missingSiteFiles(distRoot, [...expected, 'llms.txt'])
+  if (report.broken.length === 0 && missing.length === 0) {
+    console.log(
+      `verify-doc-site-fragments: ${report.checked} internal fragment reference(s) resolve;`
+      + ` ${expected.length} raw-Markdown file(s) and llms.txt emitted.`,
+    )
     return 0
   }
 
-  console.error(`verify-doc-site-fragments: ${report.broken.length} broken fragment reference(s):`)
-  for (const item of report.broken) {
-    const target = item.target === undefined ? 'target route was not built' : `${item.target} has no id ${JSON.stringify(item.fragment)}`
-    console.error(`  ${item.source}: ${JSON.stringify(item.href)} (${target})`)
+  if (report.broken.length > 0) {
+    console.error(`verify-doc-site-fragments: ${report.broken.length} broken fragment reference(s):`)
+    for (const item of report.broken) {
+      const target = item.target === undefined ? 'target route was not built' : `${item.target} has no id ${JSON.stringify(item.fragment)}`
+      console.error(`  ${item.source}: ${JSON.stringify(item.href)} (${target})`)
+    }
+  }
+  if (missing.length > 0) {
+    console.error(`verify-doc-site-fragments: ${missing.length} expected raw-Markdown file(s) missing from the build:`)
+    for (const file of missing) console.error(`  ${file}`)
   }
   return 1
 }

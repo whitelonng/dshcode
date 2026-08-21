@@ -6,9 +6,9 @@ Status: implemented
 
 ## 问题
 
-Web agent（智能体）既无法识别承载当前会话的 GUI，也不知道用户正在查看哪个 URL。[运行时上下文决策](2026-07-28-web-agent-runtime-context.md)提供前一项事实，但 GUI 编辑仍然没有可执行的验收目标：源码编辑、产物构建、监听中的进程与用户已打开的页面只是互不关联的观察结果。仓库提供的入口让错误的替代方案显得合理，因为 `apps/web/package.json` 将 `vite` 暴露为 `dev` 脚本，而裸 Vite 即使无法注入 `window.__DSH_BOOT__`，仍会返回 HTTP 200。
+Web agent（智能体）既无法识别承载当前会话的 GUI，也不知道用户正在查看哪个 URL。[运行时上下文决策](2026-07-28-web-agent-runtime-context.zh.md)提供前一项事实，但 GUI 编辑仍然没有可执行的验收目标：源码编辑、产物构建、监听中的进程与用户已打开的页面只是互不关联的观察结果。仓库提供的入口让错误的替代方案显得合理，因为 `apps/web/package.json` 将 `vite` 暴露为 `dev` 脚本，而裸 Vite 即使无法注入 `window.__DSH_BOOT__`，仍会返回 HTTP 200。
 
-[事故复盘](../../../../docs/postmortem/0003-web-agent-gui-feedback-loop.md)集中记录事件日志时间线，并解释原有检查为何会接受错误的页面、进程和端口。
+[事故复盘](../../../../docs/postmortem/0003-web-agent-gui-feedback-loop.zh.md)集中记录事件日志时间线，并解释原有检查为何会接受错误的页面、进程和端口。
 
 ## 决策
 

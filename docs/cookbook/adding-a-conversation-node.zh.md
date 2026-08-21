@@ -4,7 +4,7 @@
 
 本教程为 Web Client Chat 视图添加一行由业务自行拥有的内容。完成后的插件会把一个持久 Session 事件族关联成一个 Context，增量构造业务 State，发布类型化 Step 数据，再渲染 keyed Chat Node；整个过程不扫描 Session 窗口或其他已渲染节点。本教程假设 Host 已经记录这些事件，且该 Client 插件已组装进 Web bundle；Host 侧外部 UI 和 Trajectory 等额外视图目标不在本文范围内。
 
-[Conversation Node 组装决策](../../.agents/notes/implemented/architecture/2026-08-09-client-conversation-node-assembly.md)记录完整的引擎模型和设计理由；本文只说明实现路径。
+[Conversation Node 组装决策](../../.agents/notes/implemented/architecture/2026-08-09-client-conversation-node-assembly.zh.md)记录完整的引擎模型和设计理由；本文只说明实现路径。
 
 ## 1. 设计可回放的事件族
 

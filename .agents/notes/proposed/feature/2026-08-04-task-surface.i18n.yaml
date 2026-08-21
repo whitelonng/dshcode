@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-08-04-task-surface.md
 2026-08-04-task-surface.md: d2c75d30f47076577534c239d4f1ed222851c45f
-2026-08-04-task-surface.zh.md: 7d4b26218bc51da3182c4f4bacac8e8dc6807411
+2026-08-04-task-surface.zh.md: a428175422f853072750487e5463fb614e8f1d00

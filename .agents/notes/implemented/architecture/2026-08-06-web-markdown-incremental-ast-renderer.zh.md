@@ -18,7 +18,7 @@ Status: implemented
 
 DOM 由 `tests/fixtures/markdown-dom` 钉死:fixture 录制自替换前的 react-markdown 实现,新渲染器必须在空白规整序列化器下复现。fixture 差异即用户可见的 markdown 样式变更,必须按此评审,绝不能为重构而重录。`tests/markdown-incremental.spec.tsx` 承载等价性性质——以 1/3/7/16 字节分块,在每个追加前缀处,常驻组件的 DOM 都等于全新挂载——外加冻结边界的 DOM 节点同一性与重置行为。
 
-这推翻了[助手 Markdown Note](../feature/2026-07-23-web-assistant-markdown.md) 中被否决的备选("维护一个自定义 React walker"):增量需求是当时不存在的新证据,walker 的安全敏感分支(URL 白名单、图片策略、惰性 HTML)本就是产品自有函数,而该依赖不再删减自有代码——它阻塞了架构。该 Note 的不可信输出策略与渲染器选型不变。
+这推翻了[助手 Markdown Note](../feature/2026-07-23-web-assistant-markdown.zh.md) 中被否决的备选("维护一个自定义 React walker"):增量需求是当时不存在的新证据,walker 的安全敏感分支(URL 白名单、图片策略、惰性 HTML)本就是产品自有函数,而该依赖不再删减自有代码——它阻塞了架构。该 Note 的不可信输出策略与渲染器选型不变。
 
 ## Alternatives considered
 

@@ -14,7 +14,7 @@ Status: rejected — 独立的持久化 Service Definition 包是持久化能力
 
 将抽象的 `SessionPersistence` 服务、协调器和持久化约定辅助工具移入 `dsh-session`。JSONL 和 SQLite 仍作为独立的后端包，注册由会话包拥有的服务。这样既保留了后端可替换性，又删除了一个支撑包和一条跨包边界。
 
-实施 PR（Pull Request）应更新[能力 seam](../../implemented/architecture/2026-06-13-capability-seams.md) 指南，补充此例外：持久化不同于 bash 或 LLM（大语言模型），因为它的词汇和生命周期事件本就属于会话包的核心领域。
+实施 PR（Pull Request）应更新[能力 seam](../../implemented/architecture/2026-06-13-capability-seams.zh.md) 指南，补充此例外：持久化不同于 bash 或 LLM（大语言模型），因为它的词汇和生命周期事件本就属于会话包的核心领域。
 
 ## 验收标准
 
@@ -22,7 +22,7 @@ Status: rejected — 独立的持久化 Service Definition 包是持久化能力
 - `dsh-session` 导出持久化服务类型、协调器和约定辅助工具。
 - JSONL 和 SQLite 后端包直接依赖 `dsh-session`。
 - `agent-loop` 的恢复功能使用会话包拥有的服务键。
-- [会话持久化](../../implemented/architecture/2026-06-14-session-persistence.md)、[共享持久化写入协调器](../../implemented/architecture/2026-06-18-shared-persistence-write-coordinator.md)与[包文档](../../../../packages/session/session-persistence/README.md)说明后端实现为何仍保持独立。
+- [会话持久化](../../implemented/architecture/2026-06-14-session-persistence.zh.md)、[共享持久化写入协调器](../../implemented/architecture/2026-06-18-shared-persistence-write-coordinator.zh.md)与[包文档](../../../../packages/session/session-persistence/README.zh.md)说明后端实现为何仍保持独立。
 
 ## 放弃了什么
 

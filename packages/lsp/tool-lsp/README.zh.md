@@ -46,7 +46,7 @@ Use search/read for ordinary navigation. Use lsp when textual matches are ambigu
 
 #### 模型看到的内容
 
-模型会看到生成的 [`lsp` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-lsp)。
+模型会看到生成的 [`lsp` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-lsp)。
 
 #### Token 影响
 
@@ -86,5 +86,5 @@ Use search/read for ordinary navigation. Use lsp when textual matches are ambigu
 
 ## 已知限制与暂缓事项
 
-- **UTF-16 光标坐标**：列坐标与协议精确一致，但模型难以在非 BMP 字符周围计数；未落在符号上的位置可能返回空结果，因此提示词解释了该约定，但不鼓励广泛使用 LSP（见 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-15-lsp-capability-seam.md)）。
+- **UTF-16 光标坐标**：列坐标与协议精确一致，但模型难以在非 BMP 字符周围计数；未落在符号上的位置可能返回空结果，因此提示词解释了该约定，但不鼓励广泛使用 LSP（见 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-15-lsp-capability-seam.zh.md)）。
 - **不承诺跨服务器完整性**：受支持的服务器仍可能根据索引就绪情况返回空或部分结果；该工具不承诺跨语言或服务器的完整性。

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决定
 
-九个包统一改名进 `@deepseek-ai` scope。目录名、上游版本号、依赖 range 一律不动，所以 `vendor/README.md` 的清单仍然读作一份上游快照。面向使用者的映射表见 [docs/rescope.md](../../../../docs/rescope.md)。
+九个包统一改名进 `@deepseek-ai` scope。目录名、上游版本号、依赖 range 一律不动，所以 `vendor/README.md` 的清单仍然读作一份上游快照。面向使用者的映射表见 [docs/rescope.md](../../../../docs/rescope.zh.md)。
 
 | 目录 | npm 名 | 上游名 |
 |---|---|---|

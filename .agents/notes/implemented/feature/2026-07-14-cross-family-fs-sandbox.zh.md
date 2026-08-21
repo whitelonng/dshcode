@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-`SandboxMode` 所声明的语义涵盖文件系统效果，但最初只有 `ctx.shell` 强制执行该策略。fs 工具（`write`/`edit`）在进程内经由 `ctx.fs` 变更宿主文件系统，那里的 OS argv 包装在机制上毫无意义——[沙箱 Agent Note](2026-07-06-sandbox.md) § 进程内工具记录了这一点，并把跨家族强制执行留作一个暂缓阶段，附带一个未决问题：进程内强制执行是各 seam 各自表达，还是变成一个统一的 harness 能力。本 Agent Note 就是那个阶段，并给出答案：一个共享的策略归属，在每个家族各自正确的层级上做 per-seam 强制执行。
+`SandboxMode` 所声明的语义涵盖文件系统效果，但最初只有 `ctx.shell` 强制执行该策略。fs 工具（`write`/`edit`）在进程内经由 `ctx.fs` 变更宿主文件系统，那里的 OS argv 包装在机制上毫无意义——[沙箱 Agent Note](2026-07-06-sandbox.zh.md) § 进程内工具记录了这一点，并把跨家族强制执行留作一个暂缓阶段，附带一个未决问题：进程内强制执行是各 seam 各自表达，还是变成一个统一的 harness 能力。本 Agent Note 就是那个阶段，并给出答案：一个共享的策略归属，在每个家族各自正确的层级上做 per-seam 强制执行。
 
 这个缺口并不只有 read-only 一种形态。一个受限编码 agent（智能体）的产品模式是 `workspace-write`：bash 已经可以在工作区根目录下写入，而其外的一切都被拒绝，所以只能全部拒绝的 fs 强制执行会严格劣于禁用 fs 工具——模型会尝试在工作区内 `write`，被拒，然后学会绕道 `bash` heredoc。因此跨家族强制执行必须涵盖完整的模式阶梯，包括 `workspace-write` 要求的路径包含判定（规范化目标；`..`/符号链接/绝对路径逃逸），以及与 bash 相同的升级手段。
 
@@ -41,7 +41,7 @@ Status: implemented
 
 ### 工具对等——一个拒绝标记、一条升级流程
 
-`dsh-tool-fs` 把当前会话解析成完整策略，并传给每次变更，同时将 `FS_SANDBOX_DENIED` 映射为模型已从 bash 认识的标记：`[sandbox: file access denied under <mode> mode]`。当 `ctx.fs.sandboxMode` 在注册时报告一个受限模式，`write` 与 `edit` 宣告相同的 `sandbox_permissions` + `justification` 字段，向模型说明同样的同一轮次重试方式，并在执行前处理同样的 `ctx.approval` 请求——四种结果及其逐字的 fail-closed 文案沿用自[沙箱 Agent Note](2026-07-06-sandbox.md) § 升级（执行时根据调用的生效模式检查是否严格加宽；授权只改变当前调用的模式，并保留其会话根目录；不产生任何新会话事件）。
+`dsh-tool-fs` 把当前会话解析成完整策略，并传给每次变更，同时将 `FS_SANDBOX_DENIED` 映射为模型已从 bash 认识的标记：`[sandbox: file access denied under <mode> mode]`。当 `ctx.fs.sandboxMode` 在注册时报告一个受限模式，`write` 与 `edit` 宣告相同的 `sandbox_permissions` + `justification` 字段，向模型说明同样的同一轮次重试方式，并在执行前处理同样的 `ctx.approval` 请求——四种结果及其逐字的 fail-closed 文案沿用自[沙箱 Agent Note](2026-07-06-sandbox.zh.md) § 升级（执行时根据调用的生效模式检查是否严格加宽；授权只改变当前调用的模式，并保留其会话根目录；不产生任何新会话事件）。
 
 共享部分住在 `dsh-sandbox`，它拥有模式类型：`WIDER_MODES`、升级目标枚举、参数配对校验、拒绝/提示标记构造器，以及 `approveEscalation`——有序的 fail-closed 编排。`approveEscalation` 接收一个最小的结构式 approver（`EscalationApprover`，对 agent 与 call-id 类型泛型化），而非审批服务类型，所以 `dsh-sandbox` 不获得对 approval 或 agent 包的依赖：每个工具把自己的 `ctx.approval`、agent、call id 与工具名作为原料传入。`dsh-tool-bash` 与 `dsh-tool-fs` 都使用它们；跨文件重复检测门禁确保单一来源不走样。
 

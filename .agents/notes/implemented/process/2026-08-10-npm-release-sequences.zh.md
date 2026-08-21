@@ -22,11 +22,11 @@ Status: implemented
 
 | 序列 | 成员 | 版本基线 | tag | workflow |
 |---|---|---|---|---|
-| dsh | 发布集：非 experimental 的 `packages/*/*` + `apps/*`；私有实验性包仅加入共享版本 bump | 发布集、私有 dsh 包与 workspace 根共用一个 `0.0.x` | `dsh-v<版本>` | `release.yml` |
-| vendored framework | `vendor/*` 九个包 | 每包各自一条版本线 | `vendor-<包名>-v<版本>`（每包一个） | `release-vendor.yml` |
+| dsh | 发布集：非 experimental 的 `packages/*/*` + `apps/*`；私有实验性包仅加入共享版本 bump | 发布集、私有 dsh 包与 workspace 根共用一个 `0.0.x` | `dsh-v<版本>` | `release.yml`（pack）/ `release-publish.yml`（发布） |
+| vendored framework | `vendor/*` 九个包 | 每包各自一条版本线 | `vendor-<包名>-v<版本>`（每包一个） | `release-vendor.yml`（pack）/ `release-vendor-publish.yml`（发布） |
 | native | `native/landlock-run/packages/*` | 自己的 `0.0.x` | `landlock-run-v<版本>` | `landlock-run-release.yml` |
 
-三组一律发到 npmjs.com 的 `@deepseek-ai` scope，且 access 按序列而非按 scope 区分：vendored 框架与 native 包是 `public`，dsh 族是 `restricted`（[理由](2026-08-13-public-vendor-and-native-sequences.md)）。没有任何发布路径传 `--access`——一个选项无法服务级别互不相同的序列，且会覆盖真正拥有该级别的 manifest。
+三组一律发到 npmjs.com 的 `@deepseek-ai` scope，且 access 按序列而非按 scope 区分：vendored 框架与 native 包是 `public`，dsh 族是 `restricted`（[理由](2026-08-13-public-vendor-and-native-sequences.zh.md)）。没有任何发布路径传 `--access`——一个选项无法服务级别互不相同的序列，且会覆盖真正拥有该级别的 manifest。
 
 ### 版本由本地命令写进仓库，CI 只核对与上传
 
@@ -105,13 +105,13 @@ registry 的两个行为决定了「怎么尝试一次发布」。写入之间�
 
 dsh 族套用仓库的发布 payload 策略（拒绝源码与声明映射）。vendored 族保留上游 payload，因为那些 manifest 导出 `./src/*`，去掉 `src` 会发出一个导出映射指向不存在文件的包。
 
-### workflow 形状：一次性 pack 全部，再统一 publish
+### workflow 形状：PR/push 上 pack，从手动 dispatch 工作流发布
 
-`pack` job 一趟遍历整个发布集，把每个成员打进同一个目录，写出上传顺序，整个目录作为一份 artifact 上传；`publish` job 下载那一份 artifact，按顺序逐个发布。发布集是一个整体——绝不会出现一半的包已经上了 registry、另一半还在构建。
+`pack` job 一趟遍历整个发布集，把每个成员打进同一个目录，写出上传顺序，整个目录作为一份 artifact 上传；它位于 `release.yml` / `release-vendor.yml`。发布集是一个整体——绝不会出现一半的包已经上了 registry、另一半还在构建。
 
-`pack` 无凭据，在每个 pull request 和每次 master push 上跑，所以一个 pull request 就能证明发布集仍能完整打出来。`publish` 是手动 dispatch，挂在 `npm-publish` environment 后面等人工审批，且既不构建也不重建——它上传的就是 pack 产出的字节。pack 的 run 按 ref 分组，并发的 pull request 不会互相顶掉；全局分组落在 publish job 上，因为 dist-tag 是共享的 registry 状态。
+`pack` 无凭据，在每个 pull request 和每次 master push 上跑，所以一个 pull request 就能证明发布集仍能完整打出来。发布则位于独立的 `release-publish.yml` / `release-vendor-publish.yml` 工作流，仅 `workflow_dispatch`（因此不会作为 PR check 出现）：它重新打包当前树，再按顺序逐个发布，挂在 `npm-publish` environment 后面等人工审批。pack 的 run 按 ref 分组，并发的 pull request 不会互相顶掉；全局 `Release-publish` 分组落在 `publish` job 上，因为 dist-tag 是共享的 registry 状态。
 
-dsh 的验证会一并安装 vendored 族的 pack 产物。harness 的包把 vendored 框架声明成 peer，而那些包属于另一条序列，无凭据的 job 无法从私有 registry 取到——所以 `release.yml` 为验证而打包 vendored 族，发布的仍只有自己那一份。
+dsh 的验证会一并安装 vendored 族的 pack 产物。harness 的包把 vendored 框架声明成 peer，而那些包属于另一条序列，无凭据的 job 无法从私有 registry 取到——所以 dsh 的 `pack` job 为验证而打包 vendored 族，发布的仍只有 dsh 那一份。发布工作流（`release-publish.yml`）重新打包当前树，只发布 dsh 族。
 
 验证还会打一份 Landlock entry 的 tarball——`dsh-sandbox-local` 把它声明为普通 `dependencies`——同时略去可选依赖。那些可选项背后的平台包需要 musl 工具链且每个架构各构建一次，单台 runner 产不出来；而装不到它们的消费方也必须能起，这正是「可选」在这里的含义。因此验证按目录内容读取 tarball，而不是读发布顺序：一个目录可能只装着为满足跨序列依赖而打出来的包，任何发布顺序都不描述它。
 
@@ -128,7 +128,7 @@ dsh 的验证会一并安装 vendored 族的 pack 产物。harness 的包把 ven
 
 ### 与先前提案的关系
 
-本 Note 取代 [以产物为先的 NPM 基线发布](../../proposed/process/2026-08-04-artifact-first-npm-baseline-publication.md) 中的版本方案与发布集边界：那篇的 `<base>-<时间戳>-<短 SHA>` 预发布版本与 `dev-<base>` dist-tag 不再采用，vendor 也不排除在发布集之外。两篇一致的部分保留：pack 与 publish 分离、publish 只消费已验证的 tarball、payload 与安装后探针作为发布门。
+本 Note 取代 [以产物为先的 NPM 基线发布](../../proposed/process/2026-08-04-artifact-first-npm-baseline-publication.zh.md) 中的版本方案与发布集边界：那篇的 `<base>-<时间戳>-<短 SHA>` 预发布版本与 `dev-<base>` dist-tag 不再采用，vendor 也不排除在发布集之外。两篇一致的部分保留：pack 与 publish 分离、publish 只消费已验证的 tarball、payload 与安装后探针作为发布门。
 
 ## 曾考虑的替代方案
 

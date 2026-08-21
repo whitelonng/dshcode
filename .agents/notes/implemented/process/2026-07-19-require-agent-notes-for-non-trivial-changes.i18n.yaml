@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-07-19-require-agent-notes-for-non-trivial-changes.md
 2026-07-19-require-agent-notes-for-non-trivial-changes.md: 162ae61affb4c1b0ad526fa0da41f84ebbb02089
-2026-07-19-require-agent-notes-for-non-trivial-changes.zh.md: f1bf434f78bf10f020089d2e1990874f72a1c082
+2026-07-19-require-agent-notes-for-non-trivial-changes.zh.md: cc342547fa1977cf2a38240e79cd7e326a0cc010

@@ -30,11 +30,11 @@
 
 **尽力而为**：没有会话所有者、没有 `ctx.spillStore` 后端，或 `saveText` 返回拒绝 ⇒ 策略记录警告并返回原始结果。spill 失败绝不会将成功调用变为 `isError`，也不会隐藏内联结果。成功替换时只会更改 `content`；规范的程序化值保持不变。
 
-**dispatch-log 分支：**注册在 `tools/code-dispatch-log` 上的第二个监听器，把同一套上限、替换流水线与尽力而为的回退应用到每个 `run_code` 子调用结果的持久化副本上（产物标签为 `dispatch`，按子调用 id 归档）。程序的值不受影响，因为它早已完整跨过 worker 边界；`read` 子调用同样设界：日志副本不是模型上下文，因此不会发生 read-again 循环，而 `read` 恰恰是最容易产生巨型日志的工具（[原理](../../../.agents/notes/implemented/feature/2026-07-26-code-dispatch-log-spill.md)）。
+**dispatch-log 分支：**注册在 `tools/code-dispatch-log` 上的第二个监听器，把同一套上限、替换流水线与尽力而为的回退应用到每个 `run_code` 子调用结果的持久化副本上（产物标签为 `dispatch`，按子调用 id 归档）。程序的值不受影响，因为它早已完整跨过 worker 边界；`read` 子调用同样设界：日志副本不是模型上下文，因此不会发生 read-again 循环，而 `read` 恰恰是最容易产生巨型日志的工具（[原理](../../../.agents/notes/implemented/feature/2026-07-26-code-dispatch-log-spill.zh.md)）。
 
 ## 范围
 
-该策略只能看到最终格式化的呈现结果，看不到工具的内部资源或规范值。如果提供方已经截断内容（例如 `web-fetch-http.maxBodyChars`），spill 产物保存的是工具返回的完整格式化结果，而非完整原始源。提供方／资源上限仍然是必需的，并且与该策略相互独立。`glob`/`grep` 负责对项级呈现结果执行 spill，因为渲染前仍然存在完整的已获取值；bash 流负责在获取时 spill。通用策略预先注册自己的 waterfall（瀑布式事件）监听器，然后再委托，因此无论插件加载顺序如何，普通工具自身的异步投影都会在通用字节限制之前完成。详见[工具输出 spill Agent Note](../../../.agents/notes/implemented/architecture/2026-07-08-tool-output-spill-files.md)。
+该策略只能看到最终格式化的呈现结果，看不到工具的内部资源或规范值。如果提供方已经截断内容（例如 `web-fetch-http.maxBodyChars`），spill 产物保存的是工具返回的完整格式化结果，而非完整原始源。提供方／资源上限仍然是必需的，并且与该策略相互独立。`glob`/`grep` 负责对项级呈现结果执行 spill，因为渲染前仍然存在完整的已获取值；bash 流负责在获取时 spill。通用策略预先注册自己的 waterfall（瀑布式事件）监听器，然后再委托，因此无论插件加载顺序如何，普通工具自身的异步投影都会在通用字节限制之前完成。详见[工具输出 spill Agent Note](../../../.agents/notes/implemented/architecture/2026-07-08-tool-output-spill-files.zh.md)。
 
 ## 模型体验
 

@@ -6,17 +6,17 @@ Status: implemented
 
 ## 问题
 
-[Codex 与 Claude Code 提供方约定](../feature/2026-08-04-claude-code-and-codex-subagent-backends.md)最初以可独立安装的包交付，由部署环境在通用 subagent 工具旁加载。Agent Preset 后来成为单个 agent（智能体）的模型可见工具的常规责任方，但 preset 不能安全地拥有这些产品提供方：`ctx.subagents` 是进程级注册表，提供方名称在 Host 内唯一，而宿主消费方会跨会话解析同一个注册表。因此，重复组装 preset 会争用同一组已配置名称。如果要求用户同时编辑 Profile 和 Preset，也会使通用 preset 配置项本身不完整。
+[Codex 与 Claude Code 提供方约定](../feature/2026-08-04-claude-code-and-codex-subagent-backends.zh.md)最初以可独立安装的包交付，由部署环境在通用 subagent 工具旁加载。Agent Preset 后来成为单个 agent（智能体）的模型可见工具的常规责任方，但 preset 不能安全地拥有这些产品提供方：`ctx.subagents` 是进程级注册表，提供方名称在 Host 内唯一，而宿主消费方会跨会话解析同一个注册表。因此，重复组装 preset 会争用同一组已配置名称。如果要求用户同时编辑 Profile 和 Preset，也会使通用 preset 配置项本身不完整。
 
 归属决策必须同时保留两个彼此独立的事实：加载提供方不得启动产品，也不得对产品执行身份验证；而工具授权仍须按 preset 决定，这样两个会话才能暴露不同的产品。全局产品开关、按 agent 创建提供方实例或预先枚举的组合 preset，都会为其中一个事实另设第二责任方。
 
 ## 决策
 
-产品提供方仍是进程级的 host plane（宿主平面）注册。[生产安装排除决策](../simplification/2026-08-12-production-dsh-excludes-product-subagent-providers.md)只取代本说明原先由 base bundle 安装提供方的选择：生产 `dsh-base` 既不依赖也不挂载它们。选择产品集成的 Profile 会安装目标提供方 Bundle；其 patch 挂载默认实例，而 Profile 可以在 host plane 挂载更多命名实例。[命名实例决策](../feature/2026-08-18-product-subagent-named-instances.md)负责每个配置项的注册身份：两个产品都接受多个唯一的 `providerName`，同时保留 `codex` 与 `claude-code` 作为默认值。加载任一插件只会注册一个休眠后端；对应的 Codex 或 Claude 进程直到第一次实际委派调用时才启动。Agent Preset 通过普通 `dsh-tool-subagent` 配置项的 `provider` 与 `toolName` 准确公开单个 agent 所需的已配置实例，而无需更改 Host 注册表。
+产品提供方仍是进程级的 host plane（宿主平面）注册。[生产安装排除决策](../simplification/2026-08-12-production-dsh-excludes-product-subagent-providers.zh.md)只取代本说明原先由 base bundle 安装提供方的选择：生产 `dsh-base` 既不依赖也不挂载它们。选择产品集成的 Profile 会安装目标提供方 Bundle；其 patch 挂载默认实例，而 Profile 可以在 host plane 挂载更多命名实例。[命名实例决策](../feature/2026-08-18-product-subagent-named-instances.zh.md)负责每个配置项的注册身份：两个产品都接受多个唯一的 `providerName`，同时保留 `codex` 与 `claude-code` 作为默认值。加载任一插件只会注册一个休眠后端；对应的 Codex 或 Claude 进程直到第一次实际委派调用时才启动。Agent Preset 通过普通 `dsh-tool-subagent` 配置项的 `provider` 与 `toolName` 准确公开单个 agent 所需的已配置实例，而无需更改 Host 注册表。
 
-每个提供方包都拥有可直接安装的 Bundle patch 与私有产品运行时。本说明继续负责每个已安装提供方的进程级 Host 放置。提供方约定说明继续负责每个产品的协议、结果映射、取消、进程树生命周期与证据层级。[Agent Preset 架构](2026-08-03-per-session-agent-presets.md)继续负责宿主与 agent 的划分、preset 创作，以及改动只影响新组装会话的规则。
+每个提供方包都拥有可直接安装的 Bundle patch 与私有产品运行时。本说明继续负责每个已安装提供方的进程级 Host 放置。提供方约定说明继续负责每个产品的协议、结果映射、取消、进程树生命周期与证据层级。[Agent Preset 架构](2026-08-03-per-session-agent-presets.zh.md)继续负责宿主与 agent 的划分、preset 创作，以及改动只影响新组装会话的规则。
 
-每个 Bundle 都把可执行文件选择交给包自有的产品运行时：Codex 包运行自身声明的 wrapper，Claude Code 包则让锁定的 Agent SDK 选择私有原生可执行文件。两个提供方都不会查询或回退宿主产品命令。加载 Profile 不会创建产品状态、探测版本或测试身份验证；它可以提供每个已挂载 Provider 实例的部署配置，包括由[非交互权限决策](../feature/2026-08-15-product-subagent-noninteractive-permissions.md)负责的产品专属 `permissionMode` 值，但不会把这些选择移入 Agent Preset 或面向模型的工具。平台载荷缺失和产品故障仍局限于发生问题的那次委派。
+每个 Bundle 都把可执行文件选择交给包自有的产品运行时：Codex 包运行自身声明的 wrapper，Claude Code 包则让锁定的 Agent SDK 选择私有原生可执行文件。两个提供方都不会查询或回退宿主产品命令。加载 Profile 不会创建产品状态、探测版本或测试身份验证；它可以提供每个已挂载 Provider 实例的部署配置，包括由[非交互权限决策](../feature/2026-08-15-product-subagent-noninteractive-permissions.zh.md)负责的产品专属 `permissionMode` 值，但不会把这些选择移入 Agent Preset 或面向模型的工具。平台载荷缺失和产品故障仍局限于发生问题的那次委派。
 
 ## 验证
 

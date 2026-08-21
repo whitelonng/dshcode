@@ -26,7 +26,7 @@ Status: implemented
 - **`PRESET_ID` 移到 `types.ts`**，让发现与创作共享同一份包含边界词汇；authoring 原样转发导出。
 - **原因只留一行。** js-yaml 会附上多行代码框摘录；名单卡片不是终端，`compositionProblem` 只保留首行。
 - **mount.spec 的两个竞态用例特意不动**：`ensureStanding` 仍可能拿到删除前一刻解析出的 preset（私有路径测试），其 stamp/unstampable 语义不变——健康检查发生在此之前的公开路径上。
-- **创造模式的引导随同一 PR 落地**：`cordis` preset 的 persona 禁止编辑随附安装（损坏 `cordis` 会禁用这一模式本身），并把创作指向 `${DSH_HOME:-$HOME/.dsh}/.agent-presets/<id>/`；其技能教了 `preset.yml` 元信息、先复制再改的流程与一次升级的沙箱现实（preset 根目录在会话工作区之外）。已实测：被要求直接改随附 `cordis` 组装时，组装出的 agent 援引两条规则拒绝并给出复制路径；被要求真正创建 preset 时，它落在 `$DSH_HOME` 下并把写入合并为一次升级。该引导中关于验证的那一半——agent 无法自己启动会话，因而设置页的红色标记是用户的检查项——已由[创作 preset 的 agent 自行挂载校验其组装](2026-08-11-preset-authoring-agent-validates-its-own-composition.md)取代：下文的结构检查不是校验，而 `standingKeyFor` 才给了 agent 真正的校验手段。本篇的健康检查决策不变。
+- **创造模式的引导随同一 PR 落地**：`cordis` preset 的 persona 禁止编辑随附安装（损坏 `cordis` 会禁用这一模式本身），并把创作指向 `${DSH_HOME:-$HOME/.dsh}/.agent-presets/<id>/`；其技能教了 `preset.yml` 元信息、先复制再改的流程与一次升级的沙箱现实（preset 根目录在会话工作区之外）。已实测：被要求直接改随附 `cordis` 组装时，组装出的 agent 援引两条规则拒绝并给出复制路径；被要求真正创建 preset 时，它落在 `$DSH_HOME` 下并把写入合并为一次升级。该引导中关于验证的那一半——agent 无法自己启动会话，因而设置页的红色标记是用户的检查项——已由[创作 preset 的 agent 自行挂载校验其组装](2026-08-11-preset-authoring-agent-validates-its-own-composition.zh.md)取代：下文的结构检查不是校验，而 `standingKeyFor` 才给了 agent 真正的校验手段。本篇的健康检查决策不变。
 
 ## 曾考虑的替代方案
 

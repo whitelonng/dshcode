@@ -2,7 +2,7 @@
 
 [English](typert.md) | 中文
 
-以下类型由生成的 Remote 产物、Host Gateway 与消费方 API assembly 共用。[Typert Gateway Agent Note](../../.agents/notes/implemented/architecture/2026-08-02-typert-remote-method-calls.md) 负责架构与传输决策；本页记录 [`dsh-typert-protocol`](../../packages/typert/protocol/src/types.ts) 和 [`dsh-api-gateway`](../../packages/api/gateway/src/types.ts) 中公共约定的字面定义。
+以下类型由生成的 Remote 产物、Host Gateway 与消费方 API assembly 共用。[Typert Gateway Agent Note](../../.agents/notes/implemented/architecture/2026-08-02-typert-remote-method-calls.zh.md) 负责架构与传输决策；本页记录 [`dsh-typert-protocol`](../../packages/typert/protocol/src/types.ts) 和 [`dsh-api-gateway`](../../packages/api/gateway/src/types.ts) 中公共约定的字面定义。
 
 ## Lookup 与上下文声明
 
@@ -231,7 +231,7 @@ interface TypertClientRemote extends TypertRemoteNamespaceMap {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxapiproxy--apiproxy"></a>
 
@@ -248,7 +248,7 @@ Root interface of the unified API. New client-request domain = one new file pair
 respond(message: ClientResponse): Promise<RpcReceipt>
 ```
 
-Source: [`packages/host/apiproxy/src/api/index.ts:22`](../../packages/host/apiproxy/src/api/index.ts)
+Source: [`packages/host/apiproxy/src/api/index.ts`](../../packages/host/apiproxy/src/api/index.ts)
 
 <a id="ctxtypert--typertregistry"></a>
 
@@ -312,9 +312,9 @@ listPackages(filter: TypertPackageFilter = {}): TypertPackageRecord[]
 toJSONSchema(key: string, params?: z.core.ToJSONSchemaParams): z.core.JSONSchema.BaseSchema
 ```
 
-Types: [TypertContribution](invariants.md) · [TypertFace](invariants.md) · [TypertPackageFilter](invariants.md) · [TypertPackageRecord](invariants.md) · [TypertSchemaFilter](invariants.md) · [TypertSchemaRecord](invariants.md)
+Types: [TypertContribution](invariants.zh.md) · [TypertFace](invariants.zh.md) · [TypertPackageFilter](invariants.zh.md) · [TypertPackageRecord](invariants.zh.md) · [TypertSchemaFilter](invariants.zh.md) · [TypertSchemaRecord](invariants.zh.md)
 
-Source: [`packages/typert/registry/src/service.ts:446`](../../packages/typert/registry/src/service.ts)
+Source: [`packages/typert/registry/src/service.ts`](../../packages/typert/registry/src/service.ts)
 
 <a id="ctxtypertgateway--typertgatewayservice"></a>
 
@@ -332,5 +332,5 @@ Resolve strict generated definitions or conservative SRC markers against current
 async invoke(request: InvokeRemoteRequest): Promise<unknown>
 ```
 
-Source: [`packages/api/gateway/src/index.ts:90`](../../packages/api/gateway/src/index.ts)
+Source: [`packages/api/gateway/src/index.ts`](../../packages/api/gateway/src/index.ts)
 <!-- END GENERATED cordis-surface -->

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { AttachmentId } from '@deepseek-ai/dsh-attachment'
-import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentStore, ImageAttachmentRef, ImageRequestPolicy, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { createUserMessage, CallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, createMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { AssistantMessage, AssistantMessageEvent, Usage } from '@earendil-works/pi-ai'
@@ -43,6 +43,29 @@ async function collect(stream: AsyncIterable<StreamChunk>): Promise<StreamChunk[
   return out
 }
 
+function requestVersion(ref: ImageAttachmentRef): RequestImageAttachment {
+  return {
+    variantId: ImageVariantId(`sha256:${'e'.repeat(64)}`),
+    attachment: ref,
+    data: Uint8Array.of(1, 2, 3),
+    mediaType: ref.mediaType,
+    bytes: 3,
+    width: ref.width,
+    height: ref.height,
+    depth: 'uchar',
+    space: 'srgb',
+    hasAlpha: true,
+  }
+}
+
+function attachmentStore(readImageRequest: (
+  ref: ImageAttachmentRef,
+  policy: ImageRequestPolicy,
+  signal?: AbortSignal,
+) => Promise<RequestImageAttachment>): AttachmentStore {
+  return { readImageRequest } as unknown as AttachmentStore
+}
+
 describe('toPiContext', () => {
   it('maps system prompt, user text, and tools', () => {
     const context = toPiContext({
@@ -76,7 +99,9 @@ describe('toPiContext', () => {
       width: 1,
       height: 1,
     }
-    const readImage = vi.fn().mockResolvedValue({ ref: attachment, data: Uint8Array.of(1, 2, 3) })
+    const readImageRequest = vi.fn((value: ImageAttachmentRef, _policy: ImageRequestPolicy) => (
+      Promise.resolve(requestVersion(value))
+    ))
     const context = await toPiContext({
       provider: 'openai',
       model: 'gpt-4.1',
@@ -84,13 +109,18 @@ describe('toPiContext', () => {
         content: [{ type: 'text', text: 'describe' }, { type: 'image', attachment }],
         source: { kind: 'plugin', plugin: 'test' },
       })],
-    }, { readImage } as unknown as AttachmentStore)
+    }, attachmentStore(readImageRequest))
 
-    expect(readImage).toHaveBeenCalledWith(attachment)
+    expect(readImageRequest).toHaveBeenCalledWith(
+      attachment,
+      { maxPixels: 2048 * 2048, maxBytes: 1024 * 1024 },
+      undefined,
+    )
     expect(context.messages[0]).toEqual({
       role: 'user',
       content: [
         { type: 'text', text: 'describe' },
+        { type: 'text', text: expect.stringContaining(`Image ${attachment.attachmentId}`) as string },
         { type: 'image', data: 'AQID', mimeType: 'image/png' },
       ],
       timestamp: 0,
@@ -105,7 +135,9 @@ describe('toPiContext', () => {
       width: 1,
       height: 1,
     }
-    const readImage = vi.fn().mockResolvedValue({ ref: attachment, data: Uint8Array.of(1, 2, 3) })
+    const readImageRequest = vi.fn((value: ImageAttachmentRef, _policy: ImageRequestPolicy) => (
+      Promise.resolve(requestVersion(value))
+    ))
     const context = await toPiContext({
       provider: 'openai',
       model: 'gpt-4.1',
@@ -129,7 +161,7 @@ describe('toPiContext', () => {
         }],
         source: { kind: 'plugin', plugin: 'test' },
       })],
-    }, { readImage } as unknown as AttachmentStore)
+    }, attachmentStore(readImageRequest))
 
     expect(context.messages).toEqual([{
       role: 'toolResult',
@@ -138,6 +170,7 @@ describe('toPiContext', () => {
       content: [
         { type: 'text', text: 'before' },
         { type: 'text', text: 'middle' },
+        { type: 'text', text: expect.stringContaining(`Image ${attachment.attachmentId}`) as string },
         { type: 'image', data: 'AQID', mimeType: 'image/png' },
         { type: 'text', text: 'after' },
       ],

@@ -4,7 +4,7 @@
 
 subagent seam 允许一个 agent（智能体）通过具名提供方把工作委派给子 agent。调用方统一使用 `ctx.subagents` 服务 API；提供方决定子 agent 在当前进程、其他进程，还是通过未来的传输方式运行。
 
-[subagent 家族概述](../README.md)列出了实现和面向模型的消费方。本包负责提供方注册表、共享请求和结果约定、持久描述符以及可继续子级编排。多个具名提供方可以在该约定背后共存。
+[subagent 家族概述](../README.zh.md)列出了实现和面向模型的消费方。本包负责提供方注册表、共享请求和结果约定、持久描述符以及可继续子级编排。多个具名提供方可以在该约定背后共存。
 
 ## 服务 API
 
@@ -41,7 +41,7 @@ subagent seam 允许一个 agent（智能体）通过具名提供方把工作委
 - `toolFilter`：应用请求的子 agent 工具限制；
 - `persona`：应用每个子 agent 独立的 persona。
 
-每个进程内子 agent 都通过一次 `applyChildComposition(childCtx, parent, composition)` 调用完成组装：先加入父级的 agent-preset 组合，再应用子 agent 自己的 persona 和工具限制。加入父级组合正是子 agent 获得能力的途径：所有面向模型的行都位于 agent 平面，完全没有加入任何组合的子 agent 抵达模型时会看到空的工具注册表（见 [`dsh-agent-presets`](../../preset/agent-presets/README.md)）。将父级作为参数是刻意设计：这让“组装子 agent 却不做该加入”在各调用点无法表达，而这正是这一次调用所要杜绝的缺陷。未组装 preset roster 的部署不加入任何组合、也不需要加入；其面向模型的行位于宿主组合中，子 agent 已能通过工具注册表的全局层解析到它们。
+每个进程内子 agent 都通过一次 `applyChildComposition(childCtx, parent, composition)` 调用完成组装：先加入父级的 agent-preset 组合，再应用子 agent 自己的 persona 和工具限制。加入父级组合正是子 agent 获得能力的途径：所有面向模型的行都位于 agent 平面，完全没有加入任何组合的子 agent 抵达模型时会看到空的工具注册表（见 [`dsh-agent-presets`](../../preset/agent-presets/README.zh.md)）。将父级作为参数是刻意设计：这让“组装子 agent 却不做该加入”在各调用点无法表达，而这正是这一次调用所要杜绝的缺陷。未组装 preset roster 的部署不加入任何组合、也不需要加入；其面向模型的行位于宿主组合中，子 agent 已能通过工具注册表的全局层解析到它们。
 
 `childSessionMeta()` 把所加入的 preset id 记在子 agent 的持久化 header 上，理由与顶层会话记录自己的那一个相同：preset 决定了模型所见的工具 schema 与提示段，因此冷读子 agent 的历史时必须重建那份组装，而不是部署默认值。该值从父方**活着的** scope 链读取，而不是从父方 header 读取，因为在空白期切换过 preset 的父方运行在更新的那份组装上，而它的 header 仍写着旧的那个。
 
@@ -57,15 +57,17 @@ subagent seam 允许一个 agent（智能体）通过具名提供方把工作委
 
 `inheritsParentContext` 只用于描述，不能强制执行。它仅说明子 agent 是否能看到父级已完成的对话历史（`fork` 可以；`spawn` 和各进程外一次性提供方不可以），不表示是否继承工具、服务或权限。
 
+<a id="delegated-policy"></a>
+
 ## 委派策略
 
-两条进程内委派路径都会通过共享的子 agent 辅助函数，在委派边界固定子 agent 的权限范围。`captureDelegatedPolicyOverrides(parent)` 会为父会话的显式沙箱覆盖项（`sandboxPolicy.overrideOf()`）创建快照，并在审批能力已组合时将子 agent 的审批策略固定为 `'never'`，无论父级自身采用何种策略。这样，被委派的子 agent 只能在继承的沙箱范围内行动，每次审批请求（例如 `sandbox_permissions` 升权）都会被确定性拒绝，而不会等待无人处理的提示（这两个服务都是可选的 `ctx.get` 消费方）。`appendDelegatedPolicyOverrides()` 则在未发布的设置阶段、在任何 fork 种子之后，把每个值作为一条 `source: 'delegation'` 的 `sandbox/mode` 或 `approval/policy` 事件写入子 agent 自己的日志。因此，新捕获的策略会覆盖种子中的陈旧状态，而子 agent 的生效策略始终可以仅凭其日志重建。沙箱的部署默认值绝不复制：未切换的父级不会记录 `sandbox/mode`，其子 agent 会动态跟随部署默认值。可继续启动会在第一次 await 前捕获策略，并且只为全新物化写入这些委派事件；冷恢复只会重放已持久化的委派事件，不会重新捕获父级策略，因此创建之后的父级切换绝不会追溯性地改变持久化子 agent。每个进程内子 agent 还会收到一条作用域内的运行时上下文声明（`subagent:delegation`），告知其权限范围已固定，需要更宽访问的任务应以上报限制收尾，而不是重试。参见[一次性](../../../.agents/notes/implemented/feature/2026-07-25-subagent-policy-inheritance.md)与[可继续](../../../.agents/notes/implemented/feature/2026-08-10-continuable-subagent-policy-inheritance.md)两篇委派策略 Agent Note。
+两条进程内委派路径都会通过共享的子 agent 辅助函数，在委派边界固定子 agent 的权限范围。`captureDelegatedPolicyOverrides(parent)` 会为父会话的显式沙箱覆盖项（`sandboxPolicy.overrideOf()`）创建快照，并在审批能力已组合时将子 agent 的审批策略固定为 `'never'`，无论父级自身采用何种策略。这样，被委派的子 agent 只能在继承的沙箱范围内行动，每次审批请求（例如 `sandbox_permissions` 升权）都会被确定性拒绝，而不会等待无人处理的提示（这两个服务都是可选的 `ctx.get` 消费方）。`appendDelegatedPolicyOverrides()` 则在未发布的设置阶段、在任何 fork 种子之后，把每个值作为一条 `source: 'delegation'` 的 `sandbox/mode` 或 `approval/policy` 事件写入子 agent 自己的日志。因此，新捕获的策略会覆盖种子中的陈旧状态，而子 agent 的生效策略始终可以仅凭其日志重建。沙箱的部署默认值绝不复制：未切换的父级不会记录 `sandbox/mode`，其子 agent 会动态跟随部署默认值。可继续启动会在第一次 await 前捕获策略，并且只为全新物化写入这些委派事件；冷恢复只会重放已持久化的委派事件，不会重新捕获父级策略，因此创建之后的父级切换绝不会追溯性地改变持久化子 agent。每个进程内子 agent 还会收到一条作用域内的运行时上下文声明（`subagent:delegation`），告知其权限范围已固定，需要更宽访问的任务应以上报限制收尾，而不是重试。参见[一次性](../../../.agents/notes/implemented/feature/2026-07-25-subagent-policy-inheritance.zh.md)与[可继续](../../../.agents/notes/implemented/feature/2026-08-10-continuable-subagent-policy-inheritance.zh.md)两篇委派策略 Agent Note。
 
 ## 一次性所有权与生命周期
 
 `provider.start(request): Promise<SubagentRun>` 是所有权转移边界；委派工具也会在其由 Task 支撑的一次性后台路径中使用它。兑现前，提供方拥有设置过程，并且在任何失败路径上都必须取消、回滚并使尚未发布的资源完全停稳。兑现后，run 的所有权转移给调用方；调用方必须在每条路径上调用 `dispose()`。剩余提示词和轮次工作属于 `SubagentRun.result`。
 
-`SubagentRun.result` 兑现为 `{ output, structured?, diagnostic?, stopReason }`。子 agent 级失败会以非 `completed` 原因兑现；只有 seam 无法表示的基础设施故障才可以拒绝。提供方可以为非完成结果附加安全的 `diagnostic`：它会先排除工具输入、文件内容、环境值、凭证与原始协议载荷，并把完整文本限制在 4096 个 UTF-8 字节以内。共享结果类型不定义提供方类别或生命周期阶段：进程外提供方可以从锁定版本产品提供的结构化事实与已观测的进程结果派生固定展示文本，而消费方只负责原样呈现，不解析该文本。该字段不是 assistant 输出；消费方会将它分开呈现，它也不会进入 `subagent/end.lastAssistantMessage`。`dispose()` 是幂等的，会取消剩余工作，并等待结果结算以及子 agent 资源完全停稳。result 的拒绝只通过 `result` 本身报告；只有独立的资源释放失败，才会使 `dispose()` 被拒绝。`output` 与 `subagent/end` 事件的 `lastAssistantMessage` 使用导出的 `AssistantOutputFold`／`finalAssistantOutput` 辅助函数选取子 agent 最后一条非空 assistant 消息；若没有这类消息，则选取其累积的 assistant 文本。子 agent 两种输出均未产生时，`output` 为 `[]`，该事件字段缺省（终态结果约定归 [`SubagentResult`](../../../docs/subsystems/subagent.md#the-terminal-result-subagentresult) 所有）。
+`SubagentRun.result` 兑现为 `{ output, structured?, diagnostic?, stopReason }`。子 agent 级失败会以非 `completed` 原因兑现；只有 seam 无法表示的基础设施故障才可以拒绝。提供方可以为非完成结果附加安全的 `diagnostic`：它会先排除工具输入、文件内容、环境值、凭证与原始协议载荷，并把完整文本限制在 4096 个 UTF-8 字节以内。共享结果类型不定义提供方类别或生命周期阶段：进程外提供方可以从锁定版本产品提供的结构化事实与已观测的进程结果派生固定展示文本，而消费方只负责原样呈现，不解析该文本。该字段不是 assistant 输出；消费方会将它分开呈现，它也不会进入 `subagent/end.lastAssistantMessage`。`dispose()` 是幂等的，会取消剩余工作，并等待结果结算以及子 agent 资源完全停稳。result 的拒绝只通过 `result` 本身报告；只有独立的资源释放失败，才会使 `dispose()` 被拒绝。`output` 与 `subagent/end` 事件的 `lastAssistantMessage` 使用导出的 `AssistantOutputFold`／`finalAssistantOutput` 辅助函数选取子 agent 最后一条非空 assistant 消息；若没有这类消息，则选取其累积的 assistant 文本。子 agent 两种输出均未产生时，`output` 为 `[]`，该事件字段缺省（终态结果约定归 [`SubagentResult`](../../../docs/subsystems/subagent.zh.md#the-terminal-result-subagentresult) 所有）。
 
 本地运行会在 `start()` 兑现前发布普通的子 agent／会话，把该共享会话 id 作为 `SubagentRun.id` 返回，以 `SubagentRun.localAgent` 公开准确的子 agent，把 `request.parent.session.id` 记录到子 agent 的 `parentSession` header，并在其初始轮次内追加已解析的描述符。远程提供方则生成 parent 作用域的生命周期 id，并返回 `localAgent: undefined`；由于没有本地 child 会话，其一次性运行不会进入基于追踪的枚举结果。
 
@@ -103,11 +105,13 @@ subagent seam 允许一个 agent（智能体）通过具名提供方把工作委
 
 ## 收集模型
 
-面向模型的工具默认同步收集：先等待子 agent 结果，再 dispose 运行，然后才返回。一次性后台委派会在工具中注册普通 Task，其通用状态、收集和取消工具负责后续交互，并将模型提供的 `description` 持久化为可选显示标签。可继续后台委派会调用 `ctx.subagents.startContinuable()`，只返回持久化子 agent id；子 agent 自 inbox 接受起就拥有自己的轮次，因此没有 Task、也没有结果 promise——调用方通过 `send_message` 后续操作工具发送后续工作，`interrupt()` 只停止当前轮次而不 dispose 子 agent，而持久化子 agent 会话仍是子 agent 详细输出的来源。只有 `ctx.agents` 可用时，继续执行管理器才会存在，而会话持久化按每项继续执行操作解析。与此独立，`listChildren()` 枚举在线会话存储与可选会话持久化的在线优先合并——持久化缺席时仅枚举在线 child，因为那时冷 child 本就无法恢复——并由已注册的 `subagent` 投影单元供给每个 child 的持久化模式与标签：在线 child 取注册表的水位快照；冷 child 先取可选投影缓存的持久化行，且仅当其 `seq` 门证明该值折叠自 child 自身后缀（fork 种子之后——自有描述符一经追加即不可变）才直接采用，否则经一次有界并发的持久化 inspect 再经注册表折叠，且 inspect 结果必须仍指向枚举时的生命周期（同 id 被重新发布的会话降级为 `corrupt` diagnostic）。缓存读取抛出异常时，不会据此作出分类判断，因为缓存只是派生数据；静默落到该权威重折。分类结果完全以投影折叠为准；列表操作本身不解析描述符。取得身份值即产出 child 行；已定局而折叠未产出身份的候选是 `corrupt` diagnostic，inspect 失败是瞬时的 `unavailable`（下次列表重试），运行中而暂无身份值的候选整行省略（描述符尚未追加的创建窗口）。它不查询继续执行管理器、Agent 注册信息、Activation 或提供方。每个 child 行都会根据合并结果中携带持久化 `origin: 'subagent'` 的 header 派生读取时的 `hasChildren` 提示；它不会读取后代事件日志，展开后仍以描述符支撑的 child 目录为权威依据。UI 等服务消费方可以保留两种模式，并为无标签的一次性 child 选择回退展示；面向模型的 `list_agents` 工具只投影 `continuable` 条目，通过在线 Agent 注册表细化状态，并把仅存于存储的状态映射为可恢复而非终态的 `ready`（`running`／`idle`／`ready`），并在 `descendants` scope 下遍历 `listDescendants()`。列表操作会把调用方的取消信号转发到每次持久化读取，在这些 await 前后检查取消，并将每次检测到的中止报告为 `SubagentError` 错误码 `CANCELLED`；投影注册表未挂载则以 `SUBAGENT_CONTROL_PROJECTIONS_UNAVAILABLE` 响亮失败，会话存储缺失则以 `SUBAGENT_CONTROL_SESSION_STORE_UNAVAILABLE` 响亮失败。完整约定见[后台 subagent 任务 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-background-subagent-tasks.md)、[可继续后台 subagent Agent Note](../../../.agents/notes/implemented/feature/2026-07-21-continuable-background-subagents.md)、[持久化目录 Agent Note](../../../.agents/notes/implemented/feature/2026-07-22-durable-subagent-catalog-and-list-agents.md)、[服务合并 Agent Note](../../../.agents/notes/implemented/simplification/2026-07-26-merge-subagent-control-service.md)、[能力 seam Agent Note](../../../.agents/notes/implemented/feature/2026-06-21-subagent-capability-seam.md)和 `src/types.ts`。
+面向模型的工具默认同步收集：先等待子 agent 结果，再 dispose 运行，然后才返回。一次性后台委派会在工具中注册普通 Task，其通用状态、收集和取消工具负责后续交互，并将模型提供的 `description` 持久化为可选显示标签。可继续后台委派会调用 `ctx.subagents.startContinuable()`，只返回持久化子 agent id；子 agent 自 inbox 接受起就拥有自己的轮次，因此没有 Task、也没有结果 promise——调用方通过 `send_message` 后续操作工具发送后续工作，`interrupt()` 只停止当前轮次而不 dispose 子 agent，而持久化子 agent 会话仍是子 agent 详细输出的来源。只有 `ctx.agents` 可用时，继续执行管理器才会存在，而会话持久化按每项继续执行操作解析。与此独立，`listChildren()` 枚举在线会话存储与可选会话持久化的在线优先合并——持久化缺席时仅枚举在线 child，因为那时冷 child 本就无法恢复——并由已注册的 `subagent` 投影单元供给每个 child 的持久化模式与标签：在线 child 取注册表的水位快照；冷 child 先取可选投影缓存的持久化行，且仅当其 `seq` 门证明该值折叠自 child 自身后缀（fork 种子之后——自有描述符一经追加即不可变）才直接采用，否则经一次有界并发的持久化 inspect 再经注册表折叠，且 inspect 结果必须仍指向枚举时的生命周期（同 id 被重新发布的会话降级为 `corrupt` diagnostic）。缓存读取抛出异常时，不会据此作出分类判断，因为缓存只是派生数据；静默落到该权威重折。分类结果完全以投影折叠为准；列表操作本身不解析描述符。取得身份值即产出 child 行；已定局而折叠未产出身份的候选是 `corrupt` diagnostic，inspect 失败是瞬时的 `unavailable`（下次列表重试），运行中而暂无身份值的候选整行省略（描述符尚未追加的创建窗口）。它不查询继续执行管理器、Agent 注册信息、Activation 或提供方。每个 child 行都会根据合并结果中携带持久化 `origin: 'subagent'` 的 header 派生读取时的 `hasChildren` 提示；它不会读取后代事件日志，展开后仍以描述符支撑的 child 目录为权威依据。UI 等服务消费方可以保留两种模式，并为无标签的一次性 child 选择回退展示；面向模型的 `list_agents` 工具只投影 `continuable` 条目，通过在线 Agent 注册表细化状态，并把仅存于存储的状态映射为可恢复而非终态的 `ready`（`running`／`idle`／`ready`），并在 `descendants` scope 下遍历 `listDescendants()`。列表操作会把调用方的取消信号转发到每次持久化读取，在这些 await 前后检查取消，并将每次检测到的中止报告为 `SubagentError` 错误码 `CANCELLED`；投影注册表未挂载则以 `SUBAGENT_CONTROL_PROJECTIONS_UNAVAILABLE` 响亮失败，会话存储缺失则以 `SUBAGENT_CONTROL_SESSION_STORE_UNAVAILABLE` 响亮失败。完整约定见[后台 subagent 任务 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-background-subagent-tasks.zh.md)、[可继续后台 subagent Agent Note](../../../.agents/notes/implemented/feature/2026-07-21-continuable-background-subagents.zh.md)、[持久化目录 Agent Note](../../../.agents/notes/implemented/feature/2026-07-22-durable-subagent-catalog-and-list-agents.zh.md)、[服务合并 Agent Note](../../../.agents/notes/implemented/simplification/2026-07-26-merge-subagent-control-service.zh.md)、[能力 seam Agent Note](../../../.agents/notes/implemented/feature/2026-06-21-subagent-capability-seam.zh.md)和 `src/types.ts`。
 
 可继续 Activation 会等待 best-effort 的最终会话 flush，但不会把 listener 参与视为持久性确认。一次性运行保留尽力执行的会话检查点，因此已完成的一次性 child 只有在其会话确实进入持久化存储时，才可在 dispose 后继续被发现；如果该检查点缺失，服务不会根据 Task 历史虚构目录条目。
 
 ## 模型体验
+
+<a id="settlement-notice"></a>
 
 ### 结算通知
 

@@ -37,4 +37,4 @@
 
 它组合了内置运行时所需的本地 PTY、裸 `fs-local` 后端、供持久 Bash 使用的 danger-full-access 策略，以及未压缩的 JSONL 持久化。Bash 和编辑器绝对路径可以修改运行时进程有权访问的任何路径，因此只能针对可丢弃的 checkout 或容器运行该变体。持久 PTY 需要 POSIX 终端环境，因此不适用于 Windows agent 接口。
 
-[`minimal.py`](minimal.py)通过 Python SDK 运行该组合，并把 `DSH_MODEL` 作为默认模型。[Python SDK 教程](../../docs/user/guide/python-sdk.md)介绍安装、运行、workspace 选择与 session 标识；[SDK 参考](../../python/sdk/README.md)归属运行时生命周期与结果语义。
+[`minimal.py`](minimal.py)通过 Python SDK 运行该组合，并把 `DSH_MODEL` 作为默认模型。[Python SDK 教程](../../docs/user/guide/python-sdk.zh.md)介绍安装、运行、workspace 选择与 session 标识；[SDK 参考](../../python/sdk/README.zh.md)归属运行时生命周期与结果语义。

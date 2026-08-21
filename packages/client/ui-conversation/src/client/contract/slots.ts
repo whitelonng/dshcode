@@ -78,6 +78,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      */
     'conversation.session.header': { kind: 'single'; scope: 'session' }
     /**
+     * One breadcrumb title and its lineage controls. The render site keeps
+     * the ordinary title as fallback; an occupant receives plain title data
+     * and may replace a subagent title with one combined navigation control.
+     */
+    'conversation.session.header.lineage': {
+      kind: 'single'
+      scope: 'session'
+      owner: ConversationHeaderLineageOwnerProps
+    }
+    /**
      * One button in the session header's action row — the additive way to put
      * a per-session control beside the title without replacing the header.
      * Entries render by ascending `order`; negative values are reserved for
@@ -314,6 +324,16 @@ export interface ConversationSessionOwnerProps {
 
 /** Header actions derive their state from the standard session/global kit. */
 export interface ConversationHeaderActionOwnerProps {}
+
+/** Plain breadcrumb data handed to the optional lineage renderer. */
+export interface ConversationHeaderLineageOwnerProps {
+  /** Session represented by this breadcrumb title. */
+  lineageSessionId: SessionId
+  /** Display title available to a renderer that combines the title with a control. */
+  displayTitle: string
+  /** Navigate to an ancestor title when its combined control is clicked. */
+  openTitle?: () => void
+}
 
 /**
  * The input-region slot currency: dock/left/right entries read
@@ -664,7 +684,11 @@ export type ConversationSessionSlotProps =
 /** Full strict-session header props: shared store, tabs/actions render shares, navigation, and locale. */
 export type ConversationSessionHeaderSlotProps =
   PropsRuntime<'conversation.session.header'>
-  & PropsRenderSlots<'conversation.session.header.actions' | 'conversation.session.header.utilities'>
+  & PropsRenderSlots<
+    'conversation.session.header.lineage'
+    | 'conversation.session.header.actions'
+    | 'conversation.session.header.utilities'
+  >
   & PropsStore<ChatStore>
   & ConversationSessionHeaderInjected
   & PropsLocale<'conversation'>

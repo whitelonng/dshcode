@@ -40,7 +40,7 @@ stderr 仍是带内归因通道。受限子进程可以故意复现 runner 的�
 
 ## 已添加的防护措施
 
-- [`RunnerFailureRule`](../subsystems/sandbox.md#wrapped-argv-and-classification-dialects) 携带可选的允许退出码、不区分大小写的逐行致命签名，以及按不区分大小写的整行精确匹配排除的信息性行。
+- [`RunnerFailureRule`](../subsystems/sandbox.zh.md#wrapped-argv-and-classification-dialects) 携带可选的允许退出码、不区分大小写的逐行致命签名，以及按不区分大小写的整行精确匹配排除的信息性行。
 - [`dsh-sandbox-local`](../../packages/sandbox/sandbox-local/) 把 Landlock 映射为退出码 125 加一行非通知的 `landlock-run:` 诊断，而 bwrap、Seatbelt 和自定义 runner 仍仅依据签名。
 - [`dsh-bash-sandbox`](../../packages/shell/bash-sandbox/) 直接 spawn 提供方 argv，因此启动前遭拒时使用 spawn 错误通道，而非本地化的 shell 诊断。已结算的前台与后台执行共用一个返回证据的分类器；致命证据优先于拒绝，前台错误会报告匹配到的致命行，同时保持捕获的 stderr 不变。
 - [`dsh-tool-fs-search`](../../packages/fs/tool-fs-search/) 通过 `ctx.subprocess` 运行打包的 ripgrep，并继续位于沙箱化 bash seam 之外。

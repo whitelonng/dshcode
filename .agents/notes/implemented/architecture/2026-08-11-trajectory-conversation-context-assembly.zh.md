@@ -14,11 +14,11 @@ Trajectory 曾维护独立的 Session History 数据源，并把完整的已加�
 
 ## 决策
 
-Trajectory 针对共享的 [`ConversationNodeAssembler`](2026-08-09-client-conversation-node-assembly.md) 注册 target 自有的 Conversation Definition 和 `trajectory` View Builder。Session 只维护一份连续 Event 窗口，并通过 `Session.views` 发布 Chat 与 Trajectory 快照；它不再运行第二套 Trajectory history source 或业务 fold。
+Trajectory 针对共享的 [`ConversationNodeAssembler`](2026-08-09-client-conversation-node-assembly.zh.md) 注册 target 自有的 Conversation Definition 和 `trajectory` View Builder。Session 只维护一份连续 Event 窗口，并通过 `Session.views` 发布 Chat 与 Trajectory 快照；它不再运行第二套 Trajectory history source 或业务 fold。
 
 每个 Definition 只属于一个 target。Chat 与 Trajectory 可以识别同一持久 Event 族，但分别维护自己的 State 和最终 Node payload。它们只共享 Assembler 的精确 ID 匹配、有序 Match、Location 事实、Reader 依赖、发布调度，以及 replace/prepend/append 生命周期。
 
-既有的 [Trajectory 检查记录表](../feature/2026-07-27-trajectory-inspection-ledger.md)继续作为视图模型。Trajectory Builder 把已物化的 target Node 转换为原有的 `eventNodes`、Requests、Tool schema、运行中调用和 Location map；layout、表格虚拟化、选择、Overview 与检查器行为不会成为通用 Conversation 约定。
+既有的 [Trajectory 检查记录表](../feature/2026-07-27-trajectory-inspection-ledger.zh.md)继续作为视图模型。Trajectory Builder 把已物化的 target Node 转换为原有的 `eventNodes`、Requests、Tool schema、运行中调用和 Location map；layout、表格虚拟化、选择、Overview 与检查器行为不会成为通用 Conversation 约定。
 
 ### 业务 Definition
 
@@ -38,7 +38,7 @@ Assistant chunk 只更新对应的 `turn:step` Context。带内容的 chunk 请�
 
 ### 通过前序 Context 恢复 steering
 
-Trajectory 从持久 inbox 历史恢复 steering，使用与 [Chat steering 决策](../feature/2026-08-04-web-context-source-and-steer-marks.md)相同的标识规则，但不共享 Chat 的最终 Node。
+Trajectory 从持久 inbox 历史恢复 steering，使用与 [Chat steering 决策](../feature/2026-08-04-web-context-source-and-steer-marks.zh.md)相同的标识规则，但不共享 Chat 的最终 Node。
 
 每条目标为 `next-step` 的 `agent/inbox/spliced` Event 都会启动一个以 Event seq 标识的不可见 Context。它的 `start()` 读取最近的前序 inbox Context，应用 splice，并存储待处理标识以及累计的已领取 message ID 集合。后续用户来源的 `user/message` 读取最近的前序 inbox Context：已领取的 ID 生成 Steering Node，其余用户来源消息生成普通 User Node。
 
@@ -102,4 +102,4 @@ Trajectory 业务组装的成本随变化页面或 keyed Context 增长，不再
 
 Definition 作者必须提供稳定的协议标识。缺少必要 ID 的旧 Event 可能不会出现在受影响的 Trajectory 业务视图中；与合并无关记录或让历史加载失败相比，这是更安全的退化方式。要求完整展示的生产方必须记录该标识。
 
-[Conversation assembly 决策](2026-08-09-client-conversation-node-assembly.md)继续作为通用 Context、Reader、Location 与发布约定的真源。[Trajectory ledger 决策](../feature/2026-07-27-trajectory-inspection-ledger.md)继续负责表格层级、虚拟化、检查器和交互行为。本 Note 负责说明 Trajectory 如何适配这两项决策，以及为何该适配不与 Chat 共享最终 Node。
+[Conversation assembly 决策](2026-08-09-client-conversation-node-assembly.zh.md)继续作为通用 Context、Reader、Location 与发布约定的真源。[Trajectory ledger 决策](../feature/2026-07-27-trajectory-inspection-ledger.zh.md)继续负责表格层级、虚拟化、检查器和交互行为。本 Note 负责说明 Trajectory 如何适配这两项决策，以及为何该适配不与 Chat 共享最终 Node。

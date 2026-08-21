@@ -16,7 +16,7 @@ Status: implemented
 
 - **dsh-llm / BlockAssembler：** 任意分片流（合法 + 畸形：重复索引、滞后分片、缺少 block-start）。不变式：`blocks()` 计数 ≤ 已见到的不同索引数；重组幂等（`blocks()` 在重复调用间稳定，且 `message().content` 与之一致）；`blocks()` 从不抛异常且仅产出合法的内容块标签；`finish` 反映最后一个 `finish` 分片，无此类分片时默认为 `{kind:'stop'}`。
 - **dsh-session：** 任意事件日志。不变式：`deriveMessages` 确定性；从 seed 回放结果一致；seq 严格单调递增；非消息事件不影响推导出的历史；推导出的内容与日志解耦。
-- **dsh-tools：** 任意 `ParameterSchemaSpec`。不变式：JSON Schema 的 `required` 等于每一层 `required:true` 的键集；转换对合法声明而言是全函数；**并且与[运行时参数校验](../architecture/2026-06-11-runtime-arg-validation.md)组合验证**——满足 spec 的生成参数通过 `validateArgs`，而定向破坏（删除必填键、顶层非对象）被拒绝。聚焦用例覆盖每种根值类型、恰好一项匹配中的分支重叠与无匹配、显式开放性、原始默认值以及有损 JSON。这封堵了编译器、validator 与 `InferArgs` 之间的漂移风险。
+- **dsh-tools：** 任意 `ParameterSchemaSpec`。不变式：JSON Schema 的 `required` 等于每一层 `required:true` 的键集；转换对合法声明而言是全函数；**并且与[运行时参数校验](../architecture/2026-06-11-runtime-arg-validation.zh.md)组合验证**——满足 spec 的生成参数通过 `validateArgs`，而定向破坏（删除必填键、顶层非对象）被拒绝。聚焦用例覆盖每种根值类型、恰好一项匹配中的分支重叠与无匹配、显式开放性、原始默认值以及有损 JSON。这封堵了编译器、validator 与 `InferArgs` 之间的漂移风险。
 - **dsh-agent-loop：** 任意发送调度，对接一个永不耗尽的适配器，通过 `agent/status` settle 信号驱动（无挂钟 sleep）。不变式：无消息丢失；轮次编号严格递增；状态转换保持在合法状态机上。
 
 ## 后果

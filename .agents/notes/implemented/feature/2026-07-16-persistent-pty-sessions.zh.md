@@ -8,13 +8,13 @@ Status: implemented
 
 harness 可以运行前台与后台命令、编辑文件和委派工作，但无法跨工具调用延续一次交互式终端对话。每次 `bash` 前台运行都会启动一个新 shell，因此 shell 内的 cwd、导出变量、虚拟环境激活状态、函数、job control 状态和交互式子进程都会随本次调用结束。
 
-这个缺口排除了状态驻留在终端而不是文件中的工作流，例如单步调试 `gdb`、在 Python 或 Node REPL 中探索、驱动 `ed` 这类行式编辑器，或者中断前台命令后回到原 shell。通用的 [`ctx.jobs`](../../../../packages/jobs/README.md) 运行时可以保留后台操作句柄和输出，但不提供交互式 stdin 或终端语义。
+这个缺口排除了状态驻留在终端而不是文件中的工作流，例如单步调试 `gdb`、在 Python 或 Node REPL 中探索、驱动 `ed` 这类行式编辑器，或者中断前台命令后回到原 shell。通用的 [`ctx.jobs`](../../../../packages/jobs/README.zh.md) 运行时可以保留后台操作句柄和输出，但不提供交互式 stdin 或终端语义。
 
 现有 `bash`、`read`、`write` 和 `edit` 工具仍是有界、可审计操作的可靠默认选项。PTY 是对确实需要终端状态的工作的补充能力，不说明这些工具有缺陷，更不意味着要移除它们。
 
 ## 决策
 
-可选的 `packages/terminal/` 能力家族提供由 agent（智能体）拥有、持久化且面向行式交互的 PTY 会话。它遵循仓库的 [能力模式](../../implemented/architecture/2026-06-13-capability-seams.md)，与现有命令和文件系统工具并存，并且不修改 `agent-loop`。
+可选的 `packages/terminal/` 能力家族提供由 agent（智能体）拥有、持久化且面向行式交互的 PTY 会话。它遵循仓库的 [能力模式](../../implemented/architecture/2026-06-13-capability-seams.zh.md)，与现有命令和文件系统工具并存，并且不修改 `agent-loop`。
 
 当前实现在 Linux 和 macOS 上支持交互式 shell 与行式 REPL。全屏终端应用、按键序列、BEL 触发的控制流、进程丢失后的会话恢复以及跨 agent 共享会话都明确推迟。
 
@@ -34,7 +34,7 @@ harness 可以运行前台与后台命令、编辑文件和委派工作，但无
 
 实现不提供插件加载期 auto-start 会话。`terminal_open` 只在 agent 工具调用期间创建会话，此时所有权和所属的事件溯源会话都已确定。未来的声明式启动功能必须通过尚未发布的 agent setup 组合，而不能创建全局共享终端。
 
-agent scope dispose（资源释放）时先撤销注册，再等待全部所属 PTY 完全停稳。未发布的后端 setup 同样是受追踪的生命周期操作：owner 或服务 dispose 会中止服务自有的 signal，等待后端结算与回滚完成后才返回。即使后端 reject，或返回的会话在回滚 close 时失败，调用方取消仍会原样保留其 `AbortSignal.reason`；该清理失败不会替换调用方原因，而会继续受追踪，留待后续 owner 或服务 dispose 处理。由 lifecycle dispose 触发的回滚 close 失败会使 spawn 与该 lifecycle dispose 都 reject，而 `TerminalBackendCleanupError` 让后端在不替换调用方取消的前提下，为该 lifecycle dispose 保留自身的启动清理失败。若调用方取消在 dispose 开始前已经结算，该清理失败会继续作为受追踪的 owner activity 保留，直到后续 owner 或服务 dispose 消费并报告它，因此沙箱模式策略不会把清理失败误判为完全停稳。后端或工具插件 reload 不会遗留会话：所有权持续存放在 `TerminalSessionService` 中，直到 agent 结束，与 [`ctx.jobs`](../../../../packages/jobs/jobs/README.md) 的服务持有记录模式一致。服务会先同步把会话预留给一次活跃发送，再返回该操作；后台发送同样会在 job id 对外可见前完成预留。第二次发送会以 `SEND_ACTIVE` 失败，因此输出与取消无法跨越操作所有权。
+agent scope dispose（资源释放）时先撤销注册，再等待全部所属 PTY 完全停稳。未发布的后端 setup 同样是受追踪的生命周期操作：owner 或服务 dispose 会中止服务自有的 signal，等待后端结算与回滚完成后才返回。即使后端 reject，或返回的会话在回滚 close 时失败，调用方取消仍会原样保留其 `AbortSignal.reason`；该清理失败不会替换调用方原因，而会继续受追踪，留待后续 owner 或服务 dispose 处理。由 lifecycle dispose 触发的回滚 close 失败会使 spawn 与该 lifecycle dispose 都 reject，而 `TerminalBackendCleanupError` 让后端在不替换调用方取消的前提下，为该 lifecycle dispose 保留自身的启动清理失败。若调用方取消在 dispose 开始前已经结算，该清理失败会继续作为受追踪的 owner activity 保留，直到后续 owner 或服务 dispose 消费并报告它，因此沙箱模式策略不会把清理失败误判为完全停稳。后端或工具插件 reload 不会遗留会话：所有权持续存放在 `TerminalSessionService` 中，直到 agent 结束，与 [`ctx.jobs`](../../../../packages/jobs/jobs/README.zh.md) 的服务持有记录模式一致。服务会先同步把会话预留给一次活跃发送，再返回该操作；后台发送同样会在 job id 对外可见前完成预留。第二次发送会以 `SEND_ACTIVE` 失败，因此输出与取消无法跨越操作所有权。
 
 ### 安全与进程边界
 
@@ -45,7 +45,7 @@ agent scope dispose（资源释放）时先撤销注册，再等待全部所属 
 
 沙箱限制本地进程副作用，但不会让任意 shell 输入自动安全：网络调用和其他外部副作用仍由部署策略治理。工具描述会说明 PTY 会话比一次性工具更难审计，只应在确实需要持久状态或交互式 stdin 时使用。
 
-本地子进程终端原语只使用 `node-pty` 的公开能力：子进程 PID、`data` 与 `exit` 通知、`write` 和 `kill`。它不假设能访问原生 master fd，也不从 TypeScript 调用 `waitpid`。该原语下的平台进程检查器在 Linux 上通过 `/proc`、在 macOS 上通过 `ps` 推导前台进程组和父子进程身份。[可移植执行环境决策](../architecture/2026-07-28-portable-execution-world-consumers.md)负责定义这种进程／消费方拆分。
+本地子进程终端原语只使用 `node-pty` 的公开能力：子进程 PID、`data` 与 `exit` 通知、`write` 和 `kill`。它不假设能访问原生 master fd，也不从 TypeScript 调用 `waitpid`。该原语下的平台进程检查器在 Linux 上通过 `/proc`、在 macOS 上通过 `ps` 推导前台进程组和父子进程身份。[可移植执行环境决策](../architecture/2026-07-28-portable-execution-world-consumers.zh.md)负责定义这种进程／消费方拆分。
 
 ### 6 个面向模型的工具
 
@@ -134,7 +134,7 @@ plugins:
 - 声明式 per-agent 启动需要 agent-setup 组合点；仍然禁止插件加载期全局会话。
 - harness 进程丢失后的会话恢复需要进程外 owner 和版本化协议。
 - 网络出口策略与外部副作用回滚超出 PTY 范围，继续作为独立安全工作。
-- Windows/ConPTY 会话经由 subprocess-local 的 Windows inspector（Toolhelp32 身份、伪前台进程组、taskkill 拆卸）与 `pty-local` 的 pwsh 方言运行；见 [pwsh 持久工具 note](../architecture/2026-08-11-pwsh-persistent-pty.md)。
+- Windows/ConPTY 会话经由 subprocess-local 的 Windows inspector（Toolhelp32 身份、伪前台进程组、taskkill 拆卸）与 `pty-local` 的 pwsh 方言运行；见 [pwsh 持久工具 note](../architecture/2026-08-11-pwsh-persistent-pty.zh.md)。
 
 ## 备选方案
 

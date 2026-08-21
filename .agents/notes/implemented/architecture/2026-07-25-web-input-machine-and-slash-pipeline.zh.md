@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-25-web-input-machine-and-slash-pipeline.md) | 中文
 
-> 范围：输入状态机（occurrence 表 + claim 看护 + 提交事务）、hub/facade 与发送编排、跨插件输入改写的三个 scoped bail 事件、`/` 与 `@` 触发检测与菜单流水线（ui-input-trigger）、composer 周边 slot 体系。依赖[会话作用域 note](2026-07-25-web-client-session-scope-and-provide-channel.md)的 sctx / provide / session-maybe 与 blank 实体模型；命令知识（三型、目录、popup）零涉——那是[命令业务面 note](2026-07-25-web-command-surfaces-and-assembly.md)的领地。
+> 范围：输入状态机（occurrence 表 + claim 看护 + 提交事务）、hub/facade 与发送编排、跨插件输入改写的三个 scoped bail 事件、`/` 与 `@` 触发检测与菜单流水线（ui-input-trigger）、composer 周边 slot 体系。依赖[会话作用域 note](2026-07-25-web-client-session-scope-and-provide-channel.zh.md)的 sctx / provide / session-maybe 与 blank 实体模型；命令知识（三型、目录、popup）零涉——那是[命令业务面 note](2026-07-25-web-command-surfaces-and-assembly.zh.md)的领地。
 
 ## 问题
 

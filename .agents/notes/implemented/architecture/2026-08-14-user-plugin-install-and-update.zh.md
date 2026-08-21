@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-14-user-plugin-install-and-update.md) | 中文
 
-> 范围：仅回环 plugin-installer 网关（宿主）、安装/更新标签页（客户端），以及它们消费的重启应用通道。与 [plugin-control](2026-08-14-built-in-community-plugins-and-controls.md)（配置产品的开关）互补，支持开放式用户安装；消费 [桌面重启通道](2026-08-14-desktop-single-row-title-bar.md)。
+> 范围：仅回环 plugin-installer 网关（宿主）、安装/更新标签页（客户端），以及它们消费的重启应用通道。与 [plugin-control](2026-08-14-built-in-community-plugins-and-controls.zh.md)（配置产品的开关）互补，支持开放式用户安装；消费 [桌面重启通道](2026-08-14-desktop-single-row-title-bar.zh.md)。
 
 ## 问题
 
@@ -47,5 +47,5 @@ Status: implemented
 
 ## 相关
 
-- [桌面端插件启动失败恢复](../../implemented/architecture/2026-08-15-desktop-plugin-boot-recovery.md) 复用本网关的受管 patch 行与状态辅助函数实现禁用并重启的恢复流程，并为网关新增 `failures`/`set-safe-mode` 端点。
-- [GitHub 插件安装改走 codeload tarball 与 GitHub API](../../implemented/architecture/2026-08-15-github-tarball-installs.md) 为 GitHub 来源替换浅克隆；本笔记的身份校验与 commit 记录正是该路径仍执行的部分。
+- [桌面端插件启动失败恢复](../../implemented/architecture/2026-08-15-desktop-plugin-boot-recovery.zh.md) 复用本网关的受管 patch 行与状态辅助函数实现禁用并重启的恢复流程，并为网关新增 `failures`/`set-safe-mode` 端点。
+- [GitHub 插件安装改走 codeload tarball 与 GitHub API](../../implemented/architecture/2026-08-15-github-tarball-installs.zh.md) 为 GitHub 来源替换浅克隆；本笔记的身份校验与 commit 记录正是该路径仍执行的部分。

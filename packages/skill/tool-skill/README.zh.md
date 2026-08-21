@@ -14,7 +14,7 @@
 
 如果最初没有模型可调用 skill，则省略目录；如果该 agent（智能体）的工具视图排除了随附的 `skill` 工具，或解析出同名的作用域内遮蔽项，也会省略目录。身份比对针对本插件所注册的那个定义，而非按自身名字回查，因此本插件既可全局挂载，也可挂在单个 agent 的组装内——在后者中 `register()` 只注册到该 agent 的层中。可见性变更参与 digest 计算，使提示词指引、模型可见 schema 和可执行分派保持对齐。
 
-`catalogDescriptionMaxLength` 控制规范化后的目录描述，渲染时会对其执行 XML 转义。其默认值是 `500`，且必须是不小于 `3` 的整数，以便为截断省略号保留空间。[skill 目录热刷新 Agent Note](../../../.agents/notes/implemented/feature/2026-07-27-skill-catalog-hot-refresh.md) 负责定义持久初始目录和替换目录的生命周期。
+`catalogDescriptionMaxLength` 控制规范化后的目录描述，渲染时会对其执行 XML 转义。其默认值是 `500`，且必须是不小于 `3` 的整数，以便为截断省略号保留空间。[skill 目录热刷新 Agent Note](../../../.agents/notes/implemented/feature/2026-07-27-skill-catalog-hot-refresh.zh.md) 负责定义持久初始目录和替换目录的生命周期。
 
 ## 工具：`skill`
 
@@ -65,7 +65,7 @@ A user may also invoke a skill directly; its <skill_content> block then appears 
 
 #### 模型看到的内容
 
-模型会看到生成的 [`skill` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-skill)。
+模型会看到生成的 [`skill` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-skill)。
 
 #### Token 影响
 

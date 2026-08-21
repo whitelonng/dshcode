@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-26-code-mode-chat-subcall-rows.md) | 中文
 
-> 范围：Web chat 视图如何渲染一个 `run_code` 轮次，即 Code Mode UI 栈的客户端侧部分，构建在[宿主侧基础](2026-07-26-code-dispatch-ui-foundation.md)之上（携带完整内容的 `tool/code-dispatch`、必填的 `description` 参数）。本篇所依托的 slot 模型归 [toolview 溶解](../architecture/2026-07-23-toolview-dissolution.md)所有。
+> 范围：Web chat 视图如何渲染一个 `run_code` 轮次，即 Code Mode UI 栈的客户端侧部分，构建在[宿主侧基础](2026-07-26-code-dispatch-ui-foundation.zh.md)之上（携带完整内容的 `tool/code-dispatch`、必填的 `description` 参数）。本篇所依托的 slot 模型归 [toolview 溶解](../architecture/2026-07-23-toolview-dissolution.zh.md)所有。
 
 ## 问题
 
@@ -29,4 +29,4 @@ Status: implemented
 
 ## 后果
 
-自定义 toolview 注册无需额外改动即可适用于子调用——而且是刻意为之：不存在按注册粒度的退出机制，唯一的出路是组件自行读取自身上下文，而当前没有任何消费方需要这么做。选中高亮经由同一条 `selectedCallId` 通道到达嵌套行（分组归属会搜索整棵树）。trajectory/waterfall 现在依据分发计时事件对（[实时并行分发](2026-07-26-code-mode-live-parallel-dispatch.md)）绘制子调用 span；缺少计时，waterfall 上的 span 就是在撒谎。fixture（测试前置数据）的轮次 64（`?fixture`），加上 `code-mode-round` 浏览器 e2e（录制的真实轮次、无密钥回放），共同锁定整个界面；jsdom 与运行时测试套件则锁定 slot 分发、错误状态、递归详情解析、历史投影与引用稳定的路径复制。
+自定义 toolview 注册无需额外改动即可适用于子调用——而且是刻意为之：不存在按注册粒度的退出机制，唯一的出路是组件自行读取自身上下文，而当前没有任何消费方需要这么做。选中高亮经由同一条 `selectedCallId` 通道到达嵌套行（分组归属会搜索整棵树）。trajectory/waterfall 现在依据分发计时事件对（[实时并行分发](2026-07-26-code-mode-live-parallel-dispatch.zh.md)）绘制子调用 span；缺少计时，waterfall 上的 span 就是在撒谎。fixture（测试前置数据）的轮次 64（`?fixture`），加上 `code-mode-round` 浏览器 e2e（录制的真实轮次、无密钥回放），共同锁定整个界面；jsdom 与运行时测试套件则锁定 slot 分发、错误状态、递归详情解析、历史投影与引用稳定的路径复制。

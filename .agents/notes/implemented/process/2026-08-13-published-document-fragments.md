@@ -14,9 +14,11 @@ English | [中文](2026-08-13-published-document-fragments.zh.md)
 
 Any fragment target heading whose GitHub id differs from its VitePress id carries an explicit GitHub-compatible alias. Authored English and translated pages place the alias before the heading; translated pages use the English id shared by the bilingual pair. Generated config, tool, and persistence catalogs emit the alias from their owning generator. Source Markdown validation remains independent and continues to reject links that do not resolve under repository rendering.
 
+The file path follows the source document's locale when a paired target exists, as defined by the [localized bilingual links decision](2026-08-18-localized-bilingual-links.md); the query and fragment suffix remain identical across the pair.
+
 ## Alternatives considered
 
-**Use locale-specific fragments.** Bilingual pairs intentionally preserve identical link targets. Locale-specific fragments would make the two sources disagree and would require every link producer to know the target locale's translated heading.
+**Use locale-specific fragments.** Bilingual pairs intentionally preserve an identical fragment suffix even though a paired file path follows the source locale. Locale-specific fragments would require every link producer to know the target locale's translated heading.
 
 **Rely on VitePress heading ids.** Those ids depend on rendered punctuation and localized heading text. They do not preserve the GitHub ids already used by repository links and generated references.
 

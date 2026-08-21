@@ -12,7 +12,7 @@ Status: implemented
 
 每个 locale 根路由都是重定向页面。`/` 将读者导向 `./guide/quickstart`，`/en/` 则把同一相对目标解析为 `/en/guide/quickstart`。当网站托管在源站的子路径下时，相对目标仍会保留配置的 `DOCS_BASE`。
 
-重定向由 `docs/user/index.md` 与 `docs/user/index.zh.md` 的 VitePress frontmatter 维护。对于 locale 首页，[文档网站投影器](../process/2026-07-13-documentation-site-projection.md)只发布这段 frontmatter，因此权威 Markdown 保留中英文语言切换行，且不会渲染第二个首页。投影器测试验证两个 locale 根路由都使用相对于各自 locale 的同一快速开始目标。
+重定向由 `docs/user/index.md` 与 `docs/user/index.zh.md` 的 VitePress frontmatter 维护。对于 locale 首页，[文档网站投影器](../process/2026-07-13-documentation-site-projection.zh.md)只发布这段 frontmatter，因此权威 Markdown 保留中英文语言切换行，且不会渲染第二个首页。投影器测试验证两个 locale 根路由都使用相对于各自 locale 的同一快速开始目标。
 
 文档网站不承载产品定位和功能摘要。快速开始页面仍提供指南、开发、参考、搜索和 locale 导航。
 

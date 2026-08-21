@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向模型的 **`workflow` 工具**：运行一段扇出 subagent 的 JavaScript 编排脚本，并返回脚本的最终值。本包负责基于 [`ctx.workflowEngine`](../workflow/README.md) 定义面向模型的 schema 和运行生命周期；脚本解析、执行、上限与取消位于 seam 之后，消费方仍负责面向父级的 schema 和结果包络。
+面向模型的 **`workflow` 工具**：运行一段扇出 subagent 的 JavaScript 编排脚本，并返回脚本的最终值。本包负责基于 [`ctx.workflowEngine`](../workflow/README.zh.md) 定义面向模型的 schema 和运行生命周期；脚本解析、执行、上限与取消位于 seam 之后，消费方仍负责面向父级的 schema 和结果包络。
 
 ## 模型看到的内容
 
@@ -10,7 +10,7 @@
 
 ## 生命周期
 
-收集是同步的（类似 [`dsh-tool-subagent`](../../subagent/tool-subagent/README.md)）：`execute` 启动运行并等待 `run.result`；这些操作位于 `try/finally` 中，该结构总会 dispose（资源释放）运行，使脚本及其子 agent（智能体）在每条路径上完全停稳。`exec.signal` 会桥接到 `run.cancel()`，包括启动前已经中止的情况。非 `completed` 结束原因会映射为报告原因的 `isError` 结果，绝不会把局部输出当作成功；`start()` 同步抛出的解析／meta 失败会变成模型可据以修正的 `isError`。完成时返回规范值 `{ runId, agentsStarted, result }`；Native 渲染器保留 meta 名称、agent 数量和 JSON 值，只会在 `maxResultChars` 处截断该投影。
+收集是同步的（类似 [`dsh-tool-subagent`](../../subagent/tool-subagent/README.zh.md)）：`execute` 启动运行并等待 `run.result`；这些操作位于 `try/finally` 中，该结构总会 dispose（资源释放）运行，使脚本及其子 agent（智能体）在每条路径上完全停稳。`exec.signal` 会桥接到 `run.cancel()`，包括启动前已经中止的情况。非 `completed` 结束原因会映射为报告原因的 `isError` 结果，绝不会把局部输出当作成功；`start()` 同步抛出的解析／meta 失败会变成模型可据以修正的 `isError`。完成时返回规范值 `{ runId, agentsStarted, result }`；Native 渲染器保留 meta 名称、agent 数量和 JSON 值，只会在 `maxResultChars` 处截断该投影。
 
 对于根 transport 执行（`exec.parent` 缺省），工具还会把运行投影到调用 Agent 的 Session：`start()` 返回后写 run-start，只记录 `run.id` 匹配的成员开始与结束，并且只在 `run.result` 已取得且 `dispose()` 完全停稳后写 run-end。嵌套 transport 调用照常执行，但不写工作流记录。任一次 Session append 首次失败后，本运行会停止后续记录并只告警一次，留下空记录或合法连续前缀，同时不改变工具结果和清理。
 
@@ -18,7 +18,7 @@
 
 ## 渲染意图
 
-渲染意图预先确定（见[渲染意图 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.md)）：使用一个 `generic` 卡片，标题为 `workflow: <meta.name>`，直接从 `args.meta.name` 读取（呈现是参数的纯函数，不要求引擎解析）；脚本文本作为 `rawInput` 携带。结果继续使用 generic 卡片。
+渲染意图预先确定（见[渲染意图 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.zh.md)）：使用一个 `generic` 卡片，标题为 `workflow: <meta.name>`，直接从 `args.meta.name` 读取（呈现是参数的纯函数，不要求引擎解析）；脚本文本作为 `rawInput` 携带。结果继续使用 generic 卡片。
 
 ## 配置
 
@@ -53,7 +53,7 @@ Use the <toolName> tool ONLY when the user explicitly asks for a workflow or for
 
 #### 模型看到的内容
 
-工具可见时，已生成的默认 [`workflow` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-workflow) 包含完整的 JavaScript 钩子与元数据约定；`toolName` 可以重命名该定义，模型会提交脚本、元数据和可选 args。
+工具可见时，已生成的默认 [`workflow` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-workflow) 包含完整的 JavaScript 钩子与元数据约定；`toolName` 可以重命名该定义，模型会提交脚本、元数据和可选 args。
 
 #### Token 影响
 

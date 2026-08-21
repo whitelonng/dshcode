@@ -96,6 +96,12 @@ describe('parseSessionLog', () => {
     expect(parseSessionLog(`${header}\n\n${JSON.stringify(ev)}\n\n`)).toEqual([ev])
   })
 
+  it('rejects non-object body rows with their source line', () => {
+    const header = JSON.stringify({ type: 'session', version: 0, id: 's1', createdAt: 0 })
+    expect(() => parseSessionLog(`${header}\nnull\n`))
+      .toThrow('session snapshot line 2 must be a JSON object')
+  })
+
   it('expands a packed chunk row into its events (a fixture recorded with packChunks on)', () => {
     const header = JSON.stringify({ type: 'session', version: 0, id: 's1', createdAt: 0 })
     const row = JSON.stringify({
@@ -106,6 +112,20 @@ describe('parseSessionLog', () => {
       chunkEvent(1, 1, 1, { type: 'text-delta', index: 0, text: 'a' }),
       chunkEvent(2, 1, 1, { type: 'text-delta', index: 0, text: 'b' }),
       chunkEvent(3, 1, 1, { type: 'text-delta', index: 0, text: 'c' }),
+    ])
+  })
+
+  it('synthesizes omitted ordinary and packed snapshot envelopes', () => {
+    const header = JSON.stringify({ type: 'session', version: 0, id: 's1', createdAt: 7 })
+    const ordinary = JSON.stringify({ type: 'turn/start', data: { turn: 1 } })
+    const packed = JSON.stringify({
+      type: 'text-chunks',
+      data: { turn: 1, step: 1, index: 0, dt: [3], texts: ['a', 'b'] },
+    })
+    expect(parseSessionLog(`${header}\n${ordinary}\n${packed}\n`)).toEqual([
+      { type: 'turn/start', seq: 0, time: 0, data: { turn: 1 } },
+      chunkEvent(1, 1, 1, { type: 'text-delta', index: 0, text: 'a' }),
+      { ...chunkEvent(2, 1, 1, { type: 'text-delta', index: 0, text: 'b' }), time: 3 },
     ])
   })
 })

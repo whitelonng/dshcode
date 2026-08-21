@@ -215,6 +215,8 @@ describe('brief rendering', () => {
     expect(brief).toContain('## First-occurrence notes')
     expect(brief).toContain('agent（智能体）')
     expect(brief).toContain('首次出现 annotations attach to the document-wide first occurrence only')
+    expect(brief).toContain('targets in the active bilingual corpus use `.zh.md` for Chinese')
+    expect(brief).toContain('a missing in-scope counterpart is an error')
     expect(brief).toContain('verify-translation-pairing --write docs/foo.md')
   })
 
@@ -266,6 +268,8 @@ describe('brief rendering', () => {
       scope: { kind: 'units', bundles: [bundle], firstOccurrenceNotes: [] },
     })
     expect(brief).toContain('exactly what the new Chinese states')
+    expect(brief).toContain('targets in the active bilingual corpus use `.md` for English')
+    expect(brief).toContain('targets outside the corpus keep the authored path')
     expect(brief).toContain('verify-translation-pairing --write docs/foo.md')
   })
 

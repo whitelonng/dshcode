@@ -4,7 +4,7 @@
 
 **`CodeRuntime`**（`ctx.codeRuntime`）定义代码运行时做什么，即针对宿主提供的一组异步绑定运行一段模型编写的程序，并报告 `{ value, logs, error? }`，而不规定如何实现。
 
-此包承担该能力的 Service Definition 角色（以 bash 三包结构为模板，参见[能力 seam](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md)）：提供方通过继承 `CodeRuntime` 并注册服务接入；Consumer 是工具注册表的 Code Mode，它生成面向模型的 SDK，并桥接工具分发。这两项职责均由 [Code Mode Agent Note](../../../.agents/notes/implemented/feature/2026-06-15-code-mode.md) 规定，首个提供方是 Node worker 线程后端。运行时不了解工具或会话：调用方只向它提供具名异步函数与程序字符串；所有与工具有关的内容都留在 Consumer。
+此包承担该能力的 Service Definition 角色（以 bash 三包结构为模板，参见[能力 seam](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.zh.md)）：提供方通过继承 `CodeRuntime` 并注册服务接入；Consumer 是工具注册表的 Code Mode，它生成面向模型的 SDK，并桥接工具分发。这两项职责均由 [Code Mode Agent Note](../../../.agents/notes/implemented/feature/2026-06-15-code-mode.zh.md) 规定，首个提供方是 Node worker 线程后端。运行时不了解工具或会话：调用方只向它提供具名异步函数与程序字符串；所有与工具有关的内容都留在 Consumer。
 
 ## 服务 API（`ctx.codeRuntime`）
 
@@ -33,6 +33,6 @@ binding-global 与 error-class 名称是**语言可移植**的：必须匹配标
 ## 已知限制与暂缓事项
 
 - **`run()` 是一次性的**：`logs` 只有在 `CodeRunResult` resolve 后才能获得；seam 不提供正在运行的程序所产生输出的流式日志或进度接口。
-- **持久 REPL 风格内核已记录为未来工作**：在持久内核后端带来自己的日志方案前，运行之间不保留状态的约定继续有效（参见 [Code Mode Agent Note](../../../.agents/notes/implemented/feature/2026-06-15-code-mode.md)）。
+- **持久 REPL 风格内核已记录为未来工作**：在持久内核后端带来自己的日志方案前，运行之间不保留状态的约定继续有效（参见 [Code Mode Agent Note](../../../.agents/notes/implemented/feature/2026-06-15-code-mode.zh.md)）。
 - **目前只提供 worker 线程后端**：`'process'`／`'container'` 是已经声明但没有实现的已知 `isolation` 值；强安全边界需要等待容器后端。
 - **中间绑定值没有字节上限**：实现仍受 structured-clone 成本与进程内存约束，而提供方或执行器可能已经应用自己的获取上限。

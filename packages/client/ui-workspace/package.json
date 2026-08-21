@@ -56,10 +56,7 @@
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
-    "react": "^18.2.0"
+    "@deepseek-ai/dsh-client-ui-sidebar": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-client-connection": "workspace:^",

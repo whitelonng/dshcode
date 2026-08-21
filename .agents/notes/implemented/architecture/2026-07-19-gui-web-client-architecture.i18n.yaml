@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md
 2026-07-19-gui-web-client-architecture.md: 8b4f940299cbba78d403c34b1e5fc9740e44f2c2
-2026-07-19-gui-web-client-architecture.zh.md: a86f9d6f71bed0ce147ffee39bd921037d6c1c4c
+2026-07-19-gui-web-client-architecture.zh.md: 705b1337dd97ac37bd01bdcc5aa22484b7971908

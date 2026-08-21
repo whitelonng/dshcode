@@ -27,7 +27,7 @@
 
 #### 模型看到的内容
 
-模型会看到生成的 [`ask_user_question` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-ask-user)，其中包含问题 id、提示语、标题、选项和多选标志。
+模型会看到生成的 [`ask_user_question` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-ask-user)，其中包含问题 id、提示语、标题、选项和多选标志。
 
 #### Token 影响
 

@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-14-community-plugins-opt-in-by-default.md) | 中文
 
-> 范围：仅随发行版提供的 Web profile 模板及其安装自有迁移。反转了[内置社区插件笔记](2026-08-14-built-in-community-plugins-and-controls.md)的模板半边；该笔记仍是依赖、皮肤树与插件开关半边的权威，本变更保留这些部分。
+> 范围：仅随发行版提供的 Web profile 模板及其安装自有迁移。反转了[内置社区插件笔记](2026-08-14-built-in-community-plugins-and-controls.zh.md)的模板半边；该笔记仍是依赖、皮肤树与插件开关半边的权威，本变更保留这些部分。
 
 ## 问题
 

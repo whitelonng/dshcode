@@ -2,7 +2,7 @@
 
 [English](index.md) | 中文
 
-本教程会创建一个最小的 Harness 插件，并将其加载到 Web UI 中。请从已完成[从源码运行路径](../../../../README.md#从源码运行)的仓库检出开始。
+本教程会创建一个最小的 Harness 插件，并将其加载到 Web UI 中。请从已完成[从源码运行路径](../../../../README.zh.md)的仓库检出开始。
 
 ## 创建本地项目
 
@@ -135,10 +135,10 @@ export default class MyService extends Service {
 }
 ```
 
-大多数情况下，函数形式足够了。当插件需要向其他插件提供服务时，可使用类形式（见 [服务与依赖](../framework/service.md)）。
+大多数情况下，函数形式足够了。当插件需要向其他插件提供服务时，可使用类形式（见 [服务与依赖](../framework/service.zh.md)）。
 
 ## 下一步
 
-- [开发一个工具](./tool.md) — 了解工具定义 DSL
-- [插件配置](./config.md) — 让插件接受用户配置
-- [Cordis 框架教程](../../../cordis-tutorial/index.md) — 底层的插件框架，在临时目录中动手构建，无需 API 密钥
+- [开发一个工具](./tool.zh.md) — 了解工具定义 DSL
+- [插件配置](./config.zh.md) — 让插件接受用户配置
+- [Cordis 框架教程](../../../cordis-tutorial/index.zh.md) — 底层的插件框架，在临时目录中动手构建，无需 API 密钥

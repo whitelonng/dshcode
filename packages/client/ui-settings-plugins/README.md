@@ -20,7 +20,7 @@ A card stages what the user types and writes it only when they save. Each contro
 
 Saving writes each staged field through the client settings scope, which fences every write with the namespace revision it read, so a form that has drifted from the document is refused rather than overwriting a concurrent change. The Host is the only authority on whether a value was accepted — its validators own the constraints no schema can express — so the card reads the section back afterwards and reports a save that did not land, keeping those drafts for the user to correct.
 
-A key can also be written from another surface — the Models page addresses the same reference — which changes no settings section, so the card re-reads on the forwarded `credentials/updated` event for the reference it watches.
+A key can also be written from another surface — the Models page addresses the same reference — which changes no settings section, so the card re-reads on the forwarded `credentials/reference-updated` event for the reference it watches.
 
 A field's presence in the raw user layer — not its value — is what marks it overridden; a reset clears that field so it re-inherits the composition layer. Secret-role fields never ride a response, so a key control starts blank, reports only whether one is configured, and writes through the credentials domain rather than the settings section; a blank draft writes nothing and keeps the stored key.
 

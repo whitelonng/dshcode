@@ -6,7 +6,7 @@ Status: proposed
 
 ## 问题
 
-已经实现的[工具注册表取消约定](../../implemented/architecture/2026-07-19-cooperative-tool-cancellation.md)让每个工具主体中的 `exec.signal` 成为必填值，但许多从这些工具主体可达的异步能力接口仍接受可选信号。因此，工具可以满足自身类型，却在下一次同进程调用时意外丢失取消。
+已经实现的[工具注册表取消约定](../../implemented/architecture/2026-07-19-cooperative-tool-cancellation.zh.md)让每个工具主体中的 `exec.signal` 成为必填值，但许多从这些工具主体可达的异步能力接口仍接受可选信号。因此，工具可以满足自身类型，却在下一次同进程调用时意外丢失取消。
 
 这一缺口会沿调用链传递。文件系统工具可能调用路径解析和 I/O，Web 工具可能调用提供方，Bash 工具可能调用执行器，组合工具可能启动或等待任务、subagent 或工作流。只要某个控制工具所持有的工作且会被工具等待的操作允许省略信号，TypeScript 就无法证明取消仍能到达拥有副作用的边界。
 

@@ -6,4 +6,4 @@
 
 | 包 | 职责 |
 |---|---|
-| [`mcp-client/`](mcp-client/README.md) | MCP 客户端桥接，将外部服务器工具注册到 `ctx.tools` |
+| [`mcp-client/`](mcp-client/README.zh.md) | MCP 客户端桥接，将外部服务器工具注册到 `ctx.tools` |

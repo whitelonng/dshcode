@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向模型的 web 工具套件 `web_search` 与 `web_fetch`，构建于 [web 能力 seam](../web/README.md)（`ctx.web`）之上。它只负责面向模型的事项：工具名称、JSON Schema、snake_case 参数名称、提示词区段、结果数量上限、结果格式、HTML→markdown 呈现，以及 UI 呈现投影——`presentCall`、`presentResult`（以 `kind: 'search' | 'fetch'` 区分的 `card: 'web'` 结果卡片），以及承载有损渲染文本无法携带的结构化搜索来源或抓取摘要的 `output.presentationMeta`（见 [web-result-card Agent Note](../../../.agents/notes/implemented/feature/2026-07-30-web-result-card.md)）。所有 web 访问都通过 `ctx.web`；该包绝不导入具体提供方。两个工具都不公开面向模型的超时：每个工具的协作式工具调用超时预算通过配置在此声明（`fetchTimeoutMs`／`searchTimeoutMs`，附加为 `ToolDefinition.timeoutMs`），由 [`@deepseek-ai/dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.md)（`tools/execute` 包装层）强制执行。单项操作会转发 `exec.signal`；多查询搜索会把它与批次取消信号融合，使失败查询能够中止其余查询。
+面向模型的 web 工具套件 `web_search` 与 `web_fetch`，构建于 [web 能力 seam](../web/README.zh.md)（`ctx.web`）之上。它只负责面向模型的事项：工具名称、JSON Schema、snake_case 参数名称、提示词区段、结果数量上限、结果格式、HTML→markdown 呈现，以及 UI 呈现投影——`presentCall`、`presentResult`（以 `kind: 'search' | 'fetch'` 区分的 `card: 'web'` 结果卡片），以及承载有损渲染文本无法携带的结构化搜索来源或抓取摘要的 `output.presentationMeta`（见 [web-result-card Agent Note](../../../.agents/notes/implemented/feature/2026-07-30-web-result-card.zh.md)）。所有 web 访问都通过 `ctx.web`；该包绝不导入具体提供方。两个工具都不公开面向模型的超时：每个工具的协作式工具调用超时预算通过配置在此声明（`fetchTimeoutMs`／`searchTimeoutMs`，附加为 `ToolDefinition.timeoutMs`），由 [`@deepseek-ai/dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.zh.md)（`tools/execute` 包装层）强制执行。单项操作会转发 `exec.signal`；多查询搜索会把它与批次取消信号融合，使失败查询能够中止其余查询。
 
 每个工具独立注册；只需要其中一个工具的产品可以通过配置禁用另一个（`{ search: false }`／`{ fetch: false }`）。仅当抓取也通过配置启用时，搜索指引才会提及 `web_fetch`；仅启用搜索的组合则会要求模型使用返回的 snippet 并引用其 URL。
 
@@ -29,7 +29,7 @@
 | `searchTimeoutMs` | `30000` | `web_search` 的协作式工具调用超时预算（ms）。 |
 | `fetchMaxOutputChars` | `200000` | 同步转换的源字符数与单次完整 `web_fetch` 输出的上限（状态头、渲染后的主体与页脚合并计算）；主体被截断时，在能容纳的情况下附带截断提示。 |
 
-`searchMaxQueries` 在完全相同的字符串去重前限制可接受数组、提供方请求扇出与组合后的提供方答案增长；校验会在任何搜索开始前拒绝超限数组，随后分发只保留每个查询第一次出现的位置。该设置与各提供方自己的 `maxUses` 等控制项共同构成产品的搜索预算；通用 seam 不公开提供方内部的原生搜索计数。`fetchTimeoutMs`／`searchTimeoutMs` 声明每个工具的协作式超时预算（附加为 `ToolDefinition.timeoutMs`），由 [`@deepseek-ai/dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.md) 强制执行；面向模型的 schema 不公开超时参数。`fetchMaxOutputChars` 同时限制同步转换工作量和完整渲染结果：只转换至多该数量的源字符，随后对状态头、转换后的前缀和截断提示合并设限。默认值为本地提供方的 100,000 字符主体上限留出余量，但渲染膨胀仍可能使最终上限截断结果。
+`searchMaxQueries` 在完全相同的字符串去重前限制可接受数组、提供方请求扇出与组合后的提供方答案增长；校验会在任何搜索开始前拒绝超限数组，随后分发只保留每个查询第一次出现的位置。该设置与各提供方自己的 `maxUses` 等控制项共同构成产品的搜索预算；通用 seam 不公开提供方内部的原生搜索计数。`fetchTimeoutMs`／`searchTimeoutMs` 声明每个工具的协作式超时预算（附加为 `ToolDefinition.timeoutMs`），由 [`@deepseek-ai/dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.zh.md) 强制执行；面向模型的 schema 不公开超时参数。`fetchMaxOutputChars` 同时限制同步转换工作量和完整渲染结果：只转换至多该数量的源字符，随后对状态头、转换后的前缀和截断提示合并设限。默认值为本地提供方的 100,000 字符主体上限留出余量，但渲染膨胀仍可能使最终上限截断结果。
 
 ```yaml
 - id: tool-web
@@ -80,7 +80,7 @@ Use the web_fetch tool to retrieve the content of a specific HTTP(S) URL (for ex
 
 #### 模型看到的内容
 
-模型会看到生成的 [`web_search` 与 `web_fetch` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-web)。结果数量与超时预算属于部署设置，不是模型参数。
+模型会看到生成的 [`web_search` 与 `web_fetch` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-web)。结果数量与超时预算属于部署设置，不是模型参数。
 
 #### Token 影响
 
@@ -150,5 +150,5 @@ schema 校验会在执行前拒绝缺失或非数组的 `queries` 字段以及�
 
 - **没有覆盖整个批次的原生搜索计数器**：`searchMaxQueries` 限制 `ctx.web.search` 调用数，但提供方可以在每次调用内执行多次原生搜索。例如，配置了 `maxUses` 的模型型提供方最多可以执行 `searchMaxQueries × maxUses` 次原生搜索；`searchMaxResults` 只限制返回给调用方的组合来源。部署通过这些独立的消费方与提供方设置控制成本，因为通用 seam 不知道提供方内部的搜索计量单位。
 - **HTML→markdown 转换会在 GFM 无法安全表示的输入上降级**：[turndown](https://github.com/mixmark-io/turndown)（带 GFM 表格／删除线）通过真实 DOM 转换至多 `fetchMaxOutputChars` 个源字符。保守的 512 层词法守卫会将深层或嵌套有歧义的主体作为原始 HTML 直接透传，转换异常也会如此处理；表格的 `colspan` 会被忽略，因为 GFM 无法表示跨列单元格。这些限制可避免阻塞事件循环，也避免不受信任的数值属性使输出膨胀（[已归档的依赖决策](../../../.agents/notes/archived/simplification/2026-07-26-turndown-for-tool-web-html-markdown.md)）。
-- **面向模型的接口有意保持精简，后续扩展暂缓**：`max_results` 保持为配置上限（不是模型参数），`web_fetch` 只接受 `url`（没有 `format`／`prompt`／LLM（大语言模型）摘要模式）；两项都列为 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.md) 中的后续步骤。
+- **面向模型的接口有意保持精简，后续扩展暂缓**：`max_results` 保持为配置上限（不是模型参数），`web_fetch` 只接受 `url`（没有 `format`／`prompt`／LLM（大语言模型）摘要模式）；两项都列为 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.zh.md) 中的后续步骤。
 - **没有 web 专用权限策略**：两个工具都不会请求 `ctx.approval` 就直接执行；需要确认的部署必须添加 `tools/pre-execute` 策略，该包不定义持久化的 URL／域名授权。

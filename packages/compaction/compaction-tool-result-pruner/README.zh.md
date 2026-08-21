@@ -4,7 +4,7 @@
 
 可安全回放、不依赖模型的剪枝服务（`ctx.toolResultPruner`）。它会将超出预算的 `tool/result` 表层节点改写为长度受限的头部、固定省略标记和长度受限的尾部，同时在仅追加会话日志中保留完整原始事件。
 
-这是 [`dsh-compaction-basic`](../compaction-basic/README.md) 的具体配套服务，不是压缩（compaction）后端或面向模型的工具。Compact-basic 通过可选的 `ctx.get('toolResultPruner')` 读取它，因此这两个包仍可各自独立组合。
+这是 [`dsh-compaction-basic`](../compaction-basic/README.zh.md) 的具体配套服务，不是压缩（compaction）后端或面向模型的工具。Compact-basic 通过可选的 `ctx.get('toolResultPruner')` 读取它，因此这两个包仍可各自独立组合。
 
 ## 服务 API
 

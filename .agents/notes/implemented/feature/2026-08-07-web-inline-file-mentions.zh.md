@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决定
 
-**正文提及只在与产出文件对得上时才成为链接。**[产物行的决定](2026-07-31-web-workspace-file-links.md)否决过「把收尾消息链接化」，理由是渲染不能依赖模型把路径写得可识别；这一点不变。产物行仍是权威的、不依赖正文的记录。本特性只是给同一份 `locations` 词表增加第二个消费者：`producedFileMentions` 按精确路径解析行内代码 token，或当 token 恰好是且仅是一条产出路径的 basename 时解析。两条路径共享的 basename 保持死文本而不猜测，命名了本轮没写过的文件的 token 同样保持死文本——提及链接永远不会 404。
+**正文提及只在与产出文件对得上时才成为链接。**[产物行的决定](2026-07-31-web-workspace-file-links.zh.md)否决过「把收尾消息链接化」，理由是渲染不能依赖模型把路径写得可识别；这一点不变。产物行仍是权威的、不依赖正文的记录。本特性只是给同一份 `locations` 词表增加第二个消费者：`producedFileMentions` 按精确路径解析行内代码 token，或当 token 恰好是且仅是一条产出路径的 basename 时解析。两条路径共享的 basename 保持死文本而不猜测，命名了本轮没写过的文件的 token 同样保持死文本——提及链接永远不会 404。
 
 **渲染器不持有词表，提供方是 deliverables 插件。**`MarkdownText` 接受可选的 `MarkdownFileMentions` 解析器，对行内代码 token 询问它——URL 提升优先于解析器，且绝不在锚点内部（按钮不能嵌套在链接里）。什么算文件名的决定藏在 ui-conversation 经 `ctx.get` 触达的可选 `chatFileMentions` 服务背后：ui-deliverables 在其 turn-tail chain 注册项旁提供该服务，因此 cordis.yml 中的一行同时把产物行和正文链接组合进来或去掉，ui-primitives 不引入任何会话概念。提及只作用于已定稿的渲染——流式缓存不能固化可能过期的 handler，而且词表在轮次收尾前并不最终。消费方按收尾 seq 而非不断增长的 transcript（文本记录）记忆化解析器，因此已定稿消息的缓存解析在流式追加中得以保留。
 

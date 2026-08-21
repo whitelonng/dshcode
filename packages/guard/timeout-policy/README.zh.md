@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-工具调用超时强制执行器：单个 `tools/execute` 环绕分发监听器，会在 `exec.signal` 上设置单次调用的协作式截止时间；适用于声明了 `timeoutMs` 且声明位于其 `ToolDefinition` 上的工具。该截止时间先到时，它返回结构化 `TOOL_TIMEOUT` 结果。预算从工具自身的声明中读取（`ToolDefinition.timeoutMs`，由拥有该工具的插件设置），因此此插件是**零配置**的。它是 `tools/execute` 包装层的参考实现，也是面向模型工具调用预算的强制执行归属地（[超时库 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.md)）。
+工具调用超时强制执行器：单个 `tools/execute` 环绕分发监听器，会在 `exec.signal` 上设置单次调用的协作式截止时间；适用于声明了 `timeoutMs` 且声明位于其 `ToolDefinition` 上的工具。该截止时间先到时，它返回结构化 `TOOL_TIMEOUT` 结果。预算从工具自身的声明中读取（`ToolDefinition.timeoutMs`，由拥有该工具的插件设置），因此此插件是**零配置**的。它是 `tools/execute` 包装层的参考实现，也是面向模型工具调用预算的强制执行归属地（[超时库 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.zh.md)）。
 
 ## 插件（命名空间：`timeout-policy`）
 

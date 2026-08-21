@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-工具与提示段的可见性沿 `dsh-scope` 的父链继承，而 agent 的 scope key 铸造出来时没有父。[逐会话 agent preset](../architecture/2026-08-03-per-session-agent-presets.md) 把所有面向模型的行搬到了 agent 平面，并让 `AgentPresets.mount()` 成为绑定那条父链的唯一途径——调用点在 api-proxy 的会话创建、恢复与 fork 路径上。两个进程内 subagent 驱动通过 `applyChildComposition()` 组装子 agent，而它只安装了逐子 agent 的 persona 与工具限制，于是子 agent 的 scope 链长度为一，其注册表视图只能解析到全局层。
+工具与提示段的可见性沿 `dsh-scope` 的父链继承，而 agent 的 scope key 铸造出来时没有父。[逐会话 agent preset](../architecture/2026-08-03-per-session-agent-presets.zh.md) 把所有面向模型的行搬到了 agent 平面，并让 `AgentPresets.mount()` 成为绑定那条父链的唯一途径——调用点在 api-proxy 的会话创建、恢复与 fork 路径上。两个进程内 subagent 驱动通过 `applyChildComposition()` 组装子 agent，而它只安装了逐子 agent 的 persona 与工具限制，于是子 agent 的 scope 链长度为一，其注册表视图只能解析到全局层。
 
 在任何配置了 preset roster 的部署里，那一层现在是空的：web-app 补丁层禁用了全部宿主平面工具行。因此一次性子 agent 抵达模型时工具为零，可继续子 agent 只剩宿主平面的 `report`，两者都不带父方的 persona、工作区上下文、plan-mode 段与技能目录。fork 路径此前已因同一理由做过相同处理；委派没有。
 

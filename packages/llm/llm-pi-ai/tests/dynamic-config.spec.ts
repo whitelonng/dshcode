@@ -9,6 +9,7 @@ import { LocalCredentialProvider } from '@deepseek-ai/dsh-credentials-local'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { FileSettingsProvider } from '@deepseek-ai/dsh-settings-file'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
+import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
 
@@ -37,7 +38,11 @@ async function home(): Promise<string> {
 }
 
 /** Real dynamic composition mirroring the deepseek twin's harness. */
-async function boot(dir: string, config: LlmPiAi.Config): Promise<Context> {
+async function boot(
+  dir: string,
+  config: LlmPiAi.Config,
+  options: { authorization?: boolean } = {},
+): Promise<Context> {
   const ctx = new Context()
   cleanups.push(async () => {
     await ctx.fiber.dispose()
@@ -45,9 +50,30 @@ async function boot(dir: string, config: LlmPiAi.Config): Promise<Context> {
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(FileSettingsProvider, { path: join(dir, 'settings.yaml'), watch: false })
   await ctx.plugin(LocalCredentialProvider, { path: join(dir, '.credentials.yaml'), watch: false })
+  if (options.authorization === true) await ctx.plugin(AuthorizationService)
   await ctx.plugin(LlmPiAi, config)
   return ctx
 }
+
+describe('login flows in a real composition', () => {
+  it('offers a sign-in for a provider no route names, once the seam is mounted', async () => {
+    const ctx = await boot(await home(), {}, { authorization: true })
+
+    // Zero routes configured: signing in is what makes a route worth adding,
+    // so the offer cannot wait for a profile to name the provider.
+    const codex = ctx.authorization.describe(LlmPiAi.recordKeyFor('openai-codex'))
+    expect(codex?.methods.map(method => method.id)).toEqual(['oauth'])
+  })
+
+  it('mounts without the seam, and simply offers no sign-in', async () => {
+    const ctx = await boot(await home(), {})
+
+    // A headless or ACP composition has no surface to sign in from; everything
+    // else this plugin does still works.
+    expect(ctx.get('authorization')).toBeUndefined()
+    expect(ctx.llm.listConfigurableProviders().length).toBeGreaterThan(0)
+  })
+})
 
 describe('request-level dynamic profiles', () => {
   it('mounts bare and dormant, then registers routes the moment settings supply providers', async () => {
@@ -55,7 +81,7 @@ describe('request-level dynamic profiles', () => {
     const dir = await home()
     await writeFile(
       join(dir, '.credentials.yaml'),
-      'PI_DYNAMIC_KEY: pk-from-settings\nPI_LIVE_KEY: live-key\nPI_OTHER_KEY: other\n',
+      'version: 1\nrefs:\n  PI_DYNAMIC_KEY: pk-from-settings\n  PI_LIVE_KEY: live-key\n  PI_OTHER_KEY: other\n',
       { mode: 0o600 },
     )
     const server = await mockServer([{ events: textEvents }])
@@ -93,7 +119,7 @@ describe('request-level dynamic profiles', () => {
     const dir = await home()
     await writeFile(
       join(dir, '.credentials.yaml'),
-      'PI_LIVE_KEY: live-key\nPI_OTHER_KEY: other\n',
+      'version: 1\nrefs:\n  PI_LIVE_KEY: live-key\n  PI_OTHER_KEY: other\n',
       { mode: 0o600 },
     )
     const server = await mockServer([{ events: textEvents }])
@@ -122,7 +148,7 @@ describe('request-level dynamic profiles', () => {
   it('rotates the per-request credential referenced by apiKeyEnv', async () => {
     vi.stubEnv('PI_DYNAMIC_KEY', '')
     const dir = await home()
-    await writeFile(join(dir, '.credentials.yaml'), 'PI_DYNAMIC_KEY: pk-one\n', { mode: 0o600 })
+    await writeFile(join(dir, '.credentials.yaml'), 'version: 1\nrefs:\n  PI_DYNAMIC_KEY: pk-one\n', { mode: 0o600 })
     const server = await mockServer([{ events: textEvents }, { events: textEvents }])
     const ctx = await boot(dir, {
       providers: { deepseek: { apiKeyEnv: 'PI_DYNAMIC_KEY', baseURL: server.url } },
@@ -173,7 +199,7 @@ describe('request-level dynamic profiles', () => {
     const dir = await home()
     await writeFile(
       join(dir, '.credentials.yaml'),
-      'PI_LIVE_KEY: live-key\nPI_OTHER_KEY: other\n',
+      'version: 1\nrefs:\n  PI_LIVE_KEY: live-key\n  PI_OTHER_KEY: other\n',
       { mode: 0o600 },
     )
     const server = await mockServer([{ events: textEvents }, { events: textEvents }])

@@ -16,7 +16,7 @@
 
 > This document covers **behavior**; type definitions live in [subsystems/](../subsystems/core.md), the per-event/service reference lives in the generated regions of [subsystems/](../subsystems/core.md), and package contracts in the package READMEs state each package's required configuration and behavior ([map](../../packages/README.md)).
 
-本文档描述整体行为逻辑；类型定义存放于 [subsystems/](../subsystems/core.md)；各类事件、服务的详细参考见 [subsystems/](../subsystems/core.md) 中的生成区块；相应的 README 说明每个包（package）要求的配置和行为（[索引](../../packages/README.md)）。
+本文档描述整体行为逻辑；类型定义存放于 [subsystems/](../subsystems/core.zh.md)；各类事件、服务的详细参考见 [subsystems/](../subsystems/core.zh.md) 中的生成区块；相应的 README 说明每个包（package）要求的配置和行为（[索引](../../packages/README.zh.md)）。
 
 ## ② 防御模式规则
 

@@ -16,7 +16,7 @@ Status: implemented
 - 事件类型与内容构成两个稳定列。角色标签朝内容侧对齐，嵌套子工具略微缩进，内容预览使用 CSS 截断以适应可用宽度。token 用量和耗时留在检查器中。
 - 产品正文使用现有无衬线字体栈。轮次 id、token 数、耗时、工具调用、原始载荷和其他机器数据使用现有代码字体栈。
 - 现有主题 token 同时负责亮色和暗色渲染。中性边框与表面构成整体结构；相互区分的低强调度角色色帮助扫读而不表达成功或失败语义，业务蓝色则标识选择状态、链接和焦点。
-- Session 统一拥有一份连续 Event 窗口、分页状态、实时缺口修复与重连重建。Chat 与 Trajectory 针对共享的 `ConversationNodeAssembler` 分别注册业务 Definition；Trajectory 从 `Session.views` 读取自己的 target snapshot，并在用户到达已加载范围顶部时请求一页更早的 Session 历史。[Trajectory Context 组装决策](../architecture/2026-08-11-trajectory-conversation-context-assembly.md)负责其精确 ID Definition、stage Builder 与复杂度上界。
+- Session 统一拥有一份连续 Event 窗口、分页状态、实时缺口修复与重连重建。Chat 与 Trajectory 针对共享的 `ConversationNodeAssembler` 分别注册业务 Definition；Trajectory 从 `Session.views` 读取自己的 target snapshot，并在用户到达已加载范围顶部时请求一页更早的 Session 历史。[Trajectory Context 组装决策](../architecture/2026-08-11-trajectory-conversation-context-assembly.zh.md)负责其精确 ID Definition、stage Builder 与复杂度上界。
 - 普通生成调用与压缩调用形成一条按时间排序的请求投影，以用途区分而不是放入不同集合。生效的提示词状态及其变化附着在引入它们的请求上；压缩和提示词变化都不是独立检查实体。请求编号和累计用量覆盖已加载的历史窗口，并随更早页面到达而扩展。
 - 调用 schema 来自当前生效且已记录的请求头。无密钥快照 fixture（测试前置数据）有意将该目录替换为非数组 token `{{tools}}`，持久化检查边界会将其视为不可用，而不是尝试投影或虚构 schema。
 - 选择记录或请求后，Trajectory 内部会打开检查器，其标签页和概述区域随实体类型变化：Markdown 消息提供渲染内容、来源字段、提供方／模型字段和层级视图；工具提供 JSON 载荷／结果和 schema 视图；请求提供选项、用量、计时和结果跳转。可滚动的概述区域默认保持滚动条滑块透明，直到悬停或 `focus-within` 时才显示，同时保留滚动条预留空间和滚动行为。图片以媒体形式渲染，而不是显示为序列化数据。

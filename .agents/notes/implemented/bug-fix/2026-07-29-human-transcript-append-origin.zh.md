@@ -24,7 +24,7 @@ Status: implemented
 
 ## 延后事项
 
-浏览器客户端在[Web transcript 投影笔记](2026-07-30-web-transcript-log-ordered-projection.md)中单独修复：它按日志顺序投影同一份追加来源 transcript 并渲染一个标记组件，同时闭合本次变更打开的分页缺口——因为 `session.history` 不再为检查点消耗额度，它永远不会在检查点与检查点引用的来源事件这个整体内切分，于是一页可以携带一个引用了窗口之外 `surfaceOp.start` 的检查点，而浏览器的 surface fold 会拒绝该范围。这个缺口早于本次变更（此前计数就可能越过检查点进入它所遮蔽的范围），但当检查点是最旧的被计数消息时，旧分页规则会把整段被遮蔽的范围放在同一页。
+浏览器客户端在[Web transcript 投影笔记](2026-07-30-web-transcript-log-ordered-projection.zh.md)中单独修复：它按日志顺序投影同一份追加来源 transcript 并渲染一个标记组件，同时闭合本次变更打开的分页缺口——因为 `session.history` 不再为检查点消耗额度，它永远不会在检查点与检查点引用的来源事件这个整体内切分，于是一页可以携带一个引用了窗口之外 `surfaceOp.start` 的检查点，而浏览器的 surface fold 会拒绝该范围。这个缺口早于本次变更（此前计数就可能越过检查点进入它所遮蔽的范围），但当检查点是最旧的被计数消息时，旧分页规则会把整段被遮蔽的范围放在同一页。
 
 终端的[已归档实时压缩进度决策](../../archived/feature/2026-07-30-compaction-progress-visibility.md)使用独立标记对中的事件驱动现有的单格指示器。它既不改变本文所负责的完成标记，也不添加规模信息：检查点的 `sourceEventSeqs` 仍可供经另行论证的计数或区间使用。因此，进度显示既不需要修改标记内容，也不以提取 `renderReplacement(event)` 为前置条件。
 

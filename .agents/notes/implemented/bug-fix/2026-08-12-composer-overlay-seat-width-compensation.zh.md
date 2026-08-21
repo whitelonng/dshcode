@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[composer 标签页滚动条槽预留](2026-08-04-composer-tab-gutter-reservation.md) 让会话列滚动容器无条件预留一条滚动条槽，使 composer 座位在 Chat 与带 composer 覆盖的视图中测得相同宽度。代价由每个覆盖视图承担：视图内容列比列右边缘窄 8px，因为滚动容器为一条它从不绘制的滚动条预留了槽——trajectory 台账由视图内部自己的滚动容器滚动，外层盒子从不滚动。
+[composer 标签页滚动条槽预留](2026-08-04-composer-tab-gutter-reservation.zh.md) 让会话列滚动容器无条件预留一条滚动条槽，使 composer 座位在 Chat 与带 composer 覆盖的视图中测得相同宽度。代价由每个覆盖视图承担：视图内容列比列右边缘窄 8px，因为滚动容器为一条它从不绘制的滚动条预留了槽——trajectory 台账由视图内部自己的滚动容器滚动，外层盒子从不滚动。
 
 trajectory 表格让这个代价显形：整行分隔线在面板右边缘前 8px 处停止，每条线右侧以及整个内容列右侧都留下一条空白带。
 
@@ -24,7 +24,7 @@ trajectory 表格让这个代价显形：整行分隔线在面板右边缘前 8p
 
 **接受 4px 卡片位移。** 去掉预留却不补偿座位，会在每次切换标签页时移动输入卡——正是前一份 note 修复的症状。已拒绝：卡片位置是刻意保持的跨标签页不变量。
 
-**把 overlay 座位按滚动条宽度内缩。** [滚动条槽预留 note](2026-08-04-composer-tab-gutter-reservation.md) 当初否决的正是这个方案，本 note 采纳了它；变的是否决的前提。这个数字属于引擎而不属于我们——WebKit 路径绘制样式表里的 8px 滚动条，Firefox 路径绘制 `scrollbar-width: thin` 解析出的宽度——因此硬编码的内缩会让两种状态在 Chromium 上对齐、在别处继续漂移。当初 overlay 分支自己预留的是引擎解析出的槽宽，内缩必须精确匹配那个宽度。如今 overlay 分支不预留任何槽位，补偿成为覆盖侧唯一的机制；否决的字面量那一半，通过把 8px 变成与 `::-webkit-scrollbar` 规则同处一个 diff 的变量来回应。Firefox 那一半仍然存在：Chat 预留引擎解析宽度，补偿保持固定 8px，两者不等之处的残余漂移作为接受的代价记录在后果中。
+**把 overlay 座位按滚动条宽度内缩。** [滚动条槽预留 note](2026-08-04-composer-tab-gutter-reservation.zh.md) 当初否决的正是这个方案，本 note 采纳了它；变的是否决的前提。这个数字属于引擎而不属于我们——WebKit 路径绘制样式表里的 8px 滚动条，Firefox 路径绘制 `scrollbar-width: thin` 解析出的宽度——因此硬编码的内缩会让两种状态在 Chromium 上对齐、在别处继续漂移。当初 overlay 分支自己预留的是引擎解析出的槽宽，内缩必须精确匹配那个宽度。如今 overlay 分支不预留任何槽位，补偿成为覆盖侧唯一的机制；否决的字面量那一半，通过把 8px 变成与 `::-webkit-scrollbar` 规则同处一个 diff 的变量来回应。Firefox 那一半仍然存在：Chat 预留引擎解析宽度，补偿保持固定 8px，两者不等之处的残余漂移作为接受的代价记录在后果中。
 
 ## 后果
 

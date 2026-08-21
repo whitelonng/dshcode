@@ -3,7 +3,7 @@ import type {
   ClientContext, SessionId, SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { SubagentCatalogAction, type SubagentCatalogInjected } from './SubagentCatalogAction.tsx'
+import { SubagentHeaderLineage, type SubagentCatalogInjected } from './SubagentHeaderLineage.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
@@ -18,8 +18,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 
 export type {
-  SubagentCatalogActionProps, SubagentCatalogInjected,
-} from './SubagentCatalogAction.tsx'
+  SubagentCatalogInjected, SubagentHeaderLineageProps,
+} from './SubagentHeaderLineage.tsx'
 export type {
   SubagentReadOnlyComposerProps, SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
@@ -58,14 +58,12 @@ export function apply(ctx: ClientContext): void {
     },
   })
   ctx.slots.inject(
-    'conversation.session.header.actions',
+    'conversation.session.header.lineage',
     () => ctx.slots.register({
-      name: 'conversation.session.header.actions',
-      id: 'subagent-catalog',
-      order: 10,
+      name: 'conversation.session.header.lineage',
       locale: NS,
       inject: catalogActions,
-    }, SubagentCatalogAction),
+    }, SubagentHeaderLineage),
   )
   ctx.slots.inject(
     'conversation.composer',

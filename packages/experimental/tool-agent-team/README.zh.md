@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[`ctx.agentTeams`](../agent-team/README.md) 的 scoped 模型适配器。它会在每个隐式 Lead 与持久 teammate scope 中安装 Agent Teams 策略和协作工具。scoped Team 定义会覆盖同名的旧全局 continuable-subagent control，因此同时挂载两者的组合必须禁用旧定义。
+[`ctx.agentTeams`](../agent-team/README.zh.md) 的 scoped 模型适配器。它会在每个隐式 Lead 与持久 teammate scope 中安装 Agent Teams 策略和协作工具。scoped Team 定义会覆盖同名的旧全局 continuable-subagent control，因此同时挂载两者的组合必须禁用旧定义。
 
 ## 配置
 
@@ -18,7 +18,7 @@
 
 ## 工具与权限
 
-生成的[工具目录](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-agent-team)负责精确 schema。该适配器提供 teammate 创建；quiet 与 waking peer 投递；roster 列表、等待和仅限 Lead 的 interrupt；以及任务 create／list／get／CAS update 操作。
+生成的[工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-agent-team)负责精确 schema。该适配器提供 teammate 创建；quiet 与 waking peer 投递；roster 列表、等待和仅限 Lead 的 interrupt；以及任务 create／list／get／CAS update 操作。
 
 每个工具都要求完全相同的调用 `Agent`。`spawn_teammate` 与 `interrupt_agent` 在 `ctx.agentTeams` 内部强制执行 Lead 权限，而不只依赖描述。所有成员都可以与任意 peer 通讯并使用任务板。任务变更保留领域层的 Owner／Lead 与 revision 校验。
 

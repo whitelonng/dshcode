@@ -4,7 +4,7 @@
 
 可选的 `ctx.sessionTitle` 提供方，通过 `ctx.llm` 总结所有符合条件的用户消息。它注册 `all-prompts` 节奏，并在每条新用户提示词后启动新 revision，同时使用预置历史与子会话提示词。较新的 revision 会中止并取代旧工作；即使提供方忽略取消，也无法提交陈旧输出。
 
-该插件使用完整且必填的[共享 LLM（大语言模型）配置](../session-title-llm/README.md#configuration)。同时省略 `provider` 与 `model` 时，会继承每个当前已记录主请求的确切路由；也可以同时设置二者，使标题生成使用独立路由。如果最终封装的聚合提示词超过 `maxInputBytes`，请求会失败而不是截断历史；自动使用时会发出警告并保留先前标题。
+该插件使用完整且必填的[共享 LLM（大语言模型）配置](../session-title-llm/README.zh.md#configuration)。同时省略 `provider` 与 `model` 时，会继承每个当前已记录主请求的确切路由；也可以同时设置二者，使标题生成使用独立路由。如果最终封装的聚合提示词超过 `maxInputBytes`，请求会失败而不是截断历史；自动使用时会发出警告并保留先前标题。
 
 ## 模型体验
 

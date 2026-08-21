@@ -16,7 +16,7 @@ Status: implemented
 
 执行链路的四处查表——`executionMode`、`dispatchToolBody`、`postExecute`、`normalizeDispatchResult`——改走 `resolveExecution`。`createExecution` 通过共享的 `collapses(name, nested)` 谓词应用同一塌缩，以便在策略流水线之前区分被塌缩的调用与真正未知的名字。公共注册表视图（`get`）与 SDK 投影（`schemas`）语义不变：展示、检查与绑定枚举仍看到完整可见集合。通告（`wireSchemas`）与执行器现在一致。带非 JSON 可序列化参数的塌缩调用报告参数 `TypeError`（invalid-args 契约），而非 `UNKNOWN_TOOL`——函数体仍不会运行，策略也不会执行。
 
-塌缩是安全相关的不变量，因此验收经执行器钉死：`code` 模式下模型直呼原生工具返回 `UNKNOWN_TOOL`；同一工具经 SDK 子调用成功；`native`/`both` 模式直呼与 `run_code` 本身行为不变。本 note 把执行边界叠加在基础 [Code Mode 基础](../feature/2026-06-15-code-mode.md) 之上，传输设计由后者拥有。
+塌缩是安全相关的不变量，因此验收经执行器钉死：`code` 模式下模型直呼原生工具返回 `UNKNOWN_TOOL`；同一工具经 SDK 子调用成功；`native`/`both` 模式直呼与 `run_code` 本身行为不变。本 note 把执行边界叠加在基础 [Code Mode 基础](../feature/2026-06-15-code-mode.zh.md) 之上，传输设计由后者拥有。
 
 ## 备选方案
 

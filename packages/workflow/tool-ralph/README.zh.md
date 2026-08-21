@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-面向模型的 `ralph` 工具运行固定的前台工作流，把一个不可变目标依次交给多个全新子 agent（智能体）。它展示如何把专用编排策略实现为基于 [`ctx.workflowEngine`](../workflow/README.md) 和 [`ctx.subagents`](../../subagent/subagent/README.md) 的普通插件：不会向 `agent-loop` 添加 Ralph 模式或全新 agent loop（智能体循环），同会话的[目标领域](../../goal/goal/README.md)也保持独立。策略和暂缓事项由 [Ralph Agent Note（agent 决策记录）](../../../.agents/notes/implemented/feature/2026-07-19-fresh-agent-ralph-workflow-tool.md)负责。
+面向模型的 `ralph` 工具运行固定的前台工作流，把一个不可变目标依次交给多个全新子 agent（智能体）。它展示如何把专用编排策略实现为基于 [`ctx.workflowEngine`](../workflow/README.zh.md) 和 [`ctx.subagents`](../../subagent/subagent/README.zh.md) 的普通插件：不会向 `agent-loop` 添加 Ralph 模式或全新 agent loop（智能体循环），同会话的[目标领域](../../goal/goal/README.zh.md)也保持独立。策略和暂缓事项由 [Ralph Agent Note（agent 决策记录）](../../../.agents/notes/implemented/feature/2026-07-19-fresh-agent-ralph-workflow-tool.zh.md)负责。
 
 ## 契约
 
@@ -59,7 +59,7 @@ Use the ralph tool ONLY when the direct human explicitly asks for a Ralph loop o
 
 #### 模型看到的内容
 
-已生成的 [`ralph` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-ralph)公开一个必填 `objective` 字符串和一个可选 `maxRounds` 数字。提供方选择、交接大小、报告 schema、工作流脚本和编排行为均由部署侧控制，不在调用 schema 中。
+已生成的 [`ralph` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-ralph)公开一个必填 `objective` 字符串和一个可选 `maxRounds` 数字。提供方选择、交接大小、报告 schema、工作流脚本和编排行为均由部署侧控制，不在调用 schema 中。
 
 #### Token 影响
 

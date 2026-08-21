@@ -14,9 +14,9 @@ Codex 与 Claude Code 提供方已经能够运行一项自包含任务并返回�
 
 生产 `dsh` 不安装可选产品提供方。选择启用产品集成的 Profile 会安装所需的 `dsh-subagent-codex` 或 `dsh-subagent-claude-code` 包，并在 host plane（宿主平面）挂载所需的提供方实例。`standard`、`code` 与 `cordis` Agent Preset 使用 `backgroundMode: one-shot` 配置相应的休眠工具行；删除某一行的 `disabled` 字段后，现有可选参数 `run_in_background` 会向由该 preset 组装的 agent 公开。省略该参数或传入 `false` 时会在前台等待；显式传入 `true` 时会在同步完成 Job 预检与登记后返回由父级拥有的 Job id，而不会等待提供方启动或完成。
 
-[命名实例决策](2026-08-18-product-subagent-named-instances.md)允许两个产品分别拥有多个配置项。每个新增宿主提供方配置项都有独立的 `providerName`，每个公开的 preset 工具配置项都通过 `provider` 绑定该名称并保持唯一的 `toolName`；前台或后台调度选择不会限制实例数量。
+[命名实例决策](2026-08-18-product-subagent-named-instances.zh.md)允许两个产品分别拥有多个配置项。每个新增宿主提供方配置项都有独立的 `providerName`，每个公开的 preset 工具配置项都通过 `provider` 绑定该名称并保持唯一的 `toolName`；前台或后台调度选择不会限制实例数量。
 
-[通用 one-shot 后台适配器](2026-07-08-background-subagent-tasks.md)负责后台登记与结算。它会启动同一个 [`SubagentRun`](2026-06-21-subagent-capability-seam.md)，让 Job 自有的取消信号覆盖提供方启动与执行，等待 `run.result` 和 `run.dispose()`，把终态结果与可选安全诊断映射进 Job，并由 `job_output`、`job_list`、`job_kill` 与现有完成通知公开该状态。[产品提供方决策](2026-08-04-claude-code-and-codex-subagent-backends.md)继续负责原生协议、答案选择、本地取消与进程树完全停稳；[非交互权限决策](2026-08-15-product-subagent-noninteractive-permissions.md)负责各产品提供方的 Profile 配置与诊断生产。
+[通用 one-shot 后台适配器](2026-07-08-background-subagent-tasks.zh.md)负责后台登记与结算。它会启动同一个 [`SubagentRun`](2026-06-21-subagent-capability-seam.zh.md)，让 Job 自有的取消信号覆盖提供方启动与执行，等待 `run.result` 和 `run.dispose()`，把终态结果与可选安全诊断映射进 Job，并由 `job_output`、`job_list`、`job_kill` 与现有完成通知公开该状态。[产品提供方决策](2026-08-04-claude-code-and-codex-subagent-backends.zh.md)继续负责原生协议、答案选择、本地取消与进程树完全停稳；[非交互权限决策](2026-08-15-product-subagent-noninteractive-permissions.zh.md)负责各产品提供方的 Profile 配置与诊断生产。
 
 本调度决策不新增提供方配置、服务接口、事件、协议字段、持久化格式或产品标识符。提供方可以独立定义自己的 Profile 配置；前台与后台的区别仍然只在于由哪个现有消费方等待同一个 one-shot 运行。
 

@@ -12,6 +12,11 @@ import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
 import { gfm } from 'micromark-extension-gfm'
 import type { Nodes } from 'mdast'
+import {
+  languageSwitcherLinkOffset,
+  semanticTranslationLinkNodeTarget,
+  type TranslationLinkContext,
+} from './translation-links.ts'
 
 /** Complete opening marker line: `<!-- BEGIN GENERATED <slug> … -->` (slug captured). */
 const GENERATED_REGION_BEGIN_LINE = /^<!-- BEGIN GENERATED (\S+)(?: [^>]*)? -->$/
@@ -215,6 +220,22 @@ export function parseTranslationPairingManifest(content: string): TranslationPai
   return { excluded: excludedField(record) }
 }
 
+/** Whether a manifest entry excludes one exact file or a directory subtree. */
+export function isTranslationPairingManifestExcluded(
+  file: string,
+  manifest: TranslationPairingManifest,
+): boolean {
+  return manifest.excluded.some(entry => (entry.endsWith('/') ? file.startsWith(entry) : file === entry))
+}
+
+/** Build the active bilingual-source predicate shared by every link consumer. */
+export function translationPairSourcePredicate(
+  manifest: TranslationPairingManifest,
+): (sourcePath: string) => boolean {
+  return sourcePath => isTranslationScopeFile(sourcePath)
+    && !isTranslationPairingManifestExcluded(sourcePath, manifest)
+}
+
 /**
  * Normalize one CLI pair argument to its English anchor path: any of the
  * pair's three files (`foo.md`, `foo.zh.md`, `foo.i18n.yaml`) or the bare
@@ -311,18 +332,6 @@ export function languageSwitcherTargets(counterpart: string): string[] {
   return [basename(counterpart), `${PUBLIC_REPOSITORY_BLOB_ROOT}${counterpart}`]
 }
 
-/** Whether the tree contains a link to any accepted target. */
-export function linksTo(tree: Nodes, targets: string | readonly string[]): boolean {
-  const accepted = new Set(typeof targets === 'string' ? [targets] : targets)
-  let found = false
-  const visit = (node: Nodes): void => {
-    if (node.type === 'link' && accepted.has(node.url)) found = true
-    if ('children' in node) for (const child of node.children) visit(child)
-  }
-  visit(tree)
-  return found
-}
-
 /** Generated English sources cannot carry a switcher without making their generator stale. */
 export function requiresSourceLanguageSwitcher(source: string): boolean {
   return ![
@@ -349,11 +358,21 @@ export function requiresSourceLanguageSwitcher(source: string): boolean {
 export function translationStructureSignature(
   tree: Nodes,
   switcherTargets: string | readonly string[],
+  linkContext: TranslationLinkContext & { markdown: string },
 ): TranslationStructureSignature {
-  const acceptedSwitchers = new Set(
-    typeof switcherTargets === 'string' ? [switcherTargets] : switcherTargets,
-  )
+  const switcherOffset = languageSwitcherLinkOffset(tree, linkContext.markdown, switcherTargets)
   const sig: TranslationStructureSignature = { headings: [], code: [], tables: [], lists: [], links: [] }
+  const definitions = new Map<string, Extract<Nodes, { type: 'definition' }>>()
+  const collectDefinitions = (node: Nodes): void => {
+    if (node.type === 'definition' && !definitions.has(node.identifier)) {
+      definitions.set(node.identifier, node)
+    }
+    if ('children' in node) for (const child of node.children) collectDefinitions(child)
+  }
+  collectDefinitions(tree)
+  const linkTarget = (node: Extract<Nodes, { type: 'link' | 'definition' }>): string => (
+    semanticTranslationLinkNodeTarget(node, linkContext.markdown, linkContext)
+  )
   const visit = (node: Nodes): void => {
     switch (node.type) {
       case 'heading':
@@ -371,8 +390,17 @@ export function translationStructureSignature(
           : `bullet:items=${node.children.length}`)
         break
       case 'link':
-        if (!acceptedSwitchers.has(node.url)) sig.links.push(node.url)
+        if (node.position?.start.offset !== switcherOffset) {
+          sig.links.push(linkTarget(node))
+        }
         break
+      case 'linkReference': {
+        const definition = definitions.get(node.identifier)
+        if (definition !== undefined) {
+          sig.links.push(linkTarget(definition))
+        }
+        break
+      }
       default:
         // Every other node kind is prose or a container, not part of the signature.
         break

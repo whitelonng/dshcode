@@ -32,11 +32,11 @@ SQLite 每个逻辑事件存储一行，因此同样的逻辑日志会分别保�
 
 后台追加失败后，控制器会把完整批次恢复到所有较新的待处理事件之前，报告一次该失败，并暂停自动重试。随后新接纳的第一个事件会开启新的固定窗口；显式 flush、退役或 dispose 会立即重试，如果故障再次发生，则会向调用方暴露该故障。这可以避免计时器驱动的失败循环，同时保留现有可恢复的 flush 边界。
 
-本决策仅取代[将实时持久化归并到单个刷新控制器](../simplification/2026-07-23-collapse-persistence-flush-state.md)中的即时调度节奏。对于每个活跃会话使用一个控制器、保留失败批次、按 id 串行化、退役和完全停稳的 dispose，原 Agent Note 仍是权威记录。后端钩子边界仍由[共享持久化协调器](2026-06-18-shared-persistence-write-coordinator.md)定义。
+本决策仅取代[将实时持久化归并到单个刷新控制器](../simplification/2026-07-23-collapse-persistence-flush-state.zh.md)中的即时调度节奏。对于每个活跃会话使用一个控制器、保留失败批次、按 id 串行化、退役和完全停稳的 dispose，原 Agent Note 仍是权威记录。后端钩子边界仍由[共享持久化协调器](2026-06-18-shared-persistence-write-coordinator.zh.md)定义。
 
 ## 备选方案
 
-**不持久化流式分片事件。** 这里不采纳：这会改变事件溯源的权威地位及恢复语义，而不只是改变物理写入节奏。在无信息损失的替代方案独立定义回放、fork、引用源事件的关联、序列和崩溃行为之前，现有的[拒绝仅保留组装消息的决策](../../rejected/simplification/2026-06-20-assembled-assistant-messages-only.md)仍是防护规则。[打包行决策](2026-07-26-packed-chunk-rows-by-default.md)仍是配套的 JSONL 存储体积优化。
+**不持久化流式分片事件。** 这里不采纳：这会改变事件溯源的权威地位及恢复语义，而不只是改变物理写入节奏。在无信息损失的替代方案独立定义回放、fork、引用源事件的关联、序列和崩溃行为之前，现有的[拒绝仅保留组装消息的决策](../../rejected/simplification/2026-06-20-assembled-assistant-messages-only.zh.md)仍是防护规则。[打包行决策](2026-07-26-packed-chunk-rows-by-default.zh.md)仍是配套的 JSONL 存储体积优化。
 
 **仅在语义检查点写入。** 不采纳：此方案会最大化批处理，却让普通的崩溃丢失窗口取决于另行挂载的策略。有界后台写入会在检查点之间持久化进度，而强制 flush 继续提供更强的顺序约定。
 

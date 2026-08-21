@@ -13,10 +13,15 @@
  * way down: switching models mid-reply takes effect on the next step, never
  * inside the one in flight.
  *
- * Credentials stay outside that collection. The harness resolves a route's key
- * through its own seam and passes it as the request's `apiKey` option, which
- * pi-ai treats as the highest-priority auth override — so `Models` never holds
- * a credential store and the harness keeps its fail-loud reference semantics.
+ * A route naming a credential reference still resolves it through the harness
+ * seam and passes it as the request's `apiKey` option, which pi-ai treats as
+ * the highest-priority auth override — that is what keeps the fail-loud
+ * reference semantics. Everything that override does not cover reaches pi-ai
+ * through the collection's own auth: the credential store holds the records a
+ * login wrote and a refresh rotates, and the auth context answers the ambient
+ * questions a provider asks while resolving. Both are stable across snapshots,
+ * so a configuration change rebuilds the collection without forgetting who is
+ * signed in.
  *
  * @module dsh-llm-pi-ai/adapter
  */
@@ -24,6 +29,8 @@
 import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type {
   Api,
+  AuthContext,
+  CredentialStore,
   Model,
   Models,
   ModelThinkingLevel,
@@ -43,6 +50,7 @@ import type {
   LlmModelInfo,
   LlmProviderInfo,
   LlmResolvedModelInfo,
+  PreparedAdapterCall,
   ReasoningEffortId as ReasoningEffortIdType,
   ResolvedRetryPolicy,
   StreamChunk,
@@ -74,6 +82,15 @@ export interface PiAiAdapterOptions {
    * `MISSING_CREDENTIAL` rather than falling back.
    */
   resolveApiKey: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<string | undefined>
+  /**
+   * How every collection this adapter builds resolves auth the request-level
+   * `apiKey` override does not cover. Required rather than optional: a
+   * collection built without them gets pi-ai's in-memory default store, which
+   * is empty at every boot and discarded on every configuration change, so a
+   * route whose only method is a login would report itself unconfigured on
+   * every request no matter how often the human signed in.
+   */
+  auth: PiAiAuthInjection
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
   /**
@@ -81,6 +98,14 @@ export interface PiAiAdapterOptions {
    * conversion because its stored replay state is unusable by this build.
    */
   onReplayDegrade?: (detail: { provider: string; model: string; reason: string }) => void
+}
+
+/** The two auth injectables a pi-ai collection is built with. */
+export interface PiAiAuthInjection {
+  /** Durable storage for credentials pi-ai itself writes: logins, and the refreshes it runs under its own lock. */
+  credentials: CredentialStore
+  /** Ambient lookups a provider performs while resolving its own auth. */
+  authContext: AuthContext
 }
 
 /** Copy profile stream knobs into pi-ai's common option vocabulary. */
@@ -224,7 +249,7 @@ export class PiAiAdapter extends LlmAdapter {
   private current(): PiAiSnapshot {
     const profiles = this.config.profiles()
     if (this.snapshot?.profiles === profiles) return this.snapshot
-    const models: MutableModels = createModels()
+    const models: MutableModels = createModels(this.config.auth)
     for (const profile of profiles.values()) models.setProvider(profile.piProvider)
     this.snapshot = { profiles, models }
     return this.snapshot
@@ -281,26 +306,45 @@ export class PiAiAdapter extends LlmAdapter {
   ): Promise<LlmResolvedModelInfo> {
     return Promise.resolve().then(() => {
       const snapshot = this.current()
-      const profile = this.profileOf(snapshot, provider)
-      const resolvedModel = this.modelOf(snapshot, provider, model)
-      const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
-      // Only a cap the deployment configured is a request default; the
-      // catalog's `maxTokens` sizes the model and stops there.
-      const configuredMaxTokens = profile.configuredMaxTokens.get(model)
-      return {
-        provider,
-        id: model,
-        name: resolvedModel.name,
-        inputModalities: [...resolvedModel.input],
-        ...capabilityInfo(profile, model),
-        context: { contextWindow: resolvedModel.contextWindow },
-        ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
-        ...reasoningInfo(resolvedModel, defaultLevel),
-      }
+      return this.modelInfo(snapshot, provider, model)
     })
   }
 
-  async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+  private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
+    const profile = this.profileOf(snapshot, provider)
+    const resolvedModel = this.modelOf(snapshot, provider, model)
+    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    // Only a cap the deployment configured is a request default; the
+    // catalog's `maxTokens` sizes the model and stops there.
+    const configuredMaxTokens = profile.configuredMaxTokens.get(model)
+    return {
+      provider,
+      id: model,
+      name: resolvedModel.name,
+      inputModalities: [...resolvedModel.input],
+      ...capabilityInfo(profile, model),
+      context: { contextWindow: resolvedModel.contextWindow },
+      ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
+      ...reasoningInfo(resolvedModel, defaultLevel),
+    }
+  }
+
+  override prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
+    const snapshot = this.current()
+    return Promise.resolve({
+      model: this.modelInfo(snapshot, provider, model),
+      stream: options => this.streamWithSnapshot(options, snapshot),
+    })
+  }
+
+  stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    return this.streamWithSnapshot(options, this.current())
+  }
+
+  private async * streamWithSnapshot(
+    options: GenerateOptions,
+    snapshot: PiAiSnapshot,
+  ): AsyncIterable<StreamChunk> {
     if (options.stop !== undefined) {
       throw new LlmError('llm-pi-ai does not support GenerateOptions.stop', 'UNSUPPORTED_OPTION')
     }
@@ -309,7 +353,6 @@ export class PiAiAdapter extends LlmAdapter {
     // snapshot, and the credential freezes with them. A configuration change
     // mid-request builds a separate snapshot, so this request finishes under
     // the one it started with and the next call picks up the new one.
-    const snapshot = this.current()
     const profile = this.profileOf(snapshot, options.provider)
     const model = this.modelOf(snapshot, options.provider, options.model)
     const reasoning = resolveReasoningLevel(
@@ -339,7 +382,10 @@ export class PiAiAdapter extends LlmAdapter {
       }
       const context = attachments === undefined
         ? toPiContext(options, undefined, onReplayDegrade)
-        : await toPiContext(options, attachments, onReplayDegrade, profile.maxRequestImageBytes)
+        : await toPiContext({ ...options, signal: watchdog.signal }, attachments, onReplayDegrade, profile.maxRequestImageBytes, {
+          maxPixels: profile.requestImagePixelBudget,
+          maxBytes: profile.requestImageMaxBytes,
+        })
       const events = snapshot.models.streamSimple(model, context, {
         ...profileOptions(profile, reasoning, apiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },

@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-03-web-search-source-scroll.md
 2026-08-03-web-search-source-scroll.md: 6fe532e2a2989e834b926cf48d531ae60a32f58b
-2026-08-03-web-search-source-scroll.zh.md: bc1abb5215c618809e79f56d1f9bd6c1ee9dbf15
+2026-08-03-web-search-source-scroll.zh.md: 12bc6d3decb3c13ea759a9f25322b94e45db1322

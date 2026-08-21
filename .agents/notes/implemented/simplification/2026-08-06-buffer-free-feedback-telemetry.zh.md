@@ -14,7 +14,7 @@ Status: implemented
 
 `FEEDBACK_ONLY` 以 `feedback/record` 事件的序列号调用该方法。`session/event` 监听器运行时，追加已经提交，因此回放包含该反馈事件，且无法包含后续后缀。现有 handoff 游标可区分后续回放，无需另一个待处理记录索引。
 
-按需捕获只读取权威日志，因此不会发出 `agent-error` 或 `shutdown` 运维记录。脱敏在反馈时而非追加时求值。[反馈模式决策](../feature/2026-08-05-feedback-gated-session-telemetry.md)规定公开的共享行为；本记录规定其无缓冲实现。
+按需捕获只读取权威日志，因此不会发出 `agent-error` 或 `shutdown` 运维记录。脱敏在反馈时而非追加时求值。[反馈模式决策](../feature/2026-08-05-feedback-gated-session-telemetry.zh.md)规定公开的共享行为；本记录规定其无缓冲实现。
 
 ## 考虑过的替代方案
 

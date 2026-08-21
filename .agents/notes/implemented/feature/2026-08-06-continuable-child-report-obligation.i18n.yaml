@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-06-continuable-child-report-obligation.md
 2026-08-06-continuable-child-report-obligation.md: e771e81831147dd02a6c32a543c8d8944c2ec2f4
-2026-08-06-continuable-child-report-obligation.zh.md: 7b4f8e7f5dead9f6b5803236e3593551c66da12d
+2026-08-06-continuable-child-report-obligation.zh.md: e1cbb38644889459d8b8785382e1923a80c81957

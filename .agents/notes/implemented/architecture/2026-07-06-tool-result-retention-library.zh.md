@@ -103,7 +103,7 @@ type TextRetentionStrategy =
 
 `grep` 在分组前使用 `ItemRetainer<FlatGrepMatch>`，并将其配置为 `{ kind: 'head', maxItems: grepMaxMatches }`。执行器解析 ripgrep 输出、映射路径、应用逐行预览截断，并输入扁平匹配项。调用 `finish()` 后，工具按文件对保留的匹配项分组；如果行内结果达到上限，还可以通过 spill seam 保存完整匹配列表。分组不属于 retainer，因为上限针对匹配总数，而不是文件数；逐匹配项的预览截断和 `incomplete` 也与结果级保留相互独立。
 
-`bash` 可以使用 `TextRetainer`，配置为 `tail` 或 `headTail`，并读取至进程结束。bash 执行器仍负责 spill 文件、退出状态、信号、超时与后台任务行为；保留辅助函数只在需要该行为时替换临时实现的内存首尾核算。长时间运行任务的所有权与[通用长时间运行工具的运行时](2026-06-20-generic-long-running-tool-runtime.md)相互独立。
+`bash` 可以使用 `TextRetainer`，配置为 `tail` 或 `headTail`，并读取至进程结束。bash 执行器仍负责 spill 文件、退出状态、信号、超时与后台任务行为；保留辅助函数只在需要该行为时替换临时实现的内存首尾核算。长时间运行任务的所有权与[通用长时间运行工具的运行时](2026-06-20-generic-long-running-tool-runtime.zh.md)相互独立。
 
 `web_fetch` 可以使用 `TextRetainer`，配置为 `head` 或 `headTail`；如果提供方必须在内部读取和解码，也可以保留由提供方负责的正文上限。无论采用哪种方式，fetch 结果中的 `truncated` 仍是提供方／工具事实，该库只提供保留文本与省略元数据。
 
@@ -138,7 +138,7 @@ const formatGrepNotice = (notice: RetentionNotice): string =>
 
 **已交付内容。** `@deepseek-ai/dsh-output-retention` 导出 `ItemRetainer`、`TextRetainer`、结果类型（`RetainedItems`、`RetainedText`）、策略类型（`ItemRetentionStrategy`、`TextRetentionStrategy`）、`Omitted`、`PushDecision`、`RetentionNotice`，以及中性的提示辅助函数 `describeOmitted`／`formatRetentionNotice`，且不依赖 Cordis 或任何工具包。单元测试覆盖具有精确省略计数的条目头部保留、文本头部保留、文本尾部保留、首尾字节保留、零预算、UTF-8 边界处理（2、3、4 字节码位，以及每个裁切位置上的无效起始字节）和未知省略量的措辞。
 
-**已记录但尚未迁移的内容。** `glob`、`grep`、`bash`、`web_fetch` 与 `web_search` 的映射已记录在[包 README](../../../../packages/util/output-retention/README.md) 中，但本次改动并未把每个工具都迁移到该库；迁移工作刻意留作独立的后续任务。`read` 被明确记录为不在范围内：其 `read-render` 行窗口约定（`offset`／`limit`、`totalLines`、offset 范围错误、逐行预览截断，以及针对所选窗口的字节上限）不属于通用保留，而一个 `Omitted` 计数也无法同时表达行窗口两侧。
+**已记录但尚未迁移的内容。** `glob`、`grep`、`bash`、`web_fetch` 与 `web_search` 的映射已记录在[包 README](../../../../packages/util/output-retention/README.zh.md) 中，但本次改动并未把每个工具都迁移到该库；迁移工作刻意留作独立的后续任务。`read` 被明确记录为不在范围内：其 `read-render` 行窗口约定（`offset`／`limit`、`totalLines`、offset 范围错误、逐行预览截断，以及针对所选窗口的字节上限）不属于通用保留，而一个 `Omitted` 计数也无法同时表达行窗口两侧。
 
 **该库维持的边界。** `truncated` 表示 retainer 因预算省略了原本可用的内容，绝不表示上游不完整。工具专用状态，包括 `incomplete`、权限失败、提供方局部失败、跳过二进制文件、bash spill 路径恢复和无效 UTF-8，均留在工具领域字段中、位于 retainer 之外。未来改动迁移某项工具时，该包的 README 与测试必须证明，除了有意改变的提示措辞外，模型可见的结果文本没有变化。
 
@@ -152,6 +152,6 @@ const formatGrepNotice = (notice: RetentionNotice): string =>
 
 **把 `read` 窗口交给 `ItemRetainer`。** v1 不予采纳：`read` 是当前唯一的窗口消费方，其语义属于文件分页，而不是通用保留。一个 `Omitted` 计数无法表示行窗口两侧，而且 `read` 还携带 `totalLines`、offset 范围错误、逐行预览截断和针对所选输出的字节上限。让 `read-render` 由工具所有，可以避免共享库围绕一项特例膨胀。
 
-**让截断成为 `ToolExecutionResult` 的一部分。** 不予采纳：工具注册表将不得不理解工具专用的恢复指引、分组、行号、退出状态和提供方语义。保留是由工具的 Native renderer（原生渲染器）使用的库；模型可见投影继续由工具所有，而[规范值](2026-07-20-canonical-tool-output-contract.md)可以保留完整的已采集结果。
+**让截断成为 `ToolExecutionResult` 的一部分。** 不予采纳：工具注册表将不得不理解工具专用的恢复指引、分组、行号、退出状态和提供方语义。保留是由工具的 Native renderer（原生渲染器）使用的库；模型可见投影继续由工具所有，而[规范值](2026-07-20-canonical-tool-output-contract.zh.md)可以保留完整的已采集结果。
 
 **在每个面向模型的工具 schema 中公开上限。** 不作为默认方案：Claude Code 的 grep 公开 `head_limit`／`offset`，但本 harness 会把常规预算保留为部署配置，除非模型确实需要控制分页。未来可以为具体工具增加类似 read 的续传字段；它不属于共享保留原语。

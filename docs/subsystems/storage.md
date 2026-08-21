@@ -130,7 +130,7 @@ type DomainChanged = DomainChangedPut | DomainChangedDeleted
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxstorage--storage"></a>
 
@@ -156,7 +156,7 @@ mount<K extends keyof StorageForms>(form: K, facility: StorageForms[K]): () => v
 form<K extends keyof StorageForms>(form: K): StorageForms[K]
 ```
 
-Source: [`packages/storage/storage/src/index.ts:47`](../../packages/storage/storage/src/index.ts)
+Source: [`packages/storage/storage/src/index.ts`](../../packages/storage/storage/src/index.ts)
 
 <a id="ctxstoragedomain--domainfacility"></a>
 
@@ -201,7 +201,7 @@ get(name: string): DomainImpl | undefined
 async closeAll(): Promise<void>
 ```
 
-Source: [`packages/storage/storage-domain/src/index.ts:69`](../../packages/storage/storage-domain/src/index.ts)
+Source: [`packages/storage/storage-domain/src/index.ts`](../../packages/storage/storage-domain/src/index.ts)
 
 <a id="domain-events"></a>
 
@@ -225,5 +225,5 @@ A domain record or the global singleton changed, emitted once per write strictly
 'domain/changed'(change: DomainChanged): void
 ```
 
-Source: [`packages/storage/storage-domain/src/events.ts:46`](../../packages/storage/storage-domain/src/events.ts)
+Source: [`packages/storage/storage-domain/src/events.ts`](../../packages/storage/storage-domain/src/events.ts)
 <!-- END GENERATED cordis-surface -->

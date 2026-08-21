@@ -105,7 +105,7 @@ worker 错误、消息失败或提前退出会在清理前关闭消息接纳，�
 
 #### 模型看到的内容
 
-通过 [`dsh-tool-workflow`](../tool-workflow/README.md)，成功结果只会在该消费方的包装层中公开实体化的最终 JSON 值和子 agent 数量。本引擎提供稳定错误，包括 `workflow script does not parse: <error>`、`invalid meta: <violations>`、`agent() requires a non-empty prompt string`、`agent() could not start a child: <error>`、`child agent run failed: <error>`，以及其精确的 `parallel()`、`pipeline()`、`phase()`、选项、schema 和 JSON 边界校验消息。中间子 agent 输出可供脚本使用，但不提供给父模型。
+通过 [`dsh-tool-workflow`](../tool-workflow/README.zh.md)，成功结果只会在该消费方的包装层中公开实体化的最终 JSON 值和子 agent 数量。本引擎提供稳定错误，包括 `workflow script does not parse: <error>`、`invalid meta: <violations>`、`agent() requires a non-empty prompt string`、`agent() could not start a child: <error>`、`child agent run failed: <error>`，以及其精确的 `parallel()`、`pipeline()`、`phase()`、选项、schema 和 JSON 边界校验消息。中间子 agent 输出可供脚本使用，但不提供给父模型。
 
 #### Token 影响
 

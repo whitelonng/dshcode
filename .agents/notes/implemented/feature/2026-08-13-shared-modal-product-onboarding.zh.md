@@ -30,4 +30,4 @@ Status: implemented
 
 ## 后果
 
-新的回环 profile 会先看到指定的内测声明；仅当没有任何可用提供方时，之后才会出现行内 DeepSeek 密钥弹窗。确认仍按版本写入 `settings.yaml`，secret 仍以只写方式存入 `.credentials.yaml`，已就绪或无法修复的部署在加载判定期间不会渲染任何引导框架。Models 包现在同时持有产品引导展示与提供方配置；README 和浏览器覆盖明确记录了这项扩展后的职责。本决策在历史上的[全屏内测声明移除](../simplification/2026-08-13-remove-first-run-beta-notice.md)之后恢复简洁的测试阶段声明，但不会恢复那份声明中的遥测文案或接管式布局。
+新的回环 profile 会先看到指定的内测声明；仅当没有任何可用提供方时，之后才会出现行内 DeepSeek 密钥弹窗。确认仍按版本写入 `settings.yaml`，secret 仍以只写方式存入 `.credentials.yaml`，已就绪或无法修复的部署在加载判定期间不会渲染任何引导框架。Models 包现在同时持有产品引导展示与提供方配置；README 和浏览器覆盖明确记录了这项扩展后的职责。本决策在历史上的[全屏内测声明移除](../simplification/2026-08-13-remove-first-run-beta-notice.zh.md)之后恢复简洁的测试阶段声明，但不会恢复那份声明中的遥测文案或接管式布局。

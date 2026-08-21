@@ -28,6 +28,14 @@ async function temporaryRoot(): Promise<string> {
   return await mkdtemp(join(tmpdir(), 'dsh-coverage-partitions-'))
 }
 
+function successfulCommandRecorder(commands: CoverageCommand[]) {
+  return vi.fn(async (command: CoverageCommand) => {
+    commands.push(command)
+    await writeBlob(command)
+    return passed
+  })
+}
+
 describe('coverage partition count', () => {
   it.each([
     [undefined, undefined],
@@ -77,11 +85,7 @@ describe('coverage partition coordinator', () => {
   it('runs every single-worker partition before one merged threshold check', async () => {
     const root = await temporaryRoot()
     const commands: CoverageCommand[] = []
-    const runCommand = vi.fn(async (command: CoverageCommand) => {
-      commands.push(command)
-      await writeBlob(command)
-      return passed
-    })
+    const runCommand = successfulCommandRecorder(commands)
     const coordinator = new CoveragePartitionCoordinator({
       root,
       partitions: 3,
@@ -99,6 +103,8 @@ describe('coverage partition coordinator', () => {
       'merged coverage report',
     ])
     for (const [index, command] of commands.slice(0, 3).entries()) {
+      expect(command.command).toBe(process.execPath)
+      expect(command.args[0]).toBe('/pnpm.cjs')
       expect(command.args).toEqual(expect.arrayContaining([
         '--coverage',
         '--coverage.reportOnFailure',
@@ -121,6 +127,25 @@ describe('coverage partition coordinator', () => {
       [COVERAGE_PARTITIONS_ENV]: undefined,
       [COVERAGE_PARTITION_MODE_ENV]: undefined,
     })
+  })
+
+  it('runs a native pnpm entrypoint directly', async () => {
+    const root = await temporaryRoot()
+    const commands: CoverageCommand[] = []
+    const runCommand = successfulCommandRecorder(commands)
+    const coordinator = new CoveragePartitionCoordinator({
+      root,
+      partitions: 2,
+      pnpmEntrypoint: '/tools/pnpm',
+      runCommand,
+    })
+
+    await expect(coordinator.run()).resolves.toBe(0)
+    expect(commands).toHaveLength(3)
+    for (const command of commands) {
+      expect(command.command).toBe('/tools/pnpm')
+      expect(command.args[0]).toBe('exec')
+    }
   })
 
   it('merges normal test failures and returns their failed status', async () => {

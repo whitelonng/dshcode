@@ -1,13 +1,13 @@
 /** Durable attachment vocabulary. @module @deepseek-ai/dsh-attachment/types */
 
-import type { AttachmentId } from './brand.ts'
+import type { AttachmentId, ImageVariantId } from './brand.ts'
 
 export type { AttachmentId } from './brand.ts'
 
 /** Raster image formats accepted by the version-one attachment path. */
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
 
-/** Durable, serializable metadata for one immutable image object. */
+/** Durable, serializable reference to one immutable normalized image. */
 export interface ImageAttachmentRef {
   /** Opaque storage identifier; never a filesystem path or bearer URL. */
   attachmentId: AttachmentId
@@ -21,6 +21,14 @@ export interface ImageAttachmentRef {
   height: number
   /** Optional display name stripped of local path information. */
   name?: string
+  /**
+   * Input dimensions after applying EXIF orientation and before normalization
+   * scaling. Present only when normalization reduced the image.
+   */
+  originalDimensions?: {
+    width: number
+    height: number
+  }
 }
 
 /** Deployment-resolved limits used by upload admission and request buffering. */
@@ -57,4 +65,32 @@ export interface SaveImageAttachment {
 export interface StoredImageAttachment {
   ref: ImageAttachmentRef
   data: Uint8Array
+}
+
+/** Deterministic request-image policy selected by one exact model route. */
+export interface ImageRequestPolicy {
+  /** Maximum width multiplied by height after aspect-preserving projection. */
+  maxPixels: number
+  /** Encoded-byte cap before base64 expansion or Files API upload. */
+  maxBytes: number
+}
+
+/** Cached request version derived from one provider-independent normalized attachment. */
+export interface RequestImageAttachment {
+  /** Cache and upload-index key over the attachment id, policy, and fixed encoder parameters. */
+  variantId: ImageVariantId
+  /** Durable normalized attachment from which this request version was derived. */
+  attachment: ImageAttachmentRef
+  /** Encoded request bytes. */
+  data: Uint8Array
+  mediaType: ImageMediaType
+  bytes: number
+  width: number
+  height: number
+  /** Provider-compatible sample depth proven after request encoding. */
+  depth: 'uchar'
+  /** Provider-compatible color space proven after request encoding. */
+  space: 'srgb'
+  /** Whether the encoded request version retains an alpha channel. */
+  hasAlpha: boolean
 }

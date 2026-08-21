@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-GUI 每次首启都会先显示占满视口的内测声明：内部测试的定位表述，加上通过 `DSH_TELEMETRY_MODE` 开启 Session Log 上传的说明。会话遥测在 mode 未设置时已解析为 `DISABLED`（[遥测默认关闭](../feature/2026-08-10-telemetry-default-off.md)），因此引导流程中关于遥测的全部内容就是一段教用户如何开启的提示，而内部测试的定位表述本身也不应出现在发布版本里。
+GUI 每次首启都会先显示占满视口的内测声明：内部测试的定位表述，加上通过 `DSH_TELEMETRY_MODE` 开启 Session Log 上传的说明。会话遥测在 mode 未设置时已解析为 `DISABLED`（[遥测默认关闭](../feature/2026-08-10-telemetry-default-off.zh.md)），因此引导流程中关于遥测的全部内容就是一段教用户如何开启的提示，而内部测试的定位表述本身也不应出现在发布版本里。
 
 ## 决策
 
-本决策当时把首启声明从组装后的产品中整体移除，而不是改写。`ui-settings-general` 不再注册任何 `settings.onboarding` 步骤；声明组件、确认 store、文案所有者文件和 locale 键均被删除，Host 则保留 `ui-onboarding` namespace，使既有设置文档继续有效。后续的[共用弹窗产品引导](../feature/2026-08-13-shared-modal-product-onboarding.md)在 `ui-settings-models` 中恢复了一份新的简洁测试阶段声明，复用该字段与后端契约，但不会恢复已移除的接管式布局或遥测说明。遥测的开启仍是显式的部署环境变量选择，记录在 [CLI reference README](../../../../apps/cli/reference/README.md) 中；恢复后的声明不涉及如何开启遥测。
+本决策当时把首启声明从组装后的产品中整体移除，而不是改写。`ui-settings-general` 不再注册任何 `settings.onboarding` 步骤；声明组件、确认 store、文案所有者文件和 locale 键均被删除，Host 则保留 `ui-onboarding` namespace，使既有设置文档继续有效。后续的[共用弹窗产品引导](../feature/2026-08-13-shared-modal-product-onboarding.zh.md)在 `ui-settings-models` 中恢复了一份新的简洁测试阶段声明，复用该字段与后端契约，但不会恢复已移除的接管式布局或遥测说明。遥测的开启仍是显式的部署环境变量选择，记录在 [CLI reference README](../../../../apps/cli/reference/README.zh.md) 中；恢复后的声明不涉及如何开启遥测。
 
 ## 曾考虑的替代方案
 

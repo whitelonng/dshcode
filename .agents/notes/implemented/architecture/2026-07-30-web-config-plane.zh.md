@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-30-web-config-plane.md) | 中文
 
-> 范围：[请求级 LLM（大语言模型）配置 note](2026-07-29-request-level-llm-config-credentials.md) 中延后的 wire 面与 web UI——带推送式失效的 `settings.*`/`credentials.*`/`llm.*` RPC 领域、分层且脱敏的 `describe()`、本地设置文档交接、llm 可配置提供方目录与拓扑事件、由 `dsh-client-ui-settings` 持有的 `ctx.settingsSchema` 模型服务，以及带手写提供方编辑器的 Models 设置页。`deepseek` → `deepseek-official` 提供方路由重命名作为解锁前提的破坏性变更一并搭车合入。
+> 范围：[请求级 LLM（大语言模型）配置 note](2026-07-29-request-level-llm-config-credentials.zh.md) 中延后的 wire 面与 web UI——带推送式失效的 `settings.*`/`credentials.*`/`llm.*` RPC 领域、分层且脱敏的 `describe()`、本地设置文档交接、llm 可配置提供方目录与拓扑事件、由 `dsh-client-ui-settings` 持有的 `ctx.settingsSchema` 模型服务，以及带手写提供方编辑器的 Models 设置页。`deepseek` → `deepseek-official` 提供方路由重命名作为解锁前提的破坏性变更一并搭车合入。
 
 ## 问题
 
@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-**wire 领域挂上编译期 RPC 映射，拒绝落为错误码，owner 事件原样转发。**`settings.describe/openDocument/update/replace/mutate`、`credentials.describe/set/unset`、`llm.providers` 与 `llm.models` 一同加入 `RpcMethodMap`，由编译器锁定的接线位点让 schema、处理器与客户端保持步调一致。seam 侧拒绝折叠为业务错误，客户端则订阅转发的 settings、credentials 与 LLM owner 事件，无需轮询即可收敛（见[转发的 Remote 事件](2026-08-10-remote-event-delivery.md)）。settings 读取、原生操作与写入和 `pickDirectory`/`openPath` 一起进入连接守卫的特权集合：回环 + 同源，否则 403，因为暴露在局域网上的 dsh web 绝不能接受来自其他源的配置访问。
+**wire 领域挂上编译期 RPC 映射，拒绝落为错误码，owner 事件原样转发。**`settings.describe/openDocument/update/replace/mutate`、`credentials.describe/set/unset`、`llm.providers` 与 `llm.models` 一同加入 `RpcMethodMap`，由编译器锁定的接线位点让 schema、处理器与客户端保持步调一致。seam 侧拒绝折叠为业务错误，客户端则订阅转发的 settings、credentials 与 LLM owner 事件，无需轮询即可收敛（见[转发的 Remote 事件](2026-08-10-remote-event-delivery.zh.md)）。settings 读取、原生操作与写入和 `pickDirectory`/`openPath` 一起进入连接守卫的特权集合：回环 + 同源，否则 403，因为暴露在局域网上的 dsh web 绝不能接受来自其他源的配置访问。
 
 **`describe()` 增加分层与结构化 secret 脱敏。**`SettingsDescriptor` 在生效值之外携带 `base`/`user`，表单据此按「字段是否出现在用户层」来标记「已覆盖」，而非按值是否不等（与 base *相等*的覆盖仍然是覆盖）。`describe({ redactSecrets: true })`——在每个 wire 面都强制启用——经由对 schema 的纯结构遍历（object/dict/array 容器；secret 角色子树整体是一个不透明叶节点）从全部三层剥除 `role('secret')` 子树，并把剥除的槽位枚举为 `{path, set}`，页面因此不必收到任何值就能渲染只写输入框。
 
@@ -22,7 +22,7 @@ Status: implemented
 
 **架在 schema 模型层之上的手写编辑器。**`dsh-client-ui-settings` 提供的 `ctx.settingsSchema` 把 wire 的 `toJSON()` 信封还原（rehydrate）为活的 schemastery 节点，用于校验、路径解析与不可变草稿编辑——但不做通用渲染：第一版交付了完整的 schema 驱动表单渲染器，得到的却是一个未加样式、把 schema 原样倾倒出来的页面（每个进阶字段都平铺到卡片上、原始字段名直接充当标签、`retryPolicy` 的「不支持」回退落在主流程里）。手写方向胜过了再加一套提示／分组系统，进一步的简化又把引用输入框整个移除：卡片的主字段是一个 **API 密钥** 输入框，未配置密钥的整分节提供方会以其设置卡片的形式打开，收起的「自定义设置」折叠区承载按家族精选的额外字段（两个家族都有 `baseURL`，deepseek 有 `reasoningEffort`／pi-ai 有 `reasoning`，另有直接 DeepSeek 模型行的 `id`、`name` 和 `contextWindow`）。现有模型字段中不在可见集合内的部分会在数组编辑后保留；重试策略、超时及其他字段仍归 `settings.yaml` 所有。校验仍会在写入前运行还原出的 schema，适配器特有的检查则会拒绝序列化 schema 无法表达的目录不变量。卡片的颜色经 `--dsw-alias-*` 设计 token 解析；它此前引用的 `--border`／`--surface`／`--text-*` 在本应用中无人定义，于是渲染出的是它们的亮色模式回退值，在暗色主题下依旧保持亮色。模型目录采用 pi-ai 提供方表单引入的行形态：每个模型一个带边框的条目，ID 与显示名称落在行上，容量则收在该行自己的折叠区里，使两个编辑器呈现为同一套设计，而不是各自分岔。每个字段都保留那个为其命名的带序号 `aria-label`。两项容量都是文本输入框，读取十进制的 `K`／`M` 后缀（`1M` 即 1000K，与容量的通行标注方式一致）并存储纯数值：字段持有焦点期间保留键入的文本，因为若每次按键都从解析出的数值重新推导该文本，`1000` 会在尚未输完时就被改写成 `1K`；无法解析的文本也会留在屏幕上，因此保存时的拒绝点名的是用户仍能看见的那一行。共用的类名只承载已声明的 token 写法：`--dsw-alias-border-subtle`、`--dsw-alias-text-tertiary` 和 `--dsw-alias-text-primary` 均未声明，写出它们就会解析为各自回退槽位中的亮色模式字面值。现在有一个样式测试会拒绝 token 表未声明的任何 `--dsw-*` 名称，因此下一个写出这类名称的编辑者会当场失败，而不是交付一个只有亮色的界面。
 
-**Models 页是一次三领域联接，应用语义与服务同形。**每一行是一个已配置的提供方；「新增」卡片的选择框是可配置提供方目录中剩余的休眠条目。路由存活状态仍用于就绪判定，并会使该联接失效，但页面不将其渲染为提供方状态，因为配置存在与运行时可用性是两个不同概念。密钥通道保持引用形态，却从不展示任何引用：键入的密钥经 `credentials.set` **只写**存入 profile 的 `apiKeyEnv` 之下，引用不存在时便派生 `<ROUTE>_API_KEY`（仅在输入密钥时，pi-ai profile 才会记录该派生），因此 `settings.yaml` 从不携带密钥值；留空 pi-ai 密钥会具化一个不带引用的 profile，并保留提供方原生认证。profile 的编辑和删除会针对脱敏后的用户分节，以按路径寻址的最小 `settings.mutate` 操作落地，绝不会点名页面未收到的机密。删除用户层提供方时，会先打开本地化确认对话框，其行操作、标题、说明和最终操作都会点名同一个提供方；确认后会先清除与派生目标精确匹配且已配置、可写的凭据，再删除 profile，自定义目标、环境目标和无法识别的目标则保持不变。两个阶段都具备幂等性，部分失败会留在对话框中供重试。DeepSeek 的模型列表是数组替换配置：继承而来的生效模型行会一直显示，直到第一次编辑将完整列表具化到用户层；重置则会取消设置该列表覆盖。`llm.discoverModels` 的结果会留在选择框的本地状态中，直至点击**添加所选**；已配置的 ID 默认不勾选，**全选**／**取消全选**也只会改变这一本地集合，因此批量选择仍遵守同一条容量保护规则。部分提交与凭据所有权的理由记录在[提供方凭据生命周期 note](../bug-fix/2026-08-06-provider-credential-lifecycle.md)中。
+**Models 页是一次三领域联接，应用语义与服务同形。**每一行是一个已配置的提供方；「新增」卡片的选择框是可配置提供方目录中剩余的休眠条目。路由存活状态仍用于就绪判定，并会使该联接失效，但页面不将其渲染为提供方状态，因为配置存在与运行时可用性是两个不同概念。密钥通道保持引用形态，却从不展示任何引用：键入的密钥经 `credentials.set` **只写**存入 profile 的 `apiKeyEnv` 之下，引用不存在时便派生 `<ROUTE>_API_KEY`（仅在输入密钥时，pi-ai profile 才会记录该派生），因此 `settings.yaml` 从不携带密钥值；留空 pi-ai 密钥会具化一个不带引用的 profile，并保留提供方原生认证。profile 的编辑和删除会针对脱敏后的用户分节，以按路径寻址的最小 `settings.mutate` 操作落地，绝不会点名页面未收到的机密。删除用户层提供方时，会先打开本地化确认对话框，其行操作、标题、说明和最终操作都会点名同一个提供方；确认后会先清除与派生目标精确匹配且已配置、可写的凭据，再删除 profile，自定义目标、环境目标和无法识别的目标则保持不变。两个阶段都具备幂等性，部分失败会留在对话框中供重试。DeepSeek 的模型列表是数组替换配置：继承而来的生效模型行会一直显示，直到第一次编辑将完整列表具化到用户层；重置则会取消设置该列表覆盖。`llm.discoverModels` 的结果会留在选择框的本地状态中，直至点击**添加所选**；已配置的 ID 默认不勾选，**全选**／**取消全选**也只会改变这一本地集合，因此批量选择仍遵守同一条容量保护规则。部分提交与凭据所有权的理由记录在[提供方凭据生命周期 note](../bug-fix/2026-08-06-provider-credential-lifecycle.zh.md)中。
 
 ## 曾考虑的替代方案
 

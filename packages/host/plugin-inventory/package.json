@@ -49,8 +49,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "zod": "^4.4.3",
-    "yaml": "^2.8.2"
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",

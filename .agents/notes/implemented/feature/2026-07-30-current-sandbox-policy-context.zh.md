@@ -12,7 +12,7 @@ Status: implemented
 
 `dsh-sandbox-policy` 负责解析模式与工作区根目录，并注册一项缓存安全的 `sandbox:policy` 上下文贡献。每次 agent（智能体）请求都通过 `ctx.sandboxPolicy.resolve({ session })` 直接解析当前会话；不存在拒绝历史扫描或进程本地的「上次告知」状态。
 
-该策略贡献不依赖具体能力，并默认可用于每个 agent 会话。当模型接口有意排除动态上下文时，组合可以抑制完整的 runtime-context 通道；这不会禁用策略强制机制。该贡献不会另行维护一份已挂载后端或工具清单；模型可见的 schema 仍是可用操作的权威来源，而上下文会将其声明限定在 DSH 文件沙箱所强制执行的任何可用操作上。[不依赖具体能力的策略上下文决策](../simplification/2026-07-31-capability-neutral-sandbox-policy-context.md)取代了较早的家族注册机制，同时保留本 Agent Note 的缓存安全交付与持久快照设计。
+该策略贡献不依赖具体能力，并默认可用于每个 agent 会话。当模型接口有意排除动态上下文时，组合可以抑制完整的 runtime-context 通道；这不会禁用策略强制机制。该贡献不会另行维护一份已挂载后端或工具清单；模型可见的 schema 仍是可用操作的权威来源，而上下文会将其声明限定在 DSH 文件沙箱所强制执行的任何可用操作上。[不依赖具体能力的策略上下文决策](../simplification/2026-07-31-capability-neutral-sandbox-policy-context.zh.md)取代了较早的家族注册机制，同时保留本 Agent Note 的缓存安全交付与持久快照设计。
 
 该贡献只说明所有强制执行方言所共有的事实。`read-only` 表明受沙箱强制执行的可用操作在常驻模式下无法修改文件，并指示模型正常尝试可用工具，随后遵循该工具返回的任何拒绝与升权引导。`workspace-write` 用非排他措辞说明规范化的会话工作区，并概述某些平台临时区域可能也可写，而不逐一列举。`danger-full-access` 表明 DSH 文件沙箱不会限制可用操作修改文件。后端选择的临时路径、`/dev/null`、runner 就绪状态、确切的工具可用情况和其他策略领域都不会出现，因为 `resolve()` 无法在请求组装时确定它们。
 

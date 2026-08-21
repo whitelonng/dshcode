@@ -26,7 +26,7 @@ Service Provider 与 Consumer 由此独立演进：沙箱化执行器替换 `dsh
 
 ## 术语：seam 指三者组合，而非接口
 
-一个 **seam** 是完整的能力——三个角色合在一起：**Service Definition**（拥有 `ctx.<key>` 和词汇的 Cordis `Service`）、一个或多个 **Service Provider**，以及一个或多个 **Consumer**。`packages/shell` 是规范范例——`dsh-shell` / `dsh-bash-local`+`dsh-bash-sandbox` / `dsh-tool-bash`。一个包可以承担多个角色，但单个角色本身不是 seam。「seam」一词严格保留给这种完整能力；命名其中一个组成部分时，应使用其角色、类、服务、约定或扩展点。[术语表](../../../../docs/glossary.md#capability-seam)是规范条目。
+一个 **seam** 是完整的能力——三个角色合在一起：**Service Definition**（拥有 `ctx.<key>` 和词汇的 Cordis `Service`）、一个或多个 **Service Provider**，以及一个或多个 **Consumer**。`packages/shell` 是规范范例——`dsh-shell` / `dsh-bash-local`+`dsh-bash-sandbox` / `dsh-tool-bash`。一个包可以承担多个角色，但单个角色本身不是 seam。「seam」一词严格保留给这种完整能力；命名其中一个组成部分时，应使用其角色、类、服务、约定或扩展点。[术语表](../../../../docs/glossary.zh.md#capability-seam)是规范条目。
 
 ## 曾考虑的替代方案
 
@@ -35,4 +35,4 @@ Service Provider 与 Consumer 由此独立演进：沙箱化执行器替换 `dsh
 
 ## 后果
 
-分离角色会增加包和样板代码（`package.json`、`tsconfig`、README 和注入接线）。换来的是：Service Provider 与 Consumer 独立发布和版本管理，新后端永远不会波及面向模型的约定。[AGENTS.md](../../../../AGENTS.md) 和 [architecture.md](../../../../docs/architecture.md) 载有这项规则；bash 三件套是参考模板。本 Agent Note 记录为什么独立变化的角色通常需要拆分，而确实共享的关注点可以保持合并。
+分离角色会增加包和样板代码（`package.json`、`tsconfig`、README 和注入接线）。换来的是：Service Provider 与 Consumer 独立发布和版本管理，新后端永远不会波及面向模型的约定。[AGENTS.md](../../../../AGENTS.md) 和 [architecture.md](../../../../docs/architecture.zh.md) 载有这项规则；bash 三件套是参考模板。本 Agent Note 记录为什么独立变化的角色通常需要拆分，而确实共享的关注点可以保持合并。

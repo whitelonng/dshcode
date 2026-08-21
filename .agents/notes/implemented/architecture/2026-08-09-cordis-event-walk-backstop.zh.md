@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-`gen-cordis-catalog` 渲染 Typert host face 投影发现的每个服务与事件，fail-closed 的页面映射（`SERVICE_PAGE`、`EVENT_SCOPE_PAGE`）保证每个被发现的 key 或 scope 恰好落在一个 `docs/subsystems/` 页面上（页面区块机制归[按子系统区块决定](../process/2026-07-28-per-subsystem-cordis-surface-regions.md)所有）。但"发现"本身此前只对服务有兜底：一条独立的 AST 扫描读取每个 `declare module 'cordis'` Context merge，要求每个声明的 key 要么被渲染、要么在 `SERVICE_WALK_EXEMPTIONS` 中给出具名理由。
+`gen-cordis-catalog` 渲染 Typert host face 投影发现的每个服务与事件，fail-closed 的页面映射（`SERVICE_PAGE`、`EVENT_SCOPE_PAGE`）保证每个被发现的 key 或 scope 恰好落在一个 `docs/subsystems/` 页面上（页面区块机制归[按子系统区块决定](../process/2026-07-28-per-subsystem-cordis-surface-regions.zh.md)所有）。但"发现"本身此前只对服务有兜底：一条独立的 AST 扫描读取每个 `declare module 'cordis'` Context merge，要求每个声明的 key 要么被渲染、要么在 `SERVICE_WALK_EXEMPTIONS` 中给出具名理由。
 
 事件没有这样的兜底。投影只遍历从 host face 包导出可达的文件，因此 client face 代码——或 host 分析器无法触及的任何文件——里的 `interface Events` merge 会无声消失：12 个已声明事件（`slash/input-*`、`theme/change`、`locale/change`，以及 client runtime 的 `*/changed` 失效信号）不出现在任何生成文档中，而且再多一个也不会有任何机制察觉。服务扫描的 glob 也只有 `packages/*/*/src/*.ts`，于是声明在嵌套文件（`src/client/**`）中的 13 个 client face Context key 恰恰对这条为防止无声消失而存在的扫描不可见。
 

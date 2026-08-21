@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-Windows 平台层（当时是 base patch 旁独立的 `windows.cordis.patch.yml`，现已折入 base 行——见「决策」）在 win32 上禁用 `tool-bash`，但 shipped 预设各自挂载了一行 `tool-bash`。预设行最后组合，同名行在 Windows 上重新启用了该工具——会话同时拥有 `tool-bash`（PowerShell 后端）与 `tool-pwsh`，且是静默的，因为没有 spec pin 组合后的预设层。条目元数据没有条件机制：`!!js` 只在插件 `config` 下插值，[postmortem 0002](../../../../docs/postmortem/0002-js-expression-disabled-filesystem-tools.md) 记录了 `disabled: !!js ...` 保持真值表达式对象、在所有平台上禁用该行的事故。
+Windows 平台层（当时是 base patch 旁独立的 `windows.cordis.patch.yml`，现已折入 base 行——见「决策」）在 win32 上禁用 `tool-bash`，但 shipped 预设各自挂载了一行 `tool-bash`。预设行最后组合，同名行在 Windows 上重新启用了该工具——会话同时拥有 `tool-bash`（PowerShell 后端）与 `tool-pwsh`，且是静默的，因为没有 spec pin 组合后的预设层。条目元数据没有条件机制：`!!js` 只在插件 `config` 下插值，[postmortem 0002](../../../../docs/postmortem/0002-js-expression-disabled-filesystem-tools.zh.md) 记录了 `disabled: !!js ...` 保持真值表达式对象、在所有平台上禁用该行的事故。
 
 ## 决策
 
@@ -22,4 +22,4 @@ Loader 插值条目 `disabled` 字段（`vendor/loader/src/config/entry.ts`）�
 
 ## 后果
 
-行可以按平台或环境门控自身；错误的表达式在启动时响亮失败。其余元数据字段保持字面值，门禁继续拒绝那里的表达式——`disabled` 上的 postmortem-0002 隐患以「求值」而非「禁止」关闭。Windows shell 栈的切换从启动器注入的 patch 层移到 base bundle 自身的行上：win32 挂载受限 pwsh 栈，POSIX 携带被禁用的 pwsh 行，同一份 patch 文件服务两种阵容——[Windows 默认 pwsh](../feature/2026-08-01-windows-pwsh-default.md) note 的层机制已被取代。shell 工具行遵循与其他预设声明行相同的 one-plane 规则：web-app overlay 禁用 host 面的 `tool-bash`/`tool-pwsh` 行，预设以互逆的平台门控声明两者，因此任一宿主的每个会话都可以按预设丢弃或替换 shell 工具。`minimal` 预设缺失的 win32 PTY 栈是预设元数据的后续工作。
+行可以按平台或环境门控自身；错误的表达式在启动时响亮失败。其余元数据字段保持字面值，门禁继续拒绝那里的表达式——`disabled` 上的 postmortem-0002 隐患以「求值」而非「禁止」关闭。Windows shell 栈的切换从启动器注入的 patch 层移到 base bundle 自身的行上：win32 挂载受限 pwsh 栈，POSIX 携带被禁用的 pwsh 行，同一份 patch 文件服务两种阵容——[Windows 默认 pwsh](../feature/2026-08-01-windows-pwsh-default.zh.md) note 的层机制已被取代。shell 工具行遵循与其他预设声明行相同的 one-plane 规则：web-app overlay 禁用 host 面的 `tool-bash`/`tool-pwsh` 行，预设以互逆的平台门控声明两者，因此任一宿主的每个会话都可以按预设丢弃或替换 shell 工具。`minimal` 预设缺失的 win32 PTY 栈是预设元数据的后续工作。

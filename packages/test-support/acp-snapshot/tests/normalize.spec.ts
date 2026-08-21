@@ -3,8 +3,10 @@ import {
   type NormalizeContext,
   extractSnapshotSpillPaths,
   normalizeSessionLog,
+  normalizeSessionSnapshot,
   normalizeStdout,
   scrubRequestHeaders,
+  scrubSessionSnapshot,
   scrubSystemPrompts,
   scrubToolSchemas,
   tokenizeSessionFixtureCwd,
@@ -218,11 +220,20 @@ describe('normalizeSessionLog', () => {
     expect(out).not.toContain('123')
   })
 
-  it('zeroes each event time but keeps seq', () => {
+  it('preserves event sequence and zeroes event time', () => {
     const out = normalizeSessionLog(`${header({})}\n${event({ seq: 7, time: 999 })}\n`, ctx)
     expect(out).toContain('"time":0')
-    expect(out).toContain('"seq":7') // seq is deterministic — NOT scrubbed
+    expect(out).toContain('"seq":7')
     expect(out).not.toContain('999')
+  })
+
+  it('normalizes a projected event without adding a persistence envelope', () => {
+    const projected = JSON.stringify({ type: 'turn/start', data: { turn: 1 } })
+    const out = normalizeSessionLog(`${header({})}\n${projected}\n`, ctx)
+    expect(JSON.parse(out.trimEnd().split('\n')[1] ?? '{}')).toStrictEqual({
+      type: 'turn/start',
+      data: { turn: 1 },
+    })
   })
 
   it('scrubs cwd and session id deep inside event data', () => {
@@ -370,7 +381,7 @@ describe('normalizeSessionLog', () => {
     expect(out).toContain('"decision":"block"') // the decision is the behavior — kept
   })
 
-  it('zeroes a packed chunk row\'s time0 and dt gaps but keeps seq0 and payload', () => {
+  it('preserves a packed chunk row\'s sequence, zeroes time, and zeroes volatile dt gaps', () => {
     const row = JSON.stringify({
       type: 'text-chunks', seq0: 7, time0: 999,
       data: { turn: 1, step: 1, index: 0, dt: [212, 27, 0], texts: ['a', 'b', 'c', 'd'] },
@@ -378,17 +389,17 @@ describe('normalizeSessionLog', () => {
     const out = normalizeSessionLog(`${header({})}\n${row}\n`, ctx)
     expect(out).toContain('"time0":0')
     expect(out).toContain('"dt":[0,0,0]')
-    expect(out).toContain('"seq0":7') // seq0 is deterministic, like seq — NOT scrubbed
+    expect(out).toContain('"seq0":7')
     expect(out).toContain('"texts":["a","b","c","d"]')
     expect(out).not.toContain('999')
     expect(out).not.toContain('212')
   })
 
-  it('zeroes time0 even when a malformed row carries no dt array', () => {
+  it('normalizes a headerless packed-like stream record without decoding it', () => {
     const row = JSON.stringify({ type: 'text-chunks', seq0: 1, time0: 999, data: 'not-an-object' })
-    const out = normalizeSessionLog(`${header({})}\n${row}\n`, ctx)
+    const out = normalizeSessionLog(`${row}\n`, ctx)
+    expect(out).toContain('"seq0":1')
     expect(out).toContain('"time0":0')
-    expect(out).not.toContain('999')
   })
 
   it('leaves a non-hook event durationMs untouched (only hook/result is scrubbed)', () => {
@@ -397,15 +408,47 @@ describe('normalizeSessionLog', () => {
     expect(out).toContain('"durationMs":88')
   })
 
-  it('tolerates records missing the volatile fields it would zero', () => {
+  it('handles complete envelopes when optional normalized fields are absent', () => {
     const bareHeader = JSON.stringify({ type: 'session', id: 's' })
-    const timeless = JSON.stringify({ type: 'note', seq: 1 })
     const bareHook = JSON.stringify({ type: 'hook/result', seq: 2, time: 5, data: { decision: 'allow' } })
     const nullDataHook = JSON.stringify({ type: 'hook/result', seq: 3, time: 6, data: null })
-    const out = normalizeSessionLog(`${bareHeader}\n${timeless}\n${bareHook}\n${nullDataHook}\n`, ctx)
-    expect(out).toContain('"type":"note","seq":1')
+    const out = normalizeSessionLog(`${bareHeader}\n${bareHook}\n${nullDataHook}\n`, ctx)
     expect(out).toContain('"decision":"allow"')
     expect(out).not.toContain('durationMs')
+  })
+})
+
+describe('normalizeSessionSnapshot', () => {
+  it('normalizes, scrubs, and projects each parsed body record', () => {
+    const raw = [
+      JSON.stringify({ type: 'session', version: 0, createdAt: 123, cwd: ctx.cwd }),
+      JSON.stringify({
+        type: 'request/header',
+        seq: 7,
+        time: 999,
+        data: { header: { system: 'volatile', tools: [{ name: 'tool' }] } },
+      }),
+    ].join('\n') + '\n'
+    expect(normalizeSessionSnapshot(raw, ctx)).toBe([
+      JSON.stringify({ type: 'session', version: 0, createdAt: 0, cwd: '{{cwd}}' }),
+      JSON.stringify({ type: 'request/header', data: { header: { system: '{{system}}', tools: '{{tools}}' } } }),
+    ].join('\n') + '\n')
+  })
+
+  it('normalizes an already-projected packed row', () => {
+    const raw = [
+      JSON.stringify({ type: 'session', version: 0 }),
+      JSON.stringify({
+        type: 'text-chunks',
+        data: { turn: 1, step: 1, index: 0, dt: [9], texts: ['a', 'b'] },
+      }),
+    ].join('\n') + '\n'
+    expect(normalizeSessionSnapshot(raw, ctx)).toContain('"dt":[0]')
+  })
+
+  it('rejects headerless input', () => {
+    expect(() => normalizeSessionSnapshot('{"type":"turn/start"}\n', ctx))
+      .toThrow('session snapshot must start with a session header')
   })
 })
 
@@ -562,6 +605,32 @@ describe('scrubRequestHeaders', () => {
     expect(once.split('\n')[0]).toBe(headerLine)
     expect(once.split('\n')[2]).toBe(other)
     expect(scrubRequestHeaders(once)).toBe(once)
+  })
+})
+
+describe('scrubSessionSnapshot', () => {
+  it('preserves the header while projecting and scrubbing each body record', () => {
+    const header = '  {"type":"session","version":0,"id":"s","createdAt":7}  '
+    const request = JSON.stringify({
+      type: 'request/header', seq: 0, time: 9,
+      data: { header: { system: 'secret', tools: [{ name: 'read' }] }, reason: 'initial' },
+    })
+    const event = JSON.stringify({
+      type: 'turn/start', seq: 1, time: 10,
+      data: { turn: 1, seq: 41, time: 42 },
+    })
+
+    expect(scrubSessionSnapshot(`${header}\n${request}\n${event}\n`)).toBe([
+      header,
+      '{"type":"request/header","data":{"header":{"system":"{{system}}","tools":"{{tools}}"},"reason":"initial"}}',
+      '{"type":"turn/start","data":{"turn":1,"seq":41,"time":42}}',
+      '',
+    ].join('\n'))
+  })
+
+  it('rejects headerless input', () => {
+    expect(() => scrubSessionSnapshot('{"type":"turn/start"}\n'))
+      .toThrow('session snapshot must start with a session header')
   })
 })
 

@@ -386,7 +386,7 @@ const ZH_TARGET_DIGEST = [
   '- Nothing added, nothing dropped: the Chinese must state exactly what the new English states.',
   '- Write natural institutional technical Chinese, not word-by-word gloss; terse stays terse.',
   '- Code fences byte-identical to the English side, comments included; inline code spans verbatim.',
-  '- Relative links keep the `.md` target; only the switcher line links `.zh.md`.',
+  '- Repository-relative document links keep the same semantic target and exact query/fragment; targets in the active bilingual corpus use `.zh.md` for Chinese, a missing in-scope counterpart is an error, and targets outside the corpus keep the authored path. The switcher remains the cross-locale exception.',
   '- Structure mirrors the counterpart: heading depths and order, list kinds and item counts, table rows and columns.',
   '- 首次出现 annotations attach to the document-wide first occurrence only; later occurrences use the bare form, and an empty 首次出现 cell means never gloss.',
   '- Typography: one half-width space between Chinese and Latin or digits; full-width punctuation in Chinese prose; 顿号 for enumerations; second person is 你.',
@@ -398,7 +398,7 @@ const EN_TARGET_DIGEST = [
   '- Nothing added, nothing dropped: the English must state exactly what the new Chinese states.',
   '- Write concise professional developer prose, not word-by-word gloss; terse stays terse.',
   '- Code fences byte-identical to the Chinese side, comments included; inline code spans verbatim.',
-  '- Relative links keep the `.md` target; only the switcher line links `.zh.md`.',
+  '- Repository-relative document links keep the same semantic target and exact query/fragment; targets in the active bilingual corpus use `.md` for English, a missing in-scope counterpart is an error, and targets outside the corpus keep the authored path. The switcher remains the cross-locale exception.',
   '- Structure mirrors the counterpart: heading depths and order, list kinds and item counts, table rows and columns.',
   '- One physical line per paragraph; exactly one trailing newline.',
 ]

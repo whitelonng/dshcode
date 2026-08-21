@@ -36,5 +36,5 @@ react-loop 简化在保持 `SESSION_FORMAT_VERSION` 为 0 的同时更改了持�
 
 ## 相关资料
 
-- [加载消息标识机制引入前持久化的会话](2026-07-28-load-pre-identity-session-messages.md)：负责另一项同版本格式变更的确定性标识和通用只读导入边界。
-- [以抽象服务实现会话持久化](../architecture/2026-06-14-session-persistence.md)：负责仅追加后端存储和恢复。
+- [加载消息标识机制引入前持久化的会话](2026-07-28-load-pre-identity-session-messages.zh.md)：负责另一项同版本格式变更的确定性标识和通用只读导入边界。
+- [以抽象服务实现会话持久化](../architecture/2026-06-14-session-persistence.zh.md)：负责仅追加后端存储和恢复。

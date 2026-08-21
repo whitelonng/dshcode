@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Plan mode 状态徽章，纯浏览器 surface 插件。浏览器侧占用会话声明的 `conversation.input.plan` 单实例 seat（位于 access 模式控件右侧）；node 侧是空 apply（roster 行）。plan 行为本身——`/plan` 命令、边界或空闲即时提交的 `plan/mode` 状态、`plan` 投影单元与 policy 段——归 [`@deepseek-ai/dsh-plan-mode`](../../plan/plan-mode/README.md) 所有，由 host roster 独立组合。
+Plan mode 状态徽章，纯浏览器 surface 插件。浏览器侧占用会话声明的 `conversation.input.plan` 单实例 seat（位于 access 模式控件右侧）；node 侧是空 apply（roster 行）。plan 行为本身——`/plan` 命令、边界或空闲即时提交的 `plan/mode` 状态、`plan` 投影单元与 policy 段——归 [`@deepseek-ai/dsh-plan-mode`](../../plan/plan-mode/README.zh.md) 所有，由 host roster 独立组合。
 
 plan mode 经 `/plan` 命令路径进入：用户可以从 composer 的 `+` Command 菜单选择 Plan，也可以输入 `/plan`，而本包不渲染未激活态 plan 控件。当 host 计算的 `plan` 投影有效目标为 plan mode 时（`pending ? !active : active`——折叠的 host 值而非客户端乐观态，帧到达即自动纠正），座位渲染 warn 色的 "Plan ×" 状态按钮，该按钮经 `command.execute` 执行 `/plan off`；否则座位保持为空——未组合 plan-mode 的 host（或尚无会话的 Draft）不显示任何内容。plan mode 为有效目标期间，composer 文本框的 placeholder 切换为 plan 任务提示——"describe your task to generate plan"（中文「描述你的任务以生成计划」），经 ui-conversation 的 `conversation` locale 命名空间（`placeholder.plan` / `hint.plan` 键）本地化，并与已认领 `/plan` 命令的提示逐字共用同一份文案（由 composer 从同一投影渲染；owner 提供的 placeholder 优先）。
 

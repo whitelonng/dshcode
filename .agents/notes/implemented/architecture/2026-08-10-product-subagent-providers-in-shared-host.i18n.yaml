@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-10-product-subagent-providers-in-shared-host.md
 2026-08-10-product-subagent-providers-in-shared-host.md: 196e28c1263c4b6d71eaeb59b9ba8457b36f3ff4
-2026-08-10-product-subagent-providers-in-shared-host.zh.md: b36398be50065dd1520fb97ca15416467c580bf2
+2026-08-10-product-subagent-providers-in-shared-host.zh.md: 1451890e1b250a2095e3366c59d6ce0873b55fe9

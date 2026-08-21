@@ -2,7 +2,7 @@
 
 [English](llm-streaming.md) | 中文
 
-[`packages/llm`](../../packages/llm/README.md) 提供对话与流式输出类型：每个请求和持久历史共用的 `Message`/`ContentBlock` 变体、完整组装的模型请求、原始 `StreamChunk` 协议、每个适配器必须实现的适配器约定（adapter contract），以及共享的 assembler。[核心包](core.md)在每个轮次持有并记录这些值；本页声明它们。
+[`packages/llm`](../../packages/llm/README.zh.md) 提供对话与流式输出类型：每个请求和持久历史共用的 `Message`/`ContentBlock` 变体、完整组装的模型请求、原始 `StreamChunk` 协议、每个适配器必须实现的适配器约定（adapter contract），以及共享的 assembler。[核心包](core.zh.md)在每个轮次持有并记录这些值；本页声明它们。
 
 源码：[`packages/llm/llm/src/types.ts`](../../packages/llm/llm/src/types.ts)
 
@@ -28,7 +28,7 @@ interface ContentBlockMap {
 }
 ```
 
-各块接口（完整字段见源码）：`TextBlock`（`text`）、`ReasoningBlock`（thinking，区别于可见文本）、`ImageBlock`（一个持久的[图片附件](attachment.md)）、`ToolCallBlock`（`id: CallId`、`name`、原始 JSON `arguments`），以及 `ToolResultBlock`（`toolCallId`、嵌套 `content: ContentBlock[]`、`isError?`）。`ContentBlock = ContentBlockMap[ContentBlockType]`。仅当适配器、UI、压缩（compaction）和持久回放路径均支持某种新模态时，才将其纳入可合并扩展的 map。
+各块接口（完整字段见源码）：`TextBlock`（`text`）、`ReasoningBlock`（thinking，区别于可见文本）、`ImageBlock`（一个持久的[图片附件](attachment.zh.md)）、`ToolCallBlock`（`id: CallId`、`name`、原始 JSON `arguments`），以及 `ToolResultBlock`（`toolCallId`、嵌套 `content: ContentBlock[]`、`isError?`）。`ContentBlock = ContentBlockMap[ContentBlockType]`。仅当适配器、UI、压缩（compaction）和持久回放路径均支持某种新模态时，才将其纳入可合并扩展的 map。
 
 源码：[`packages/llm/llm/src/message.ts`](../../packages/llm/llm/src/message.ts)
 
@@ -236,17 +236,17 @@ interface LlmFailure {
 - **一次适配器调用就是一次提供方尝试。** 适配器禁用库重试。agent 层恢复会打开另一个持久、带编号的轮次；直接调用 `ctx.llm.stream()` 的调用方仍然只尝试一次。
 - **提供方停顿在传输层受到时限约束。** 两个已交付的远程适配器都暴露正数且有限的 `streamIdleTimeoutMs`，默认五分钟。watchdog 只在 iterator `next()` 尚未完成时启动，整个请求使用同一个稳定 signal，把自身到期映射为 `TIMEOUT`，并把更早发生的调用方中止保留为 `ABORTED`。
 - **上下文溢出只有一个规范 code。** 两个 DeepSeek 适配器都通过 `isContextWindowExceededError()` 对提供方的显式细节分类并暴露 `CONTEXT_WINDOW_EXCEEDED`，无论失败以抛出的 HTTP `LlmError` 还是带内 finish error 到达。消费方按 code 路由，绝不依赖提供方文本。
-- **空 completion 是可重试错误，而不是静默的成功结果。** 两个适配器都把没有携带任何内容块的终止性 `stop` 结束映射为携带规范 `EMPTY_RESPONSE` code 的 `finish {kind:'error'}`，`dsh-llm-retry` 默认会重试它；详见[空模型响应可重试](../../.agents/notes/implemented/bug-fix/2026-07-24-empty-model-response-is-retryable.md)。
+- **空 completion 是可重试错误，而不是静默的成功结果。** 两个适配器都把没有携带任何内容块的终止性 `stop` 结束映射为携带规范 `EMPTY_RESPONSE` code 的 `finish {kind:'error'}`，`dsh-llm-retry` 默认会重试它；详见[空模型响应可重试](../../.agents/notes/implemented/bug-fix/2026-07-24-empty-model-response-is-retryable.zh.md)。
 - **每个提供方 HTTP 请求都携带应用归属头。** 适配器发送 `attributionHeaders()`（见下文）作为 `User-Agent` 基线，并通过协议级测试加以证明。
 - **回放状态归适配器所有；其切分是共享词汇。** 成功的 `finish` 可以携带一个 `ReplayEnvelope`：不透明的响应级元数据，加上与发射块序列对齐的可选逐块条目。对齐关系是 harness 的词汇——组装丢弃某个块时，同一位置的条目一并丢弃，因此存储的元数据始终描述存储的内容。循环把裁剪后的数据与组装后的 assistant 消息一起存储。后续请求中，仅当历史提供方与目标提供方当前注册到完全相同的适配器实例时，`LlmRuntime` 才会传递该状态。该适配器负责校验状态并拥有所有跨模型或跨提供方转换；其他适配器只会收到提供方无关的内容以及提供方／模型字段，不会收到私有状态。持久化内容保持权威：读取适配器无法使用的已存状态只会把这一条消息降级为提供方无关转换并带出诊断，而不是让请求失败。
 
 ## `ResolvedRetryPolicy`
 
-重试配置会在路由注册前解析为不可变的可辨识联合。normal mode 携带 `mode: 'normal'`、有限的 `maxRetries`、`retryableCodes`，以及必填的 `initialDelayMs`、`maxDelayMs` 与 `jitterRatio`；always mode 携带 `mode: 'always'` 和相同的必填退避字段，但没有有限上限。省略提供方策略时使用重试五次的 normal 默认值。分层 settings 在切换到 always 模式后可能保留仅属于 normal 的 `maxRetries` 或 `retryableCodes`；解析器会忽略这些未启用字段，并捕获纯 always 策略。`LlmRuntime.providerRetryPolicy(provider)` 返回注册值；调用选定实际提供服务的注册后，`llmRetryPolicyOf(stream)` 返回从中捕获的值，因此之后释放或替换路由都无法改变进行中失败的恢复策略。可选配置输入字段由[生成的配置目录](../config-catalog.md)列出。
+重试配置会在路由注册前解析为不可变的可辨识联合。normal mode 携带 `mode: 'normal'`、有限的 `maxRetries`、`retryableCodes`，以及必填的 `initialDelayMs`、`maxDelayMs` 与 `jitterRatio`；always mode 携带 `mode: 'always'` 和相同的必填退避字段，但没有有限上限。省略提供方策略时使用重试五次的 normal 默认值。分层 settings 在切换到 always 模式后可能保留仅属于 normal 的 `maxRetries` 或 `retryableCodes`；解析器会忽略这些未启用字段，并捕获纯 always 策略。`LlmRuntime.providerRetryPolicy(provider)` 返回注册值；调用选定实际提供服务的注册后，`llmRetryPolicyOf(stream)` 返回从中捕获的值，因此之后释放或替换路由都无法改变进行中失败的恢复策略。可选配置输入字段由[生成的配置目录](../config-catalog.zh.md)列出。
 
 ## `AppIdentity`：应用归属
 
-每个适配器都会向提供方发送的静态公开应用标识（[`packages/llm/llm/src/attribution.ts`](../../packages/llm/llm/src/attribution.ts)）。`attributionHeaders(identity?)` 只把它映射到标准 `User-Agent` header；该约定有意不支持 OpenRouter 特有的应用归属 header。默认 `APP_IDENTITY` 从包 manifest（元数据清单）获取版本；每个字段都是公开产品事实——不含 secret、路径、会话 id 或逐用户标识，且任何逐请求信息都不得影响这些值。设计理由见[强制 `User-Agent` 归属](../../.agents/notes/implemented/architecture/2026-06-21-mandatory-app-attribution-headers.md)。
+每个适配器都会向提供方发送的静态公开应用标识（[`packages/llm/llm/src/attribution.ts`](../../packages/llm/llm/src/attribution.ts)）。`attributionHeaders(identity?)` 只把它映射到标准 `User-Agent` header；该约定有意不支持 OpenRouter 特有的应用归属 header。默认 `APP_IDENTITY` 从包 manifest（元数据清单）获取版本；每个字段都是公开产品事实——不含 secret、路径、会话 id 或逐用户标识，且任何逐请求信息都不得影响这些值。设计理由见[强制 `User-Agent` 归属](../../.agents/notes/implemented/architecture/2026-06-21-mandatory-app-attribution-headers.zh.md)。
 
 ```ts type-equiv
 /**
@@ -600,7 +600,7 @@ interface ToolSchema {
 }
 ```
 
-面向模型的 `ToolSchema` 是协议类型；产出它的已注册 `ToolDefinition`（schema + `execute`）在 [tools.md](tools.md) 中。
+面向模型的 `ToolSchema` 是协议类型；产出它的已注册 `ToolDefinition`（schema + `execute`）在 [tools.md](tools.zh.md) 中。
 
 界面正在起草的提供方既没有路由也没有 catalog，因此询问被单独描述：请求携带用户正在编辑的草稿，回复是界面可以采纳的候选，而不是它必须服务的 catalog。
 
@@ -653,7 +653,7 @@ interface LlmDiscoveredModel {
 
 ### 请求信封：`LlmCallConfig` 与记录的 header
 
-循环从已记录状态构建每个请求。`EpochHeader` 记录调用配置，标记由适配器默认值提供的字段，并通过完整的 `request/header` 快照记录渲染后的提示词以及权威返回工具顺序（由 `toolOrder` 配置；未配置时按字典序）。结合派生历史，请求便可由会话日志重建。见 [session.md](session.md#the-request-header-event-requestheader) 与[可重建性 Agent Note](../../.agents/notes/implemented/architecture/2026-07-05-reconstructable-requests.md)。
+循环从已记录状态构建每个请求。`EpochHeader` 记录调用配置，标记由适配器默认值提供的字段，并通过完整的 `request/header` 快照记录渲染后的提示词以及权威返回工具顺序（由 `toolOrder` 配置；未配置时按字典序）。结合派生历史，请求便可由会话日志重建。见 [session.md](session.zh.md#the-request-header-event-requestheader) 与[可重建性 Agent Note](../../.agents/notes/implemented/architecture/2026-07-05-reconstructable-requests.zh.md)。
 
 `agent/request` 接收冻结的调用配置种子，并可返回替代值以切换提供方、模型、推理强度或采样参数。waterfall（瀑布式事件）开始前，循环会移除标记为适配器默认值的值，使确切模型准备过程填入所选路由的当前值；未带标记的显式设置仍保留在提议中。waterfall 结束后，准备过程会在轮次信号控制下拒绝显式指定但不受支持的推理强度 ID（不自动调整），并记录生效配置以及由适配器默认值提供的字段。准备完成的调用直至分派完成始终持有同一项适配器注册。到达 `llm/stream` 的请求会被深度冻结，因此变更会抛异常；请求还携带进程本地循环标识，使观察者不会把单独记录的冻结辅助调用误认成对话请求。
 
@@ -691,7 +691,7 @@ interface LlmCallConfigAdapterDefaults {
 
 ## 服务与提供方约定
 
-`LlmAdapter` 是提供方约定：创建子类、实现 `stream()`，再用 `ctx.llm.registerAdapter(providers, adapter)` 注册一个适配器实例。`GenerateOptions.provider` 选择已注册适配器；`GenerateOptions.model` 会传给该适配器，无需在生命周期启动时注册。重复提供方路由会原子失败。可选的 `providerRetryPolicy()` 会按路由捕获并填入 normal 默认值，`providerInfo()` 与异步 `listModels()` 方法则为 `LlmRuntime.listProviders()` / `listModels()` 提供分离的 selector 元数据。该目录仅供参考，不是请求白名单：适配器仍是权威，并可接受未列出的模型 id。单次异步 `resolveModel()` 查询返回确切模型身份，以及可选的对正确性敏感的上下文容量、适配器配置的 `defaultMaxTokens`、由模型持有的有序推理强度 ID 和可选的部署默认值；字段缺失表示元数据不可用或保留提供方持有的行为，而不表示目录成员关系无效。解析器会接收可选的取消信号，并且必须在信号中止后迅速完成结算。`LlmRuntime.resolveModelInfo()` 会校验聚合结果并返回分离值。在最终适配器边界，`resolveCallConfig()` 仅在 `maxTokens` 缺失时填入输出默认值，并校验和填入推理强度，因此直接调用也无法绕过任何一项已配置行为；直接分派会在等待解析前捕获一项适配器注册。agent loop 则使用 `prepareCall()`，使模型解析、请求头持久记录和分派全程使用同一项注册，保留来自同一次查询的分离上下文元数据，并报告适配器填入的配置字段。适配器查找发生在 `llm/stream` waterfall 的终端 continuation，因此 listener 可以在查找前短路调用，或路由一个可变的一次性请求。AgentLoop 在外层 waterfall 返回流句柄时观察到一次请求尝试；这个有限边界不能证明惰性终端适配器已构造完成或开始提供方 I/O。`block-start` / `block-end` 的 `index` 关联与 assembler 共同意味着适配器只需 emit 格式正确的分片——块重组不是每个适配器各自的问题。`ctx.llm.stream()` 与 `llm/stream` waterfall 在一个轮次中的位置见 [architecture.md](../architecture.md#turn-flow)。
+`LlmAdapter` 是提供方约定：创建子类、实现 `stream()`，再用 `ctx.llm.registerAdapter(providers, adapter)` 注册一个适配器实例。`GenerateOptions.provider` 选择已注册适配器；`GenerateOptions.model` 会传给该适配器，无需在生命周期启动时注册。重复提供方路由会原子失败。可选的 `providerRetryPolicy()` 会按路由捕获并填入 normal 默认值，`providerInfo()` 与异步 `listModels()` 方法则为 `LlmRuntime.listProviders()` / `listModels()` 提供分离的 selector 元数据。该目录仅供参考，不是请求白名单：适配器仍是权威，并可接受未列出的模型 id。单次异步 `resolveModel()` 查询返回确切模型身份，以及可选的对正确性敏感的上下文容量、适配器配置的 `defaultMaxTokens`、由模型持有的有序推理强度 ID 和可选的部署默认值；字段缺失表示元数据不可用或保留提供方持有的行为，而不表示目录成员关系无效。解析器会接收可选的取消信号，并且必须在信号中止后迅速完成结算。`LlmRuntime.resolveModelInfo()` 会校验聚合结果并返回分离值。在最终适配器边界，`resolveCallConfig()` 仅在 `maxTokens` 缺失时填入输出默认值，并校验和填入推理强度，因此直接调用也无法绕过任何一项已配置行为；直接分派会在等待解析前捕获一项适配器注册。agent loop 则使用 `prepareCall()`，使模型解析、请求头持久记录和分派全程使用同一项注册，保留来自同一次查询的分离上下文元数据，并报告适配器填入的配置字段。适配器查找发生在 `llm/stream` waterfall 的终端 continuation，因此 listener 可以在查找前短路调用，或路由一个可变的一次性请求。AgentLoop 在外层 waterfall 返回流句柄时观察到一次请求尝试；这个有限边界不能证明惰性终端适配器已构造完成或开始提供方 I/O。`block-start` / `block-end` 的 `index` 关联与 assembler 共同意味着适配器只需 emit 格式正确的分片——块重组不是每个适配器各自的问题。`ctx.llm.stream()` 与 `llm/stream` waterfall 在一个轮次中的位置见 [architecture.md](../architecture.zh.md#turn-flow)。
 
 ```ts type-equiv
 /** One model call whose config and adapter registration were resolved together. */
@@ -702,6 +702,8 @@ interface PreparedLlmCall {
   readonly retryPolicy: ResolvedRetryPolicy
   /** Detached context metadata resolved with the registration-bound call. */
   readonly context?: LlmModelContext
+  /** Exact model modalities captured with the adapter dispatch generation. */
+  readonly inputModalities?: readonly ModelModality[]
   /** Config fields materialized by the captured adapter rather than proposed by the caller. */
   readonly adapterDefaults: LlmCallConfigAdapterDefaults
   /**
@@ -758,6 +760,16 @@ declare abstract class LlmAdapter {
     _signal?: AbortSignal,
   ): Promise<LlmResolvedModelInfo>;
   /**
+   * Bind exact model metadata and the eventual request dispatch to one adapter generation.
+   * Dynamic adapters override this so settings changes between preparation and
+   * dispatch cannot combine one generation's capabilities with another's endpoint.
+   * @param provider - registered provider route.
+   * @param model - exact model id.
+   * @param signal - cancellation for model resolution.
+   * @returns model metadata and a one-generation stream entry point.
+   */
+  async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;
+  /**
    * Stream one model call as raw chunks. The only required method.
    * @param options - the fully-assembled request; implementations must honor `options.signal`.
    * @returns the chunk stream, obeying the adapter contract documented on `StreamChunk`.
@@ -774,7 +786,7 @@ declare abstract class LlmAdapter {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxllm--llmruntime"></a>
 
@@ -900,7 +912,7 @@ async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<Prepared
 stream(options: GenerateOptions): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:285`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 
 <a id="llm-events"></a>
 
@@ -925,7 +937,7 @@ The provider topology changed: an adapter registered or unregistered routes, or 
 'llm/adapters-updated'(): void
 ```
 
-Source: [`packages/llm/llm/src/types.ts:23`](../../packages/llm/llm/src/types.ts)
+Source: [`packages/llm/llm/src/types.ts`](../../packages/llm/llm/src/types.ts)
 
 <a id="llmstream--waterfall"></a>
 
@@ -949,5 +961,5 @@ Waterfall around every streaming model call (retry, replay, routing). Bound to t
 'llm/stream'(this: LlmRuntime, options: GenerateOptions, next: () => AsyncIterable<StreamChunk>): AsyncIterable<StreamChunk>
 ```
 
-Source: [`packages/llm/llm/src/index.ts:65`](../../packages/llm/llm/src/index.ts)
+Source: [`packages/llm/llm/src/index.ts`](../../packages/llm/llm/src/index.ts)
 <!-- END GENERATED cordis-surface -->

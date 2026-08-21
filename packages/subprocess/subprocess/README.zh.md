@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-子进程 seam（`ctx.subprocess`）是一个执行世界的进程部分。抽象的 `SubprocessRuntime` 公开可执行文件查找、普通受管 `spawn` 和一项终端进程原语；其词汇涵盖原始／收集式 stdio、进程与终端句柄、退出事实、进程树／会话清理，以及受管的 `DSH_*` 环境命名空间。本地实现位于 [`dsh-subprocess-local`](../subprocess-local/README.md)。
+子进程 seam（`ctx.subprocess`）是一个执行世界的进程部分。抽象的 `SubprocessRuntime` 公开可执行文件查找、普通受管 `spawn` 和一项终端进程原语；其词汇涵盖原始／收集式 stdio、进程与终端句柄、退出事实、进程树／会话清理，以及受管的 `DSH_*` 环境命名空间。本地实现位于 [`dsh-subprocess-local`](../subprocess-local/README.zh.md)。
 
 ## 约定
 
@@ -15,7 +15,7 @@
 - `scrubbedParentEnv()` / `SENSITIVE_ENV_PATTERN` 是唯一一份共享的环境清理定义：环境中形似凭据的名称与 `DSH_*` 名称都会被丢弃，显式 `env` 在清除之后合并。本地的普通 spawn 与终端 spawn 都应用该定义；拥有自身 spawn 的 SDK 管理传输可直接导入它。
 - 服务自身的 dispose（资源释放）会终止所有仍在运行的受管进程并等待其退出。
 
-参见[子进程子系统页面](../../../docs/subsystems/subprocess.md)与[seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.md)。
+参见[子进程子系统页面](../../../docs/subsystems/subprocess.zh.md)与[seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.zh.md)。
 
 ## 模型体验
 

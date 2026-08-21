@@ -163,10 +163,10 @@ export function trayIconFile(platform: NodeJS.Platform): string {
 export const DESKTOP_FRAME_ARG = '--dsh-frame=custom'
 
 /** Launch-argument prefix carrying the URL-encoded product name. */
-export const DESKTOP_PRODUCT_ARG_PREFIX = '--dsh-product-name='
+const DESKTOP_PRODUCT_ARG_PREFIX = '--dsh-product-name='
 
 /** Launch-argument prefix carrying the packaged application version. */
-export const DESKTOP_VERSION_ARG_PREFIX = '--dsh-app-version='
+const DESKTOP_VERSION_ARG_PREFIX = '--dsh-app-version='
 
 /** IPC channel the renderer menu button invokes to pop the window menu. */
 export const DESKTOP_SHOW_MENU_CHANNEL = 'desktop:show-menu'

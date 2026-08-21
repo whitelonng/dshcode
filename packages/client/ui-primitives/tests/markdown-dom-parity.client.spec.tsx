@@ -163,6 +163,17 @@ const CORPUS: Record<string, string> = {
     'after',
   ].join('\n'),
   'table-header-only': '| a | b |\n| --- | --- |\n\nafter',
+  // Four columns take the md-table-wide hook at top level; the same table
+  // inside a blockquote falls back to the fill arm.
+  'table-wide-and-blockquote': [
+    '| C1 | C2 | C3 | C4 |',
+    '| --- | --- | --- | --- |',
+    '| a | b | c | d |',
+    '',
+    '> | Q1 | Q2 | Q3 | Q4 |',
+    '> | --- | --- | --- | --- |',
+    '> | a | b | c | d |',
+  ].join('\n'),
   'inline-code-with-newline': 'Spans `a\nb` across a line.',
   'links-and-autolinks': [
     '[https ok](https://example.com "with title") and [mailto ok](mailto:dev@example.com).',

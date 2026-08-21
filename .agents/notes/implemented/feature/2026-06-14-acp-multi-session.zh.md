@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-06-14-acp-multi-session.md) | 中文
 
-> 本 Agent Note 写于 ACP 还是编辑器桥接层的时期，动机来自 Zed 的多会话客户端模型。[ACP 作为仅面向自动化的协议](../simplification/2026-07-23-acp-automation-only-protocol.md)移除了编辑器接口；多路复用决策本身不变，本 Agent Note 现依照自动化约定陈述它。
+> 本 Agent Note 写于 ACP 还是编辑器桥接层的时期，动机来自 Zed 的多会话客户端模型。[ACP 作为仅面向自动化的协议](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)移除了编辑器接口；多路复用决策本身不变，本 Agent Note 现依照自动化约定陈述它。
 
 ## 问题
 
@@ -24,9 +24,9 @@ ACP 桥接层将活跃会话存储在 `Map<SessionId, SessionRecord>` 中。agen
 
 ## 协议与工作区作用域
 
-[ACP v1 明确允许一个连接上存在多个并发会话](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/get-started/architecture.mdx#L16-L24)，每个新会话都携带自己的主 `cwd`。本桥实现该会话级多路复用，其中包括[按会话 cwd 决策](../architecture/2026-07-02-fs-per-session-cwd.md)所记录的不同主工作区；它不会为每个会话创建一个 agent 子进程。
+[ACP v1 明确允许一个连接上存在多个并发会话](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/get-started/architecture.mdx#L16-L24)，每个新会话都携带自己的主 `cwd`。本桥实现该会话级多路复用，其中包括[按会话 cwd 决策](../architecture/2026-07-02-fs-per-session-cwd.zh.md)所记录的不同主工作区；它不会为每个会话创建一个 agent 子进程。
 
-一个会话内部的多根项目是另一项可选能力：ACP 把[有效根目录定义为主 `cwd` 加 `additionalDirectories`](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/session-setup.mdx#L313-L367)。自动化桥接层不公布任何多根能力，并拒绝非空的 `additionalDirectories`；如[包约定](../../../../packages/acp/acp/README.md#protocol-contract)所记录，每个全新会话恰好有一个工作区。
+一个会话内部的多根项目是另一项可选能力：ACP 把[有效根目录定义为主 `cwd` 加 `additionalDirectories`](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/session-setup.mdx#L313-L367)。自动化桥接层不公布任何多根能力，并拒绝非空的 `additionalDirectories`；如[包约定](../../../../packages/acp/acp/README.zh.md#protocol-contract)所记录，每个全新会话恰好有一个工作区。
 
 [标准传输是每个 stdio 连接一个 agent 子进程](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/transports.mdx#L17-L42)；多个连接因此需要多个子进程或自定义传输，而本决策保证的是一个连接内部存在多个会话。在该连接内，`ctx.sandboxPolicy` 把每个会话的 `cwd` 解析为其自己的 `workspace-write` 根目录，因此共享的 bash 和文件系统服务可以服务并发项目而不授予跨项目写入。这不会添加 ACP `additionalDirectories`；它只是从已经支持的「每会话一个主根目录」路径中移除了进程级根目录限制。
 

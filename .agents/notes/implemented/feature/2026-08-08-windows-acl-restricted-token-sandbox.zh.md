@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-最初的[沙箱决策](2026-07-06-sandbox.md)将 `PLATFORM_CHAINS.win32` 留空，因此交付的 Windows profile 因不存在隔离执行器而退化为 danger-full-access。win32 档必须约束沙箱词汇表中的两种文件效果模式——`read-only`（不显式授予任何可写根目录）与 `workspace-write`（允许写入工作区根目录及后端定义的临时区域）——并报告其机制无法约束的任何效果；读取、网络与进程可见性仍在这套词汇之外。
+最初的[沙箱决策](2026-07-06-sandbox.zh.md)将 `PLATFORM_CHAINS.win32` 留空，因此交付的 Windows profile 因不存在隔离执行器而退化为 danger-full-access。win32 档必须约束沙箱词汇表中的两种文件效果模式——`read-only`（不显式授予任何可写根目录）与 `workspace-write`（允许写入工作区根目录及后端定义的临时区域）——并报告其机制无法约束的任何效果；读取、网络与进程可见性仍在这套词汇之外。
 
 ## 决策
 
-直接基于原始 ACL 机制实现该档：把调用者令牌复制为 `WRITE_RESTRICTED` 受限令牌（`CreateRestrictedToken`，`WRITE_RESTRICTED` + `DISABLE_MAX_PRIVILEGE` + `LUA_TOKEN`），其 restricting SIDs 携带彼此独立的工作区能力与私有临时目录能力。`WRITE_RESTRICTED` 只对写访问做交集检查，因此读取保留调用者的环境访问，而写入还必须匹配这些能力 ACE 之一。该机制来自 huoyaoyuan/windows-acl-restrict-poc（`10e4dfb`）的演示；本移植检查每个 API 调用并 fail-closed（POC 因忽略失败而 fail-open）。工作区 SID 由规范工作区路径确定性派生（`workspaceWriteSid`——sha256 → `S-1-4-x-y`）；其常驻工作区 ACE 是跨会话复用缓存，精确 ACE 跳过可避免重复的急切全树传播。每个活跃的会话/工作区对则获得一个随机私有临时目录，以及一个从该路径派生的、经过域分离的 SID（`tempWriteSid`）；其 ACE 可回收，TMP/TEMP 指向该目录，令牌默认 DACL 列入该临时 SID，因此新建的临时对象不会获得共享的工作区能力。fork 因此无法写入同级会话的临时目录树。即使恢复的是同一会话，新的提供方也会选择新的路径和 SID，因此崩溃残留只是失效垃圾，而非冲突或继承的能力；无 agent（智能体）的调用会逐调用创建并移除同样的形态。环境临时根目录绝不会被隐式授权。如果工作区等于或包含临时根目录，调用会在任何 ACL 改动发生前失败，因为否则其可继承的常驻 ACE 会向每个私有子目录授权；直接 API 会拒绝可写根目录与实际私有临时目录在任一方向上的重叠。PowerShell 可借助这项私有临时目录能力完成启动时的 AppLocker 探针，因此在没有主机范围策略时，`workspace-write` 会保持 FullLanguage；`read-only` 无法创建探针文件，会保守地进入 ConstrainedLanguage。这一区别属于 PowerShell 启动行为，不是 ACL 边界的一部分。令牌列表为 read-only = [登录 SID、Everyone]，workspace-write = [登录 SID、Everyone、工作区 SID、可选临时 SID]。登录 SID + Everyone 是保活不变式（没有它们，早期 DLL 初始化会以 0xC0000142 死亡，CNG 会让 pwsh 以 0xE0434352 崩溃）。由于 Everyone 仍在列表中，向 Everyone 授予写访问的外部对象会通过两次检查；由于 NTFS ACL 属于文件对象，工作区内获授权的硬链接也会使同一对象的外部别名获得授权。拒绝所有硬链接会让普通 pnpm 工作区不可用，因此提供方报告 `enforcement: 'partial'`，原生套件则钉住这两个缺口。Read-only 不含任何能力 SID，因此常驻工作区 ACE 在模式降级后保持失效。Authenticated Users 在两种列表中都不存在——CIM 不可用，从而关闭 C:\-root 建树逃逸——INTERACTIVE/LOCAL 也不存在，因此 Public 树写入被拒绝。新建匿名管道和同步对象通过 `SetTokenInformation(TokenDefaultDacl)` 继承临时 SID（禁用临时目录时继承工作区 SID，read-only 下继承 Everyone）；named pipe 保持 Win32 层 owner/SYSTEM/Admins 全权、Everyone/ANONYMOUS 只读的模板，因此受限孙进程的管道 stdio 仍被拒绝。它以 [`@deepseek-ai/dsh-sandbox-windows-acl`](../../../../packages/sandbox/sandbox-windows-acl/README.md)、[`dsh-sandbox-local`](../../../../packages/sandbox/sandbox-local/README.md) 的 `win32` 档，以及作为隔离执行器的 [`@deepseek-ai/dsh-pwsh-sandbox`](../../../../packages/shell/pwsh-sandbox/README.md) 交付。
+直接基于原始 ACL 机制实现该档：把调用者令牌复制为 `WRITE_RESTRICTED` 受限令牌（`CreateRestrictedToken`，`WRITE_RESTRICTED` + `DISABLE_MAX_PRIVILEGE` + `LUA_TOKEN`），其 restricting SIDs 携带彼此独立的工作区能力与私有临时目录能力。`WRITE_RESTRICTED` 只对写访问做交集检查，因此读取保留调用者的环境访问，而写入还必须匹配这些能力 ACE 之一。该机制来自 huoyaoyuan/windows-acl-restrict-poc（`10e4dfb`）的演示；本移植检查每个 API 调用并 fail-closed（POC 因忽略失败而 fail-open）。工作区 SID 由规范工作区路径确定性派生（`workspaceWriteSid`——sha256 → `S-1-4-x-y`）；其常驻工作区 ACE 是跨会话复用缓存，精确 ACE 跳过可避免重复的急切全树传播。每个活跃的会话/工作区对则获得一个随机私有临时目录，以及一个从该路径派生的、经过域分离的 SID（`tempWriteSid`）；其 ACE 可回收，TMP/TEMP 指向该目录，令牌默认 DACL 列入该临时 SID，因此新建的临时对象不会获得共享的工作区能力。fork 因此无法写入同级会话的临时目录树。即使恢复的是同一会话，新的提供方也会选择新的路径和 SID，因此崩溃残留只是失效垃圾，而非冲突或继承的能力；无 agent（智能体）的调用会逐调用创建并移除同样的形态。环境临时根目录绝不会被隐式授权。如果工作区等于或包含临时根目录，调用会在任何 ACL 改动发生前失败，因为否则其可继承的常驻 ACE 会向每个私有子目录授权；直接 API 会拒绝可写根目录与实际私有临时目录在任一方向上的重叠。PowerShell 可借助这项私有临时目录能力完成启动时的 AppLocker 探针，因此在没有主机范围策略时，`workspace-write` 会保持 FullLanguage；`read-only` 无法创建探针文件，会保守地进入 ConstrainedLanguage。这一区别属于 PowerShell 启动行为，不是 ACL 边界的一部分。令牌列表为 read-only = [登录 SID、Everyone]，workspace-write = [登录 SID、Everyone、工作区 SID、可选临时 SID]。登录 SID + Everyone 是保活不变式（没有它们，早期 DLL 初始化会以 0xC0000142 死亡，CNG 会让 pwsh 以 0xE0434352 崩溃）。由于 Everyone 仍在列表中，向 Everyone 授予写访问的外部对象会通过两次检查；由于 NTFS ACL 属于文件对象，工作区内获授权的硬链接也会使同一对象的外部别名获得授权。拒绝所有硬链接会让普通 pnpm 工作区不可用，因此提供方报告 `enforcement: 'partial'`，原生套件则钉住这两个缺口。Read-only 不含任何能力 SID，因此常驻工作区 ACE 在模式降级后保持失效。Authenticated Users 在两种列表中都不存在——CIM 不可用，从而关闭 C:\-root 建树逃逸——INTERACTIVE/LOCAL 也不存在，因此 Public 树写入被拒绝。新建匿名管道和同步对象通过 `SetTokenInformation(TokenDefaultDacl)` 继承临时 SID（禁用临时目录时继承工作区 SID，read-only 下继承 Everyone）；named pipe 保持 Win32 层 owner/SYSTEM/Admins 全权、Everyone/ANONYMOUS 只读的模板，因此受限孙进程的管道 stdio 仍被拒绝。它以 [`@deepseek-ai/dsh-sandbox-windows-acl`](../../../../packages/sandbox/sandbox-windows-acl/README.zh.md)、[`dsh-sandbox-local`](../../../../packages/sandbox/sandbox-local/README.zh.md) 的 `win32` 档，以及作为隔离执行器的 [`@deepseek-ai/dsh-pwsh-sandbox`](../../../../packages/shell/pwsh-sandbox/README.zh.md) 交付。
 
 ## How the restriction works (why no new identity)
 
@@ -28,7 +28,7 @@ AppContainer 令牌没有环境读访问：每个可读路径都必须预先通�
 
 ### 为什么不选 landstrip？
 
-[landstrip 评估](../../rejected/feature/2026-07-26-evaluate-landstrip-for-windows-sandbox-rung.md)在实现前已被否决（未经实战检验；自建 launcher 方案胜出），且其 Windows 后端是 AppContainer 形态，继承同样的任意路径读问题。
+[landstrip 评估](../../rejected/feature/2026-07-26-evaluate-landstrip-for-windows-sandbox-rung.zh.md)在实现前已被否决（未经实战检验；自建 launcher 方案胜出），且其 Windows 后端是 AppContainer 形态，继承同样的任意路径读问题。
 
 ## 后果
 
@@ -40,4 +40,4 @@ AppContainer 令牌没有环境读访问：每个可读路径都必须预先通�
 
 ## Related
 
-[pwsh 执行器决策](2026-08-01-pwsh-tool-and-executor.md)拥有本档所消费的 pwsh-sandbox/tool-pwsh 方言划分。
+[pwsh 执行器决策](2026-08-01-pwsh-tool-and-executor.zh.md)拥有本档所消费的 pwsh-sandbox/tool-pwsh 方言划分。

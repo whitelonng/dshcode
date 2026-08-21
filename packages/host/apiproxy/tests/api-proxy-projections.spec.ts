@@ -24,6 +24,10 @@ import { RpcId } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
 import { createApiProxy } from '@deepseek-ai/dsh-host-apiproxy'
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    'test/last-user': LastUserState
+    'test/internal-count': number
+  }
   interface SessionProjectionMap {
     'test/last-user': { text: string } | null
   }
@@ -36,16 +40,27 @@ function request<P>(payload: P): RpcRequest<P> {
 
 /** Whole-value unit folding the latest user/message text; null before the first. */
 type LastUserState = { text: string } | null
-const lastUserUnit = (): ProjectionDefinition<'test/last-user', LastUserState> => ({
+const lastUserUnit = () => ({
   key: 'test/last-user',
-  schema: z.union([z.object({ text: z.string() }), z.null()]),
+  stateSchema: z.union([z.object({ text: z.string() }), z.null()]),
   init: () => null,
   apply: (state, event) => (event.type === 'user/message'
     ? { text: (event.data.content[0] as { text?: string }).text ?? '' }
     : state),
-  view: state => state,
+  wire: {
+    viewSchema: z.union([z.object({ text: z.string() }), z.null()]),
+    view: state => state,
+  },
   stateVersion: 1,
-})
+}) satisfies ProjectionDefinition<'test/last-user', LastUserState>
+
+const internalCountUnit = () => ({
+  key: 'test/internal-count',
+  stateSchema: z.number().int().nonnegative(),
+  init: () => 0,
+  apply: (state: number) => state + 1,
+  stateVersion: 1,
+}) satisfies ProjectionDefinition<'test/internal-count', number>
 
 async function harness(withRegistry: boolean): Promise<{ ctx: Context; session: Session }> {
   const ctx = new Context()
@@ -150,6 +165,33 @@ describe('session.history projections block', () => {
     expect(response.result.ok).toBe(true)
     if (!response.result.ok) throw new Error('unreachable')
     expect('projections' in response.result.value).toBe(false)
+  })
+
+  it('never exposes a host-only unit through history, listing, or push frames', async () => {
+    const { ctx, session } = await harness(true)
+    ctx.sessionProjections.register(internalCountUnit())
+    const proxy = api(ctx)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const abort = new AbortController()
+    const frames: MuxFrame[] = []
+    const drained = (async () => {
+      for await (const envelope of proxy.events.mux({ rpcId: RpcId('t-host-only-mux'), payload: {} }, abort.signal)) {
+        frames.push(envelope.payload)
+        if (envelope.payload.type === 'session/event') abort.abort()
+      }
+    })().catch(() => {})
+
+    seedMessages(session, 1)
+    await drained
+
+    const history = await proxy.sessions.history(request({ sessionId: session.id }))
+    if (!history.result.ok) throw new Error('history failed')
+    expect('test/internal-count' in (history.result.value.projections?.values ?? {})).toBe(false)
+    const listing = await proxy.sessions.list(request({}))
+    if (!listing.result.ok) throw new Error('listing failed')
+    const row = listing.result.value.items.find(item => item.sessionId === session.id)
+    expect('test/internal-count' in (row?.projections?.values ?? {})).toBe(false)
+    expect(frames.some(frame => frame.type === 'session/projection' && frame.key === 'test/internal-count')).toBe(false)
   })
 
   it('drops a disposed registration from subsequent tail pages (empty block, key absent)', async () => {
@@ -262,7 +304,10 @@ describe('session.list projections column', () => {
     const { ctx, session } = await harness(true)
     ctx.sessionProjections.register({
       ...lastUserUnit(),
-      view: () => { throw new Error('unit exploded') },
+      wire: {
+        viewSchema: z.union([z.object({ text: z.string() }), z.null()]),
+        view: () => { throw new Error('unit exploded') },
+      },
     })
     seedMessages(session, 1)
     const response = await api(ctx).sessions.list(request({}))

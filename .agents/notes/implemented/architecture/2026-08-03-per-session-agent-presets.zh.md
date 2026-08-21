@@ -8,7 +8,7 @@ Status: implemented
 
 一个 `dsh` 进程服务多个会话，但决定 agent（智能体）究竟是什么的那套组装——它的工具、人设、提示词段落、委派后端——由启动器所引导的 `cordis.yml` 一次性固定给整个进程。若某个部署希望一个 benchmark 精简 agent 与一个完整编码 agent 并存，就必须跑两个进程；而现有的变通方案（`apps/cli/config/minimal.cordis.yml`，一个用来禁用工具行的 `--config` 覆盖层）会一次性改变所有会话。
 
-对"让会话自选组装"最直觉的理解，是 loader 需要新增一层。其实不需要。[`dsh-tools`](../../../../packages/core/tools/README.md) 与 [`dsh-system-prompt`](../../../../packages/core/system-prompt/README.md) 本就按调用方上下文的 scope 分层归档注册，而且 [agent 本身就是一个注册 scope](2026-07-08-agent-scope-contexts.md)。此前缺的只是一种把整份 `cordis.yml` 指向某一个 agent scope 的办法。
+对"让会话自选组装"最直觉的理解，是 loader 需要新增一层。其实不需要。[`dsh-tools`](../../../../packages/core/tools/README.zh.md) 与 [`dsh-system-prompt`](../../../../packages/core/system-prompt/README.zh.md) 本就按调用方上下文的 scope 分层归档注册，而且 [agent 本身就是一个注册 scope](2026-07-08-agent-scope-contexts.zh.md)。此前缺的只是一种把整份 `cordis.yml` 指向某一个 agent scope 的办法。
 
 ## 决策
 
@@ -56,7 +56,7 @@ Status: implemented
 
 **创作 preset 是一次 RPC，而且是特权 RPC。** 组装是一个文件，但“去文件系统里改它”并不是浏览器能提供的操作，因此名单在 `select` 之外新增了 `read`/`write`/`remove`。这三者被固定在环回地址：组装指明了一个会话所运行的插件，因此读取它是侦察，写入它是任意能力。`list` 与 `select` 刻意保持为普通方法。名单只携带 id 与信任级别，而局域网客户端的选择器需要它；至于选择本身，它看起来像提权——其中一个 preset 会挂载可编辑活动运行时的工具集——但 `session.create` 本就接受 `agentPreset`，只固定切换会把同一能力留在隔壁一个方法上。这份能力也不由 preset 授予：部署自带的默认 preset 本就带着 `bash` 与文件系统工具，因此任何被允许开启会话的调用方，早已能以本进程的身份执行命令。约束是 id 自身的性质（`[a-z0-9][a-z0-9-]*`），在它成为目录名之前就检查，而不是事后再去审视拼接出的路径；文本使用 loader 自身的 schema 与方言解析，因此保存不会留下任何会话都无法加载的文件。随部署提供的 preset 拒绝写入与删除，因为部署自带的那一份正是用来对照有问题的本地 preset 的——这也让“先复制、再编辑”成为创作路径本身，而非事后补充。
 
-**在 agent 平面之外还有消费方的服务，不能搬进 preset。** 激进拆分把 `subagents` 注册表连同 spawn/fork 后端一起搬进了 delegation 组的 entry-local realm，于是 `dsh web` 直接起不来：`dsh-host-apiproxy` 是宿主行，它注入 `subagents` 来回答浏览器的跨会话查询（`listChildren`、`followup`），因而永远等待一个此刻只有会话才提供的服务。按会话各一份在两个层面上都是错的——provider 名只能注册一次，第二个会话本来也会相撞。注册表与所有共享后端，包括[固定的 Codex 与 Claude Code 产品 provider](2026-08-10-product-subagent-providers-in-shared-host.md)，都属于宿主平面；preset 只贡献自己的 agent 应看见的委派**工具**，这些工具解析宿主注册表。`workflows` 保持 entry-local，因为 agent 之外没有任何东西读它。本该拦下它的是「检索注入方」这一步，而它没拦住：检索必须覆盖宿主包，而不只是 agent 平面的包。
+**在 agent 平面之外还有消费方的服务，不能搬进 preset。** 激进拆分把 `subagents` 注册表连同 spawn/fork 后端一起搬进了 delegation 组的 entry-local realm，于是 `dsh web` 直接起不来：`dsh-host-apiproxy` 是宿主行，它注入 `subagents` 来回答浏览器的跨会话查询（`listChildren`、`followup`），因而永远等待一个此刻只有会话才提供的服务。按会话各一份在两个层面上都是错的——provider 名只能注册一次，第二个会话本来也会相撞。注册表与所有共享后端，包括[固定的 Codex 与 Claude Code 产品 provider](2026-08-10-product-subagent-providers-in-shared-host.zh.md)，都属于宿主平面；preset 只贡献自己的 agent 应看见的委派**工具**，这些工具解析宿主注册表。`workflows` 保持 entry-local，因为 agent 之外没有任何东西读它。本该拦下它的是「检索注入方」这一步，而它没拦住：检索必须覆盖宿主包，而不只是 agent 平面的包。
 
 **真实组装测试若禁用了某个宿主行，就无法审计该行。** web 组装测试把 `api-gateway`——也就是 api-proxy 本身——当作「有外部副作用的行」禁用了，而它恰恰是那个会以 pending 注入点名此次断裂的行。现在它在启用 api-proxy、并替换为 browse 目录选择器的前提下引导，启动审计因此覆盖整个宿主平面的注入图；只有端口、资源目录与遥测导出器仍然关闭。
 
@@ -78,7 +78,7 @@ Status: implemented
 
 **把 agent 的 scope 键设为 preset。** 同一 preset 上的会话就能免费共享一层，但按 agent 的注册——`installAgentLlmTarget`、按 agent 的工具限制——会跨会话相撞。
 
-**把每个 preset 作为子进程运行。** [`subagent-dsh-sdk`](../../../../packages/subagent/subagent-dsh-sdk/README.md) 已经证明完整的子 harness 可行，隔离性也会是绝对的。但这同时意味着要按会话代理流式输出、审批与投影，那是一个传输层项目，而非组装问题。
+**把每个 preset 作为子进程运行。** [`subagent-dsh-sdk`](../../../../packages/subagent/subagent-dsh-sdk/README.zh.md) 已经证明完整的子 harness 可行，隔离性也会是绝对的。但这同时意味着要按会话代理流式输出、审批与投影，那是一个传输层项目，而非组装问题。
 
 **给产品 subagent 增加全局启用设置与独立设置页。** 进程级值会与 preset 争夺模型可见工具的所有权，也无法表达两个会话使用不同组装。产品 provider 留在宿主，普通 preset 行分别暴露 Codex 与 Claude Code 工具。
 

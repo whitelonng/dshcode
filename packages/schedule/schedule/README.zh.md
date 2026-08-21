@@ -26,7 +26,7 @@ Schedule 负责确定性的日历规范化。落在夏令时缺口内的本地�
 
 ## 管理工具
 
-生成的[工具目录](../../../docs/tool-catalog.md)负责 `schedule_create`、`schedule_list` 和 `schedule_delete` 的参数与输出 schema。虽然模型输入使用 `after_seconds` 和 `time_zone`，但其规范值中的记录字段使用 camelCase。
+生成的[工具目录](../../../docs/tool-catalog.zh.md)负责 `schedule_create`、`schedule_list` 和 `schedule_delete` 的参数与输出 schema。虽然模型输入使用 `after_seconds` 和 `time_zone`，但其规范值中的记录字段使用 camelCase。
 
 一条 Agent-scoped 队列会将每项已接纳的管理事务与 live owner 的到期事务从 preflight 到任何 post-append barrier 全程串行化。`schedule_create` 要求 `after_seconds`、`at` 与 `every_seconds` 有且只有一项；它会在进入队列前验证只依赖输入形状的失败，随后执行检查点、分配永不复用的 id、追加 create，再次执行检查点。`schedule_list` 按创建顺序返回活动记录，其中包含 `state: "scheduled" | "overdue"` 与 `deliveryMode: "session-local"`。`schedule_delete` 会在进入队列前拒绝空 id 或前后带空白的 id，并只为活动 id 追加事件；未知或已终结的 id 会在 preflight 后返回 `{ id, deleted: false, code: "schedule_not_found" }`。
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import LlmRuntime, {
   errorChain,
   GenerateOptions,
@@ -13,6 +14,7 @@ import LlmRuntime, {
   resolveRetryPolicy,
   StreamChunk,
   createMessage,
+  createUserMessage,
 } from '@deepseek-ai/dsh-llm'
 import type {
   LlmModelContext,
@@ -967,6 +969,89 @@ describe('LlmRuntime', () => {
     expect(noDefault.config).toEqual({ provider: 'route', model: 'no-default' })
     expect(noDefault.context).toEqual({ contextWindow: 64_000 })
     expect(resolutions).toBe(2)
+  })
+
+  it('binds adapter-owned capabilities and dispatch to one prepared generation', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    let generation = 'first'
+    let dispatched: string | undefined
+    const adapter = new class extends ScriptedAdapter {
+      override prepareCall(provider: string, model: string) {
+        const captured = generation
+        return Promise.resolve({
+          model: { provider, id: model, name: model, inputModalities: ['text'] as const },
+          stream: (options: GenerateOptions) => {
+            dispatched = captured
+            return super.stream(options)
+          },
+        })
+      }
+    }(SCRIPT)
+    ctx.llm.registerAdapter(['route'], adapter)
+
+    const prepared = await ctx.llm.prepareCall({ provider: 'route', model: 'model' })
+    generation = 'second'
+    expect(prepared.inputModalities).toEqual(['text'])
+    expect(Object.isFrozen(prepared.inputModalities)).toBe(true)
+    await collect(prepared.stream({ ...prepared.config, messages: [] }))
+    expect(dispatched).toBe('first')
+  })
+
+  it('projects historical images to stable text only after the loop-visible waterfall', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    const seen: GenerateOptions[] = []
+    const adapter = new class extends ScriptedAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        return Promise.resolve({ provider, id: model, name: model, inputModalities: ['text'] })
+      }
+
+      override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        seen.push(options)
+        yield * super.stream(options)
+      }
+    }(SCRIPT)
+    ctx.llm.registerAdapter(['route'], adapter)
+    const attachment = {
+      attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
+      mediaType: 'image/png' as const,
+      bytes: 3,
+      width: 1,
+      height: 1,
+    }
+    const waterfall: GenerateOptions[] = []
+    ctx.on('llm/stream', async function* (options, next) {
+      waterfall.push(options)
+      yield * next()
+    })
+
+    await collect(ctx.llm.stream({
+      provider: 'route',
+      model: 'text-only',
+      messages: [createUserMessage({
+        content: [{ type: 'image', attachment }],
+        source: { kind: 'plugin', plugin: 'test' },
+      })],
+    }))
+
+    expect(waterfall[0]?.messages[0]?.content).toEqual([{ type: 'image', attachment }])
+    expect(seen[0]?.messages[0]?.content).toEqual([{
+      type: 'text',
+      text: '[image omitted because this model accepts text only; attachment sha256:aaaaaaaa]',
+    }])
+
+    const frozen = Object.freeze({
+      provider: 'route',
+      model: 'text-only',
+      messages: [createUserMessage({
+        content: [{ type: 'image', attachment }],
+        source: { kind: 'plugin' as const, plugin: 'test' },
+      })],
+    })
+    await collect(ctx.llm.stream(frozen))
+    expect(Object.isFrozen(seen[1])).toBe(true)
+    expect(Object.isFrozen(seen[1]?.messages)).toBe(true)
   })
 
   it('passes cancellation through exact-model resolution', async () => {

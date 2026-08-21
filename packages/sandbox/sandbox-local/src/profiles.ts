@@ -14,7 +14,7 @@ import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
  * @returns profile arguments before the trailing separator and command argv.
  */
 export function bwrapProfileArgs(policy: SandboxPolicy): string[] {
-  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--die-with-parent']
+  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent']
   if (policy.mode === 'workspace-write') {
     args.push('--tmpfs', '/tmp')
     args.push('--bind', policy.workspaceRoot, policy.workspaceRoot)

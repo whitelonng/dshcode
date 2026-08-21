@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-本决策只部分取代[共享 host 放置决策](../architecture/2026-08-10-product-subagent-providers-in-shared-host.md)中关于默认包含提供方的部分：`@deepseek-ai/dsh-base` 不依赖也不挂载 Codex 与 Claude Code subagent 提供方。每个提供方包都是可直接安装的 Profile Bundle，其 `dsh.bundle.patch` 指向包自身拥有的 `cordis.patch.yml`。每份 patch 恰好贡献一条挂载自身提供方的 Host 行，不包含 Agent 工具行。
+本决策只部分取代[共享 host 放置决策](../architecture/2026-08-10-product-subagent-providers-in-shared-host.zh.md)中关于默认包含提供方的部分：`@deepseek-ai/dsh-base` 不依赖也不挂载 Codex 与 Claude Code subagent 提供方。每个提供方包都是可直接安装的 Profile Bundle，其 `dsh.bundle.patch` 指向包自身拥有的 `cordis.patch.yml`。每份 patch 恰好贡献一条挂载自身提供方的 Host 行，不包含 Agent 工具行。
 
 两个 Bundle 彼此独立。Codex Bundle 自己负责锁定的官方 wrapper 与六个平台 alias；生产环境会启动包所声明的 wrapper，绝不会回退到宿主 `codex`。Claude Code Bundle 自己负责锁定的 Agent SDK 与匹配平台 CLI；生产环境让 SDK 选择该私有 CLI，绝不会回退到宿主 `claude`。安装其中一个 Bundle 不会带入另一个，默认的 `@deepseek-ai/dsh` 生产依赖闭包既不包含任一提供方，也不包含任一产品运行时。每个已安装 Bundle 会在下次 Profile 启动时注册一个休眠提供方，而 Agent Preset 独立决定新 Session 是否获得对应工具。安装不会启动产品、验证账户、改写原生设置或向模型授予访问权。
 

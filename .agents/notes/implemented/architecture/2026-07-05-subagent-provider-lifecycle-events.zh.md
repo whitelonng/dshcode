@@ -6,9 +6,9 @@ Status: implemented
 
 ## 问题
 
-[提示词变量 Agent Note](2026-07-05-prompt-variables-and-tool-guidance-ownership.md) 让 `dsh-tool-subagent` 从其提供方派生面向模型的措辞：`SubagentProvider.inheritsParentContext`（spawn 和 ACP（Agent Client Protocol）为 `false`，fork 为 `true`）同时驱动工具描述和 `prompt` 参数描述，使 fork 工具不再在上下文继承问题上对模型撒谎。这一修复引入了跨 fiber 的数据依赖：工具描述在工具注册时固定（这是有意为之——描述是 tool-choice 引导所在之处），但提供方在自己的插件 fiber 上到达，时机不确定。
+[提示词变量 Agent Note](2026-07-05-prompt-variables-and-tool-guidance-ownership.zh.md) 让 `dsh-tool-subagent` 从其提供方派生面向模型的措辞：`SubagentProvider.inheritsParentContext`（spawn 和 ACP（Agent Client Protocol）为 `false`，fork 为 `true`）同时驱动工具描述和 `prompt` 参数描述，使 fork 工具不再在上下文继承问题上对模型撒谎。这一修复引入了跨 fiber 的数据依赖：工具描述在工具注册时固定（这是有意为之——描述是 tool-choice 引导所在之处），但提供方在自己的插件 fiber 上到达，时机不确定。
 
-如果在工具插件的 `apply` 时刻解析提供方，就会产生一个隐式的加载顺序要求（「在 cordis.yml 中把后端列在工具前面」）。这个要求不成立，因为 Cordis Loader 并发启动同级条目，且 `Entry.init()` 不会等待激活完成：延迟到达的后端即使列在前面，也可能让工具 fiber 失败。Loader 不提供同级顺序保证——「异步状态不是同步状态」（见[防御性模式](../../../../docs/defensive-patterns.md)）。
+如果在工具插件的 `apply` 时刻解析提供方，就会产生一个隐式的加载顺序要求（「在 cordis.yml 中把后端列在工具前面」）。这个要求不成立，因为 Cordis Loader 并发启动同级条目，且 `Entry.init()` 不会等待激活完成：延迟到达的后端即使列在前面，也可能让工具 fiber 失败。Loader 不提供同级顺序保证——「异步状态不是同步状态」（见[防御性模式](../../../../docs/defensive-patterns.zh.md)）。
 
 ## 决策
 
@@ -31,6 +31,6 @@ Status: implemented
 ## 后果
 
 - 从命名提供方派生状态的消费方响应 `subagent/provider-added`/`-removed` 事件，而非在 `apply` 时读取注册表；`dsh-tool-subagent` 是参考实现。
-- **添加时大声失败；移除时按监听器隔离。** 添加监听器可以回滚注册。移除在 disposal 期间运行，因此单个监听器抛异常只会被记录日志，不会饿死后续镜像或干扰拆解流程。`start()` 仍在每次运行时按名称解析提供方，防止陈旧工具调用已移除的后端。见[事件目录](../../../../docs/subsystems/subagent.md#cordis-surface)与[生产者/消费方映射](../../../../docs/event-producer-consumer.md)。
+- **添加时大声失败；移除时按监听器隔离。** 添加监听器可以回滚注册。移除在 disposal 期间运行，因此单个监听器抛异常只会被记录日志，不会饿死后续镜像或干扰拆解流程。`start()` 仍在每次运行时按名称解析提供方，防止陈旧工具调用已移除的后端。见[事件目录](../../../../docs/subsystems/subagent.zh.md#cordis-surface)与[生产者/消费方映射](../../../../docs/event-producer-consumer.zh.md)。
 - **工具不存在的窗口期。** 在后端 disposal 与重新注册之间（HMR 重载期间），模型看不到 subagent 工具。这是诚实的状态——替代方案是一个向空处分发的工具——工具注册表发出的 `tools/change` 事件会使提示词组装保持最新状态。
 - **两个等待中的 fiber 共享同一 `toolName` 是无效配置，被延迟捕获。** 如果两个 `dsh-tool-subagent` 加载实例分别指定了不同的提供方但相同的 `toolName`，两者都会等待，先到达的提供方先注册；第二次注册仅在其提供方到达时才抛异常。插件中的 `TODO(subagent-dup-toolname)` 记录了这一影响范围；工具注册表的重名拒绝机制仍是最终防线。

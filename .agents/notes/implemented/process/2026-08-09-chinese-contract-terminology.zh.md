@@ -14,7 +14,7 @@ Status: implemented
 
 术语真源规定 `contract` 译为「约定」，`adapter contract` 首次出现时写作「适配器约定（adapter contract）」。所有活跃中文文档配对均遵循该裁决；归档 Agent Note 保持冻结。未参与配对的双语校准资产和翻译提示词说明文字也采用相同术语，避免继续教授已被取代的译法。
 
-这次迁移只维护语义正文，不重命名标识符。行内代码、文件路径、链接、API 名称、文件名中包含的英文 `contract` 以及机器可读值均保持不变。`convention` 不新增全局术语行，也不做全语料改写：翻译时保留自然中文，只在源文明确对比两个概念时消歧。[具体行文决策](2026-08-09-concrete-prose-names-actors-and-recorded-facts.md)另行规定：如果英文正文中的 `contract` 含糊不清，应在翻译前将其改为确切的规则、API 或行为。
+这次迁移只维护语义正文，不重命名标识符。行内代码、文件路径、链接、API 名称、文件名中包含的英文 `contract` 以及机器可读值均保持不变。`convention` 不新增全局术语行，也不做全语料改写：翻译时保留自然中文，只在源文明确对比两个概念时消歧。[具体行文决策](2026-08-09-concrete-prose-names-actors-and-recorded-facts.zh.md)另行规定：如果英文正文中的 `contract` 含糊不清，应在翻译前将其改为确切的规则、API 或行为。
 
 ## 考虑过的替代方案
 

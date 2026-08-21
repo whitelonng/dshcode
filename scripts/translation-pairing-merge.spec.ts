@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -15,8 +16,8 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { gitBlobHash, storeGitBlob } from './translation-pairing-git.ts'
 import {
-  mergeTranslationPairingRecords,
-  resolveTranslationPairingConflicts,
+  mergeTranslationPairingRecords as mergeTranslationPairingRecordsWithScope,
+  resolveTranslationPairingConflicts as resolveTranslationPairingConflictsWithScope,
 } from './translation-pairing-merge.ts'
 import {
   renderTranslationPairingRecord,
@@ -33,6 +34,27 @@ const fixtures: string[] = []
 interface Fixture {
   env: NodeJS.ProcessEnv
   root: string
+}
+
+function mergeTranslationPairingRecords(
+  root: string,
+  metaPath: string,
+  ancestorRecord: string,
+  currentRecord: string,
+  otherRecord: string,
+) {
+  return mergeTranslationPairingRecordsWithScope(
+    root,
+    metaPath,
+    ancestorRecord,
+    currentRecord,
+    otherRecord,
+    () => true,
+  )
+}
+
+function resolveTranslationPairingConflicts(root: string): string[] {
+  return resolveTranslationPairingConflictsWithScope(root, () => true)
 }
 
 afterEach(() => {
@@ -252,6 +274,19 @@ describe('translation pairing merge composition', { timeout: 15_000 }, () => {
     )).toThrow('pairing record escapes the repository')
   })
 
+  it('rejects a pairing record excluded from the active corpus', () => {
+    const fixture = createFixture(false)
+
+    expect(() => mergeTranslationPairingRecordsWithScope(
+      fixture.root,
+      'docs/guide.i18n.yaml',
+      '',
+      '',
+      '',
+      () => false,
+    )).toThrow('docs/guide.i18n.yaml is excluded from the active bilingual documentation corpus')
+  })
+
   it('merges the owner blobs named by three valid records', () => {
     const fixture = createFixture(false)
     git(fixture, ['config', 'merge.default', 'text'])
@@ -269,6 +304,48 @@ describe('translation pairing merge composition', { timeout: 15_000 }, () => {
     expect(result.zhContent.toString('utf8')).toBe(mergedZh)
     expect(result.sourceHash).toBe(gitBlobHash(Buffer.from(mergedSource)))
     expect(result.zhHash).toBe(gitBlobHash(Buffer.from(mergedZh)))
+  })
+
+  it('accepts locale-specific paths to the same paired document', () => {
+    const fixture = createFixture(false)
+    write(fixture.root, 'docs/reference.md', '# Overview\n')
+    write(fixture.root, 'docs/reference.zh.md', '# 概览\n')
+    git(fixture, ['add', 'docs/reference.md', 'docs/reference.zh.md'])
+    const source = baseSource.replace('Alpha base.', '[Reference](reference.md#overview)')
+    const zh = baseZh.replace('甲基础。', '[参考](reference.zh.md#overview)')
+    const ancestor = record(fixture.root, 'docs/guide.md', source, zh)
+    const current = record(fixture.root, 'docs/guide.md', source, zh)
+    const other = record(fixture.root, 'docs/guide.md', source, zh)
+    rmSync(join(fixture.root, 'docs/reference.md'))
+    rmSync(join(fixture.root, 'docs/reference.zh.md'))
+
+    expect(mergeTranslationPairingRecords(
+      fixture.root,
+      'docs/guide.i18n.yaml',
+      ancestor,
+      current,
+      other,
+    ).zhContent.toString('utf8')).toBe(zh)
+  })
+
+  it('rejects a clean merge whose Chinese link uses the English sibling', () => {
+    const fixture = createFixture(false)
+    write(fixture.root, 'docs/reference.md', '# Overview\n')
+    write(fixture.root, 'docs/reference.zh.md', '# 概览\n')
+    git(fixture, ['add', 'docs/reference.md', 'docs/reference.zh.md'])
+    const source = baseSource.replace('Alpha base.', '[Reference](reference.md)')
+    const zh = baseZh.replace('甲基础。', '[参考](reference.md)')
+    const ancestor = record(fixture.root, 'docs/guide.md', source, zh)
+    const current = record(fixture.root, 'docs/guide.md', source, zh)
+    const other = record(fixture.root, 'docs/guide.md', source, zh)
+
+    expect(() => mergeTranslationPairingRecords(
+      fixture.root,
+      'docs/guide.i18n.yaml',
+      ancestor,
+      current,
+      other,
+    )).toThrow('docs/guide.zh.md:5 clean merge uses "reference.md"; expected "reference.zh.md"')
   })
 
   it('merges a generated source without an English language switcher', () => {
@@ -412,6 +489,49 @@ describe('translation pairing merge composition', { timeout: 15_000 }, () => {
 
     expect(git(fixture, ['diff', '--name-only', '--diff-filter=U'])).toBe('')
     expectMergedPair(fixture)
+  })
+
+  it('sees a paired link target added by the other branch', () => {
+    const fixture = createFixture()
+    commitPair(fixture, baseSource, baseZh, 'base')
+    git(fixture, ['switch', '-c', 'current'])
+    commitPair(fixture, currentSource, currentZh, 'current guide')
+    git(fixture, ['switch', 'master'])
+    record(
+      fixture.root,
+      'docs/guide.md',
+      baseSource.replace('Beta base.', '[Reference](reference.md#overview)'),
+      baseZh.replace('乙基础。', '[参考](reference.zh.md#overview)'),
+    )
+    record(
+      fixture.root,
+      'docs/reference.md',
+      '# Reference\n\nEnglish | [中文](reference.zh.md)\n\nOverview.\n',
+      '# 参考\n\n[English](reference.md) | 中文\n\n概览。\n',
+    )
+    git(fixture, ['add', '.'])
+    git(fixture, ['commit', '-m', 'other guide and target'])
+    git(fixture, ['switch', 'current'])
+    installFixtureRuntime(fixture.root)
+    git(fixture, [
+      'config',
+      'merge.dsh-translation-pairing.driver',
+      'scripts/merge-translation-pairing-driver.sh %O %A %B %P',
+    ])
+
+    const merge = spawnSync('git', ['-C', fixture.root, 'merge', '--no-edit', 'master'], {
+      encoding: 'utf8',
+      env: fixture.env,
+    })
+
+    expect(merge.status, merge.stderr).toBe(0)
+    expect(git(fixture, ['diff', '--name-only', '--diff-filter=U'])).toBe('')
+    expect(readFileSync(join(fixture.root, 'docs/guide.md'), 'utf8')).toContain(
+      '[Reference](reference.md#overview)',
+    )
+    expect(readFileSync(join(fixture.root, 'docs/guide.zh.md'), 'utf8')).toContain(
+      '[参考](reference.zh.md#overview)',
+    )
   })
 
   it('leaves an ordinary recoverable conflict when the configured runtime is unavailable', () => {

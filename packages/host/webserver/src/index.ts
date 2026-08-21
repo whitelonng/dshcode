@@ -1,8 +1,8 @@
 /**
  * @deepseek-ai/dsh-host-webserver — Web route-registration plugin: a node:http
- * server plus the `webServer` service (HTTP and upgrade route registries,
- * index transform taps, and the single fallback seat for everything no route
- * claims). Knows no harness concepts and serves no files; the composing
+ * server plus the `webServer` service (HTTP and upgrade route registries, the
+ * structured index injection table with raw transform taps behind it, and the
+ * single fallback seat for everything no route claims). Knows no harness concepts and serves no files; the composing
  * application's frontend plugin owns dist serving through the fallback hook.
  * Browser carrier shared by standalone Web and the DSHCode Electron window.
  * This package never prints: the URL line belongs to the owning application.
@@ -14,10 +14,24 @@ import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { renderIndexInjections, type IndexInjection } from './injections.ts'
+
+export { renderIndexInjections } from './injections.ts'
+export type { IndexInjection, IndexInjectionPlacement } from './injections.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     webServer: WebServer
+  }
+  interface Events {
+    /**
+     * Collect the structured index injection table. Emitted on every index
+     * render and every worker boot-payload request; listeners push their
+     * current rows, so a row's data is read fresh at emit time.
+     * @param table - Mutable row table; listeners append in activation order.
+     * @mode emit
+     */
+    'webserver/index-inject'(table: IndexInjection[]): void
   }
 }
 
@@ -131,8 +145,9 @@ export class WebServer extends Service {
   }
 
   /**
-   * Register an index.html transform, applied by the fallback owner to every
-   * index response ({@link applyIndexTaps}) in registration order.
+   * Register a raw-HTML index transform, the escape hatch for markup no
+   * {@link IndexInjection} row expresses: {@link renderIndex} applies taps in
+   * registration order after rendering the structured rows.
    * @param transform - pure html-to-html function.
    * @returns the disposer removing the transform.
    */
@@ -260,6 +275,28 @@ export class WebServer extends Service {
     let out = html
     for (const transform of this.indexTaps) out = transform(out)
     return out
+  }
+
+  /**
+   * Gather the structured injection table: one `webserver/index-inject` emit,
+   * every subscriber pushes its current rows. Fresh per call, so subscribers
+   * read live state (module graph, theme preference) at emit time.
+   * @returns rows in subscriber activation order.
+   */
+  collectIndexInjections(): IndexInjection[] {
+    const table: IndexInjection[] = []
+    this.ctx.emit('webserver/index-inject', table)
+    return table
+  }
+
+  /**
+   * Render one index.html body: the structured injection table first, then
+   * the raw `tapIndex` transforms over the result.
+   * @param html - the raw index.html body.
+   * @returns the transformed body.
+   */
+  renderIndex(html: string): string {
+    return this.applyIndexTaps(renderIndexInjections(html, this.collectIndexInjections()))
   }
 }
 

@@ -483,6 +483,12 @@ describe('image attachments', () => {
           ...input.name === undefined ? {} : { name: input.name },
         })
       }),
+      validateImageBatch(inputs: readonly unknown[]) {
+        const validate = AttachmentStore.prototype as unknown as {
+          validateImageBatch(this: unknown, batch: readonly unknown[]): void
+        }
+        validate.validateImageBatch.call(this, inputs)
+      },
       // The real base-class batch method over this double's limits and members.
       saveImages(inputs: readonly unknown[]) {
         return (AttachmentStore.prototype.saveImages as (this: unknown, batch: readonly unknown[]) => Promise<unknown[]>).call(this, inputs)
@@ -585,7 +591,9 @@ describe('image attachments', () => {
     const store = storeOf()
     store.saveImage.mockImplementationOnce((input: { mediaType: string }) => {
       controller.abort('operator cancelled during admission')
-      return Promise.resolve({ attachmentId: 'att-late', mediaType: input.mediaType, bytes: 3, width: 1, height: 1 })
+      return Promise.resolve({
+        attachmentId: 'att-late', mediaType: input.mediaType, bytes: 3, width: 1, height: 1,
+      })
     })
     ctx.provide('attachments', store)
     const { agent } = await mintAgentScope(ctx, 'a')

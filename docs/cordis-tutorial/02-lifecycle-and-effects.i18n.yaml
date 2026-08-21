@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cordis-tutorial/02-lifecycle-and-effects.md
 02-lifecycle-and-effects.md: 8e75708eb0cba1aceb7fa3dae5ae334995eb113f
-02-lifecycle-and-effects.zh.md: bc4489e702ab58b5d1efd8a72fc693ee48af2624
+02-lifecycle-and-effects.zh.md: b5f8bc18ed242784528574a861c57bedae6fa880

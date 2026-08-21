@@ -25,7 +25,7 @@ agent 生命周期、agent 整体活动状态、收件箱条目的进度以及�
 
 是否继续和终止执行由数据表达，不再由返回的控制枚举表达。工具调用和已接受的 steering 要求再执行一个步骤。携带 `concludesTurn` 的工具结果会在其所属步骤终止工具循环。循环不再暴露通用的 `ContinuationDecision` 或终止返回通道。
 
-模型请求失败会先关闭当前步骤，再携带该错误本身、标准化 `LlmFailure` 和仍有效的轮次信号进入 `agent/request-error`。负责恢复的监听器修复状态、返回 `{ kind: 'retry' }`，并停止继续委托。循环会关闭失败轮次，并基于该状态开启一个重试轮次，中间不发布空闲通知；重试不是失败轮次内的另一个步骤。`agent/settled` 报告终态结果；对于需要脱离轮次结算单独报告失败的消费方，`agent/error` 仍作为实时错误通知保留。[重试动作决策](2026-07-27-request-error-retry-action.md)取代了本设计中命令形式的部分。
+模型请求失败会先关闭当前步骤，再携带该错误本身、标准化 `LlmFailure` 和仍有效的轮次信号进入 `agent/request-error`。负责恢复的监听器修复状态、返回 `{ kind: 'retry' }`，并停止继续委托。循环会关闭失败轮次，并基于该状态开启一个重试轮次，中间不发布空闲通知；重试不是失败轮次内的另一个步骤。`agent/settled` 报告终态结果；对于需要脱离轮次结算单独报告失败的消费方，`agent/error` 仍作为实时错误通知保留。[重试动作决策](2026-07-27-request-error-retry-action.zh.md)取代了本设计中命令形式的部分。
 
 事件分类体系移除了旧的提示词准备／提交与串行步骤钩子，以及 `agent/post-step`、`agent/session-prefix`、`agent/step-result`、`agent/turn-continuation` 和 `agent/turn-stop`。唯一的 `agent/pre-step` waterfall 负责已领取消息能否进入步骤。持久的轮次与步骤边界仍由会话事件记录。面向模型的新增内容使用有日志记录的消息通道，请求配置使用 `agent/request`，响应内容按组装后的原样记录，失败请求恢复使用 `agent/request-error` 返回动作，轮次结束时是否继续则使用 `agent/turn-stopping` 加 steering 表达。
 
@@ -35,7 +35,7 @@ agent 生命周期、agent 整体活动状态、收件箱条目的进度以及�
 
 **将 dispose 表示为第三种 `AgentStatus`。** 这样会让仍被持有的句柄得到一个终止状态值，但也会重复表达 `agent/disposed` 已经体现的注册表生命周期。当前决策让 `AgentStatus` 只表示 agent 存续期间的活动状态，并将注册生命周期作为独立维度。
 
-**让 `agent/request-error` 返回重试决策。** 这一替代方案已由[重试动作决策](2026-07-27-request-error-retry-action.md)取代；新决策移除了重复命令，并将决策局限于 waterfall 的返回结果。
+**让 `agent/request-error` 返回重试决策。** 这一替代方案已由[重试动作决策](2026-07-27-request-error-retry-action.zh.md)取代；新决策移除了重复命令，并将决策局限于 waterfall 的返回结果。
 
 **将持久的轮次与步骤边界映射为 agent 事件。** 这样会为同一事实向实时消费方提供第二条事件流。当前决策将会话日志保留为真源，仅暴露扩展检查点或持久事件流无法承载的纯实时事实。
 
@@ -51,8 +51,8 @@ agent 生命周期、agent 整体活动状态、收件箱条目的进度以及�
 
 ## 相关内容
 
-- [统一 agent 交付路由，并将注入上下文合并到 user/message](../architecture/2026-07-22-unified-send-and-coalesced-user-messages.md)
-- [移除普通发送中的隐式批处理](2026-07-17-one-send-one-turn.md)
-- [微内核事件分类体系](../architecture/2026-06-11-microkernel-event-taxonomy.md)
-- [有界 LLM（大语言模型）请求恢复](../architecture/2026-06-21-bounded-llm-request-recovery.md)
-- [可重建的请求](../architecture/2026-07-05-reconstructable-requests.md)
+- [统一 agent 交付路由，并将注入上下文合并到 user/message](../architecture/2026-07-22-unified-send-and-coalesced-user-messages.zh.md)
+- [移除普通发送中的隐式批处理](2026-07-17-one-send-one-turn.zh.md)
+- [微内核事件分类体系](../architecture/2026-06-11-microkernel-event-taxonomy.zh.md)
+- [有界 LLM（大语言模型）请求恢复](../architecture/2026-06-21-bounded-llm-request-recovery.zh.md)
+- [可重建的请求](../architecture/2026-07-05-reconstructable-requests.zh.md)

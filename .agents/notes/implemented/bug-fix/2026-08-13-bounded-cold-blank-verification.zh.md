@@ -24,7 +24,7 @@ Web 会话树会隐藏空白 Session，并把当前选中的空白项复用为 N
 
 **读取每一份冷日志。** 拒绝，因为列表延迟与 I/O 会随所有已存对话的总字节数增长。物理大小资格检查只针对能够低成本核验的小型历史工件，更大的未知项则向保持可见降级。该检查有意不为“让阈值与读取原子化”单独新增 persistence 操作：并发增长可能增加一次探测的读取成本，但新增事件只会保持可见，或把空白结果改为非空。
 
-**把空白状态与最近时间存入权威 persistence index。** 暂缓，因为 JSONL 的首行不可变，需要增加带有顺序写入要求的第二份持久工件；SQLite 则需要 schema 字段。更广泛的精确索引设计仍由[最后活动提案](../../proposed/architecture/2026-07-29-durable-last-activity-index.md)负责。
+**把空白状态与最近时间存入权威 persistence index。** 暂缓，因为 JSONL 的首行不可变，需要增加带有顺序写入要求的第二份持久工件；SQLite 则需要 schema 字段。更广泛的精确索引设计仍由[最后活动提案](../../proposed/architecture/2026-07-29-durable-last-activity-index.zh.md)负责。
 
 **继续按 mtime 排序 JSONL。** 拒绝，因为 mtime 记录包括拾起边界在内的每一次工件写入，而非最近真人 prompt；其错误方向会把未经操作的 Session 提升到列表开头。
 

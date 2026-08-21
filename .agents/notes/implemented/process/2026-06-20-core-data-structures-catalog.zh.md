@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-试图理解 harness 的读者可以在 [architecture.md](../../../../docs/architecture.md) 中找到它的*行为*（服务图、会话/轮次/步骤生命周期、事件分类体系），却找不到一个统一描述其*词汇*的地方，也就是这些行为所传递的数据结构。类型定义只存在于源码中，散落在 `packages/*/src/types.ts` 各处，因此要理解「什么是 `Message`、`SessionEvent`、`StreamChunk`」，就必须直接阅读声明。文字目录会有所帮助，但复述或复制粘贴类型定义的目录会在字段发生变化时立即腐化，而不同步的类型文档比没有文档更糟，因为读者会信任它。
+试图理解 harness 的读者可以在 [architecture.md](../../../../docs/architecture.zh.md) 中找到它的*行为*（服务图、会话/轮次/步骤生命周期、事件分类体系），却找不到一个统一描述其*词汇*的地方，也就是这些行为所传递的数据结构。类型定义只存在于源码中，散落在 `packages/*/src/types.ts` 各处，因此要理解「什么是 `Message`、`SessionEvent`、`StreamChunk`」，就必须直接阅读声明。文字目录会有所帮助，但复述或复制粘贴类型定义的目录会在字段发生变化时立即腐化，而不同步的类型文档比没有文档更糟，因为读者会信任它。
 
 因此，这项工作有两个相互交织的问题：**这样的目录应包含什么**（范围问题——harness 有数十种跨包边界的类型，把它们全部罗列出来对谁都没有帮助），以及**如何避免粘贴的类型定义发生漂移**（持久性问题）。本 Agent Note 记下了这两项决策。与它历史上配套的[已归档的 Cordis 事件与服务目录自动生成决策](../../archived/process/2026-06-20-generated-cordis-catalog.md)从*接线*维度形成补充：本文对数据结构编目，另一篇则对传递这些结构的事件和服务编目。
 
@@ -16,7 +16,7 @@ Status: implemented
 
 ### 何为「核心」——主干与子系统的分界线
 
-> **作为页面范围界定规则已被取代**，见[按包锚定的子系统页面](2026-08-03-package-anchored-subsystem-pages.md)：每页现在锚定到声明其词汇的包分组。下文的 `ts type-equiv` 机制仍然有效。
+> **作为页面范围界定规则已被取代**，见[按包锚定的子系统页面](2026-08-03-package-anchored-subsystem-pages.zh.md)：每页现在锚定到声明其词汇的包分组。下文的 `ts type-equiv` 机制仍然有效。
 
 范围界定的决定性测试是 `ShellExecRequest`/`ShellExecSpec`/`ShellRunResult`：bash 是一个能力 *seam*，不属于 agent loop（智能体循环）主干；如果这些算「核心」，那么「核心」就意味着*所有跨包词汇*，目录沦为平铺罗列；如果不算，「核心」就意味着*中央主干*，bash 词汇归入其自身的子系统页面。后者胜出，由此确定了整体结构：一个**分层文件夹**，而非一份平铺文档。
 
@@ -27,7 +27,7 @@ Status: implemented
 - `ToolSchema` 是核心（它是流经每个步骤的模型请求 `GenerateOptions` 的一个字段），即使它在概念上属于工具流水线——当*流经主干*与*概念归属*冲突时，前者胜出。
 - 工具展示词汇（`ToolCallView`/`ToolResultView` 等）、`SessionPersistence` 持久性 seam 以及 bash 词汇归入子系统页面。
 
-`core.md` 是一份**自包含的主干文档**：它给出每个主干结构的确切类型定义，辅以最少的行文，并链接到同级子系统页面获取包所拥有的细节；目录的 [README](../../../../docs/subsystems/README.md) 索引全部页面。最初的子系统页面包括 `llm-streaming.md`、`session.md`、`persistence.md`（沿内存模型与持久性 seam 的分界线从会话页面拆出）、`tools.md` 和 `shell.md`。
+`core.md` 是一份**自包含的主干文档**：它给出每个主干结构的确切类型定义，辅以最少的行文，并链接到同级子系统页面获取包所拥有的细节；目录的 [README](../../../../docs/subsystems/README.zh.md) 索引全部页面。最初的子系统页面包括 `llm-streaming.md`、`session.md`、`persistence.md`（沿内存模型与持久性 seam 的分界线从会话页面拆出）、`tools.md` 和 `shell.md`。
 
 ### `ts type-equiv` 机制——既逐字又防漂移
 

@@ -412,6 +412,16 @@ const reference = [
   }]),
 ]
 
+/**
+ * Sidebar collections of each locale, in the order the site's navigation
+ * presents them. The navigation bar and the llms.txt index both read this
+ * sequence, so a new collection lands in both surfaces together.
+ */
+export const localeCollections = {
+  root: ['zh-guide', 'zh-develop', 'zh-reference'],
+  en: ['en-guide', 'en-develop', 'en-reference'],
+} as const satisfies Record<DocsLocale, readonly DocsSidebar[]>
+
 /** A sidebar group, matched to pages by `label`. */
 export interface DocsSection {
   /** Group heading, equal to the `section` field of every page it holds. */

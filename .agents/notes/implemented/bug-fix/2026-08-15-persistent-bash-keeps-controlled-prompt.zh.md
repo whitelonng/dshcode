@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-`dsh-tool-bash-persistent` 用 `stty -echo; PS1='__DSH_PERSISTENT_BASH_PROMPT__ '` 初始化其 shell，覆盖了 `dsh-terminal-bash` 在 spawn 环境中设定的 `PS1`。后端的提示符就绪检测要求 OSC `133;D` 标记之后的可打印尾部与受控提示符完全相等（[设计](../feature/2026-07-16-persistent-pty-sessions.md)），因此初始化之后任何 send 都无法经由该路径结算。`PROMPT_COMMAND` 未被覆盖，标记仍持续到达，于是每次 send 都要支付静默层加交接宽限——生产默认值下每次工具调用 3.5 秒；首次调用 7.2 秒，因为初始化 send 同样退化；每条长命令结束后还要多等 3.5 秒。macOS 没有精确 stdin 等待层，而 Linux 的精确探测无法观察到在一个轮询周期内完成的命令脱离其 stdin 等待，因此退化实际覆盖了几乎每次调用。包测试把 `idleSilenceMs` 配成 100 毫秒，掩盖了该问题。
+`dsh-tool-bash-persistent` 用 `stty -echo; PS1='__DSH_PERSISTENT_BASH_PROMPT__ '` 初始化其 shell，覆盖了 `dsh-terminal-bash` 在 spawn 环境中设定的 `PS1`。后端的提示符就绪检测要求 OSC `133;D` 标记之后的可打印尾部与受控提示符完全相等（[设计](../feature/2026-07-16-persistent-pty-sessions.zh.md)），因此初始化之后任何 send 都无法经由该路径结算。`PROMPT_COMMAND` 未被覆盖，标记仍持续到达，于是每次 send 都要支付静默层加交接宽限——生产默认值下每次工具调用 3.5 秒；首次调用 7.2 秒，因为初始化 send 同样退化；每条长命令结束后还要多等 3.5 秒。macOS 没有精确 stdin 等待层，而 Linux 的精确探测无法观察到在一个轮询周期内完成的命令脱离其 stdin 等待，因此退化实际覆盖了几乎每次调用。包测试把 `idleSilenceMs` 配成 100 毫秒，掩盖了该问题。
 
 这个覆盖存在的目的是给工具一个已知提示符，服务两个消费点：用视口后缀检测「shell 已回到提示符但没有结束标记」的回退判定，以及从部分输出中剥离提示符文本的美化。
 

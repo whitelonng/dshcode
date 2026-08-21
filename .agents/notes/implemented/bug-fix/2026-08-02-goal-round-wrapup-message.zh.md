@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-自主 Goal Round 报告 `update_goal` `complete` 或 `blocked` 时，物理轮次在工具结果处直接终结，模型在调用之后再无发言机会。会话终止在一张裸的 `update_goal` 卡片上，内测同学的观感是 agent 话说到一半戛然而止：模型调用前的文本通常预告了一份汇报（“目标达成，标记完成：”）却永远没有下文，因为标准 tool-use 预期是工具结果之后还有一条 assistant 消息，而 Goal Round 提示词与工具描述都没有说明这次调用是终点。硬停止来自 [goal 工具决策](../feature/2026-07-19-model-facing-goal-tools.md)，本 note 取代其中的轮次停止条款。
+自主 Goal Round 报告 `update_goal` `complete` 或 `blocked` 时，物理轮次在工具结果处直接终结，模型在调用之后再无发言机会。会话终止在一张裸的 `update_goal` 卡片上，内测同学的观感是 agent 话说到一半戛然而止：模型调用前的文本通常预告了一份汇报（“目标达成，标记完成：”）却永远没有下文，因为标准 tool-use 预期是工具结果之后还有一条 assistant 消息，而 Goal Round 提示词与工具描述都没有说明这次调用是终点。硬停止来自 [goal 工具决策](../feature/2026-07-19-model-facing-goal-tools.zh.md)，本 note 取代其中的轮次停止条款。
 
 ## 决策
 

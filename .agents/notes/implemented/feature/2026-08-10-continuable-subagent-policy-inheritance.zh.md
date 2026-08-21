@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-自[进程内策略继承决策](2026-07-25-subagent-policy-inheritance.md)以来，一次性进程内驱动器一直会把父级的沙箱／审批覆盖项注入其子级，但可继续路径从未这样做：`SubagentContinuationManager` 的物化只应用子级组合与 Activation（激活）设置注册表。默认组合包把两个委派工具都配置为 `backgroundMode: continuable`，因此在默认部署中，每个后台子 agent（智能体）都静默回退到部署默认值：切换到 `danger-full-access` 的父级产出的子 agent 卡在 `workspace-write`，每次工作区外操作都会触发审批提示；父级无人值守的 `'never'` 审批立场也退回为发起提示的行为（[dsh-external/issues#334](https://github.com/dsh-external/issues/issues/334)）。
+自[进程内策略继承决策](2026-07-25-subagent-policy-inheritance.zh.md)以来，一次性进程内驱动器一直会把父级的沙箱／审批覆盖项注入其子级，但可继续路径从未这样做：`SubagentContinuationManager` 的物化只应用子级组合与 Activation（激活）设置注册表。默认组合包把两个委派工具都配置为 `backgroundMode: continuable`，因此在默认部署中，每个后台子 agent（智能体）都静默回退到部署默认值：切换到 `danger-full-access` 的父级产出的子 agent 卡在 `workspace-write`，每次工作区外操作都会触发审批提示；父级无人值守的 `'never'` 审批立场也退回为发起提示的行为（[dsh-external/issues#334](https://github.com/dsh-external/issues/issues/334)）。
 
 ## 决策
 
-捕获／追加这对函数从一次性驱动器移入该 seam 的共享子 agent 模块（`dsh-subagent/src/child-agent.ts`），即声明的共享子级组合唯一归属之处：`captureDelegatedPolicyOverrides(parent)` 通过可选的 `ctx.get` 对 `sandboxPolicy.overrideOf(parent.session)` 建立快照，并把子级审批策略钉定为 `'never'`（[审批钉定决策](2026-08-10-subagent-approval-pinned-never.md)），`appendDelegatedPolicyOverrides(childSession, overrides)` 则追加 `source: 'delegation'` 事件。一次性驱动器与继续执行管理器都调用它们，因此两条路径不会出现偏差。
+捕获／追加这对函数从一次性驱动器移入该 seam 的共享子 agent 模块（`dsh-subagent/src/child-agent.ts`），即声明的共享子级组合唯一归属之处：`captureDelegatedPolicyOverrides(parent)` 通过可选的 `ctx.get` 对 `sandboxPolicy.overrideOf(parent.session)` 建立快照，并把子级审批策略钉定为 `'never'`（[审批钉定决策](2026-08-10-subagent-approval-pinned-never.zh.md)），`appendDelegatedPolicyOverrides(childSession, overrides)` 则追加 `source: 'delegation'` 事件。一次性驱动器与继续执行管理器都调用它们，因此两条路径不会出现偏差。
 
 `startContinuable` 在其第一次 await（`prepareContinuable`）之前完成捕获，沿用与一次性路径相同的「父级后续切换属于父级的未来」边界。快照放在 `MaterializeInputs.create` 中传递，因此只有全新物化会在未发布的设置阶段、排在任何 fork 种子之后追加这些事件。冷恢复（cold resume）不传入 `create` 输入，也不追加任何内容：持久化的子日志已经携带委派事件，而回放该日志本身就是状态。子 agent 的生效策略由持久化子日志拥有，而不是当前 Activation，也不是发起恢复的父级，因此父级在驻留纪元（residency epoch）之间的切换绝不会追溯性地改变一个持久化子 agent。
 

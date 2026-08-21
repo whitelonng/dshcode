@@ -191,6 +191,10 @@ describe('StatsLine', () => {
     return { useSession: bindSnapshotSelector(source), useProjection: projections(values), t: tEn }
   }
 
+  function tokenUsage(cacheReadTokens: number, uncachedInputTokens: number) {
+    return { uncachedInputTokens, outputTokens: 1, cacheReadTokens, cacheWriteTokens: 0 }
+  }
+
   it('renders the grouped stats row and hides a brand-new empty session', () => {
     const { source } = makeSource({ nodes: [assistant(1, 1)] })
     const view = render(<StatsLine {...props(source)} />)
@@ -205,19 +209,43 @@ describe('StatsLine', () => {
     expect(emptyView.container.textContent).toBe('')
   })
 
+  it.each([
+    { actual: '98.6%', tokenUsageValue: tokenUsage(986, 14), expected: 'Cache hit 99%' },
+    { actual: '99.1%', tokenUsageValue: tokenUsage(991, 9), expected: 'Cache hit 99%' },
+    { actual: '99.49%', tokenUsageValue: tokenUsage(9_949, 51), expected: 'Cache hit 99%' },
+    { actual: '99.5%', tokenUsageValue: tokenUsage(995, 5), expected: 'Cache hit 99.5%' },
+    { actual: '99.94%', tokenUsageValue: tokenUsage(9_994, 6), expected: 'Cache hit 99.9%' },
+    { actual: '99.95%', tokenUsageValue: tokenUsage(9_995, 5), expected: 'Cache hit 99.95%' },
+    { actual: '99.955%', tokenUsageValue: tokenUsage(19_991, 9), expected: 'Cache hit 99.96%' },
+    { actual: '99.985%', tokenUsageValue: tokenUsage(19_997, 3), expected: 'Cache hit 99.99%' },
+    { actual: '99.995%', tokenUsageValue: tokenUsage(19_999, 1), expected: 'Cache hit 99.995%' },
+    { actual: '99.9975%', tokenUsageValue: tokenUsage(39_999, 1), expected: 'Cache hit 99.998%' },
+    {
+      actual: 'the closest non-full ratio available from safe integer cumulative counts',
+      tokenUsageValue: tokenUsage(Number.MAX_SAFE_INTEGER - 1, 1),
+      expected: 'Cache hit 99.99999999999999%',
+    },
+    { actual: '100%', tokenUsageValue: tokenUsage(10_000, 0), expected: 'Cache hit 100%' },
+  ])('formats an actual $actual cache-hit ratio as $expected', ({ tokenUsageValue, expected }) => {
+    const { source } = makeSource({ nodes: [assistant(1, 1)] })
+    const view = render(<StatsLine {...props(source, { tokenUsage: tokenUsageValue })} />)
+    expect(view.container.textContent).toContain(expected)
+  })
+
   it('reveals the full line in a delayed hover tooltip only while the row is clipped', () => {
     vi.useFakeTimers()
     // jsdom lays nothing out; fake a row narrower than its content.
     vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockReturnValue(800)
     vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(400)
     const { source } = makeSource({ nodes: [assistant(1, 1)] })
-    const view = render(<StatsLine {...props(source)} />)
+    const view = render(<StatsLine {...props(source, { tokenUsage: tokenUsage(9_995, 5) })} />)
+    expect(view.container.textContent).toContain('Cache hit 99.95%')
     fireEvent.mouseEnter(view.container.firstElementChild!)
     act(() => { vi.advanceTimersByTime(499) })
     expect(view.container.querySelector('[role="tooltip"]')).toBeNull()
     act(() => { vi.advanceTimersByTime(1) })
     expect(view.container.querySelector('[role="tooltip"]')?.textContent)
-      .toBe('1 turns · 1 steps | Cache hit 90% | Input 100 tok · Output 5 tok')
+      .toBe('1 turns · 1 steps | Cache hit 99.95% | Input 10K tok · Output 1 tok')
   })
 
   it('suppresses the tooltip while the row fits without truncation', () => {
@@ -245,9 +273,9 @@ describe('StatsLine', () => {
       timing: { stepStartTime: 1_000, firstTokenTime: 1_800, completedTime: 4_800 },
     }
     const { source } = makeSource({ nodes: [timed] })
-    const view = render(<StatsLine {...props(source)} t={t} />)
+    const view = render(<StatsLine {...props(source, { tokenUsage: tokenUsage(9_995, 5) })} t={t} />)
     expect(view.container.textContent)
-      .toBe('1 轮 · 1 步| LLM 3.8s| 首 token 平均 0.8s · 20 tok/s| 缓存命中 90%| 输入 100 tok · 输出 5 tok')
+      .toBe('1 轮 · 1 步| LLM 3.8s| 首 token 平均 0.8s · 20 tok/s| 缓存命中 99.95%| 输入 10K tok · 输出 1 tok')
   })
 
   it('renders without ResizeObserver support', () => {

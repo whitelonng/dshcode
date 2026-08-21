@@ -14,7 +14,7 @@ Status: implemented
 
 `LocalJobRegistry` 拥有 `maxConcurrentJobsPerOwner` 配置字段。它只接受正的安全整数，默认值为 `10`，并通过 Service Provider 的 Cordis schema、typed `agent-spine-demo` 组合包与 ACP 应用配置提供。组合包只传输该值；其含义归进程内 Service Provider 所有。
 
-[通用任务运行时决策](../architecture/2026-06-20-generic-long-running-tool-runtime.md)拥有共享 Task 生命周期与控制 API；本记录只拥有进程内准入策略。
+[通用任务运行时决策](../architecture/2026-06-20-generic-long-running-tool-runtime.zh.md)拥有共享 Task 生命周期与控制 API；本记录只拥有进程内准入策略。
 
 `start()` 在现有任务控制器、任务字段与存活 owner 检查之后、`JobStart.run()` 之前执行准入。它从注册表当前记录派生活动数量，而不保存另一份计数：
 

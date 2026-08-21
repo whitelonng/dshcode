@@ -154,11 +154,11 @@ function at(time: number, type: string, data: unknown): SessionEvent {
 
 /** Fold a synthetic event list through the definition and view the result. */
 function fold(events: readonly SessionEvent[]): SessionStatsProjection {
-  const state = events.reduce(
+  const state = events.reduce<Parameters<typeof sessionStatsProjectionDefinition.apply>[0]>(
     (folded, event) => sessionStatsProjectionDefinition.apply(folded, event),
     sessionStatsProjectionDefinition.init(),
   )
-  return sessionStatsProjectionDefinition.view(state)
+  return sessionStatsProjectionDefinition.wire.view(state)
 }
 
 describe('sessionStats wall-time fold (controlled timestamps)', () => {
@@ -269,7 +269,7 @@ describe('sessionStats wall-time fold (controlled timestamps)', () => {
       .toEqual(totals({ turns: 1, steps: 1, llmMs: 1_000, ttftMs: 400, ttftSteps: 1 }))
     // The first message closed the step boundary; a defensive duplicate finds
     // no open step and folds to the same reference.
-    const state = events.reduce(
+    const state = events.reduce<Parameters<typeof sessionStatsProjectionDefinition.apply>[0]>(
       (folded, event) => sessionStatsProjectionDefinition.apply(folded, event),
       sessionStatsProjectionDefinition.init(),
     )

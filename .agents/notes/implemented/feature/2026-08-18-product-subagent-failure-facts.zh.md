@@ -6,9 +6,9 @@ Status: implemented
 
 ## Problem
 
-[Claude Code 与 Codex 产品提供方](2026-08-04-claude-code-and-codex-subagent-backends.md)会收到结构化产品失败，但已发布运行以往会把其中大多数压成共享的 `error` 终止原因。产品日志保留了细节，前台父 agent 与[一次性后台 Job](2026-08-12-product-subagent-one-shot-background-tasks.md)却无法据此区分产品限制、执行失败或进程提前退出。
+[Claude Code 与 Codex 产品提供方](2026-08-04-claude-code-and-codex-subagent-backends.zh.md)会收到结构化产品失败，但已发布运行以往会把其中大多数压成共享的 `error` 终止原因。产品日志保留了细节，前台父 agent 与[一次性后台 Job](2026-08-12-product-subagent-one-shot-background-tasks.zh.md)却无法据此区分产品限制、执行失败或进程提前退出。
 
-若把 SDK 错误文本、app-server payload 或 stderr 复制进结果，就会暴露任务文本、路径、环境值、凭证或产品内部信息。若增加共享错误字段，又会让提供方无关的 [subagent seam](2026-06-21-subagent-capability-seam.md)拥有彼此独立变化的产品版本词汇。
+若把 SDK 错误文本、app-server payload 或 stderr 复制进结果，就会暴露任务文本、路径、环境值、凭证或产品内部信息。若增加共享错误字段，又会让提供方无关的 [subagent seam](2026-06-21-subagent-capability-seam.zh.md)拥有彼此独立变化的产品版本词汇。
 
 ## Decision
 
@@ -22,7 +22,7 @@ Status: implemented
 Product subagent failure (product: <product>; stage: <stage>; category: <category>; HTTP status: <status>; exit code: <code>; signal: <signal>)
 ```
 
-提供方会省略不可用的可选字段。退出码与信号是相互独立的事实，只要已观测到就分别保留。来自[非交互权限决策](2026-08-15-product-subagent-noninteractive-permissions.md)且参与失败的权限决定会跟在结构化行之后；最新的安全权限事实仍只属于当前操作。共享结果边界会把完整文本限制在 4096 个 UTF-8 字节以内。
+提供方会省略不可用的可选字段。退出码与信号是相互独立的事实，只要已观测到就分别保留。来自[非交互权限决策](2026-08-15-product-subagent-noninteractive-permissions.zh.md)且参与失败的权限决定会跟在结构化行之后；最新的安全权限事实仍只属于当前操作。共享结果边界会把完整文本限制在 4096 个 UTF-8 字节以内。
 
 成功结果与本地取消都不公开失败事实。原始产品错误、stderr、工具输入、路径、环境值、凭证和协议 payload 绝不会进入诊断。启动与清理拒绝会在 Error 消息中使用同一安全行。原始失败保留在内部 cause 链中；提供方 Host 日志与转发的 stderr 也只作为产品本地观测。
 

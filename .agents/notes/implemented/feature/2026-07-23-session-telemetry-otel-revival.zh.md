@@ -14,7 +14,7 @@ Status: implemented
 
 - **`@deepseek-ai/dsh-session-telemetry`** —— seam 本体。`SessionTelemetrySink`（`emit`/`flush?`/`shutdown`）、服务注册形态的 `SessionTelemetryBackend`、以及拥有捕获侧的 `SessionTelemetryCoordinator`：带游标回读的实时纳管与逐 append 的 firehose（投影 → `structuredClone` → 脱敏 → `emit`，零 I/O）、从权威日志进行的无缓冲按需回放、固定的每个（轮次、步骤）组合首分片投影、实时 `agent/error` 转发，以及实时 dispose（资源释放）时的 `shutdown` 记录。
 - **`session-telemetry/record` waterfall（瀑布式事件）** —— 相对分支版本的增量，也是该 seam 的脱敏扩展点。每条记录抵达任何后端前必经此处；seam 自身不带任何规则——最内层 `next()` 原样透传，部署方以监听器挂载自己的规则（通过变换 `next()` 的返回值堆叠），抛异常的规则将该记录 fail-closed 扣下。脱敏只作用于导出副本；canonical log 永不改写。
-- **`@deepseek-ai/dsh-session-telemetry-otel`** —— 参考后端：OTel JS SDK 日志流水线（`LoggerProvider` → `BatchLogRecordProcessor` → OTLP/HTTP exporter），经 `exporter`/`processor` passthrough 原样配置。`DISABLED` 是默认值，且不构造任何传输；[反馈门控遥测决策](2026-08-05-feedback-gated-session-telemetry.md)定义了需显式启用的 `FULL` 与 `FEEDBACK_ONLY` 投递模式，这两种模式要求 `exporter.url`，且不移动脱敏或后端边界。[无缓冲反馈回放](../simplification/2026-08-06-buffer-free-feedback-telemetry.md)避免在内存中创建会话前缀的第二份副本。
+- **`@deepseek-ai/dsh-session-telemetry-otel`** —— 参考后端：OTel JS SDK 日志流水线（`LoggerProvider` → `BatchLogRecordProcessor` → OTLP/HTTP exporter），经 `exporter`/`processor` passthrough 原样配置。`DISABLED` 是默认值，且不构造任何传输；[反馈门控遥测决策](2026-08-05-feedback-gated-session-telemetry.zh.md)定义了需显式启用的 `FULL` 与 `FEEDBACK_ONLY` 投递模式，这两种模式要求 `exporter.url`，且不移动脱敏或后端边界。[无缓冲反馈回放](../simplification/2026-08-06-buffer-free-feedback-telemetry.zh.md)避免在内存中创建会话前缀的第二份副本。
 
 
 边界公理保持不变：harness 的职责止于 `emit()`。批处理、重试、排队与丢失策略属于 reporting SDK，经 passthrough 配置——投递是尽力而为（崩溃时至多一次），两份 README 对此如实陈述。
@@ -35,4 +35,4 @@ Status: implemented
 
 ## 后果
 
-部署方在 `cordis.yml` 加一个带 OTLP endpoint 的 Cordis 配置项，并显式选择 `FULL`，即可把会话流接入任何 OTel 兼容体系；选择 `FEEDBACK_ONLY` 则会在记录反馈时回放权威日志前缀。`DISABLED` 是[默认值](2026-08-10-telemetry-default-off.md)，且不构造上报流水线；删除该配置项仍是静默退出方式，而禁用模式会保留本地反馈警告。未挂载规则的部署导出的记录与捕获时完全一致，包括文件内容与命令输出中内嵌的任何凭据。因此，跨信任边界的部署必须挂载 `session-telemetry/record` 监听器，两个 README 对此如实陈述。挂载规则后，导出的 body 可能与 canonical log 字节不同，接收端不得把遥测当作字节精确副本；日志仍是真源。崩溃持久性在上述 outbox 决定重新审议前明确不在范围内。
+部署方在 `cordis.yml` 加一个带 OTLP endpoint 的 Cordis 配置项，并显式选择 `FULL`，即可把会话流接入任何 OTel 兼容体系；选择 `FEEDBACK_ONLY` 则会在记录反馈时回放权威日志前缀。`DISABLED` 是[默认值](2026-08-10-telemetry-default-off.zh.md)，且不构造上报流水线；删除该配置项仍是静默退出方式，而禁用模式会保留本地反馈警告。未挂载规则的部署导出的记录与捕获时完全一致，包括文件内容与命令输出中内嵌的任何凭据。因此，跨信任边界的部署必须挂载 `session-telemetry/record` 监听器，两个 README 对此如实陈述。挂载规则后，导出的 body 可能与 canonical log 字节不同，接收端不得把遥测当作字节精确副本；日志仍是真源。崩溃持久性在上述 outbox 决定重新审议前明确不在范围内。

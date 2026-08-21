@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-14-web-ui-slot-seats-and-compat-shim.md
 2026-08-14-web-ui-slot-seats-and-compat-shim.md: 09c28f57bf00f6addac92c3b09a1b346e460c4f0
-2026-08-14-web-ui-slot-seats-and-compat-shim.zh.md: 0290c6ea12d03e0ef40d3592d6aab3c717caec42
+2026-08-14-web-ui-slot-seats-and-compat-shim.zh.md: f28d0ee3b71964c116a77d40356c0216919174f1

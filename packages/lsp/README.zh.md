@@ -12,6 +12,6 @@
 
 Service Definition 位于 `lsp/lsp/`。该 seam 恰好公开四种语义操作：`goToDefinition`、`findReferences`、`goToImplementation`、`hover`，且不提供通用 JSON-RPC 逃生口；因此，替换提供方不会改变模型请求导航的方式，也不会让协议载荷或未经评审的修改进入模型约定。提供方注册的是**能力**而非工具；`tool-lsp` 是面向模型的名称、schema、提示词指引和呈现的唯一 owner。
 
-设计原理见 [LSP 能力 seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-15-lsp-capability-seam.md)，其中也解释了文档为何在每次查询时临时打开、stdio 主机为何使用共享的文件系统／子进程执行环境，以及扩展名归属为何在同一运行时内互斥。
+设计原理见 [LSP 能力 seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-15-lsp-capability-seam.zh.md)，其中也解释了文档为何在每次查询时临时打开、stdio 主机为何使用共享的文件系统／子进程执行环境，以及扩展名归属为何在同一运行时内互斥。
 
-子系统参考——操作、坐标、请求／结果、`LspError`——见 [docs/subsystems/lsp.md](../../docs/subsystems/lsp.md)；设计依据见 [LSP 能力 seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-15-lsp-capability-seam.md)。
+子系统参考——操作、坐标、请求／结果、`LspError`——见 [docs/subsystems/lsp.md](../../docs/subsystems/lsp.zh.md)；设计依据见 [LSP 能力 seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-15-lsp-capability-seam.zh.md)。

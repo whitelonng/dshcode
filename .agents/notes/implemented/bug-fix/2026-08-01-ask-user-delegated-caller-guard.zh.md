@@ -18,7 +18,7 @@ Status: implemented
 
 共享失败文本与具体消费方无关，并给出可执行指引：子级把尚未解决的问题或决策写入最终结果。委托约定本就会把该结果传给父级，父级可据此决定是否询问人类。服务和子级都不会宣称存在实际上并不存在的向上消息传递或回答转发能力。
 
-该安全边界与浏览器的 composer 选举相互独立。提议的[语义 composer 阶段](../../proposed/architecture/2026-08-08-semantic-composer-chain-phases.md)解决已有待处理交互与只读 subagent 界面的排序方式；它不会削弱此运行时守卫。
+该安全边界与浏览器的 composer 选举相互独立。提议的[语义 composer 阶段](../../proposed/architecture/2026-08-08-semantic-composer-chain-phases.zh.md)解决已有待处理交互与只读 subagent 界面的排序方式；它不会削弱此运行时守卫。
 
 ## 备选方案
 

@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-新增可独立安装的 `@deepseek-ai/dsh-tool-subagent-report` 包。它会向每个可继续进程内 child Activation 贡献一个普通的面向模型 `report` 工具。机制本身接受一个轮次中调用零次或多次；child 会另行被要求在结束前调用一次（见[报告义务](2026-08-06-continuable-child-report-obligation.md)）。调用成功既不会结束该轮次或结算 Activation，也不会阻止 parent 之后继续 follow-up；完成轮次也绝不会自动报告。
+新增可独立安装的 `@deepseek-ai/dsh-tool-subagent-report` 包。它会向每个可继续进程内 child Activation 贡献一个普通的面向模型 `report` 工具。机制本身接受一个轮次中调用零次或多次；child 会另行被要求在结束前调用一次（见[报告义务](2026-08-06-continuable-child-report-obligation.zh.md)）。调用成功既不会结束该轮次或结算 Activation，也不会阻止 parent 之后继续 follow-up；完成轮次也绝不会自动报告。
 
 该功能是协作控制，不是承载结果的执行包装层。它不新增 Task、`SubagentRun`、结果 promise、Activation 状态、投递队列或回放路径。
 
@@ -36,7 +36,7 @@ root、one-shot child、伪造对象、陈旧 Agent 和同 id 替换对象都以
 
 ### 投递策略
 
-该包会校验 `reportDelivery: 'quiet' | 'next-step'`，默认值为 `next-step`（见[顺序决策](../bug-fix/2026-08-17-subagent-report-settlement-ordering.md)）。
+该包会校验 `reportDelivery: 'quiet' | 'next-step'`，默认值为 `next-step`（见[顺序决策](../bug-fix/2026-08-17-subagent-report-settlement-ordering.zh.md)）。
 
 静默投递调用 `parent.inject()`。它会添加模型可见的 next-step 上下文，但不唤醒空闲 parent；运行中的 parent 会把报告暂存到下一个安全日志位置。
 
@@ -72,7 +72,7 @@ ACP（Agent Client Protocol）快照 harness 新增 `waitForSubagentTurnEnd`，�
 
 ### 始终唤醒 parent
 
-每次报告都唤醒 parent 会产生未经请求的轮次，还可能沿嵌套 subagent 级联扩散。当初选择静默投递作为默认值，前提是 parent 还有别的理由去读自己的上下文。[报告义务](2026-08-06-continuable-child-report-obligation.md)取代了该选择：已经停驻的后台协调者并没有这样的理由，因此唤醒成为默认值，而本段现在记录的是 `quiet` 为何仍然保留。
+每次报告都唤醒 parent 会产生未经请求的轮次，还可能沿嵌套 subagent 级联扩散。当初选择静默投递作为默认值，前提是 parent 还有别的理由去读自己的上下文。[报告义务](2026-08-06-continuable-child-report-obligation.zh.md)取代了该选择：已经停驻的后台协调者并没有这样的理由，因此唤醒成为默认值，而本段现在记录的是 `quiet` 为何仍然保留。
 
 ### 允许 child 选择投递模式
 

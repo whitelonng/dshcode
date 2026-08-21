@@ -19,13 +19,13 @@ Status: implemented
 
 长时间运行工具是生产方。`dsh-tool-bash` 将 `ShellProcess` 适配为增量输出与进程取消；`dsh-tool-subagent` 将子运行适配为最终输出与子运行释放。bash 与 subagent 能力 seam 保持独立，不依赖会话或任务注册表。
 
-`JobRegistry` 是 `@deepseek-ai/dsh-jobs` 中的 Service Definition；进程内 Service Provider 是 `@deepseek-ai/dsh-jobs-local` 中的 `LocalJobRegistry`（该拆分记录在[任务注册表约定 Agent Note](2026-07-26-job-registry-seam.md)中）。
+`JobRegistry` 是 `@deepseek-ai/dsh-jobs` 中的 Service Definition；进程内 Service Provider 是 `@deepseek-ai/dsh-jobs-local` 中的 `LocalJobRegistry`（该拆分记录在[任务注册表约定 Agent Note](2026-07-26-job-registry-seam.zh.md)中）。
 
 ## 运行时约定
 
-字面类型见[任务子系统页面](../../../../docs/subsystems/jobs.md)。生产方调用 `ctx.jobs.start()`，传入 kind、label、可选的所属 `Agent`、可选的正数 `outputLimitBytes` 与一个 `run()` 函数。运行时会在调用 `run()` 前完成所有可能失败的预检工作，并且只调用一次。`run()` 返回钩子后，注册过程不会再执行可能失败的步骤而直接提交；生产方无法启动没有可收集 job id 的工作。
+字面类型见[任务子系统页面](../../../../docs/subsystems/jobs.zh.md)。生产方调用 `ctx.jobs.start()`，传入 kind、label、可选的所属 `Agent`、可选的正数 `outputLimitBytes` 与一个 `run()` 函数。运行时会在调用 `run()` 前完成所有可能失败的预检工作，并且只调用一次。`run()` 返回钩子后，注册过程不会再执行可能失败的步骤而直接提交；生产方无法启动没有可收集 job id 的工作。
 
-进程内 Service Provider 还拥有有界准入，其理由记录在[有界后台任务准入决策](../bug-fix/2026-08-11-bounded-background-job-admission.md)中。它的 `maxConcurrentJobsPerOwner` 配置必须是正的安全整数，默认值为 `10`；`start()` 从 `running` 与 `stopping` 记录派生每个确切 `Agent` 对象的活动数量，而全部无 owner 任务共享一个服务级桶。容量拒绝发生在 `run()` 与 id 分配之前，处于 stopping 的任务只有在生产方 `done` 结算时才释放名额。Service Provider 不排队或抢占任务，也不保留第二份可变计数。
+进程内 Service Provider 还拥有有界准入，其理由记录在[有界后台任务准入决策](../bug-fix/2026-08-11-bounded-background-job-admission.zh.md)中。它的 `maxConcurrentJobsPerOwner` 配置必须是正的安全整数，默认值为 `10`；`start()` 从 `running` 与 `stopping` 记录派生每个确切 `Agent` 对象的活动数量，而全部无 owner 任务共享一个服务级桶。容量拒绝发生在 `run()` 与 id 分配之前，处于 stopping 的任务只有在生产方 `done` 结算时才释放名额。Service Provider 不排队或抢占任务，也不保留第二份可变计数。
 
 `outputLimitBytes` 是生产方拥有的呈现策略，而非注册表缓冲区。注册表校验该值，并将其原样投影到 `JobSnapshot`；通用任务控制器添加自身的状态或通知元数据后，再将该上限应用于完整的面向模型输出。省略该值时保持现有控制器行为，因此运行时不会向无关的生产方类别施加隐式默认值。
 
@@ -79,7 +79,7 @@ job id 在运行时全局可见且可预测，因此注册表会授权每次访�
 
 流式读取共享一个任务作用域内的消费游标，因为所属模型是预期读取方。UI 或多个独立读取方需要单独的非消费式观察 API；共享该游标会让读取方彼此消费对方的输出。
 
-系统提示词要求模型保留 job id、在后台工作运行时继续处理独立工作而非忙轮询或重复启动同一任务、在给出最终答案前收集相关任务，并终止不再重要的工作。完成时，系统会向确切所有者的会话交付一条已记录的消息：繁忙的所有者走注入，空闲的所有者会被唤醒，其有界策略由[空闲所有者唤醒决策](../feature/2026-08-11-background-job-completion-wakes-an-idle-owner.md)负责。
+系统提示词要求模型保留 job id、在后台工作运行时继续处理独立工作而非忙轮询或重复启动同一任务、在给出最终答案前收集相关任务，并终止不再重要的工作。完成时，系统会向确切所有者的会话交付一条已记录的消息：繁忙的所有者走注入，空闲的所有者会被唤醒，其有界策略由[空闲所有者唤醒决策](../feature/2026-08-11-background-job-completion-wakes-an-idle-owner.zh.md)负责。
 
 当读取或等待交付终止任务、尚在等待的等待方在结算时认领了投递，或模型显式终止任务时，运行时将终止任务标为 `reported`。已报告的任务不会注入冗余的完成通知。监听器失败会独立记录，不会阻止后续监听器，也不会被等待方或资源销毁过程等待。当快照携带 `outputLimitBytes` 时，`dsh-tool-jobs` 会保持 UTF-8 边界，并复用生产方已有的截断标记，而不会重复添加。读取会为状态后缀预留空间并保留输出尾部；完成通知会先为稳定的 `background job <id>` 前缀与 `job_output` 指令预留空间，再截断可变的 kind、label、status、detail，乃至截断标记本身，因此 PTY 的最小上限仍能标识需要收集的任务。任务控制器在策略有机会拒绝或短路分发之前，于最先执行的 pre-execute 监听器中解析调用方可见的生产方上限；随后通过任务定义最后一道的 `finalizeContent` 回调应用该上限，使规范化的工具错误、外层流水线失败与单文本策略结果都无法绕过该边界；经特意结构化的多块策略结果仍由策略拥有其形状与大小。
 
@@ -105,7 +105,7 @@ bash seam 暴露 `resolve`、`run` 和 `start`。`start(spec)` 返回一个 `She
 
 ### 立即抽象任务运行时后端
 
-当前 `JobStart.run()` 约定传入进程内回调与确切的 `Agent` 对象。持久化后端会改变身份、重启、所有权与观察语义，因此在引入之时注册表保持为单一具体服务，而非固化错误的边界。[任务注册表约定 Agent Note](2026-07-26-job-registry-seam.md)后来在不改变这些进程内语义的前提下，将约定与进程内实现分离。
+当前 `JobStart.run()` 约定传入进程内回调与确切的 `Agent` 对象。持久化后端会改变身份、重启、所有权与观察语义，因此在引入之时注册表保持为单一具体服务，而非固化错误的边界。[任务注册表约定 Agent Note](2026-07-26-job-registry-seam.zh.md)后来在不改变这些进程内语义的前提下，将约定与进程内实现分离。
 
 ### 由消费方负责授权或清理事件
 
@@ -131,7 +131,7 @@ bash seam 暴露 `resolve`、`run` 和 `start`。`start(spec)` 返回一个 `She
 
 ## 后果
 
-bash 命令与 subagent 共享一套 id 词汇、列表、通知格式、提示词习惯和控制工具。新的长时间运行生产方只需实现执行钩子，而不必再实现一套注册表与工具族。[工具实操手册](../../../../docs/cookbook/adding-a-tool.md)将生产方指向本约定。
+bash 命令与 subagent 共享一套 id 词汇、列表、通知格式、提示词习惯和控制工具。新的长时间运行生产方只需实现执行钩子，而不必再实现一套注册表与工具族。[工具实操手册](../../../../docs/cookbook/adding-a-tool.zh.md)将生产方指向本约定。
 
 单个确切 owner 无法再无限增加进程内由 Task 承载的工作，另一个 owner 也不会消耗它的额度。取消请求会继续占用容量，直到生产方真正释放资源，因此用新工作替换缓慢停止的任务不会突破已配置的实时资源预算。
 

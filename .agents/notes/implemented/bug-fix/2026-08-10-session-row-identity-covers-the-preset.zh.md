@@ -34,4 +34,4 @@ hero 上的 chip 正是其中一个读取方，而且它在发出任何请求之
 
 ## 相关内容
 
-同一条 e2e 也覆盖[目录失效的修复](2026-08-10-slash-catalog-follows-preset-switch.md)——正是它让菜单在切换真正落地之后跟随任一方向的切换。
+同一条 e2e 也覆盖[目录失效的修复](2026-08-10-slash-catalog-follows-preset-switch.zh.md)——正是它让菜单在切换真正落地之后跟随任一方向的切换。

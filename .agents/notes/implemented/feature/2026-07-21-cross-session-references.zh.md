@@ -26,7 +26,7 @@ Web 用户需要把另一场对话中的相关工作带入一条新消息，但�
 
 ## 消息所有权
 
-该服务的外层 `agent/pre-step` 监听器会先调用下游监听器，并且只处理 `enter` 决策。它会解析每条已接受的直接用户消息，在把规范 mention 替换为可读标签时保留消息 id，并把冻结快照插入到该消息紧后。最终领取的消息是准备过程的输入，因此队列编辑和从 queue 移动到 steer 不需要引用专用状态。[上下文分离决策](../architecture/2026-07-24-separate-context-injection-from-turn-execution.md)规定了这一上下文顺序。
+该服务的外层 `agent/pre-step` 监听器会先调用下游监听器，并且只处理 `enter` 决策。它会解析每条已接受的直接用户消息，在把规范 mention 替换为可读标签时保留消息 id，并把冻结快照插入到该消息紧后。最终领取的消息是准备过程的输入，因此队列编辑和从 queue 移动到 steer 不需要引用专用状态。[上下文分离决策](../architecture/2026-07-24-separate-context-injection-from-turn-execution.zh.md)规定了这一上下文顺序。
 
 引用准备过程不是新的投递协议，本身也不会创建轮次。准备失败会通过 agent loop 的现有插件失败路径终止已经接受的轮次。
 
@@ -34,9 +34,9 @@ Web 用户需要把另一场对话中的相关工作带入一条新消息，但�
 
 统一的 Web `@` source 把会话候选与 Host 支持的文件发现组合在一起。会话候选查询会对 session id、cwd 或最新折叠后的标题执行不区分大小写的子串匹配，显示该标题，并在没有标题观察结果或标题观察失败时回退到 session id。查询遵循请求的取消信号；session id、cwd 和提及标签中的外部控制字符会被转义，但规范 URI 仍保留原始 id。
 
-Web 通过所属服务上的生成 Remote 方法提供文件与会话发现，详见 [Web 文件与会话引用](2026-07-27-web-file-and-session-references.md)。session 选择项是由 Host 生成的规范 mention 支撑的原子 chip。普通 `session.prompt` 投递会携带该 mention，无需引用专用 API Proxy 路由。回放会把独立的 session-reference 上下文与紧邻其前的直接消息关联起来，并渲染精简来源摘要，而不暴露快照 JSON。
+Web 通过所属服务上的生成 Remote 方法提供文件与会话发现，详见 [Web 文件与会话引用](2026-07-27-web-file-and-session-references.zh.md)。session 选择项是由 Host 生成的规范 mention 支撑的原子 chip。普通 `session.prompt` 投递会携带该 mention，无需引用专用 API Proxy 路由。回放会把独立的 session-reference 上下文与紧邻其前的直接消息关联起来，并渲染精简来源摘要，而不暴露快照 JSON。
 
-[仅面向自动化的 ACP（Agent Client Protocol）传输层](../simplification/2026-07-23-acp-automation-only-protocol.md)有意不挂载会话查询或会话引用服务。
+[仅面向自动化的 ACP（Agent Client Protocol）传输层](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)有意不挂载会话查询或会话引用服务。
 
 ## 预算与保留策略
 

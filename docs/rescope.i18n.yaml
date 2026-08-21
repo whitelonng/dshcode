@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/rescope.md
 rescope.md: 3dde39875021e7a4161e1ae66550e9dedf5eb4fa
-rescope.zh.md: a7f355cf651fb063bf2d4c3cefe18babd4a57401
+rescope.zh.md: 6ee834e33dd50a16c04e3253368de165b8a46100

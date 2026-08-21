@@ -209,20 +209,20 @@ describe('contextBreakdown session projection', () => {
     state = definition.apply(state, append(1))
     state = definition.apply(state, append(3))
     // No metering event: the replacement contributes zero instead of throwing.
-    expect(definition.view(definition.apply(state, replace(1, 3))).messageTokens)
-      .toBe(definition.view(state).messageTokens)
+    expect(definition.wire.view(definition.apply(state, replace(1, 3))).messageTokens)
+      .toBe(definition.wire.view(state).messageTokens)
     // An adjacent claim for another range contradicts the replacement.
     const mismatched = definition.apply(state, meter(1, 1, 8))
     expect(() => definition.apply(mismatched, replace(1, 3))).toThrow('no adjacent shadow price')
     // A claim expires after one intervening event, so replacement delta is zero.
     let expired = definition.apply(state, meter(1, 3, 8))
     expired = definition.apply(expired, { type: 'todo/write', seq: 9, time: 0, data: { todos: [] } } as unknown as SessionEvent)
-    expect(definition.view(definition.apply(expired, replace(1, 3))).messageTokens)
-      .toBe(definition.view(state).messageTokens)
+    expect(definition.wire.view(definition.apply(expired, replace(1, 3))).messageTokens)
+      .toBe(definition.wire.view(state).messageTokens)
     // The armed claim prices exactly the next event's matching replacement.
     const armed = definition.apply(state, meter(1, 3, 8))
-    expect(definition.view(definition.apply(armed, replace(1, 3))).messageTokens)
-      .toBe(definition.view(state).messageTokens - 5 + estimateMessage(
+    expect(definition.wire.view(definition.apply(armed, replace(1, 3))).messageTokens)
+      .toBe(definition.wire.view(state).messageTokens - 5 + estimateMessage(
         createUserMessage({ content: [{ type: 'text', text: 'x' }], source: { kind: 'user' } }),
       ))
   })

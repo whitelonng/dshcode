@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-自引用 Cordis 工具集：五个面向模型的工具，操作当前 DSH 进程中的实时运行时。注册表、vm 沙箱与浏览器广播属于 [`@deepseek-ai/dsh-cordis-host-runner`](../cordis-host-runner/README.md)（`ctx.dynamic`），本工具集注入它——只装这些工具而不装 runner 的组合永远不会激活它们。沙箱语义、动态包生命周期与组合及既定决策详见[工具集 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md)。
+自引用 Cordis 工具集：五个面向模型的工具，操作当前 DSH 进程中的实时运行时。注册表、vm 沙箱与浏览器广播属于 [`@deepseek-ai/dsh-cordis-host-runner`](../cordis-host-runner/README.zh.md)（`ctx.dynamic`），本工具集注入它——只装这些工具而不装 runner 的组合永远不会激活它们。沙箱语义、动态包生命周期与组合及既定决策详见[工具集 Agent Note](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.zh.md)。
 
 ## 功能
 
@@ -14,17 +14,17 @@
 - `cordis_stop`：把 host 半 dispose 到完全停稳，并从各页面撤回浏览器半；定义存续，可以再次运行。
 - `cordis_undefine`：必要时先停止该包，再忘掉定义；它的卡片作为一条已卸载记录留在会话里。
 
-面向模型的确切 schema 见[生成的工具目录](../../../docs/tool-catalog.md)。
+面向模型的确切 schema 见[生成的工具目录](../../../docs/tool-catalog.zh.md)。
 
 动态包只存在于共享 DSH 进程内存中。它可跨后续轮次保持活跃，也可能影响同一进程中的其他会话，但会在 `cordis_stop`／`cordis_undefine`、工具集卸载或 DSH 重启后消失。它不会创建插件文件、安装任何包、修改 `cordis.yml` 或个人／项目配置、跨重启存续，也不能自动转为正式插件。若要保留实验结果，应让 agent（智能体）通过常规开发流程实现普通的本地、项目或仓库插件。每个动词都以会话为界：一个包只在定义它的那个会话里可见、可控。
 
 ## 信任立场
 
-该沙箱隔离全局变量，但不是安全边界。Node 全局变量不存在，或会重定向到 `ctx.fs`、`ctx.web`、`ctx.bash` 等 Cordis 服务；写入 `globalThis` 的内容保持局部，但 host realm helper 使逃逸成为可能。运行中的 host 半收到不含框架内部机制的 façade，但获准服务仍会影响存活运行时。动态工具 schema 与 annotation 通过迭代式 JSON 克隆和 schema 规范化跨越 realm，因此有效的深层声明受内存而非调用栈限制；含 JSON 不可见 key 的 record，以及子类化或装饰过的 schema array，会在规范化前被拒绝。应当像对待 bash 访问一样对待该工具集；参见[设计与信任立场](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.md)。
+该沙箱隔离全局变量，但不是安全边界。Node 全局变量不存在，或会重定向到 `ctx.fs`、`ctx.web`、`ctx.bash` 等 Cordis 服务；写入 `globalThis` 的内容保持局部，但 host realm helper 使逃逸成为可能。运行中的 host 半收到不含框架内部机制的 façade，但获准服务仍会影响存活运行时。动态工具 schema 与 annotation 通过迭代式 JSON 克隆和 schema 规范化跨越 realm，因此有效的深层声明受内存而非调用栈限制；含 JSON 不可见 key 的 record，以及子类化或装饰过的 schema array，会在规范化前被拒绝。应当像对待 bash 访问一样对待该工具集；参见[设计与信任立场](../../../.agents/notes/implemented/feature/2026-07-08-self-referential-cordis-toolset.zh.md)。
 
 ## 配置
 
-无。vm 求值边界（`vmTimeoutMs`）与浏览器确认窗口（`ackTimeoutMs`）属于拥有沙箱与广播的 runner 服务——见 [`@deepseek-ai/dsh-cordis-host-runner`](../cordis-host-runner/README.md#config)。
+无。vm 求值边界（`vmTimeoutMs`）与浏览器确认窗口（`ackTimeoutMs`）属于拥有沙箱与广播的 runner 服务——见 [`@deepseek-ai/dsh-cordis-host-runner`](../cordis-host-runner/README.zh.md#config)。
 
 ## 生成的 client 槽目录
 
@@ -51,7 +51,7 @@
 
 ## 导出形式
 
-Namespace 插件：命名导出 `name`／`inject`／`apply`，无默认导出（[docs/postmortem/0001](../../../docs/postmortem/0001-acp-default-export-drops-inject.md)）。它注入 `tools` 与 `dynamicCordisRunner`。
+Namespace 插件：命名导出 `name`／`inject`／`apply`，无默认导出（[docs/postmortem/0001](../../../docs/postmortem/0001-acp-default-export-drops-inject.zh.md)）。它注入 `tools` 与 `dynamicCordisRunner`。
 
 ## 模型体验
 
@@ -59,7 +59,7 @@ Namespace 插件：命名导出 `name`／`inject`／`apply`，无默认导出（
 
 #### 模型看到的内容
 
-该插件可见时，会话模型会看到生成的 [`cordis_inspect`、`cordis_define`、`cordis_run`、`cordis_stop` 和 `cordis_undefine` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-cordis)。
+该插件可见时，会话模型会看到生成的 [`cordis_inspect`、`cordis_define`、`cordis_run`、`cordis_stop` 和 `cordis_undefine` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-cordis)。
 
 #### Token 影响
 
@@ -101,4 +101,4 @@ Namespace 插件：命名导出 `name`／`inject`／`apply`，无默认导出（
 
 - **沙箱只用于约束诚实代码，并非安全边界**：可以访问沙箱全局变量上的 host realm helper，因此包代码可以触达 Node；加载该插件时，应当像授予 bash 工具一样慎重（见 § 信任立场）。
 - **`ctx` façade 不公开 `effect()`**：包代码无法注册定制 disposer；`on`／`provide`／`tools.register` 是受支持的清理路径。
-- **vm 与确认窗口这两个边界属于 runner**：见它的[已知限制](../cordis-host-runner/README.md#known-limitations-and-deferred-work)；async 的 host 半主体可逃出 `vmTimeoutMs`。
+- **vm 与确认窗口这两个边界属于 runner**：见它的[已知限制](../cordis-host-runner/README.zh.md#known-limitations-and-deferred-work)；async 的 host 半主体可逃出 `vmTimeoutMs`。

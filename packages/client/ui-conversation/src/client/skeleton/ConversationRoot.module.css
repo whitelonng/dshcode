@@ -103,6 +103,11 @@
   cursor: pointer;
 }
 
+.crumbSubagent {
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .crumb:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
 }

@@ -28,6 +28,18 @@ async function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), 'dsh-atomic-write-'))
 }
 
+/** Resolve once the lockfile exists, so contention is measured against a held lock. */
+async function waitForLock(lockPath: string): Promise<void> {
+  for (;;) {
+    try {
+      await stat(lockPath)
+      return
+    } catch {
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
+  }
+}
+
 describe('writeFileAtomic', () => {
   it('creates the file and its parents with exactly the stated mode', async () => {
     const dir = await scratch()
@@ -104,5 +116,34 @@ describe('withFileLock', () => {
       called = true
     })).rejects.toThrow(/ENOENT|ENOTDIR|not a directory/i)
     expect(called).toBe(false)
+  })
+
+  it('waits for the caller-stated limit rather than the protocol default', async () => {
+    // An operation whose work includes a network round trip legitimately holds
+    // the lock far longer than the render-and-rename the default was sized
+    // for. The limit is per call so one such operation cannot fail every other
+    // writer of the same file, and a caller that states a short one still
+    // fails fast.
+    const dir = await scratch()
+    const target = join(dir, 'document')
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const holder = withFileLock(target, () => held)
+    // The holder owns the lock once its lockfile exists; contending before
+    // that would measure nothing.
+    await waitForLock(`${target}.lock`)
+
+    // Elapsed time is the assertion that distinguishes a honoured limit from
+    // the ignored argument: without it the contender simply waits out the
+    // protocol default and fails with the same message.
+    const startedAt = Date.now()
+    await expect(withFileLock(target, async () => 'impatient', { waitMs: 50 }))
+      .rejects.toThrow(/timed out waiting for the writer lock/)
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+
+    const patient = withFileLock(target, async () => 'patient', { waitMs: 10_000 })
+    release()
+    await holder
+    expect(await patient).toBe('patient')
   })
 })

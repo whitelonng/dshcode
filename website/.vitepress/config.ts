@@ -1,12 +1,12 @@
 /** VitePress configuration for the locally projected documentation site. */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DefaultTheme, PageData } from 'vitepress'
+import type { DefaultTheme, PageData, SiteConfig } from 'vitepress'
 import type { ViteDevServer } from 'vite'
 import { withMermaid } from 'vitepress-plugin-mermaid'
-import { landingLink, orderedPages, routeLink, sectionSpec, type DocsLocale, type DocsPage, type DocsSidebar } from '../docs.ts'
-import { docsSourceFiles, projectDocs } from '../../scripts/project-doc-site.ts'
+import { landingLink, localeCollections, orderedPages, routeLink, sectionSpec, type DocsLocale, type DocsPage, type DocsSidebar } from '../docs.ts'
+import { docsSourceFiles, emitRawMarkdownPages, llmsTxt, projectDocs, rawMarkdownRoute } from '../../scripts/project-doc-site.ts'
 
 projectDocs()
 
@@ -58,14 +58,14 @@ interface GuideModules {
  */
 const guideModules = {
   root: {
-    guide: 'zh-guide',
-    develop: { label: '开发', collection: 'zh-develop' },
-    reference: { label: '参考', collection: 'zh-reference' },
+    guide: localeCollections.root[0],
+    develop: { label: '开发', collection: localeCollections.root[1] },
+    reference: { label: '参考', collection: localeCollections.root[2] },
   },
   en: {
-    guide: 'en-guide',
-    develop: { label: 'Development', collection: 'en-develop' },
-    reference: { label: 'Reference', collection: 'en-reference' },
+    guide: localeCollections.en[0],
+    develop: { label: 'Development', collection: localeCollections.en[1] },
+    reference: { label: 'Reference', collection: localeCollections.en[2] },
   },
 } satisfies Record<DocsLocale, GuideModules>
 
@@ -108,6 +108,46 @@ function watchCanonicalDocs(server: ViteDevServer): void {
   server.watcher.on('change', (changed) => {
     if (!sources.includes(changed)) return
     projectDocs()
+  })
+}
+
+/**
+ * Serve the raw-Markdown twin of each route and llms.txt during development,
+ * matching what `buildEnd` emits into the static build. Pages project from
+ * their canonical sources per request, so an edit shows without a rebuild.
+ */
+function serveRawMarkdown(server: ViteDevServer): void {
+  server.middlewares.use((req, res, next) => {
+    if (req.url === undefined || (req.method !== 'GET' && req.method !== 'HEAD')) {
+      next()
+      return
+    }
+    // The dev client imports page modules at these same `.md` URLs, and a
+    // module script must reach Vite's transform. Browsers declare the purpose:
+    // `script` for module imports, `document` for address-bar navigation.
+    // Header-less clients (curl, agents) read the raw twin. In-page fetch()
+    // (`empty`) also passes to Vite — a deliberate dev-only divergence that
+    // keeps Vite's own requests unbroken, while production static hosting
+    // answers such a fetch with the raw file.
+    const fetchDest = req.headers['sec-fetch-dest']
+    if (fetchDest !== undefined && fetchDest !== 'document') {
+      next()
+      return
+    }
+    const pathname = req.url.split(/[?#]/, 1)[0] ?? ''
+    const sitePath = pathname.startsWith(base) ? pathname.slice(base.length) : pathname.replace(/^\//, '')
+    if (sitePath === 'llms.txt') {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.end(llmsTxt({ base, ...siteIdentity }))
+      return
+    }
+    const content = sitePath.endsWith('.md') ? rawMarkdownRoute(sitePath) : undefined
+    if (content === undefined) {
+      next()
+      return
+    }
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+    res.end(content)
   })
 }
 
@@ -162,6 +202,12 @@ const sharedTheme: Pick<DefaultTheme.Config, 'search' | 'socialLinks' | 'editLin
 
 /** Site base path, carrying the leading and trailing slashes VitePress requires. */
 const base = process.env.DOCS_BASE ?? '/'
+
+/** Site identity shared by the VitePress configuration and the llms.txt index. */
+const siteIdentity = {
+  title: 'DeepSeek Harness',
+  description: '用于构建 Agent Harness 的插件化 SDK',
+}
 
 /**
  * The DeepSeek wordmark, inlined so its `currentColor` fills follow the active
@@ -247,9 +293,14 @@ function siteTitle(previewTag: string): string {
 }
 
 export default withMermaid({
-  title: 'DeepSeek Harness',
-  description: '用于构建 Agent Harness 的插件化 SDK',
+  title: siteIdentity.title,
+  description: siteIdentity.description,
   base,
+  /** Emit the raw-Markdown twin of every route plus llms.txt beside the rendered site. */
+  buildEnd(siteConfig: SiteConfig) {
+    emitRawMarkdownPages(siteConfig.outDir)
+    writeFileSync(resolve(siteConfig.outDir, 'llms.txt'), llmsTxt({ base, ...siteIdentity }))
+  },
   head: [
     // VitePress leaves head hrefs untouched, so the base belongs here explicitly.
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
@@ -322,7 +373,10 @@ export default withMermaid({
     plugins: [
       {
         name: 'deepseek-harness-doc-projector',
-        configureServer: watchCanonicalDocs,
+        configureServer(server) {
+          watchCanonicalDocs(server)
+          serveRawMarkdown(server)
+        },
       },
     ],
   },
@@ -330,11 +384,29 @@ export default withMermaid({
     config(md) {
       const renderText = md.renderer.rules.text
       const renderCode = md.renderer.rules.code_inline
-      if (renderText === undefined || renderCode === undefined) {
-        throw new Error('VitePress Markdown renderer is missing its text or inline-code rule.')
-      }
+      const renderFence = md.renderer.rules.fence
+      if (renderText === undefined) throw new Error('VitePress Markdown renderer is missing the text rendering rule.')
+      if (renderCode === undefined) throw new Error('VitePress Markdown renderer is missing the inline-code rendering rule.')
+      if (renderFence === undefined) throw new Error('VitePress Markdown renderer is missing the fence rendering rule.')
       md.renderer.rules.text = (...args) => escapeVueInterpolation(renderText(...args))
       md.renderer.rules.code_inline = (...args) => escapeVueInterpolation(renderCode(...args))
+      const renderedFences = new Map<string, string>()
+      md.renderer.rules.fence = (...args) => {
+        const [tokens, index] = args
+        const token = tokens[index]
+        if (token === undefined) throw new Error('VitePress code-fence renderer received no token.')
+        // Mermaid output embeds the token position, and VitePress snippets resolve source files during rendering.
+        if (['mermaid', 'mmd'].includes(token.info.trim().split(/\s+/, 1)[0] ?? '')) return renderFence(...args)
+        if (Reflect.get(token, 'src') !== undefined) return renderFence(...args)
+        // Keep the cache build-local; a dev renderer can survive many HMR updates.
+        if (process.env.NODE_ENV !== 'production') return renderFence(...args)
+        const key = JSON.stringify([token.content, token.info, token.markup, token.attrs])
+        const cached = renderedFences.get(key)
+        if (cached !== undefined) return cached
+        const html = renderFence(...args)
+        renderedFences.set(key, html)
+        return html
+      }
     },
   },
   mermaid: {},

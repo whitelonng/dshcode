@@ -10,11 +10,11 @@ DeepSeek Harness 有两路出站遥测数据流。在内测阶段，共享基础
 
 ## 决策
 
-两路数据流都使用 `DSH_TELEMETRY_MODE` 作为正向授权配置。未设置和空值都解析为 `DISABLED`。`@deepseek-ai/dsh-session-telemetry-otel` 也将省略的 `mode` 解析为 `DISABLED`；该模式不构造 OTel 提供方、处理器或导出器，并将反馈留在本地会话日志中。dsh 共享基础配置继续挂载后端配置行，使禁用模式仍可在记录反馈时说明没有共享任何内容。部署方通过 `FULL` 或 `FEEDBACK_ONLY` 显式启用 Session Log 共享；只有 `FULL` 还允许 dsh-sdk 启动器上报。任何非空 `DSH_TELEMETRY_DISABLED` 仍是具有最高优先级的加载前硬性退出开关。[默认挂载决策](2026-07-31-web-telemetry-default-mount.md)继续负责 endpoint、批处理节奏和退出排空设置。
+两路数据流都使用 `DSH_TELEMETRY_MODE` 作为正向授权配置。未设置和空值都解析为 `DISABLED`。`@deepseek-ai/dsh-session-telemetry-otel` 也将省略的 `mode` 解析为 `DISABLED`；该模式不构造 OTel 提供方、处理器或导出器，并将反馈留在本地会话日志中。dsh 共享基础配置继续挂载后端配置行，使禁用模式仍可在记录反馈时说明没有共享任何内容。部署方通过 `FULL` 或 `FEEDBACK_ONLY` 显式启用 Session Log 共享；只有 `FULL` 还允许 dsh-sdk 启动器上报。任何非空 `DSH_TELEMETRY_DISABLED` 仍是具有最高优先级的加载前硬性退出开关。[默认挂载决策](2026-07-31-web-telemetry-default-mount.zh.md)继续负责 endpoint、批处理节奏和退出排空设置。
 
-dsh-sdk 启动器读取同一变量，不解析 `cordis.yml`，也不启动 Cordis。`FULL` 允许上报；`FEEDBACK_ONLY`、`DISABLED`、未设置和空值都会拒绝。授权在命令执行前从启动环境冻结：`dsh-sdk start` 会加载项目 `.env`，项目代码也能修改 `process.env`，若在执行后解析，项目便能自行授权上报其自身配置，而[配置来源所有权决策](../architecture/2026-08-04-configuration-source-ownership.md)对整个 `DSH_*` 命名空间禁止这种行为。在该边界上，不受支持的模式按拒绝处理而非抛出，因为遥测不得改变命令结果。此规则在启动器及其提案被[SDK 项目工具链移除决策](../simplification/2026-08-11-remove-sdk-project-toolchain.md)删除之前，仅取代了启动器默认允许上报的规则。
+dsh-sdk 启动器读取同一变量，不解析 `cordis.yml`，也不启动 Cordis。`FULL` 允许上报；`FEEDBACK_ONLY`、`DISABLED`、未设置和空值都会拒绝。授权在命令执行前从启动环境冻结：`dsh-sdk start` 会加载项目 `.env`，项目代码也能修改 `process.env`，若在执行后解析，项目便能自行授权上报其自身配置，而[配置来源所有权决策](../architecture/2026-08-04-configuration-source-ownership.zh.md)对整个 `DSH_*` 命名空间禁止这种行为。在该边界上，不受支持的模式按拒绝处理而非抛出，因为遥测不得改变命令结果。此规则在启动器及其提案被[SDK 项目工具链移除决策](../simplification/2026-08-11-remove-sdk-project-toolchain.zh.md)删除之前，仅取代了启动器默认允许上报的规则。
 
-[CLI reference README](../../../../apps/cli/reference/README.md) 记录了这一部署口径：会话日志上传默认关闭，`DSH_TELEMETRY_MODE=FEEDBACK_ONLY` 和 `DSH_TELEMETRY_MODE=FULL` 是两种显式启用选项，显式开启后的导出可能包含完整会话内容。恢复后的[测试阶段引导声明](2026-08-13-shared-modal-product-onboarding.md)不包含遥测文案，因此产品仍不提供任何关于开启上传的提示。
+[CLI reference README](../../../../apps/cli/reference/README.zh.md) 记录了这一部署口径：会话日志上传默认关闭，`DSH_TELEMETRY_MODE=FEEDBACK_ONLY` 和 `DSH_TELEMETRY_MODE=FULL` 是两种显式启用选项，显式开启后的导出可能包含完整会话内容。恢复后的[测试阶段引导声明](2026-08-13-shared-modal-product-onboarding.zh.md)不包含遥测文案，因此产品仍不提供任何关于开启上传的提示。
 
 ## 考虑过的替代方案
 

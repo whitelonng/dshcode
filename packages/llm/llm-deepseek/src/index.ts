@@ -22,8 +22,20 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { getOrCreateAnonymousUserId, type AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import {
   DEFAULT_CONTEXT_WINDOW,
-  DEFAULT_MAX_REQUEST_IMAGE_BYTES,
+  DEFAULT_FILE_EXPIRY_SECONDS,
+  DEFAULT_FILE_QUOTA_CLEANUP_BATCH,
+  DEFAULT_FILE_REFRESH_MARGIN_SECONDS,
+  DEFAULT_FILES_API_TIMEOUT_MS,
+  DEFAULT_IMAGE_OFFLOAD_BYTE_QUANTUM,
+  DEFAULT_IMAGE_OFFLOAD_COUNT_QUANTUM,
+  DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM,
+  DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET,
+  DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES,
+  DEFAULT_MAX_IMAGES_PER_REQUEST,
+  DEFAULT_MAX_REQUEST_FILES_BYTES,
   DEFAULT_MAX_TOKENS,
+  DEFAULT_REQUEST_IMAGE_MAX_BYTES,
+  DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   DeepSeekAdapter,
 } from './adapter.ts'
@@ -31,8 +43,20 @@ import type { DeepSeekCatalogModel, DeepSeekConnectionOptions } from './adapter.
 
 export {
   DEFAULT_CONTEXT_WINDOW,
-  DEFAULT_MAX_REQUEST_IMAGE_BYTES,
+  DEFAULT_FILE_EXPIRY_SECONDS,
+  DEFAULT_FILE_QUOTA_CLEANUP_BATCH,
+  DEFAULT_FILE_REFRESH_MARGIN_SECONDS,
+  DEFAULT_FILES_API_TIMEOUT_MS,
+  DEFAULT_IMAGE_OFFLOAD_BYTE_QUANTUM,
+  DEFAULT_IMAGE_OFFLOAD_COUNT_QUANTUM,
+  DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM,
+  DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET,
+  DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES,
+  DEFAULT_MAX_IMAGES_PER_REQUEST,
+  DEFAULT_MAX_REQUEST_FILES_BYTES,
   DEFAULT_MAX_TOKENS,
+  DEFAULT_REQUEST_IMAGE_MAX_BYTES,
+  DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   DeepSeekAdapter,
 } from './adapter.ts'
@@ -42,6 +66,14 @@ export type {
   DeepSeekConnectionOptions,
   DeepSeekReasoningLevel,
 } from './adapter.ts'
+export { DeepSeekFileStore, MAX_CHAT_IMAGE_BYTES } from './file-store.ts'
+export type { DeepSeekFileConnection, DeepSeekFilePolicy, DeepSeekFileReference } from './file-store.ts'
+export { DeepSeekFilesClient, MAX_FILE_EXPIRY_SECONDS, MAX_FILE_UPLOAD_BYTES, MAX_STORED_FILE_BYTES, MAX_STORED_FILE_COUNT, MIN_FILE_EXPIRY_SECONDS } from './files-api.ts'
+export type { DeepSeekFileObject, DeepSeekFilePage } from './files-api.ts'
+export { DeepSeekFileId } from './file-id.ts'
+export type { DeepSeekFileId as DeepSeekFileIdType } from './file-id.ts'
+export { DeepSeekUploadIndex, deepSeekFileScope } from './upload-index.ts'
+export type { DeepSeekUploadRecord } from './upload-index.ts'
 export type { RequestDefaults } from './serialize.ts'
 export type * from './types.ts'
 
@@ -56,6 +88,14 @@ const PROVIDER = 'deepseek-official'
 const DEFAULT_MODELS: DeepSeekCatalogModel[] = [
   { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', contextWindow: DEFAULT_CONTEXT_WINDOW },
   { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', contextWindow: DEFAULT_CONTEXT_WINDOW },
+  {
+    id: 'deepseek-v4-flash-vision-exp',
+    name: 'DeepSeek-V4-Flash-Vision-Exp',
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
+    inputModalities: ['text', 'image'],
+    imagePixelBudget: DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET,
+    imageMaxBytes: DEFAULT_REQUEST_IMAGE_MAX_BYTES,
+  },
 ]
 
 const MODEL_MODALITIES = ['text', 'image'] as const satisfies readonly ModelModality[]
@@ -81,12 +121,30 @@ export interface Config {
   maxTokens?: number
   /** Positive context capacity used when the selected model has no exact value (default 1,000,000). */
   defaultContextWindow?: number
-  /** Advisory models shown by discovery consumers; defaults to V4 Flash and V4 Pro. */
+  /** Advisory models shown by discovery consumers; defaults to V4 Flash, V4 Pro, and V4 Flash Vision Exp. */
   models?: DeepSeekCatalogModel[]
   /** Maximum provider idle time while one stream read is outstanding (default five minutes). */
   streamIdleTimeoutMs?: number
-  /** Maximum accumulated base64 image payload per request (default 20 MiB). */
-  maxRequestImageBytes?: number
+  /** Maximum accumulated file-referenced image bytes per chat request (default 128 MiB). */
+  maxRequestFilesBytes?: number
+  /** Maximum accumulated base64 image payload after Files API fallback (default 20 MiB). */
+  maxInlineRequestImageBytes?: number
+  /** Maximum number of represented images per chat request (default 600). */
+  maxImagesPerRequest?: number
+  /** Raw-byte removal step after the request exceeds its file bound (default 64 MiB). */
+  imageOffloadByteQuantum?: number
+  /** Base64-byte removal step after inline fallback exceeds its bound (default 10 MiB). */
+  inlineImageOffloadByteQuantum?: number
+  /** Image-count removal step after the request exceeds its count bound (default 20). */
+  imageOffloadCountQuantum?: number
+  /** Maximum duration of one request-image Files API resolution (default one minute). */
+  filesApiTimeoutMs?: number
+  /** Explicit lifetime assigned to each uploaded image (default seven days). */
+  fileExpiresAfterSeconds?: number
+  /** Remaining lifetime below which an indexed file is replaced (default one hour). */
+  fileRefreshMarginSeconds?: number
+  /** Oldest harness-owned files deleted before one quota-recovery upload retry (default 100). */
+  fileQuotaCleanupBatch?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
   retryPolicy?: RetryPolicyConfig
 }
@@ -108,6 +166,9 @@ const catalogModel: z<DeepSeekCatalogModel> = z.object({
     z.const(false),
     z.dict(z.union([z.string(), z.const(null)]), z.union(['off', 'high', 'max'])),
   ]) as unknown as z<Exclude<DeepSeekCatalogModel['reasoningEfforts'], undefined>>,
+  imagePixelBudget: z.number().step(1).min(1),
+  imageMaxBytes: z.number().step(1).min(1),
+  imageDetail: z.union(['auto', 'low']),
 })
 
 export const Config: z<Config> = z.object({
@@ -119,7 +180,16 @@ export const Config: z<Config> = z.object({
   defaultContextWindow: z.number().step(1).min(1).default(DEFAULT_CONTEXT_WINDOW),
   models: z.array(catalogModel).default(DEFAULT_MODELS),
   streamIdleTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STREAM_IDLE_TIMEOUT_MS),
-  maxRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_IMAGE_BYTES),
+  maxRequestFilesBytes: z.number().step(1).min(1).default(DEFAULT_MAX_REQUEST_FILES_BYTES),
+  maxInlineRequestImageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES),
+  maxImagesPerRequest: z.number().step(1).min(1).default(DEFAULT_MAX_IMAGES_PER_REQUEST),
+  imageOffloadByteQuantum: z.number().step(1).min(1).default(DEFAULT_IMAGE_OFFLOAD_BYTE_QUANTUM),
+  inlineImageOffloadByteQuantum: z.number().step(1).min(1).default(DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM),
+  imageOffloadCountQuantum: z.number().step(1).min(1).default(DEFAULT_IMAGE_OFFLOAD_COUNT_QUANTUM),
+  filesApiTimeoutMs: z.number().min(Number.MIN_VALUE).max(MAX_TIMER_DELAY_MS).default(DEFAULT_FILES_API_TIMEOUT_MS),
+  fileExpiresAfterSeconds: z.number().step(1).min(3_600).max(2_592_000).default(DEFAULT_FILE_EXPIRY_SECONDS),
+  fileRefreshMarginSeconds: z.number().step(1).min(0).default(DEFAULT_FILE_REFRESH_MARGIN_SECONDS),
+  fileQuotaCleanupBatch: z.number().step(1).min(1).max(1_000).default(DEFAULT_FILE_QUOTA_CLEANUP_BATCH),
   retryPolicy: RetryPolicySchema,
 })
 
@@ -169,6 +239,19 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
     if (new Set(inputModalities).size !== inputModalities.length) {
       throw new Error(`llm-deepseek: catalog model "${model.id}" inputModalities must not contain duplicates`)
     }
+    const hasImage = inputModalities.includes('image')
+    if (!hasImage && (model.imagePixelBudget !== undefined
+      || model.imageMaxBytes !== undefined || model.imageDetail !== undefined)) {
+      throw new Error(`llm-deepseek: text-only catalog model "${model.id}" cannot declare image request limits`)
+    }
+    if (model.imagePixelBudget !== undefined
+      && (!Number.isSafeInteger(model.imagePixelBudget) || model.imagePixelBudget <= 0)) {
+      throw new Error(`llm-deepseek: catalog model "${model.id}" imagePixelBudget must be a positive safe integer`)
+    }
+    if (model.imageMaxBytes !== undefined
+      && (!Number.isSafeInteger(model.imageMaxBytes) || model.imageMaxBytes <= 0)) {
+      throw new Error(`llm-deepseek: catalog model "${model.id}" imageMaxBytes must be a positive safe integer`)
+    }
     if (seen.has(model.id)) throw new Error(`llm-deepseek: duplicate catalog model "${model.id}"`)
     seen.add(model.id)
     if (model.reasoningEfforts !== undefined && model.reasoningEfforts !== false) {
@@ -202,6 +285,16 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
       ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
       inputModalities: [...inputModalities],
       ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
+      ...hasImage
+        ? {
+          imagePixelBudget: model.imagePixelBudget
+            ?? (model.imageDetail === 'low'
+              ? DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET
+              : DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET),
+          imageMaxBytes: model.imageMaxBytes ?? DEFAULT_REQUEST_IMAGE_MAX_BYTES,
+          ...model.imageDetail === undefined ? {} : { imageDetail: model.imageDetail },
+        }
+        : {},
     }
   })
 }
@@ -240,9 +333,65 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
       `llm-deepseek: streamIdleTimeoutMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`,
     )
   }
-  const maxRequestImageBytes = config.maxRequestImageBytes ?? DEFAULT_MAX_REQUEST_IMAGE_BYTES
-  if (!Number.isSafeInteger(maxRequestImageBytes) || maxRequestImageBytes <= 0) {
-    throw new Error('llm-deepseek: maxRequestImageBytes must be a positive safe integer')
+  const maxRequestFilesBytes = config.maxRequestFilesBytes ?? DEFAULT_MAX_REQUEST_FILES_BYTES
+  if (!Number.isSafeInteger(maxRequestFilesBytes) || maxRequestFilesBytes <= 0) {
+    throw new Error('llm-deepseek: maxRequestFilesBytes must be a positive safe integer')
+  }
+  const maxInlineRequestImageBytes = config.maxInlineRequestImageBytes ?? DEFAULT_MAX_INLINE_REQUEST_IMAGE_BYTES
+  if (!Number.isSafeInteger(maxInlineRequestImageBytes) || maxInlineRequestImageBytes <= 0) {
+    throw new Error('llm-deepseek: maxInlineRequestImageBytes must be a positive safe integer')
+  }
+  const maxImagesPerRequest = config.maxImagesPerRequest ?? DEFAULT_MAX_IMAGES_PER_REQUEST
+  if (!Number.isSafeInteger(maxImagesPerRequest) || maxImagesPerRequest <= 0) {
+    throw new Error('llm-deepseek: maxImagesPerRequest must be a positive safe integer')
+  }
+  const imageOffloadByteQuantum = config.imageOffloadByteQuantum ?? DEFAULT_IMAGE_OFFLOAD_BYTE_QUANTUM
+  if (!Number.isSafeInteger(imageOffloadByteQuantum) || imageOffloadByteQuantum <= 0) {
+    throw new Error('llm-deepseek: imageOffloadByteQuantum must be a positive safe integer')
+  }
+  if (imageOffloadByteQuantum > maxRequestFilesBytes) {
+    throw new Error('llm-deepseek: imageOffloadByteQuantum must not exceed maxRequestFilesBytes')
+  }
+  const inlineImageOffloadByteQuantum = config.inlineImageOffloadByteQuantum
+    ?? DEFAULT_INLINE_IMAGE_OFFLOAD_BYTE_QUANTUM
+  if (!Number.isSafeInteger(inlineImageOffloadByteQuantum) || inlineImageOffloadByteQuantum <= 0) {
+    throw new Error('llm-deepseek: inlineImageOffloadByteQuantum must be a positive safe integer')
+  }
+  if (inlineImageOffloadByteQuantum > maxInlineRequestImageBytes) {
+    throw new Error('llm-deepseek: inlineImageOffloadByteQuantum must not exceed maxInlineRequestImageBytes')
+  }
+  const imageOffloadCountQuantum = config.imageOffloadCountQuantum ?? DEFAULT_IMAGE_OFFLOAD_COUNT_QUANTUM
+  if (!Number.isSafeInteger(imageOffloadCountQuantum) || imageOffloadCountQuantum <= 0) {
+    throw new Error('llm-deepseek: imageOffloadCountQuantum must be a positive safe integer')
+  }
+  if (imageOffloadCountQuantum > maxImagesPerRequest) {
+    throw new Error('llm-deepseek: imageOffloadCountQuantum must not exceed maxImagesPerRequest')
+  }
+  const filesApiTimeoutMs = config.filesApiTimeoutMs ?? DEFAULT_FILES_API_TIMEOUT_MS
+  if (!Number.isFinite(filesApiTimeoutMs)
+    || filesApiTimeoutMs <= 0
+    || filesApiTimeoutMs > MAX_TIMER_DELAY_MS) {
+    throw new Error(
+      `llm-deepseek: filesApiTimeoutMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`,
+    )
+  }
+  const fileExpiresAfterSeconds = config.fileExpiresAfterSeconds ?? DEFAULT_FILE_EXPIRY_SECONDS
+  if (!Number.isSafeInteger(fileExpiresAfterSeconds)
+    || fileExpiresAfterSeconds < 3_600
+    || fileExpiresAfterSeconds > 2_592_000) {
+    throw new Error('llm-deepseek: fileExpiresAfterSeconds must be an integer from 3600 through 2592000')
+  }
+  const fileRefreshMarginSeconds = config.fileRefreshMarginSeconds ?? DEFAULT_FILE_REFRESH_MARGIN_SECONDS
+  if (!Number.isSafeInteger(fileRefreshMarginSeconds)
+    || fileRefreshMarginSeconds < 0
+    || fileRefreshMarginSeconds >= fileExpiresAfterSeconds) {
+    throw new Error('llm-deepseek: fileRefreshMarginSeconds must be a non-negative integer below fileExpiresAfterSeconds')
+  }
+  const fileQuotaCleanupBatch = config.fileQuotaCleanupBatch ?? DEFAULT_FILE_QUOTA_CLEANUP_BATCH
+  if (!Number.isSafeInteger(fileQuotaCleanupBatch)
+    || fileQuotaCleanupBatch < 1
+    || fileQuotaCleanupBatch > 1_000) {
+    throw new Error('llm-deepseek: fileQuotaCleanupBatch must be an integer from 1 through 1000')
   }
   return {
     apiKeyEnv: credentialRef(config.apiKeyEnv ?? DEFAULT_API_KEY_ENV),
@@ -257,7 +406,18 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
     defaultContextWindow: config.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW,
     models: resolveModels(config.models),
     streamIdleTimeoutMs,
-    maxRequestImageBytes,
+    maxRequestFilesBytes,
+    maxInlineRequestImageBytes,
+    maxImagesPerRequest,
+    imageOffloadByteQuantum,
+    inlineImageOffloadByteQuantum,
+    imageOffloadCountQuantum,
+    filesApiTimeoutMs,
+    filePolicy: {
+      expiresAfterSeconds: fileExpiresAfterSeconds,
+      refreshMarginSeconds: fileRefreshMarginSeconds,
+      quotaCleanupBatch: fileQuotaCleanupBatch,
+    },
     retryPolicy: resolveRetryPolicy(config.retryPolicy, 'llm-deepseek: retryPolicy'),
   }
 }

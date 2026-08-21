@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-06-29-todo-write-tool.md
 2026-06-29-todo-write-tool.md: 74af8a66ea86a474533b9c53d6431f7e0026192c
-2026-06-29-todo-write-tool.zh.md: 027b5ed46d8cfc1d1d696021af5d11d6f243b747
+2026-06-29-todo-write-tool.zh.md: 223268ee1e9d330df3299651a594b7b2ed08e1ce

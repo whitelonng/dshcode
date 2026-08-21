@@ -34,5 +34,5 @@ Status: implemented
 
 ## 相关
 
-- [将每条消息创建为带标识的不可变值](../architecture/2026-07-28-identified-immutable-message-values.md)：该记录负责当前的消息标识与不可变性约定。
-- [会话持久化作为抽象服务](../architecture/2026-06-14-session-persistence.md)：该记录负责仅追加后端与恢复边界。
+- [将每条消息创建为带标识的不可变值](../architecture/2026-07-28-identified-immutable-message-values.zh.md)：该记录负责当前的消息标识与不可变性约定。
+- [会话持久化作为抽象服务](../architecture/2026-06-14-session-persistence.zh.md)：该记录负责仅追加后端与恢复边界。

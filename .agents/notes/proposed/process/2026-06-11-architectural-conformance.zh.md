@@ -6,7 +6,7 @@ Status: proposed
 
 ## 问题
 
-目前有两项架构保证仅存在于行文中：（1）没有任何组件依赖具体的 agent loop（智能体循环）包（[微内核承诺](../../implemented/architecture/2026-06-11-microkernel-event-taxonomy.md)）；（2）每个 LlmAdapter 都正确遵循分片协议。二者都应由机制强制执行（[质量门禁原则](../../implemented/process/2026-06-11-quality-gates.md)）。
+目前有两项架构保证仅存在于行文中：（1）没有任何组件依赖具体的 agent loop（智能体循环）包（[微内核承诺](../../implemented/architecture/2026-06-11-microkernel-event-taxonomy.zh.md)）；（2）每个 LlmAdapter 都正确遵循分片协议。二者都应由机制强制执行（[质量门禁原则](../../implemented/process/2026-06-11-quality-gates.zh.md)）。
 
 ## 提案
 
@@ -18,7 +18,7 @@ Status: proposed
 - `vendor/*` 禁止从 `packages/*` 导入。
 - 分层：dsh-llm 不导入其他 dsh 包；dsh-session 仅导入 dsh-llm；以此类推（packages/README.md 中的依赖表，强制执行）。
 
-**适配器一致性套件**位于 dsh-llm（`@deepseek-ai/dsh-llm/conformance`）：一个以适配器工厂为参数的可复用 vitest 套件，用于断言分片协议约定，包括每个块内的索引单调递增、某个索引出现 `block-end` 后不再接收增量、恰好出现一个 `finish`、用量至多出现一次、每个 `tool-call-delta` 都携带调用 id，并且及时响应 abort。当前先对 mock 运行；DeepSeek V4 适配器从第一天起继承该套件。还可以选择提供开发模式下的 `strictAdapter()` 包装层，在调试标志开启时于运行时强制执行相同规则（与 [开发模式不变式](../../implemented/architecture/2026-06-11-dev-invariants-over-deep-readonly.md) 配对）。
+**适配器一致性套件**位于 dsh-llm（`@deepseek-ai/dsh-llm/conformance`）：一个以适配器工厂为参数的可复用 vitest 套件，用于断言分片协议约定，包括每个块内的索引单调递增、某个索引出现 `block-end` 后不再接收增量、恰好出现一个 `finish`、用量至多出现一次、每个 `tool-call-delta` 都携带调用 id，并且及时响应 abort。当前先对 mock 运行；DeepSeek V4 适配器从第一天起继承该套件。还可以选择提供开发模式下的 `strictAdapter()` 包装层，在调试标志开启时于运行时强制执行相同规则（与 [开发模式不变式](../../implemented/architecture/2026-06-11-dev-invariants-over-deep-readonly.zh.md) 配对）。
 
 ## 计划
 

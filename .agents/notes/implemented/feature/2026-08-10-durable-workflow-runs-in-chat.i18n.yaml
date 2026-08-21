@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-10-durable-workflow-runs-in-chat.md
 2026-08-10-durable-workflow-runs-in-chat.md: 817fd4debd93a4768904e3934456ebdd4bdaa896
-2026-08-10-durable-workflow-runs-in-chat.zh.md: 7b09708d94783de5aff9a9fd59757120c661775a
+2026-08-10-durable-workflow-runs-in-chat.zh.md: 1a31e54dc9bf52884c118884c24c6856aad399a0

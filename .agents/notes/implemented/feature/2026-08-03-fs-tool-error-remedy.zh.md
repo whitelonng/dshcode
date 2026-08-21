@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-受防护的 `write` 与 `edit` 失败以只陈述条件、不给出唯一正确恢复方式的消息到达模型：`FS_STALE_VERSION`（「file changed since it was read」）与 `FS_NOT_OBSERVED`（「edit requires reading … first」）。模型必须自行猜测恢复方式是重新读取（或首次读取）后重试，而基于结构化错误码路由的重试/权限/UI 层看到的也是同一段消息文本。提供方拥有的消息属于存储 seam 的面向机器词汇（[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.md)），因此恢复指令不能放在那里，否则会把面向模型的措辞泄漏给 `FsError` 的每个消费方。
+受防护的 `write` 与 `edit` 失败以只陈述条件、不给出唯一正确恢复方式的消息到达模型：`FS_STALE_VERSION`（「file changed since it was read」）与 `FS_NOT_OBSERVED`（「edit requires reading … first」）。模型必须自行猜测恢复方式是重新读取（或首次读取）后重试，而基于结构化错误码路由的重试/权限/UI 层看到的也是同一段消息文本。提供方拥有的消息属于存储 seam 的面向机器词汇（[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.zh.md)），因此恢复指令不能放在那里，否则会把面向模型的措辞泄漏给 `FsError` 的每个消费方。
 
 ## 决策
 
@@ -21,7 +21,7 @@ Status: implemented
 
 ## 考虑过的替代方案
 
-- **在 `dsh-fs` / `dsh-fs-local` 的提供方消息中追加恢复指令。** 被拒绝：这些消息是面向机器的 seam 词汇，被重试、权限、UI 和面向模型的各层消费；面向模型的措辞应位于模型边界，即 `dsh-tool-fs` 已经拥有结果格式化之处（[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.md)）。
+- **在 `dsh-fs` / `dsh-fs-local` 的提供方消息中追加恢复指令。** 被拒绝：这些消息是面向机器的 seam 词汇，被重试、权限、UI 和面向模型的各层消费；面向模型的措辞应位于模型边界，即 `dsh-tool-fs` 已经拥有结果格式化之处（[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.zh.md)）。
 - **改为在提示词引导中加入恢复方式。** 被拒绝：失败发生在任务中途；静态指令无法可靠地影响重试决策，而错误消息恰好在模型必须行动时出现。
 - **用新的 `FsError` 错误码表达恢复指令。** 被拒绝：这两种失败对应的条件，重试层本就已经处理；拆分错误码会使相同语义采用不同路由。
 
@@ -29,4 +29,4 @@ Status: implemented
 
 两个错误码的模型可见文本发生变化；`fs-policy-reject` 无密钥快照被重新录制，`dsh-tool-fs` 与 `dsh-fs-observation-policy` 的 README 逐字固定追加后的文本。单元测试直接覆盖包装层（恢复指令文本、错误码保留、cause 链、其他错误码与非 `FsError` 值的透传），组装后的工具路径断言两个错误码的恢复指令都到达模型。
 
-[文件系统缺失观测后续决策](../bug-fix/2026-08-09-filesystem-absence-observation.md)使外部删除场景下的陈旧恢复指令能够生效。失败的重新读取仍返回 `FS_NOT_FOUND`，但会记录确认缺失：随后 edit 返回 `FS_NOT_FOUND`，不再附加陈旧恢复指令；write 则以原子 `createIfAbsent` 重试，并保留任何并发创建者写入的文件。
+[文件系统缺失观测后续决策](../bug-fix/2026-08-09-filesystem-absence-observation.zh.md)使外部删除场景下的陈旧恢复指令能够生效。失败的重新读取仍返回 `FS_NOT_FOUND`，但会记录确认缺失：随后 edit 返回 `FS_NOT_FOUND`，不再附加陈旧恢复指令；write 则以原子 `createIfAbsent` 重试，并保留任何并发创建者写入的文件。

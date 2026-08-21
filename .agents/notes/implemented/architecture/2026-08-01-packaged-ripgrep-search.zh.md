@@ -24,11 +24,11 @@ Status: implemented
 
 **让 `rgPath` 可注入（配置字段或环境变量覆盖），让测试与快照继续使用替身二进制。** 否决：这会新增一个只有测试钩子会消费的公开部署面，而真实二进制本身具有足够的确定性——通过 fixture（测试前置数据）的 mtime 即可直接钉住；打包二进制就是部署形态，测试应当拿它来测。
 
-**改用纯 JS 的 glob/搜索引擎（如 `picomatch`/`tinyglobby`）。** 否决：[依赖替换审计](../../rejected/simplification/2026-07-26-dependency-swaps-rejected-by-nih-audit.md) 已基于「不存在 glob 引擎」的证据否决过该方向；ripgrep 语义（`--sort=modified`、VCS 剪枝、JSON 传输、正则方言）就是工具约定。
+**改用纯 JS 的 glob/搜索引擎（如 `picomatch`/`tinyglobby`）。** 否决：[依赖替换审计](../../rejected/simplification/2026-07-26-dependency-swaps-rejected-by-nih-audit.zh.md) 已基于「不存在 glob 引擎」的证据否决过该方向；ripgrep 语义（`--sort=modified`、VCS 剪枝、JSON 传输、正则方言）就是工具约定。
 
 ## 后果
 
-- 发现工具在打包二进制覆盖的每个平台（darwin/linux/win32，x64/arm64）上开箱即用，无需宿主安装；交付的 TUI/Web 工具清单把 `glob`/`grep` 变为固定成员（见 [拉平交付的工具清单](../feature/2026-07-31-even-out-shipped-tool-rosters.md)）。
+- 发现工具在打包二进制覆盖的每个平台（darwin/linux/win32，x64/arm64）上开箱即用，无需宿主安装；交付的 TUI/Web 工具清单把 `glob`/`grep` 变为固定成员（见 [拉平交付的工具清单](../feature/2026-07-31-even-out-shipped-tool-rosters.zh.md)）。
 - shell 字符串攻击面消失：恶意模式只是不具执行性的 argv 元素，由集成套件钉住；该套件现在也在 Windows 上运行（此前没有系统 `rg` 时它自行跳过）。
 - spawn 不受沙箱约束（普通的 `ctx.subprocess` 调用），因此前缀 `--no-config`：宿主的 `RIPGREP_CONFIG_PATH`（或二进制旁的 `rg.conf`）否则可注入 `--pre` 预处理器，对每个匹配文件执行任意命令。加上 `--no-config` 后，任何配置文件——因而任何预处理器——都无法触及搜索。
 - 原始输出溢出路径的形态改变：旧的 bash 承载路径继承了 bash-local 常开的 spill，可能留下没人读的多 MB 临时文件；subprocess seam 现在无 spill 收集，溢出是纯粹的错误（`SEARCH_RAW_OUTPUT_OVERFLOW`，"narrow pattern, path, or include and retry"），不返回任何内容。

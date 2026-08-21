@@ -28,7 +28,7 @@ The repository requires `^22.19.0 || >=24.0.0`, and this worker dependency graph
 
 Every relative import that names a type is marked, with `import type` or the inline `type` modifier. `tsconfig.base.json` sets `verbatimModuleSyntax: false`, so an unmarked type import is elided at build time and passes both `typecheck` and the bundle, while Node strip mode keeps the specifier and fails at load with `does not provide an export named`. Marking is mandatory here even though no compiler or lint rule demands it.
 
-`packages/code-runtime/code-runtime-worker-thread/src/index.ts` already loads its source worker this way under the same two preconditions, and [the test-subprocess launch modes](../../../../docs/testing.md#test-subprocess-launch-modes) permit erasable `.ts` subprocesses to run directly with Node without tsx or the root paths map.
+`packages/code-runtime/code-runtime-worker-thread/src/index.ts` already loads its source worker this way under the same two preconditions, and [the test-subprocess launch modes](../../../../docs/testing.md) permit erasable `.ts` subprocesses to run directly with Node without tsx or the root paths map.
 
 The packaged arm remains `worker.cjs` under plain node. Both arms choose from `new URL(import.meta.url).pathname.endsWith('.ts')`, so a query string on the module URL cannot misclassify a source module as built.
 

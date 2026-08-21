@@ -43,20 +43,7 @@
   "license": "MIT",
   "dependencies": {
     "immer": "^10.1.1",
-    "zustand": "~4.4.7",
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-attachment": "workspace:^",
-    "@deepseek-ai/dsh-client-connection": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
-    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-llm-retry": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-session-projection": "workspace:^",
-    "@deepseek-ai/dsh-session-title": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^",
-    "react": "^18.2.0"
+    "zustand": "~4.4.7"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",

@@ -36,7 +36,7 @@ Status: implemented
 
 ## 宿主组合
 
-该消费方是一个需显式启用的插件。已交付的宿主组合不挂载它：已交付的 TUI、Web 与无头界面保留 `ctx.sessionQuery` 索引（即 `/resume` 与 Web 内容搜索背后的 SQLite 服务），但不挂载面向模型的消费方，因此其默认请求既不携带查询提示词，也不携带五个 schema；仅用于自动化的 ACP 组合也两者均不挂载（[session-search-not-shipped-default](2026-08-02-session-search-not-shipped-default.md)）。这些组合还提供通用的超时与 spill 策略。专用的 ACP 快照 fixture（测试前置数据）显式挂载该消费方与这两项策略，并使用私有的本地 spill 存储。通用工具呈现无需会话查询专用客户端插件。
+该消费方是一个需显式启用的插件。已交付的宿主组合不挂载它：已交付的 TUI、Web 与无头界面保留 `ctx.sessionQuery` 索引（即 `/resume` 与 Web 内容搜索背后的 SQLite 服务），但不挂载面向模型的消费方，因此其默认请求既不携带查询提示词，也不携带五个 schema；仅用于自动化的 ACP 组合也两者均不挂载（[session-search-not-shipped-default](2026-08-02-session-search-not-shipped-default.zh.md)）。这些组合还提供通用的超时与 spill 策略。专用的 ACP 快照 fixture（测试前置数据）显式挂载该消费方与这两项策略，并使用私有的本地 spill 存储。通用工具呈现无需会话查询专用客户端插件。
 
 ## 考虑过的替代方案
 

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-20-composer-edit-range-from-selection.md
+2026-08-20-composer-edit-range-from-selection.md: f836fe4de297746d35f7343cd215e8522a0116d0
+2026-08-20-composer-edit-range-from-selection.zh.md: 86e65e4567c6d061b458e77be856aa1942cf0fe3

@@ -19,7 +19,7 @@
 
 #### 模型看到什么
 
-生成的 [`pwsh` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-pwsh-persistent)，含配置的 `description`。本插件不贡献独立的 system-prompt 段落；persona 与环境指引由部署方负责。
+生成的 [`pwsh` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-pwsh-persistent)，含配置的 `description`。本插件不贡献独立的 system-prompt 段落；persona 与环境指引由部署方负责。
 
 #### Token 影响
 

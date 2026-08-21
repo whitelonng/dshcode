@@ -20,7 +20,7 @@ harness 可以通过 `dsh-tool-subagent` 将一个任务委派给一个子 agent
 
 ### seam（dsh-workflow）
 
-`ctx.workflowEngine` 是 bash 形态的抽象 `WorkflowEngine`——每个上下文一个引擎，无命名提供方注册表（引擎是部署级替换，不是共存者）。`start(request)` 对无法启动的脚本同步抛出；返回的 `WorkflowRun` 的 `result` 永不 reject（失败时结算为 `stopReason: 'error' | 'cancelled'`）。`workflow/*` 事件是仅观察的 emit，携带数据快照（id + meta；`workflow/end` 省略 result 值），按监听器隔离，与 `subagent/start`/`subagent/end` 对称——控制权留在 run 的持有者手中。词汇详情见 [subsystems/workflow.md](../../../../docs/subsystems/workflow.md)。
+`ctx.workflowEngine` 是 bash 形态的抽象 `WorkflowEngine`——每个上下文一个引擎，无命名提供方注册表（引擎是部署级替换，不是共存者）。`start(request)` 对无法启动的脚本同步抛出；返回的 `WorkflowRun` 的 `result` 永不 reject（失败时结算为 `stopReason: 'error' | 'cancelled'`）。`workflow/*` 事件是仅观察的 emit，携带数据快照（id + meta；`workflow/end` 省略 result 值），按监听器隔离，与 `subagent/start`/`subagent/end` 对称——控制权留在 run 的持有者手中。词汇详情见 [subsystems/workflow.md](../../../../docs/subsystems/workflow.zh.md)。
 
 ### 引擎（dsh-workflow-worker-thread）：每次运行一个 worker 线程
 
@@ -28,7 +28,7 @@ harness 可以通过 `dsh-tool-subagent` 将一个任务委派给一个子 agent
 
 **为何选择 `node:worker_threads`**：每次运行获得一个非池化的 worker。vm 上下文限定了文档中说明的脚本 API，而消息端口 RPC 将 `agent()` 桥接到宿主侧的子循环。worker 防止脚本的同步工作阻塞宿主，提供序列化边界，并允许取消后强制终止。`isolated-vm` 因其维护状态和部署要求被否决。
 
-宿主在发布前校验元数据并解析正文。私有枚举键 payload 映射定义协议格式；待启动记录、已发布子记录、单一取消信号、worker 死亡回收、结果优先级与 dispose（资源释放）时的完全停稳，在此协议上保持 subagent run 约定。这些竞态算法由 [agent 作用域运行时设计 Agent Note](../architecture/2026-07-12-agent-scope-runtime-design.md#workflow-children-are-pending-starts-or-published-records) 定义。
+宿主在发布前校验元数据并解析正文。私有枚举键 payload 映射定义协议格式；待启动记录、已发布子记录、单一取消信号、worker 死亡回收、结果优先级与 dispose（资源释放）时的完全停稳，在此协议上保持 subagent run 约定。这些竞态算法由 [agent 作用域运行时设计 Agent Note](../architecture/2026-07-12-agent-scope-runtime-design.zh.md#workflow-children-are-pending-starts-or-published-records) 定义。
 
 引擎暴露一条进程内 `MessageChannel` 测试路径，因为主进程 V8 覆盖率无法观测 worker 执行。
 
@@ -40,7 +40,7 @@ harness 可以通过 `dsh-tool-subagent` 将一个任务委派给一个子 agent
 
 一个 `workflow` 工具，镜像 `dsh-tool-subagent` 的同步形态：启动、await、`try/finally` dispose、abort 桥接 `exec.signal`、非 `completed` → `isError`。渲染意图：一张以调用的 `meta.name` 参数为标题的 `generic` 卡片（展示是参数的纯函数）。工具描述即面向模型的编写规范。使用策略以工具自身的 `tool:<toolName>` 提示词段落随工具发布（显式请求才使用的引导——工具引导存在于工具插件中，从不在部署 persona 中）；harness 没有 ultracode 风格的 effort 门控。
 
-对于顶层工具执行，同一消费方还会把运行及实际成员生命周期写入调用方父 Session，形成四类 log-only `tool-workflow/*` 事件。记录路径只观察、不控制执行：第一次 append 失败会禁用本运行后续写入并留下合法前缀，不改变工具结果。[`ui-workflow-run`](../../../../packages/client/ui-workflow-run/README.md) 通过 Conversation Node 引擎重建这些事实，形成独立 keyed Chat 行；现有 generic 工具行继续拥有自己的展示。持久化、回放、展开/收起与实时导航的详细决策见 [Chat 中的持久工作流运行](2026-08-10-durable-workflow-runs-in-chat.md)。
+对于顶层工具执行，同一消费方还会把运行及实际成员生命周期写入调用方父 Session，形成四类 log-only `tool-workflow/*` 事件。记录路径只观察、不控制执行：第一次 append 失败会禁用本运行后续写入并留下合法前缀，不改变工具结果。[`ui-workflow-run`](../../../../packages/client/ui-workflow-run/README.zh.md) 通过 Conversation Node 引擎重建这些事实，形成独立 keyed Chat 行；现有 generic 工具行继续拥有自己的展示。持久化、回放、展开/收起与实时导航的详细决策见 [Chat 中的持久工作流运行](2026-08-10-durable-workflow-runs-in-chat.zh.md)。
 
 ### 基础：subagent seam 上的结构化输出
 
@@ -48,7 +48,7 @@ harness 可以通过 `dsh-tool-subagent` 将一个任务委派给一个子 agent
 
 输出 schema 使一次 schema 有效的已提交捕获成为子 agent 成功完成的必要条件。作用域运行时呈现捕获工具和指令，仅提交成功的最终结果（包括 SDK 调用时外层 `run_code` 的结果），在捕获变为 pending 后拒绝后续副作用，并在提交后不再进行模型步骤即停止子 agent。校验失败仍是可重试的工具错误；没有已提交捕获的正常完成以错误结算。
 
-`ObjectJsonSchema` 是 `dsh-tools` 统一且可强制执行的原始 JSON Schema 子集所提供的对象根消费方视图；不支持的关键字会明确报错，因为该协议数据会逐字成为捕获工具的 parameters。[统一 JSON 值 schema Agent Note](../architecture/2026-07-20-unified-json-value-schema-dsl.md)定义词汇与校验语义，[agent 作用域运行时设计 Agent Note](../architecture/2026-07-12-agent-scope-runtime-design.md#structured-output-commits-only-authoritative-outcomes)则定义组装、提交、守卫和终止停止算法。
+`ObjectJsonSchema` 是 `dsh-tools` 统一且可强制执行的原始 JSON Schema 子集所提供的对象根消费方视图；不支持的关键字会明确报错，因为该协议数据会逐字成为捕获工具的 parameters。[统一 JSON 值 schema Agent Note](../architecture/2026-07-20-unified-json-value-schema-dsl.zh.md)定义词汇与校验语义，[agent 作用域运行时设计 Agent Note](../architecture/2026-07-12-agent-scope-runtime-design.zh.md#structured-output-commits-only-authoritative-outcomes)则定义组装、提交、守卫和终止停止算法。
 
 ## 测试
 

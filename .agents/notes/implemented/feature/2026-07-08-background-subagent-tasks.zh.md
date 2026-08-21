@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[subagent seam](2026-06-21-subagent-capability-seam.md) 会返回 `SubagentRun`，但原先面向模型的工具会同步收集每一次运行。因此，各自独立的慢速委派要么一直占用父调用，要么按串行方式运行。
+[subagent seam](2026-06-21-subagent-capability-seam.zh.md) 会返回 `SubagentRun`，但原先面向模型的工具会同步收集每一次运行。因此，各自独立的慢速委派要么一直占用父调用，要么按串行方式运行。
 
 subagent 需要与其他长时间运行的工具相同的启动、收集、列出、停止、归属、通知和清理行为，但不应采用进程流语义。子会话仍是详细记录；父级只需最终答案或安全失败说明，以及任务状态。后台子级的存活时间还会超过启动它的工具调用，因此必须明确其取消和拥有者资源释放约定。
 
@@ -14,9 +14,9 @@ subagent 需要与其他长时间运行的工具相同的启动、收集、列�
 
 每个 `dsh-tool-subagent` 实例都可以公开 `run_in_background`，由 `enableRunInBackground` 控制，且默认启用。禁用该功能的实例不包含此参数，并会在执行时拒绝强制传入的后台参数。提供方选择仍属于部署配置，因此一个实例仍然只为一个提供方注册一个名称可区分的工具。
 
-后台 subagent 使用[通用后台任务运行时](../architecture/2026-06-20-generic-long-running-tool-runtime.md)。`job_output`、`job_list` 和 `job_kill` 负责收集、列出、取消、完成通知和提示词引导；系统不提供 subagent 专用的配套工具。
+后台 subagent 使用[通用后台任务运行时](../architecture/2026-06-20-generic-long-running-tool-runtime.zh.md)。`job_output`、`job_list` 和 `job_kill` 负责收集、列出、取消、完成通知和提示词引导；系统不提供 subagent 专用的配套工具。
 
-前台调用保留其同步约定：等待提供方启动和 `run.result`；仅当状态为 `completed` 时返回最终文本；将其他终止原因映射为出错的工具结果，并在存在时附上由[非交互权限决策](2026-08-15-product-subagent-noninteractive-permissions.md)描述的可选安全诊断；而且始终在返回前释放该运行。
+前台调用保留其同步约定：等待提供方启动和 `run.result`；仅当状态为 `completed` 时返回最终文本；将其他终止原因映射为出错的工具结果，并在存在时附上由[非交互权限决策](2026-08-15-product-subagent-noninteractive-permissions.zh.md)描述的可选安全诊断；而且始终在返回前释放该运行。
 
 对于后台调用，工具会验证父级，并在调用 `ctx.jobs.start()` 前拒绝已中止的执行信号。任务运行时会在调用生产者启动器前，预检控制 API 和拥有者清理。该启动器创建独立的 `AbortController` 并启动 `ctx.subagents.start()`；返回 id 之后，工具调用的信号不再拥有该子级。
 

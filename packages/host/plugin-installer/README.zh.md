@@ -1,6 +1,6 @@
-[English](README.md) | 中文
-
 # dsh-host-plugin-installer
+
+[English](README.md) | 中文
 
 当前 profile 的仅回环插件安装与更新。网关（`/plugin-installer`）以 `authority: 'loopback'` 注册在 Connection 通道上，暴露：
 
@@ -28,7 +28,7 @@ pnpm 可用时，网关把安装/更新/卸载委托给 profile workspace 里的
 
 #### 模型看到的内容
 
-网关注册四个面向模型的工具（`plugin_search` / `plugin_install` / `plugin_uninstall` / `plugin_status`），与浏览器面板读写同一份安装态：`plugin_search { query?, source?, refresh? }` 把已注册索引源的目录条目（id、形态、来源、能力面、描述、所属源及其信任级别）渲染为每行一条文本；`plugin_install { source }` 返回一行安装结果（安装的 id 与版本，以及重启要求）；`plugin_uninstall { id }` 返回一行移除结果；`plugin_status { id? }` 每个已装插件返回一行（id@版本、安装来源、禁用标记）。它们的名称、描述与 JSON-Schema 参数编入 [tool-catalog.md](../../../docs/tool-catalog.md)，经常规系统提示词工具装配到达模型。
+网关注册四个面向模型的工具（`plugin_search` / `plugin_install` / `plugin_uninstall` / `plugin_status`），与浏览器面板读写同一份安装态：`plugin_search { query?, source?, refresh? }` 把已注册索引源的目录条目（id、形态、来源、能力面、描述、所属源及其信任级别）渲染为每行一条文本；`plugin_install { source }` 返回一行安装结果（安装的 id 与版本，以及重启要求）；`plugin_uninstall { id }` 返回一行移除结果；`plugin_status { id? }` 每个已装插件返回一行（id@版本、安装来源、禁用标记）。它们的名称、描述与 JSON-Schema 参数编入 [tool-catalog.zh.md](../../../docs/tool-catalog.zh.md)，经常规系统提示词工具装配到达模型。
 
 #### Token 影响
 

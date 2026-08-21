@@ -100,6 +100,22 @@ export interface KnobState {
   approval: ApprovalPolicy | null
 }
 
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    permissions: KnobState
+  }
+}
+
+const knobStateSchema: zod.ZodType<KnobState> = zod.object({
+  preset: zod.string().nullable(),
+  sandbox: zod.union([
+    zod.literal('read-only'),
+    zod.literal('workspace-write'),
+    zod.literal('danger-full-access'),
+  ]).nullable(),
+  approval: zod.union([zod.literal('ask'), zod.literal('never')]).nullable(),
+}).strict()
+
 /** State for the empty log: every knob at its composition default. */
 const EMPTY_KNOBS: KnobState = { preset: null, sandbox: null, approval: null }
 
@@ -243,10 +259,10 @@ export class PermissionPresetService extends Service {
     ctx.inject(['sessionProjections'], (projectionCtx) => {
       projectionCtx.sessionProjections.register<'permissions', KnobState>({
         key: 'permissions',
-        schema: selectSchema,
+        stateSchema: knobStateSchema,
         init: () => EMPTY_KNOBS,
         apply: applyKnobEvent,
-        view: state => this.selectFor(state),
+        wire: { viewSchema: selectSchema, view: state => this.selectFor(state) },
         stateVersion: 1,
       })
     })

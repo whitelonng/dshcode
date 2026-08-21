@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-`ctx.jobs` 已经承载了 harness 在后台启动的全部长时工作——`bash`、`pwsh`、`pty-send`，以及一次性后台 subagent——但它唯一的读者是模型。[`dsh-tool-jobs`](../../../../packages/jobs/tool-jobs/README.md) 暴露了 `job_list`、`job_output` 和 `job_kill`，除此之外没有任何东西观察这个注册表。
+`ctx.jobs` 已经承载了 harness 在后台启动的全部长时工作——`bash`、`pwsh`、`pty-send`，以及一次性后台 subagent——但它唯一的读者是模型。[`dsh-tool-jobs`](../../../../packages/jobs/tool-jobs/README.zh.md) 暴露了 `job_list`、`job_output` 和 `job_kill`，除此之外没有任何东西观察这个注册表。
 
 于是 Web 端的人类看不到构建正在跑，分不清一个任务是已经完成还是卡死，也无法把它停掉。唯一的痕迹是 transcript 里更早某处那张打印了 job id 的 `run_in_background` 工具卡片，而那张卡片此后再也不会更新。
 
-会话 header 本来就是每会话后台活动的落点：[`dsh-client-ui-subagent`](../../../../packages/client/ui-subagent/README.md) 把 subagent 目录贡献到 `conversation.session.header.actions`。位置没有争议。缺的是任何一条把任务状态送到浏览器的通道。
+会话 header 本来就是每会话后台活动的落点：[`dsh-client-ui-subagent`](../../../../packages/client/ui-subagent/README.zh.md) 把 subagent 目录贡献到 `conversation.session.header.actions`。位置没有争议。缺的是任何一条把任务状态送到浏览器的通道。
 
 ## 决策
 
@@ -87,7 +87,7 @@ abstract onJobsChanged(listener: JobsChangedListener): () => void
 
 ### header 入口
 
-[`@deepseek-ai/dsh-client-ui-jobs`](../../../../packages/client/ui-jobs/README.md) 在 `conversation.session.header.actions` 注册一个条目，排在 subagent 目录之后。呈现契约归它自己的 README；值得记在这里的决策是：会话没有任务时控件根本不渲染；活跃角标为零时省略，让只剩历史的会话保留一个安静的入口；终态行保持可见，因为失败任务的 `detail` 是其失败唯一可读之处。
+[`@deepseek-ai/dsh-client-ui-jobs`](../../../../packages/client/ui-jobs/README.zh.md) 在 `conversation.session.header.actions` 注册一个条目，排在 subagent 目录之后。呈现契约归它自己的 README；值得记在这里的决策是：会话没有任务时控件根本不渲染；活跃角标为零时省略，让只剩历史的会话保留一个安静的入口；终态行保持可见，因为失败任务的 `detail` 是其失败唯一可读之处。
 
 因此一个运行中的一次性后台 subagent 会同时出现在那里和 subagent 目录里。两者回答不同的问题——目录负责进入子会话的 transcript，而这个列表是中断能力唯一可能附着的句柄——在这里屏蔽 `kind: 'subagent'` 会让中断那一期恰好对这批任务没有入口。
 
@@ -105,7 +105,7 @@ abstract onJobsChanged(listener: JobsChangedListener): () => void
 
 **只在弹层打开时轮询，不改 seam。** 最省事，也是唯一不碰 `JobRegistry` 的选项。它无法在不常驻轮询的前提下支持触发器上的常驻计数，而后面两期反正都需要一条真正的变更订阅，所以它省下一周又还回去。
 
-**基于持久任务事件的 session-projection 单元。** 投影单元在已提交的会话事件上折叠，所以这条路要先让任务生命周期变持久——`job/started` … `job/settled` 作为一对独立的开合括号，由最后一个 [`session/end-seed`](../../../../packages/core/session/src/types.ts) 把未配对的开括号标为死历史，与 compaction 括号已有的做法完全一致。它在客户端确实更省：`dsh-tool-todo` 用十五行的单元展示了整套模式，而现成的 `session/projection` 帧、history-tail 块和持久化 checkpoint 缓存本可以承载这批数据，无需新线路面、无需载体订阅、无需 manager 状态。否决它，是因为这要拿一次持久格式变更去换一个浏览器列表，而且它并不能延伸到最需要它的那一期：[`spill/`](../../../../packages/spill/README.md) 的存在正是为了让超大工具输出留在日志之外，所以流式任务输出无论如何都不能骑在持久事件上。如果持久任务历史将来凭自身价值站得住，本设计不阻挡重新考虑它。
+**基于持久任务事件的 session-projection 单元。** 投影单元在已提交的会话事件上折叠，所以这条路要先让任务生命周期变持久——`job/started` … `job/settled` 作为一对独立的开合括号，由最后一个 [`session/end-seed`](../../../../packages/core/session/src/types.ts) 把未配对的开括号标为死历史，与 compaction 括号已有的做法完全一致。它在客户端确实更省：`dsh-tool-todo` 用十五行的单元展示了整套模式，而现成的 `session/projection` 帧、history-tail 块和持久化 checkpoint 缓存本可以承载这批数据，无需新线路面、无需载体订阅、无需 manager 状态。否决它，是因为这要拿一次持久格式变更去换一个浏览器列表，而且它并不能延伸到最需要它的那一期：[`spill/`](../../../../packages/spill/README.zh.md) 的存在正是为了让超大工具输出留在日志之外，所以流式任务输出无论如何都不能骑在持久事件上。如果持久任务历史将来凭自身价值站得住，本设计不阻挡重新考虑它。
 
 **复用 `dsh-tool-jobs` 的 `PublicJobSnapshot`。** 字段几乎就是对的，但它属于面向模型的控制面。浏览器程序从一个 tool 包导入线路类型，会把客户端呈现耦合到面向 prompt 的决策上，并把一个 host-only 包拖进客户端构建。
 

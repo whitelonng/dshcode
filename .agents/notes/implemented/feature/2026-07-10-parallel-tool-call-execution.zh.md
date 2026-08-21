@@ -14,7 +14,7 @@ Status: implemented
 
 ## 决策
 
-每个工具都可以提供可选的 `isConcurrencySafe(args)` 分类器。该分类器必须是同步纯函数：它只检查当前调用已解析的参数，不执行 I/O 或任何变更。只有显式返回 `true` 才表示选择并行；分类器缺失、参数无效、分类器抛错或返回任何其他值，都会使该调用按独占方式执行。规范类型约定见[工具数据结构](../../../../docs/subsystems/tools.md)。
+每个工具都可以提供可选的 `isConcurrencySafe(args)` 分类器。该分类器必须是同步纯函数：它只检查当前调用已解析的参数，不执行 I/O 或任何变更。只有显式返回 `true` 才表示选择并行；分类器缺失、参数无效、分类器抛错或返回任何其他值，都会使该调用按独占方式执行。规范类型约定见[工具数据结构](../../../../docs/subsystems/tools.zh.md)。
 
 分类器有意设计为一元函数。返回 `true` 表示工具承诺：此调用可以与任何同样返回 `true` 的并列调用重叠执行。调度器不会比较调用，也不会证明它们的资源访问相容。
 
@@ -58,9 +58,9 @@ Code Mode 仍不使用此调度器，因为模型只会发出一个原生 `run_c
 
 ## 配置与声明
 
-`maxParallelToolCalls` 是 AgentLoop 的正整数部署上限，由工厂创建的所有 agent（智能体）共享。默认值为 `10`；`1` 保持串行执行。字段和默认值的精确定义见生成的[配置目录](../../../../docs/config-catalog.md)。
+`maxParallelToolCalls` 是 AgentLoop 的正整数部署上限，由工厂创建的所有 agent（智能体）共享。默认值为 `10`；`1` 保持串行执行。字段和默认值的精确定义见生成的[配置目录](../../../../docs/config-catalog.zh.md)。
 
-当前实现中的声明保持保守。Web 搜索、Web 获取、文件系统读取、会话查询的 trace/read 工具和 subagent 委派选择并行；委派之所以并行，是因为子 agent 在自己的会话中工作，其运行绝不变更父会话，并列委派间的工作区协调由模型负责（[并行 subagent Agent Note](2026-08-09-parallel-subagent-delegations.md)）。文件系统写入与编辑、bash 工具、会话查询的 search 工具、工作流、用户交互、todo 变更、Code Mode 以及 Cordis 变更工具仍按独占方式执行。Bash 没有已证明的输入敏感分类器，因此仍按独占方式执行。
+当前实现中的声明保持保守。Web 搜索、Web 获取、文件系统读取、会话查询的 trace/read 工具和 subagent 委派选择并行；委派之所以并行，是因为子 agent 在自己的会话中工作，其运行绝不变更父会话，并列委派间的工作区协调由模型负责（[并行 subagent Agent Note](2026-08-09-parallel-subagent-delegations.zh.md)）。文件系统写入与编辑、bash 工具、会话查询的 search 工具、工作流、用户交互、todo 变更、Code Mode 以及 Cordis 变更工具仍按独占方式执行。Bash 没有已证明的输入敏感分类器，因此仍按独占方式执行。
 
 文件系统读取依赖一个范围很窄的记录器例外：其同步观察更新可以不按顺序结算，但写入和编辑在变更前会重新检查已观察的版本，因此陈旧状态只会导致 `FS_STALE_VERSION`。
 

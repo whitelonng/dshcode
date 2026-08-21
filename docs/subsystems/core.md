@@ -318,7 +318,7 @@ The two core IDs are `CallId` (correlates a tool call with its result; dsh-llm) 
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxagentdefaultmodel--agentdefaultmodelconfig"></a>
 
@@ -342,7 +342,7 @@ currentSelection(): ModelSelection
 async saveSelection(next: ModelSelection): Promise<void>
 ```
 
-Source: [`packages/core/agent-default-model/src/index.ts:64`](../../packages/core/agent-default-model/src/index.ts)
+Source: [`packages/core/agent-default-model/src/index.ts`](../../packages/core/agent-default-model/src/index.ts)
 
 <a id="ctxagentloop--agentloop"></a>
 
@@ -381,7 +381,7 @@ async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandl
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:296`](../../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts`](../../packages/core/agent-loop/src/index.ts)
 
 <a id="ctxagentpresets--agentpresets"></a>
 
@@ -552,7 +552,7 @@ async standingKeyFor(id?: string): Promise<ScopeKey>
 
 Types: [ScopeKey](scope.md)
 
-Source: [`packages/preset/agent-presets/src/index.ts:82`](../../packages/preset/agent-presets/src/index.ts)
+Source: [`packages/preset/agent-presets/src/index.ts`](../../packages/preset/agent-presets/src/index.ts)
 
 <a id="ctxagents--agentregistry"></a>
 
@@ -724,7 +724,7 @@ list(): Agent[]
 roots(): Agent[]
 ```
 
-Source: [`packages/core/agent/src/index.ts:256`](../../packages/core/agent/src/index.ts)
+Source: [`packages/core/agent/src/index.ts`](../../packages/core/agent/src/index.ts)
 
 <a id="agent-events"></a>
 
@@ -752,7 +752,7 @@ A fully configured agent and live session were published. Setup is composition-o
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:177`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentdisposed--emit"></a>
 
@@ -774,7 +774,7 @@ An agent left the registry; AgentLoop emits this after driver quiescence and sco
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:186`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agenterror--emit"></a>
 
@@ -798,7 +798,7 @@ A step or turn errored. The machine reports a failure here even when the error h
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:308`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxclaimed--emit"></a>
 
@@ -822,7 +822,7 @@ One message left the inbox inside its open turn. If the proposed step is rejecte
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:215`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxdiscarded--emit"></a>
 
@@ -843,7 +843,7 @@ One message was discarded from the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:223`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxinserted--emit"></a>
 
@@ -864,7 +864,7 @@ One message entered the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:204`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentpre-step--waterfall"></a>
 
@@ -889,7 +889,7 @@ Reject a proposed step or replace the messages that enter it. Calling `next()` p
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:249`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest--waterfall"></a>
 
@@ -915,7 +915,7 @@ Replace the frozen call configuration. `await next()` yields the config the mach
 
 Types: [LlmCallConfig](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:262`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest-error--waterfall"></a>
 
@@ -944,7 +944,7 @@ Handle one failed model-request attempt before the loop retries or closes its st
 
 Types: [LlmFailure](llm-streaming.md) · [ResolvedRetryPolicy](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:278`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentsession-start--emit"></a>
 
@@ -968,7 +968,7 @@ The session lifecycle began, once before the first turn. Use `agent.inject()` to
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:235`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentstatus--emit"></a>
 
@@ -991,7 +991,7 @@ Agent status changed (`idle` ⇄ `running`). A waking delivery enters `running` 
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:196`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentturn-stopping--serial"></a>
 
@@ -1022,7 +1022,7 @@ The turn is about to close: the model owes no response (no live tool calls, no f
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:296`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agent-loop-events"></a>
 
@@ -1047,7 +1047,7 @@ A declarative agent entry failed before it could publish a live agent. Consumers
 'agent-loop/config-start-failed'(payload: { sessionId: SessionId; error: unknown }): void
 ```
 
-Source: [`packages/core/agent-loop/src/index.ts:183`](../../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts`](../../packages/core/agent-loop/src/index.ts)
 
 <a id="agent-preset-events"></a>
 
@@ -1070,5 +1070,5 @@ One session committed a different agent preset to its durable log. Consumers inv
 'agent-preset/selected'(sessionId: SessionId, agentPreset: string): void
 ```
 
-Source: [`packages/preset/agent-presets/src/types.ts:13`](../../packages/preset/agent-presets/src/types.ts)
+Source: [`packages/preset/agent-presets/src/types.ts`](../../packages/preset/agent-presets/src/types.ts)
 <!-- END GENERATED cordis-surface -->

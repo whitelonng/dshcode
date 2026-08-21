@@ -75,6 +75,6 @@ Host 与 Client 两次 tsdown 都接收 `vendor/*`、`packages/*/*` 和 `apps/cl
 
 干净构建成为顺序正确性的权威验证：没有任何既存 `/remote` 产物时，Host tsc 必须先成功，Host tsdown 必须生成约定，随后 Client tsc、Client tsdown 与 Web build 必须成功。任何阶段都不得把产物写进 `src`。
 
-[TypeScript 构建配置 Note](2026-06-17-ts-build-config.md)确定的 tsc-first 职责保持不变，但其单次全图 tsc 后再打包的命令形态由本文的有序阶段取代。[双 aggregate solution Note](2026-07-22-tsconfig-solution-root-two-aggregates.md)确定的普通 package 单 aggregate 规则保持不变，本文只为 `api/remotes` 建立一个显式例外。
+[TypeScript 构建配置 Note](2026-06-17-ts-build-config.zh.md)确定的 tsc-first 职责保持不变，但其单次全图 tsc 后再打包的命令形态由本文的有序阶段取代。[双 aggregate solution Note](2026-07-22-tsconfig-solution-root-two-aggregates.zh.md)确定的普通 package 单 aggregate 规则保持不变，本文只为 `api/remotes` 建立一个显式例外。
 
 Client 的独立构建不再是干净工作树上的自足入口；仓库命令、CI 和发布流程必须先运行 Host lib 阶段。普通 package 的开发者无需理解或复制该例外，仍按所属运行环境选择一个 aggregate。

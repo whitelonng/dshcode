@@ -46,7 +46,7 @@ export function apply(ctx: Context) {
 }
 ```
 
-这里的每个模式都来自前几章：`inject: ['tools']`（[第 3 章](03-services.md)）会让插件等待工具注册表就绪；`ctx.tools.register(...)` 会把注册 disposer 附着到插件（[第 2 章](02-lifecycle-and-effects.md)），因此卸载时会注销工具。`defineTool` 将 `parameters` 规约转换为向模型展示的 JSON Schema，推导 `args` 的类型，并在 `execute` 运行前校验模型提供的参数。工具返回由 `output.schema` 声明的规范值；`output.render` 则作为 Native renderer（原生渲染器），另行生成可持久化的结果内容。
+这里的每个模式都来自前几章：`inject: ['tools']`（[第 3 章](03-services.zh.md)）会让插件等待工具注册表就绪；`ctx.tools.register(...)` 会把注册 disposer 附着到插件（[第 2 章](02-lifecycle-and-effects.zh.md)），因此卸载时会注销工具。`defineTool` 将 `parameters` 规约转换为向模型展示的 JSON Schema，推导 `args` 的类型，并在 `execute` 运行前校验模型提供的参数。工具返回由 `output.schema` 声明的规范值；`output.render` 则作为 Native renderer（原生渲染器），另行生成可持久化的结果内容。
 
 ## 观察插件
 
@@ -80,7 +80,7 @@ export function apply(ctx: Context) {
 - name: './greet-tool.ts'
 ```
 
-`@deepseek-ai/dsh-tools` 会注入 `systemPrompt` 服务，因为工具需要向系统提示词贡献 schema，所以组合中也要列出该服务的提供方。缺少提供方时，工具插件会像[第 6 章](06-composition-and-hmr.md)所述那样保持 PENDING。
+`@deepseek-ai/dsh-tools` 会注入 `systemPrompt` 服务，因为工具需要向系统提示词贡献 schema，所以组合中也要列出该服务的提供方。缺少提供方时，工具插件会像[第 6 章](06-composition-and-hmr.zh.md)所述那样保持 PENDING。
 
 ```sh
 node --import tsx ../../vendor/cordis/bin.js
@@ -99,9 +99,9 @@ logger 会先触发：`tools/result` 在结果物化过程中发出，发生在 
 
 后续可以阅读：
 
-- [构建工具](../user/develop/basic/tool.md)：深入了解 `defineTool`，包括呈现和更丰富的 schema。
-- [三层能力设计](../user/develop/practice/index.md)：harness 如何组织可替换能力。
-- [子系统页面](../subsystems/core.md)上生成的 `cordis-surface` 区块：可以注入和监听的所有内容，各在其所属页面上。
-- [架构](../architecture.md)：这些插件所处的系统地图。
+- [构建工具](../user/develop/basic/tool.zh.md)：深入了解 `defineTool`，包括呈现和更丰富的 schema。
+- [三层能力设计](../user/develop/practice/index.zh.md)：harness 如何组织可替换能力。
+- [子系统页面](../subsystems/core.zh.md)上生成的 `cordis-surface` 区块：可以注入和监听的所有内容，各在其所属页面上。
+- [架构](../architecture.zh.md)：这些插件所处的系统地图。
 
 [![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

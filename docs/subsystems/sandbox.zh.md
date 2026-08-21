@@ -93,6 +93,8 @@ interface SandboxPolicy extends SandboxExecutionPolicy {
 }
 ```
 
+<a id="wrapped-argv-and-classification-dialects"></a>
+
 ## 包装后的 argv 与分类方言
 
 `RunnerFailureRule` 汇集用于判定 runner 在执行命令前失败的证据。消费方要求进程以非零状态退出，并同时满足可选的允许退出码门控，以及余下某一 stderr 行中不区分大小写的致命签名。系统会先按不区分大小写的整行精确匹配移除信息性排除项，因此无害的 runner 通知本身不能证明失败。匹配到的行仍可用作错误详情；分类过程不会重写 stderr。
@@ -147,13 +149,13 @@ interface ConfinedArgv {
 }
 ```
 
-[本地提供方](../../packages/sandbox/sandbox-local/README.md)拥有运维配置，并将其 runner 方言映射到这些规则。[沙箱化 bash 消费方](../../packages/shell/bash-sandbox/README.md)拥有 spawn 与结果归因。
+[本地提供方](../../packages/sandbox/sandbox-local/README.zh.md)拥有运维配置，并将其 runner 方言映射到这些规则。[沙箱化 bash 消费方](../../packages/shell/bash-sandbox/README.zh.md)拥有 spawn 与结果归因。
 
 ## 提供方与 fail-closed 错误
 
 `ctx.sandbox.confine(argv, policy)` 返回一个 `ConfinedArgv`，或在没有可用后端时抛出 `SandboxUnavailableError`（错误码 `SANDBOX_UNAVAILABLE`）。消费方也可以在 spawn 或观察所返回的 argv 时对失败进行分类；该归因属于消费方约定。对于受限策略，静默的无隔离透传永远不合法。
 
-提供方选择、探测、缓存和后端特定的强制执行报告归[本地提供方](../../packages/sandbox/sandbox-local/README.md)所有。
+提供方选择、探测、缓存和后端特定的强制执行报告归[本地提供方](../../packages/sandbox/sandbox-local/README.zh.md)所有。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -161,7 +163,7 @@ interface ConfinedArgv {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxsandbox--sandboxprovider-abstract-seam"></a>
 
@@ -184,7 +186,7 @@ Abstract process-sandbox service. confine must return enforcing argv or fail clo
 abstract confine(argv: readonly string[], policy: SandboxPolicy): ConfinedArgv
 ```
 
-Source: [`packages/sandbox/sandbox/src/index.ts:158`](../../packages/sandbox/sandbox/src/index.ts)
+Source: [`packages/sandbox/sandbox/src/index.ts`](../../packages/sandbox/sandbox/src/index.ts)
 
 <a id="ctxsandboxpolicy--sandboxpolicyservice"></a>
 
@@ -212,7 +214,7 @@ resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy
 overrideOf(session: Session): SandboxMode | undefined
 ```
 
-Types: [Session](session.md)
+Types: [Session](session.zh.md)
 
-Source: [`packages/sandbox/sandbox-policy/src/index.ts:91`](../../packages/sandbox/sandbox-policy/src/index.ts)
+Source: [`packages/sandbox/sandbox-policy/src/index.ts`](../../packages/sandbox/sandbox-policy/src/index.ts)
 <!-- END GENERATED cordis-surface -->

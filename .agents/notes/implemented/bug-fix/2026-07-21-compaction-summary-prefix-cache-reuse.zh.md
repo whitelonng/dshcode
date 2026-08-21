@@ -42,4 +42,4 @@ Status: implemented
 
 - **单元：** `compaction-basic.spec.ts` 断言辅助调用转发 `system`/`tools`/前导消息，并把压缩指令作为最后一条消息追加，且 `compactRegion` 回放最新的已路由 header 前缀。现有的内容断言通过回放的消息而非 transcript 字符串来读取摘要器输入。
 - **循环：** `compact-loop-repro.spec.ts` 依据摘要请求尾部 user 消息中的压缩指令对其分类，溢出恢复测试则继续在真实循环中固定对话请求与摘要请求的数量。
-- **快照：** 无密钥回放会从带标记的 `compaction/summary` 重建一条规范成功流；[compaction-seam Agent Note](../feature/2026-06-18-compaction-capability-seam.md) 负责持久标记约定。
+- **快照：** 无密钥回放会从带标记的 `compaction/summary` 重建一条规范成功流；[compaction-seam Agent Note](../feature/2026-06-18-compaction-capability-seam.zh.md) 负责持久标记约定。

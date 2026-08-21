@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-30-session-end-seed-log-boundary.md
 2026-07-30-session-end-seed-log-boundary.md: 1c5a8097a6b901f133205dcd52d674a8e3594b28
-2026-07-30-session-end-seed-log-boundary.zh.md: 2b7d32f289cd53bcc717de0dd8ec169a466e9097
+2026-07-30-session-end-seed-log-boundary.zh.md: ea3549543229a15d0fba7ad0316a8683c674a558

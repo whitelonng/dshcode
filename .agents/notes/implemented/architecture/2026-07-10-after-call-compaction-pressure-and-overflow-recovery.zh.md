@@ -22,9 +22,9 @@ Compact-basic 会在每个拟议请求之前包装 `agent/pre-step`。在续步�
 
 ### 请求恢复只覆盖最终模型边界
 
-`agent/request-error` 表示来自最终适配器边界的终止失败。适配器选择、分发、iterator 构造与迭代抛出会在 agent loop（智能体循环）消费前成为终止 `error` 或 `aborted` finish；适配器直接发出的终止 finish 进入同一路径。提示词装配、请求 middleware、请求日志、结果处理、工具、step 监听器与清理仍属于普通失败。[LLM（大语言模型）流的终止失败](2026-07-29-terminal-llm-stream-failures.md)规定这一规范化边界。
+`agent/request-error` 表示来自最终适配器边界的终止失败。适配器选择、分发、iterator 构造与迭代抛出会在 agent loop（智能体循环）消费前成为终止 `error` 或 `aborted` finish；适配器直接发出的终止 finish 进入同一路径。提示词装配、请求 middleware、请求日志、结果处理、工具、step 监听器与清理仍属于普通失败。[LLM（大语言模型）流的终止失败](2026-07-29-terminal-llm-stream-failures.zh.md)规定这一规范化边界。
 
-恢复运行前，失败 step 已经关闭。负责处理的监听器修复持久状态、返回 `{ kind: 'retry' }`，并停止 waterfall（瀑布式事件）委托。循环随后关闭失败 turn，并从持久日志开启一个重试 turn，中间不发布空闲通知。重试策略与尝试计数由插件自己拥有；compaction-basic 在链路到达终态 `agent/settled` 时清除对应 agent 的溢出计数。两个 DeepSeek 适配器都把识别出的提供方上下文限制错误规范化为 `CONTEXT_WINDOW_EXCEEDED`。[重试动作决策](../simplification/2026-07-27-request-error-retry-action.md)规定这一返回边界。
+恢复运行前，失败 step 已经关闭。负责处理的监听器修复持久状态、返回 `{ kind: 'retry' }`，并停止 waterfall（瀑布式事件）委托。循环随后关闭失败 turn，并从持久日志开启一个重试 turn，中间不发布空闲通知。重试策略与尝试计数由插件自己拥有；compaction-basic 在链路到达终态 `agent/settled` 时清除对应 agent 的溢出计数。两个 DeepSeek 适配器都把识别出的提供方上下文限制错误规范化为 `CONTEXT_WINDOW_EXCEEDED`。[重试动作决策](../simplification/2026-07-27-request-error-retry-action.zh.md)规定这一返回边界。
 
 如果取消发生在 assistant 工具调用已经持久化之后、所有调用完成分发之前，循环会为每个尚未分发的调用记录一对合成的 `tool/call` 与 aborted `tool/result`，随后进入正常中止路径。因此，表层不会仅因取消赢得竞态而留下孤立的持久工具调用。
 
@@ -58,4 +58,4 @@ Compact-basic 会在每个拟议请求之前包装 `agent/pre-step`。在续步�
 
 代价是在共享 pre-step waterfall 中执行压力工作，并需要适配器持续维护溢出分类。提供方措辞与启发式字符密度仍是维护风险。表层压缩依然无法修复仅信封本身就超出窗口的情况，也不能拆分不可分割的非工具节点，或修复不可剪枝的剩余部分仍然过大的工具单元。若可移除的文本工具结果是主要体积，可选剪枝器仍可修复原本不可分割的工具配对。
 
-[已领取 pre-step 生命周期](2026-07-31-claimed-pre-step-inbox-lifecycle.md)取代了本记录原先的 post-step 触发方式。服务拆分、独立 token meter、平衡范围约定、日志中记录的锁、摘要替换与唯一 `summarize()` 子类 hook 均保持不变。
+[已领取 pre-step 生命周期](2026-07-31-claimed-pre-step-inbox-lifecycle.zh.md)取代了本记录原先的 post-step 触发方式。服务拆分、独立 token meter、平衡范围约定、日志中记录的锁、摘要替换与唯一 `summarize()` 子类 hook 均保持不变。

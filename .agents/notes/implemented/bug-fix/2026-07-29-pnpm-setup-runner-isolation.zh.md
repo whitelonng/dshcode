@@ -10,9 +10,9 @@ Status: implemented
 
 ## 决策
 
-[主 CI 工作流](../../../../.github/workflows/ci.yml)中的每个 `pnpm/action-setup` 步骤都设置 `dest: ${{ runner.temp }}/setup-pnpm`。每个 runner 服务独占自己的临时目录，因此一个设置过程无法替换另一个 runner 的安装目录。持久 store 的复用仍由 `PNPM_CONFIG_STORE_DIR` 独立处理，遵循 [pnpm 配置决策](../process/2026-07-26-pnpm-action-setup-for-symmetric-ci-caching.md)。
+[主 CI 工作流](../../../../.github/workflows/ci.yml)与 [CI master 工作流](../../../../.github/workflows/ci-master.yml)中的每个 `pnpm/action-setup` 步骤都设置 `dest: ${{ runner.temp }}/setup-pnpm`。每个 runner 服务独占自己的临时目录，因此一个设置过程无法替换另一个 runner 的安装目录。持久 store 的复用仍由 `PNPM_CONFIG_STORE_DIR` 独立处理，遵循 [pnpm 配置决策](../process/2026-07-26-pnpm-action-setup-for-symmetric-ci-caching.zh.md)。
 
-[工作流回归测试](../../../../scripts/ci-workflow.spec.ts)会找出 `ci.yml` 中的每个 `pnpm/action-setup` 步骤，并拒绝缺少 runner 专属目标目录的步骤。这可确保后续新增的作业也处于同一隔离边界内。
+[工作流回归测试](../../../../scripts/ci-workflow.spec.ts)会找出 `ci.yml` 与 `ci-master.yml` 中的每个 `pnpm/action-setup` 步骤，并拒绝缺少 runner 专属目标目录的步骤。这可确保后续新增的作业也处于同一隔离边界内。
 
 ## 曾考虑的替代方案
 

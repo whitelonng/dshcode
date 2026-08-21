@@ -107,7 +107,8 @@ jobs:
         run: pnpm run build:official
 
       # Real-API end-to-end tests only. The keyless gates (lint/typecheck/
-      # coverage/snapshot/etc.) already run in ci.yml on every push/PR.
+      # coverage/snapshot/etc.) already run in ci.yml (pull requests) and
+      # ci-master.yml (master push standby).
       # DEEPSEEK_BASE_URL is pinned to the external API; the secret is scoped to
       # this step (and preflight) only — never exposed to checkout/setup/install.
       - name: E2E tests (real DeepSeek API)

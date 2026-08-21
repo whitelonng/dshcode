@@ -52,8 +52,8 @@ When translations need to be written from scratch, the orchestrating agent does 
 - **Read the completed counterpart alone.** After the source comparison, read the translated file without the source beside it and rewrite phrasing whose awkwardness only becomes visible in isolation.
 - Write only the final text to the file, never drafts or notes.
 - Every term in [terminology.md](../../../docs/i18n/terminology.md) renders exactly as specified. For a Chinese target, use the Chinese and first-occurrence columns; an unlisted term needs a citable Chinese OSS/vendor precedent or stays English under 「待定术语」. For an English target, use the English column and an established English technical term; preserve an ambiguous source term with a short gloss and list it as pending. Never invent a rendering inline.
-- Code blocks are byte-identical across the pair, comments included. Relative links keep their `.md` targets; only the switcher line links `.zh.md`.
-- The pairing gate checks heading depths, fenced blocks, table row and column counts, list kinds, ordered-list starts, list item counts, and link targets. In Pass 2, manually verify list and table order, noncanonical list numbering, inline code, emphasis, meaning, terminology, and tone.
+- Code blocks are byte-identical across the pair, comments included. Repository-relative document links keep the same semantic target and exact query/fragment suffix: targets in the active bilingual corpus use `.md` on the English side and `.zh.md` on the Chinese side, a missing in-scope counterpart is an error, targets outside the corpus keep their authored path, and the switcher remains the cross-locale exception.
+- The pairing gate checks heading depths, fenced blocks, table row and column counts, list kinds, ordered-list starts, list item counts, link locale, and semantic targets. In Pass 2, manually verify list and table order, noncanonical list numbering, inline code, emphasis, meaning, terminology, and tone.
 
 ## Find the work
 

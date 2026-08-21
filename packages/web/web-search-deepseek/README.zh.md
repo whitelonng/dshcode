@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-由 [DeepSeek](https://deepseek.com) 支持的 `WebSearchProvider`，用于 harness [web 能力 seam](../web/README.md)（`ctx.web`）。它调用 DeepSeek 的 **Anthropic 兼容 Messages API**（`POST {baseURL}/messages`），启用原生 `web_search_20250305` 服务器工具，并把 DeepSeek 返回的结构化 `web_search_tool_result` 块映射为 seam 规范化的 `WebSearchResult`。
+由 [DeepSeek](https://deepseek.com) 支持的 `WebSearchProvider`，用于 harness [web 能力 seam](../web/README.zh.md)（`ctx.web`）。它调用 DeepSeek 的 **Anthropic 兼容 Messages API**（`POST {baseURL}/messages`），启用原生 `web_search_20250305` 服务器工具，并把 DeepSeek 返回的结构化 `web_search_tool_result` 块映射为 seam 规范化的 `WebSearchResult`。
 
 这是一个**实现**包：它向 `ctx.web` 注册提供方，通过可选的 `ctx.credentials` seam 为每次搜索解析凭据，若存在发起请求的 agent（智能体）会话，还会在其中记录该辅助请求，且不注册面向模型的工具。与 `@deepseek-ai/dsh-llm-deepseek` 一样，它是函数／命名空间插件（`inject: ['web']`）。Anthropic 协议格式（wire format）是提供方私有细节，并**不**使该提供方依赖 `ctx.llm`。
 
@@ -68,7 +68,7 @@ DeepSeek 返回的提供方生成答案均不被该提供方信任为 `content`�
 
 #### 模型看到的内容
 
-通过 [`dsh-tool-web`](../tool-web/README.md)，会话模型会看到结构化搜索块中去重后的 URL、标题、日期与引用 snippet；提供方文本不会作为答案受到信任。该提供方的具体错误消息包括带有处理指引的凭据缺失消息、`DeepSeek search credential resolution failed: <error>`、`DeepSeek search aborted`、`DeepSeek search request failed: <error>`、`DeepSeek returned no web_search_tool_result blocks; the request may not have triggered native web search` 和 `DeepSeek returned an unprocessable response body: <error>`；HTTP 失败保留提供方消息。错误包装属于消费方。
+通过 [`dsh-tool-web`](../tool-web/README.zh.md)，会话模型会看到结构化搜索块中去重后的 URL、标题、日期与引用 snippet；提供方文本不会作为答案受到信任。该提供方的具体错误消息包括带有处理指引的凭据缺失消息、`DeepSeek search credential resolution failed: <error>`、`DeepSeek search aborted`、`DeepSeek search request failed: <error>`、`DeepSeek returned no web_search_tool_result blocks; the request may not have triggered native web search` 和 `DeepSeek returned an unprocessable response body: <error>`；HTTP 失败保留提供方消息。错误包装属于消费方。
 
 #### Token 影响
 

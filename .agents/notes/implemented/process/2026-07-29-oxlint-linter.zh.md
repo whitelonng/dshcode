@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-根目录的 [`.oxlintrc.json`](../../../../.oxlintrc.json) 是仓库类型感知 lint 配置的权威来源。不加载项目的 [`.oxlintrc.staged.json`](../../../../.oxlintrc.staged.json) 配置继承其源码规则，为有界的 pre-commit 路径禁用类型分析，并重新纳入类型感知后端无法分析但需保留的 TypeGraph fixture（测试前置数据）。`lint` 与 `lint:fix` 包脚本、门禁调度器、CI 和 lefthook 通过 [`scripts/run-oxlint.ts`](../../../../scripts/run-oxlint.ts) 调用 Oxlint；[仅使用 Oxlint 的修复工作流](2026-08-09-oxlint-only-fix-workflow.md)负责多轮插件修复，并取代单独的格式化回退路径。
+根目录的 [`.oxlintrc.json`](../../../../.oxlintrc.json) 是仓库类型感知 lint 配置的权威来源。不加载项目的 [`.oxlintrc.staged.json`](../../../../.oxlintrc.staged.json) 配置继承其源码规则，为有界的 pre-commit 路径禁用类型分析，并重新纳入类型感知后端无法分析但需保留的 TypeGraph fixture（测试前置数据）。`lint` 与 `lint:fix` 包脚本、门禁调度器、CI 和 lefthook 通过 [`scripts/run-oxlint.ts`](../../../../scripts/run-oxlint.ts) 调用 Oxlint；[仅使用 Oxlint 的修复工作流](2026-08-09-oxlint-only-fix-workflow.zh.md)负责多轮插件修复，并取代单独的格式化回退路径。
 
 `options.typeAware` 启用 `oxlint-tsgolint`。其后端按文件发现 TypeScript 项目：包源码使用各自的包项目，host 测试、示例和网站使用 `tsconfig.host.json`，client 测试及 `scripts/client-bundle-purity.spec.ts` 使用 `tsconfig.client.json`。不含程序的根解决方案绝不会被扁平化。Oxlint 的 `--tsconfig` 覆盖项会影响导入解析，但类型感知 lint 会忽略它，因此本仓库不设置该选项。该配置显式载入迁移后的严格类型检查规则和仓库覆盖配置，而不启用内容可能发生变化的 Oxlint 宽泛类别。`typescript/no-unnecessary-condition` 仍从 Oxlint 的 nursery 规则集中启用，因为它在迁移前就是仓库强制执行的规则。
 
@@ -30,7 +30,7 @@ CI 不恢复或保存 lint 结果缓存。`DSH_OXLINT_THREADS` 使共享运行�
 
 **在全仓库范围内同时运行两个 linter。** 所有正确性规则均可通过 Oxlint 原生规则、nursery 规则或 JavaScript 插件兼容层获得。在全仓库范围启用 ESLint 回退会保留较慢的项目服务初始化和两套正确性配置，却不会增加任何检查。
 
-**使用单独的格式化器。** 迁移保留了窄范围的 ESLint 流程，因为当时认为兼容层无法执行修复。锁定版本的工具链证明能够执行相同修复后，[仅使用 Oxlint 的修复工作流](2026-08-09-oxlint-only-fix-workflow.md)以一次有界重试取代了该部分决策。
+**使用单独的格式化器。** 迁移保留了窄范围的 ESLint 流程，因为当时认为兼容层无法执行修复。锁定版本的工具链证明能够执行相同修复后，[仅使用 Oxlint 的修复工作流](2026-08-09-oxlint-only-fix-workflow.zh.md)以一次有界重试取代了该部分决策。
 
 **移除尚无原生实现的 @stylistic 或 SonarJS 规则。** 这会移除依赖，但也会削弱机械质量约定。兼容层会保留这些规则，直到能够通过单独决策评估原生替代规则。
 

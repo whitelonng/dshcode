@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-交付的 bundle 之前以启用状态挂载 SQLite 会话查询提供方的全文索引（`openAt: first-search`），因此每个默认部署都携带一个派生 FTS 索引，Web 侧边栏提供内容搜索。一个部署是否需要该索引——它的 node:sqlite 导入、每次搜索的来源对账和派生存储——是部署自身的选择，产品默认不携带它交付；面向模型的搜索工具此前已经是 opt-in 且未挂载（见[非默认交付决策](../feature/2026-08-02-session-search-not-shipped-default.md)）。
+交付的 bundle 之前以启用状态挂载 SQLite 会话查询提供方的全文索引（`openAt: first-search`），因此每个默认部署都携带一个派生 FTS 索引，Web 侧边栏提供内容搜索。一个部署是否需要该索引——它的 node:sqlite 导入、每次搜索的来源对账和派生存储——是部署自身的选择，产品默认不携带它交付；面向模型的搜索工具此前已经是 opt-in 且未挂载（见[非默认交付决策](../feature/2026-08-02-session-search-not-shipped-default.zh.md)）。
 
 通过卸载插件行来关闭该能力不可行。`ApiProxyService` 将 `sessionQuery` 声明为必需注入，没有该提供方时整个宿主 API 网关保持未加载，Web GUI 无法启动。会话日志导出通过 `ctx.sessionQuery.traceSession` 追踪子代理后代，子代理分叉也通过同一血缘追踪解析其 Workspace——两者都需要可选服务守卫加一个替代血缘来源，改动面大约扩大三倍，同时使精确读取在所有地方消失。
 

@@ -22,6 +22,8 @@ Status: implemented
 
 `pre-merge-commit` 与 `pre-commit` 会对照两侧文档在索引中的精确字节，校验暂存的 `.i18n.yaml` 文件。这些钩子会验证驱动输出，但不会重新生成记录，因此绕过钩子也无法默默确认发生漂移的译文；CI 中全语料的 `doc-sync`（文档同步门禁）仍是权威检查。
 
+<a id="failure-contract"></a>
+
 ## 失败约定
 
 | 普通 `git merge` 期间的失败 | 可观察状态 | 恢复 |

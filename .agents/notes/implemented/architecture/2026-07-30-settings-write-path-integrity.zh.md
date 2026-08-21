@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-30-settings-write-path-integrity.md) | 中文
 
-> 范围：`dsh-settings-file` 的写路径数据完整性（操作链、读-改-写、跨进程写锁、diff 形态的 YAML 编辑）与 `dsh-settings` 的观察者生命周期（watch 的 dispose（资源释放）、异步监听器收容、JSON 形态写入边界）。本 note 推翻了[用户设置 seam note](2026-07-28-user-settings-seam.md)所记录的一项延后决定：跨进程锁文件现已交付。
+> 范围：`dsh-settings-file` 的写路径数据完整性（操作链、读-改-写、跨进程写锁、diff 形态的 YAML 编辑）与 `dsh-settings` 的观察者生命周期（watch 的 dispose（资源释放）、异步监听器收容、JSON 形态写入边界）。本 note 推翻了[用户设置 seam note](2026-07-28-user-settings-seam.zh.md)所记录的一项延后决定：跨进程锁文件现已交付。
 
 ## 问题
 
@@ -38,4 +38,4 @@ YAML 写入则整体替换 namespace 节点，把分节内的每条注释都删�
 
 `update()` 对锁获取期限与磁盘文档非法都有成文的失败模式，rejection 消息携带以 `$` 为根的路径。持有者崩溃后可能留下锁，需要操作者核实后移除；若按锁龄自动接管，则会允许多个写入方重叠。仍然存在、且已记录在提供方 README 中的有：同 namespace 并发编辑仍是后写胜出（没有逐值合并，也没有修订号检查）；OS 从未投递的 watcher 事件会让缓存保持陈旧，直到下一个信号或下一次写入；被替换数组内部的注释、以及行内附着在被改标量值上的注释，会随其描述的值一起消失。
 
-[用户设置 seam note](2026-07-28-user-settings-seam.md)里「延后锁文件」那条替代方案已被本 note 取代。同类缺陷曾存在于 `dsh-credentials-local`（两条链共用一个 `.env`、按缓存整文件写回、持久化之后才发事件）与 `llm/adapters-updated` 扇出；[credential-boundaries note](2026-07-30-credential-boundaries-and-atomic-registration.md) 在那里套用了本模板。
+[用户设置 seam note](2026-07-28-user-settings-seam.zh.md)里「延后锁文件」那条替代方案已被本 note 取代。同类缺陷曾存在于 `dsh-credentials-local`（两条链共用一个 `.env`、按缓存整文件写回、持久化之后才发事件）与 `llm/adapters-updated` 扇出；[credential-boundaries note](2026-07-30-credential-boundaries-and-atomic-registration.zh.md) 在那里套用了本模板。

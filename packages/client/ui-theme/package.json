@@ -52,14 +52,12 @@
     "@deepseek-ai/dsh-client-ui-settings": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
-    "react": "^18.2.0"
+    "@deepseek-ai/dsh-settings": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",
+    "@deepseek-ai/dsh-client-connection": "workspace:^",
     "@deepseek-ai/dsh-client-locale": "workspace:^",
     "@deepseek-ai/dsh-client-runtime": "workspace:^",
     "@deepseek-ai/dsh-client-test-runtime": "workspace:^",
@@ -68,10 +66,9 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@types/react": "~18.3.1",
-    "react": "^18.2.0",
     "@deepseek-ai/dsh-settings": "workspace:^",
-    "@deepseek-ai/dsh-client-connection": "workspace:^"
+    "@types/react": "~18.3.1",
+    "react": "^18.2.0"
   },
   "files": [
     "lib/index.js",
@@ -86,7 +83,6 @@
   },
   "dependencies": {
     "clsx": "^2.0.0",
-    "@deepseek-ai/schemastery": "workspace:^",
-    "@deepseek-ai/dsh-settings": "workspace:^"
+    "@deepseek-ai/schemastery": "workspace:^"
   }
 }

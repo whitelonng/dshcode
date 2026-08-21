@@ -190,6 +190,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Configuration carries references to secrets; providers own the values. Consumers resolve per operation, so a rotated credential reaches the very next request; the web gateway exposes value-free views and write-only storage.',
   },
   {
+    key: 'authorization',
+    pkg: 'authorization',
+    title: 'Authorization flow registry',
+    mode: 'seam',
+    implementations: [],
+    consumers: ['llm-pi-ai'],
+    note: 'Flows are registered by the plugin that knows how to obtain one credential and keyed by the record they write; the seam owns the conversation and the one-attempt-per-key lifecycle, never the protocol.',
+  },
+  {
     key: 'sessionTelemetry',
     pkg: 'session-telemetry',
     title: 'Session telemetry seam',

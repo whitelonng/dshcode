@@ -8,7 +8,7 @@ Status: implemented
 
 Web composer 的一次提交是一个信封——草稿文本、已附加图片、投递模式——但两条提交平面对它的消费是不对称的。普通消息走 `defaultSink → conversation.sendSession`，图片被序列化进 prompt 内容并在成功后清除。被 claim 的斜杠命令走 `claim.submit(args, actx)`，一个纯文本事务：`/goal rebuild the cathedral` 带四张参考照片时，命令执行、草稿清空，图片却静默滞留在 composer 附件栏。模型从未看到它们，也没有任何界面提示。这个缺陷在契约层面而非某个漏掉的调用点：claim、裁决、宿主执行器都没有建模附件，因此任何命令都可能消费提交的文本一半而丢弃其余部分。
 
-合并两个平面从未在考虑范围内——[插件命令注册 Agent Note](2026-07-19-plugin-command-registration.md)刻意让人类命令留在模型平面之外，这个分离是正确的。问题在于信封在平面分叉处被拆散了。
+合并两个平面从未在考虑范围内——[插件命令注册 Agent Note](2026-07-19-plugin-command-registration.zh.md)刻意让人类命令留在模型平面之外，这个分离是正确的。问题在于信封在平面分叉处被拆散了。
 
 ## Decision
 

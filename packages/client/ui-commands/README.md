@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Client command API (`ctx.commandUi`): the session-keyed command-directory cache, the `/` command source with `matchSpace`/`matchEnter` decision hooks, three-kind dispatch (`execute` / `popupSelect` / `leadingInput`), and popupSelect registration for business packages. The [web command Agent Note](../../../.agents/notes/implemented/architecture/2026-07-25-web-command-surfaces-and-assembly.zh.md) records the decision.
+Client command API (`ctx.commandUi`): the session-keyed command-directory cache, the `/` command source with `matchSpace`/`matchEnter` decision hooks, three-kind dispatch (`execute` / `popupSelect` / `leadingInput`), and popupSelect registration for business packages. The [web command Agent Note](../../../.agents/notes/implemented/architecture/2026-07-25-web-command-surfaces-and-assembly.md) records the decision.
 
 `src/client/contract.ts` is the fixed business contract: `CommandUiContract.register(name, spec)` and `decorate(name, spec)` are everything a business package consumes; `CommandUiSpec{options, onSelect}` keeps popup data self-contained — the shell component belongs to this package and business packages never see it. A contribution is a client-owned command (a host-name collision fails loud); a decoration adds a bare-invocation popup to an EXISTING host command. The host keeps its catalog row, argument claim (space / argued Enter), and lifecycle logging, and a decorated name with no host row in the session's directory never fires. Command kinds derive per dispatch, never per registration: a host descriptor with `input` is `leadingInput`, a registered `CommandUiSpec` is `popupSelect`, and everything else is `execute`.
 

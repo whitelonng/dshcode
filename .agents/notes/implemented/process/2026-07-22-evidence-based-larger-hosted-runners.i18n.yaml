@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-07-22-evidence-based-larger-hosted-runners.md
 2026-07-22-evidence-based-larger-hosted-runners.md: db08a4eb9812a2cb13499718cbd3ceb023960c06
-2026-07-22-evidence-based-larger-hosted-runners.zh.md: 1b9b622e929a693d165d23ce256ba4d3c85a0460
+2026-07-22-evidence-based-larger-hosted-runners.zh.md: c6a3a5c12199d0f7fc1351e77c0824259896de52

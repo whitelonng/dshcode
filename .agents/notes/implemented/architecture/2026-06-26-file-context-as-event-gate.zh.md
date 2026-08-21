@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[拆分文件系统 seam Agent Note](../simplification/2026-06-26-fsspec-style-fs-seam.md) 在面向模型的工具与 `ctx.fs` 提供方之间放置了 `ctx.fileContext`：`dsh-tool-fs` 注入 `fileContext`，并将每次 `read`/`write`/`edit` 路由到它的方法。这使得 `fileContext` **位于关键路径上且不可省略**。工具不经过它就无法访问 `ctx.fs`，策略层掌控着 fs I/O 和读取窗口，而一个不需要观测状态策略的部署也无法简单地移除该包——`dsh-tool-fs` 会因无法解析 `ctx.fileContext` 而失败。
+[拆分文件系统 seam Agent Note](../simplification/2026-06-26-fsspec-style-fs-seam.zh.md) 在面向模型的工具与 `ctx.fs` 提供方之间放置了 `ctx.fileContext`：`dsh-tool-fs` 注入 `fileContext`，并将每次 `read`/`write`/`edit` 路由到它的方法。这使得 `fileContext` **位于关键路径上且不可省略**。工具不经过它就无法访问 `ctx.fs`，策略层掌控着 fs I/O 和读取窗口，而一个不需要观测状态策略的部署也无法简单地移除该包——`dsh-tool-fs` 会因无法解析 `ctx.fileContext` 而失败。
 
 这把三件本应可分离的事情耦合在了一起：
 
@@ -33,7 +33,7 @@ provider      dsh-fs-local      local implementation of ctx.fs
 
 该模型是叠加式的：裸 `ctx.fs` 执行原子化、无约束的文本 I/O，而 `dsh-fs-observation-policy` 叠加观测状态、先读后编辑和版本守卫。因此移除策略层后工具仍可用，只是不受约束。正式发布的 agent（智能体）配置会加载策略；裸模式的存在是为了让策略在服务边界保持可选，而非作为正常部署姿态。
 
-[文件系统缺失观测后续决策](../bug-fix/2026-08-09-filesystem-absence-observation.md)把记录载荷从仅表示成功的版本细化为显式的存在/缺失状态，并要求带防护的创建以不替换方式发布。事件门控归属与无 I/O 策略边界保持不变。
+[文件系统缺失观测后续决策](../bug-fix/2026-08-09-filesystem-absence-observation.zh.md)把记录载荷从仅表示成功的版本细化为显式的存在/缺失状态，并要求带防护的创建以不替换方式发布。事件门控归属与无 I/O 策略边界保持不变。
 
 `dsh-tool-fs` 不再注入 `fileContext`。它注入 `fs` 和 `tools`/`systemPrompt`。
 
@@ -152,7 +152,7 @@ interface Events {
 
 ## 取代关系
 
-本 Agent Note 修正——而非推翻——[拆分文件系统 seam Agent Note](../simplification/2026-06-26-fsspec-style-fs-seam.md)。四层拆分、提供方约定和新鲜度*策略*均保留。变更的是**工具与策略层之间的耦合方式**：强制性方法服务变为插件拥有的事件门控，fs I/O + 读取窗口从 `fileContext` 上移至 `dsh-tool-fs`。拆分文件系统 seam Agent Note 中关于 `dsh-tool-fs` 注入 `fileContext` 以及 `fileContext` 拥有 `read`/`write`/`edit` 的描述已在同一变更中更新。
+本 Agent Note 修正——而非推翻——[拆分文件系统 seam Agent Note](../simplification/2026-06-26-fsspec-style-fs-seam.zh.md)。四层拆分、提供方约定和新鲜度*策略*均保留。变更的是**工具与策略层之间的耦合方式**：强制性方法服务变为插件拥有的事件门控，fs I/O + 读取窗口从 `fileContext` 上移至 `dsh-tool-fs`。拆分文件系统 seam Agent Note 中关于 `dsh-tool-fs` 注入 `fileContext` 以及 `fileContext` 拥有 `read`/`write`/`edit` 的描述已在同一变更中更新。
 
 ## 验证
 
@@ -160,7 +160,7 @@ interface Events {
 
 ## 曾考虑的替代方案
 
-- **保留 `ctx.fileContext` 作为关键路径上的方法服务**——[拆分文件系统 seam Agent Note](../simplification/2026-06-26-fsspec-style-fs-seam.md) 最初落地的形态；否决，因为工具无法在没有策略层的情况下运行，使策略对基本操作是承重性的，而非可选的收紧。
+- **保留 `ctx.fileContext` 作为关键路径上的方法服务**——[拆分文件系统 seam Agent Note](../simplification/2026-06-26-fsspec-style-fs-seam.zh.md) 最初落地的形态；否决，因为工具无法在没有策略层的情况下运行，使策略对基本操作是承重性的，而非可选的收紧。
 - **策略侧版本检查**（`dsh-fs-observation-policy` 在其 waterfall 处理器中 stat 并比较版本）——否决，因为该检查与工具实际写入之间存在 TOCTOU 间隙；提供方的 mutation 临界区是唯一无竞态的位置，因此策略只选择 CAS 基准并对先前观测进行门控。
 - **每工具 `/read`/`/write`/`/edit` 子路径插件**——实现时放弃：没有消费方需要单工具部署，且子路径发布迫使引入兄弟工具包都不需要的定制 `tsdown`/`tsconfig`/`files`/workspace-constraint 处理；每工具的注册辅助函数仍作为根插件组合的内部模块保留。
 

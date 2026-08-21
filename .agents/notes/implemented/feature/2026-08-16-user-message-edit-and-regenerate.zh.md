@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-停止运行后无法修改刚发出的提示：删除（[消息删除](../feature/2026-08-16-message-deletion-and-transcript-removal.md)）会移除内容，但改错别字或换个说法意味着要当作新消息重打一遍，旧对话还留在历史里。
+停止运行后无法修改刚发出的提示：删除（[消息删除](../feature/2026-08-16-message-deletion-and-transcript-removal.zh.md)）会移除内容，但改错别字或换个说法意味着要当作新消息重打一遍，旧对话还留在历史里。
 
 ## 决策
 

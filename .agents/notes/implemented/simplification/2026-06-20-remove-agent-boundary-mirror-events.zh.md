@@ -16,7 +16,7 @@ Status: implemented
 
 四个持久边界镜像——`agent/turn-start`、`agent/turn-end`、`agent/step-start`、`agent/step-end`——已从 agent（智能体）事件分类体系中移除。希望在边界处取得 agent handle 的 UI 会保留来自 `agent/created`/`agent/disposed` 的实时目标对象，并直接比较其会话；`dsh-ui-stdio` 据此为应用拥有的 agent 标记 `[main turn N]` 头部，其他会话则渲染其持久 id。规范记录仍是事件溯源会话日志。
 
-步骤镜像（完全没有消费方）最先在[事件域语义 Agent Note](../architecture/2026-06-30-event-domain-semantics.md) 中移除；该 Agent Note 当时以 stdio UI 需要在轮次边界取得 `Agent` handle 为由，保留了轮次镜像。本决策完成余下工作：`dsh-ui-stdio` 是可随时丢弃的测试 REPL，其渲染可以自由变化，因此「ui-stdio 需要它」并不是保留镜像的理由——它读取 `session/event`，只保留自己的实时目标对象。
+步骤镜像（完全没有消费方）最先在[事件域语义 Agent Note](../architecture/2026-06-30-event-domain-semantics.zh.md) 中移除；该 Agent Note 当时以 stdio UI 需要在轮次边界取得 `Agent` handle 为由，保留了轮次镜像。本决策完成余下工作：`dsh-ui-stdio` 是可随时丢弃的测试 REPL，其渲染可以自由变化，因此「ui-stdio 需要它」并不是保留镜像的理由——它读取 `session/event`，只保留自己的实时目标对象。
 
 ## 范围：移除什么、不移除什么
 
@@ -31,7 +31,7 @@ Status: implemented
 ## 曾考虑的替代方案
 
 - **将 `agent/steering` 一并移除**——原始提案的范围；因超出范围而被排除：它镜像持久的 `steering/message` 控制记录，而非边界，后来由[自己的决策](../../archived/simplification/2026-07-04-remove-agent-steering-mirror.md)移除（`agent/stream-chunk` 也由[流分片镜像 Agent Note](../../archived/simplification/2026-07-02-remove-stream-chunk-mirror.md) 移除）。
-- **为 stdio UI 保留轮次镜像**——[事件域语义 Agent Note](../architecture/2026-06-30-event-domain-semantics.md) 的原始立场；在此否决，因为 `dsh-ui-stdio` 是可随时丢弃的测试 REPL，而非承载关键约束的消费方，并且它改为根据 `session/event` 加自己的实时目标对象渲染边界。
+- **为 stdio UI 保留轮次镜像**——[事件域语义 Agent Note](../architecture/2026-06-30-event-domain-semantics.zh.md) 的原始立场；在此否决，因为 `dsh-ui-stdio` 是可随时丢弃的测试 REPL，而非承载关键约束的消费方，并且它改为根据 `session/event` 加自己的实时目标对象渲染边界。
 
 ## 后果
 

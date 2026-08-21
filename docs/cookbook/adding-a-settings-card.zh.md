@@ -97,4 +97,4 @@ import { clientBundle } from '../tsdown.client.ts'
 export default clientBundle('@deepseek-ai/dsh-client-my-plugin', ['lib/types/index.js', 'lib/types/invariant.js'])
 ```
 
-该预设目前未发布，因此本仓库之外的包得自行复刻同样的输出格式。bundle 纯净度门禁同时拒绝跨插件的值导入，所以卡片无法导入本分区的卡片外观或其暂存表单模型——它渲染自己的那一份，并自行拥有暂存与 revision 设栅。这两条限制都记在[本分区的已知限制](../../packages/client/ui-settings-plugins/README.md#known-limitations-and-deferred-work)里。
+该预设目前未发布，因此本仓库之外的包得自行复刻同样的输出格式。bundle 纯净度门禁同时拒绝跨插件的值导入，所以卡片无法导入本分区的卡片外观或其暂存表单模型——它渲染自己的那一份，并自行拥有暂存与 revision 设栅。这两条限制都记在[本分区的已知限制](../../packages/client/ui-settings-plugins/README.zh.md#known-limitations-and-deferred-work)里。

@@ -16,7 +16,7 @@ Web「通用」设置页将「权限」显示为禁用的骨架控件，尽管 `
 
 现有 `/permission` 命令和 `permissions` 投影仍是当前会话的操作路径。浏览器插件现在向 `settings.general.item` 贡献「权限」行，从脱敏后的 Settings 描述符读取动态 enum，并只通过经过 revision 校验的 `settings.mutate` 写入 `defaultPreset`。该行通过 slot 的 `hooks` 格注入 observable，而不是绑定渲染器专用钩子；权限服务挂载时会遍历并固定所有已存活会话，因此 HMR（热模块替换）不会遗留未固定的会话。无归属的「通用」设置包不贡献任何占位行。
 
-ApiProxy 在可配置提供方 namespace 之外，将 `permission` 显式加入 Web Settings allowlist。这是局部的边界决策，而不是通用注册标志或 `local-client` 访问模型：注册其他 Settings namespace 仍不会将其暴露。权限变更通过转发的 `settings/document-updated` 到达客户端（[转发的 Remote 事件](../architecture/2026-08-10-remote-event-delivery.md)），不会宣告模型拓扑。
+ApiProxy 在可配置提供方 namespace 之外，将 `permission` 显式加入 Web Settings allowlist。这是局部的边界决策，而不是通用注册标志或 `local-client` 访问模型：注册其他 Settings namespace 仍不会将其暴露。权限变更通过转发的 `settings/document-updated` 到达客户端（[转发的 Remote 事件](../architecture/2026-08-10-remote-event-delivery.zh.md)），不会宣告模型拓扑。
 
 ## 后果
 

@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/simplification/2026-07-27-intent-named-subagent-continuation-operations.md
 2026-07-27-intent-named-subagent-continuation-operations.md: 72fb042978cdb8faa238d7483c17eb7c7fce80bd
-2026-07-27-intent-named-subagent-continuation-operations.zh.md: 09af0a3ba343a441306d9c1eec3f00c582d510e6
+2026-07-27-intent-named-subagent-continuation-operations.zh.md: 8734c439fd4f3baf384d6fa1fc2ae197e2ed5b64

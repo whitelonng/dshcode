@@ -29,13 +29,13 @@
 
 上传授权采用显式许可，且为 fail-closed。通过直接构造传入未知模式时，会在读取传输配置前失败。只有 `FULL` 接受对 `ctx.sessionTelemetry.emit()` 的直接调用。`FEEDBACK_ONLY` 向其按需协调器提供私有后端能力，并且仅在 `feedback/record` 对象已经存储于 `session.events[event.seq]` 且对象身份完全相同时，才将其视为同意；独立发出的总线值会被忽略。即使存在导出器选项，`DISABLED` 也绝不会构造 SDK 流水线。
 
-已挂载的服务通过 seam 的 [`SessionTelemetrySharingStatus`](../session-telemetry/README.md#the-sharing-disclosure) `sharing` 属性披露解析后的模式（`full` / `feedback-only` / `disabled`），因此 `/feedback` 的确认文本可以报告会话是否以及如何被共享。该披露在构造函数中设置，与采集相互独立：即使 `DISABLED` 也会披露 `disabled`。
+已挂载的服务通过 seam 的 [`SessionTelemetrySharingStatus`](../session-telemetry/README.zh.md#the-sharing-disclosure) `sharing` 属性披露解析后的模式（`full` / `feedback-only` / `disabled`），因此 `/feedback` 的确认文本可以报告会话是否以及如何被共享。该披露在构造函数中设置，与采集相互独立：即使 `DISABLED` 也会披露 `disabled`。
 
 `exporter.url` 在 `FULL` 与 `FEEDBACK_ONLY` 中必填，无默认值，且必须能解析为 `http(s)`；在 `DISABLED` 中可省略且不使用。在上传模式中，`shutdownTimeoutMillis` 是由 DSH 管理的有限正数外层截止时间，默认值为 3000 ms；`processor.maxExportBatchSize` 不是正整数时也会在插件加载时失败，因为 SDK 会接受该值，随后却在关闭时挂起。两个 SDK 配置块都整体透传（passthrough）：`OTLPExporterNodeConfigBase` 的每个字段（`headers`、`timeoutMillis`、`compression`、`keepAlive` 等）都会到达导出器；批处理、导出节奏（`scheduledDelayMillis`）、重试、队列上限，以及持续失败下的丢失策略，都是通过 `processor` 调节的 SDK 行为。该后端不实现 `flush()`：常规 flush 由批处理器负责。关闭期间，OTel 会先等待 `exporter.forceFlush()`，再等待受处理器 `exportTimeoutMillis` 限制的完成 promise；如果该传输 promise 始终不结算，本包会在 `shutdownTimeoutMillis` 到期时放弃等待，通过协调器记录已隔离的关闭失败，并让应用继续拆卸。该截止时间无法取消 SDK 传输，因此届时仍待处理的记录可能在进程退出时丢失。
 
 ## 哪些数据会离开本机
 
-在上传模式中，记录携带完整的 `event.data`，内容以 seam 的 `sessionTelemetry/record` waterfall（瀑布式事件）返回的结果为准：用户与 assistant 消息内容、工具参数与工具结果（命令输出、文件内容）、完整的系统提示词与工具 schema（`request/header`）、todo 文本、压缩（compaction）摘要、钩子的 `stderrSummary`、反馈文本，以及会话 `cwd`（一个本地路径）。seam 不带任何脱敏规则：未挂载 `sessionTelemetry/record` 监听器时，导出的就是捕获原样的副本，因此向可信边界之外导出的部署方要挂载自己的规则（见 [seam README](../session-telemetry/README.md#the-redact-waterfall)）。`FULL` 在追加时运行脱敏；`FEEDBACK_ONLY` 不保留遥测副本，而是在反馈触发权威日志回放时运行当时挂载的规则。无论如何，提供方凭据都不会出现：适配器的 API key 是构造函数参数而非会话事件，因此它们在结构上就不存在于日志中，也就不存在于遥测中。`DISABLED` 不会构造 SDK 流水线，也不会将任何捕获内容交给后端。
+在上传模式中，记录携带完整的 `event.data`，内容以 seam 的 `sessionTelemetry/record` waterfall（瀑布式事件）返回的结果为准：用户与 assistant 消息内容、工具参数与工具结果（命令输出、文件内容）、完整的系统提示词与工具 schema（`request/header`）、todo 文本、压缩（compaction）摘要、钩子的 `stderrSummary`、反馈文本，以及会话 `cwd`（一个本地路径）。seam 不带任何脱敏规则：未挂载 `sessionTelemetry/record` 监听器时，导出的就是捕获原样的副本，因此向可信边界之外导出的部署方要挂载自己的规则（见 [seam README](../session-telemetry/README.zh.md#the-redact-waterfall)）。`FULL` 在追加时运行脱敏；`FEEDBACK_ONLY` 不保留遥测副本，而是在反馈触发权威日志回放时运行当时挂载的规则。无论如何，提供方凭据都不会出现：适配器的 API key 是构造函数参数而非会话事件，因此它们在结构上就不存在于日志中，也就不存在于遥测中。`DISABLED` 不会构造 SDK 流水线，也不会将任何捕获内容交给后端。
 
 ## 字段映射
 

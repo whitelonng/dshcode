@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`ensureSymlink` 改用 `unlinkSync(link)` 删除过期链接。`unlink` 在所有平台上都只删除重解析点或符号链接本身、绝不进入目标目录，从而保住该函数“真实目录永远不会被删除”的大声失败保证。[profile-plugin-bundles 决策](../architecture/2026-08-05-profile-plugin-bundles.md)继续拥有回退目录的双锚点解析；本 note 只拥有“用哪个删除原语”这一决定。
+`ensureSymlink` 改用 `unlinkSync(link)` 删除过期链接。`unlink` 在所有平台上都只删除重解析点或符号链接本身、绝不进入目标目录，从而保住该函数“真实目录永远不会被删除”的大声失败保证。[profile-plugin-bundles 决策](../architecture/2026-08-05-profile-plugin-bundles.zh.md)继续拥有回退目录的双锚点解析；本 note 只拥有“用哪个删除原语”这一决定。
 
 ## 考虑过的替代方案
 

@@ -16,7 +16,7 @@ Status: implemented
 
 `@deepseek-ai/dsh-client-ui-renderer` 是带 `immediately` 标记的动态客户端插件。它持有 React slot outlet、SessionProvider 与 observable 到 uSES 的绑定。它注入的 `slots` 与 `sessions` 激活后，便安装 slot 渲染器并提供 `ctx.uiRenderer`。`mount()` hydrate 内核生成的启动 DOM，再通过 layout effect 在浏览器绘制中间帧前将其替换为组装完成的应用。hydrate 后的 spinner 节点会保持动画相位。组装后的树投影当前会话标题，并执行唯一一次上下文级 `renderSlot('root')` 调用。服务、渲染器安装和 React 根都随各自持有方 dispose。
 
-`ui-conversation` 声明 `conversation.input.attachments` 与 `conversation.message.images`，并提供附件数据、回调、经会话授权的图片加载及其 locale seat。`ui-attachment` 通过 `ctx.slots.inject()` 等待这些声明，再注册草稿附件栏／拖放目标和历史图片画廊／灯箱。React 实现仍是包内值；跨插件组合通过 slot 完成。这项包集成决策取代[附件展示 Note](../feature/2026-08-11-web-attachment-display-alignment.md)中的直接导入规则，但不改变该 Note 的视觉与交互决策。
+`ui-conversation` 声明 `conversation.input.attachments` 与 `conversation.message.images`，并提供附件数据、回调、经会话授权的图片加载及其 locale seat。`ui-attachment` 通过 `ctx.slots.inject()` 等待这些声明，再注册草稿附件栏／拖放目标和历史图片画廊／灯箱。React 实现仍是包内值；跨插件组合通过 slot 完成。这项包集成决策取代[附件展示 Note](../feature/2026-08-11-web-attachment-display-alignment.zh.md)中的直接导入规则，但不改变该 Note 的视觉与交互决策。
 
 ui-theme 把自己的五份全局样式表作为 `?inline` 字符串导入。客户端 entry 调用 `installThemeStyles(ctx)`，经 `ctx.effect()` 为每份样式安装一个 style 标签，因此卸载或重载 ui-theme 时，其全局 CSS 会随服务的同一生命周期删除或替换。Web 内核只保留挂载默认值，以及字体和颜色与对应主题 token 一致的自给自足启动页配色。
 

@@ -29,7 +29,7 @@
 
 `SessionQueryEngine.searchSessions(request, exec?)` 按匹配最强的事件对逻辑语料库分组；`searchEvents(request, exec?)` 搜索一个逻辑会话。这两个是服务仅有的抽象方法。两者都返回分页结果，其延续信息是由服务持有的带品牌 `SessionSearchCursor`；接受可选取消，并在不使用提供方专用数值分数的情况下提供摘录。事件搜索分页结果还携带来自与命中相同索引世代的克隆目标 header，使授权消费方可将策略绑定到此次载荷观察。搜索请求只接受事件元数据过滤器，因为字面文本过滤使用上文所述扫描路径。
 
-该包没有提供方协调器、回退实现或独立具体插件。具体服务后端继承已实现的读取、过滤和跟踪，同时负责全文观察、对账、排名、游标世代和查询执行；第一个实现是 [`@deepseek-ai/dsh-session-query-sqlite`](../session-query-sqlite/README.md)。
+该包没有提供方协调器、回退实现或独立具体插件。具体服务后端继承已实现的读取、过滤和跟踪，同时负责全文观察、对账、排名、游标世代和查询执行；第一个实现是 [`@deepseek-ai/dsh-session-query-sqlite`](../session-query-sqlite/README.zh.md)。
 
 `SessionQueryError.code` 是一个封闭联合，覆盖请求验证、缺失目标、格式错误的表层、来源冲突、持久化/索引失败、取消，以及无效或陈旧游标；精确字面值在 [`src/config.ts`](src/config.ts) 中定义。
 
@@ -53,4 +53,4 @@
 ## 已知限制与暂缓事项
 
 - **无调用方授权**：这是上下文范围内的可信基础设施；未来的模型工具或 UI 必须限制调用方可检查的会话。
-- **无注册表或面向模型工具**：尚未提供提取器和搜索提供方注册表、递归遍历所引用的源事件的能力，以及面向模型的工具。[跟踪决策](../../../.agents/notes/implemented/feature/2026-07-13-session-query-tracing.md) 负责关系语义；SQLite 归属和 tokenizer 决策位于[已实现搜索记录](../../../.agents/notes/implemented/feature/2026-07-10-sqlite-session-query-provider.md)。
+- **无注册表或面向模型工具**：尚未提供提取器和搜索提供方注册表、递归遍历所引用的源事件的能力，以及面向模型的工具。[跟踪决策](../../../.agents/notes/implemented/feature/2026-07-13-session-query-tracing.zh.md) 负责关系语义；SQLite 归属和 tokenizer 决策位于[已实现搜索记录](../../../.agents/notes/implemented/feature/2026-07-10-sqlite-session-query-provider.zh.md)。

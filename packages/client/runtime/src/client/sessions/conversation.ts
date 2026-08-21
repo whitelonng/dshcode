@@ -157,7 +157,10 @@ export type ModelRetryNode = LlmRetryEventData & {
   retryState: 'scheduled' | 'started' | 'cancelled'
 }
 
-/** Durable terminal failure for a turn that has no scheduled retry. */
+/**
+ * Durable terminal failure for a turn that ended with an error reason; the
+ * turn's settled retry chain renders separately and never replaces this node.
+ */
 export interface TurnErrorNode {
   kind: 'turn-error'
   /** Seq of the owning turn/end event. */

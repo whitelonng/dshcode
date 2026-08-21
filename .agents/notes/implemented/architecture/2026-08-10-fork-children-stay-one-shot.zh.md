@@ -6,9 +6,9 @@ Status: implemented
 
 ## 问题
 
-fork 与 spawn 的唯一区别是 child 的 Session 会以 parent 已完成轮次的前缀作为初始内容（见 [subagent-fork-in-process](../../../../packages/subagent/subagent-fork-in-process/README.md)）。这份初始内容有实打实的 token 成本——继承的历史会在 child 的每次请求中重新发送——而它唯一确定的回报是提供方侧的前缀复用：在提供方与模型相同的前提下，起始字节与 parent 逐字节相同的 child 请求，无需为这段共享区间重新预填充。任何由 child 作用域添加在继承历史*之前*的内容都会消耗掉这份回报，因为复用在第一个不同字节处即告停止。
+fork 与 spawn 的唯一区别是 child 的 Session 会以 parent 已完成轮次的前缀作为初始内容（见 [subagent-fork-in-process](../../../../packages/subagent/subagent-fork-in-process/README.zh.md)）。这份初始内容有实打实的 token 成本——继承的历史会在 child 的每次请求中重新发送——而它唯一确定的回报是提供方侧的前缀复用：在提供方与模型相同的前提下，起始字节与 parent 逐字节相同的 child 请求，无需为这段共享区间重新预填充。任何由 child 作用域添加在继承历史*之前*的内容都会消耗掉这份回报，因为复用在第一个不同字节处即告停止。
 
-作用域局部的 `report` 返回通道现在是此类添加中最大的一项，而自[report 义务](../feature/2026-08-06-continuable-child-report-obligation.md)起它是两项而非一项增量：`report` 工具 schema，以及 `tool:report` 系统提示词 section。两者都位于请求头部——系统块与工具块先于所有消息——因此一个可继续的 fork child 会在第一条继承轮次之前就使复用失效，并重新预填充它当初 fork 就是为了复用的整份 transcript（文本记录）。这种组合付出了 fork 的复制成本却收不到它的收益，而 parent 手上仍握着一份 child 本可共享的可复用前缀。
+作用域局部的 `report` 返回通道现在是此类添加中最大的一项，而自[report 义务](../feature/2026-08-06-continuable-child-report-obligation.zh.md)起它是两项而非一项增量：`report` 工具 schema，以及 `tool:report` 系统提示词 section。两者都位于请求头部——系统块与工具块先于所有消息——因此一个可继续的 fork child 会在第一条继承轮次之前就使复用失效，并重新预填充它当初 fork 就是为了复用的整份 transcript（文本记录）。这种组合付出了 fork 的复制成本却收不到它的收益，而 parent 手上仍握着一份 child 本可共享的可复用前缀。
 
 ## 决策
 
@@ -20,7 +20,7 @@ one-shot child——前台与后台皆然——经由 `SubagentRuntime.start()` 
 
 ### 该限制在于组合，不在于代码
 
-`ForkInProcessProvider.prepareContinuable` 仍然实现完好，`ctx.subagents.startContinuable()` 也仍接受 `fork`；改动的只有随附的 `cordis.yml` 行。`tool-subagent` 在挂载时同时知道提供方的 `inheritsParentContext` 与自身的 `backgroundMode`，因此一个加载期拒绝该组合的检查是可行的，而这里刻意不加：该组合并非普遍错误。它只在某个 child 作用域增量位于继承历史之前时才是错的，而产生该增量的包——[`dsh-tool-subagent-report`](../../../../packages/subagent/tool-subagent-report/README.md)——是独立安装的，并且按其自身设计对 `tool-subagent` 不可见。一个不安装 report 包的部署可以在前缀完好的前提下运行可继续的 fork child。把某一份插件清单的后果写成委派工具的不变量，会让该工具断言它无法观察到的事实。
+`ForkInProcessProvider.prepareContinuable` 仍然实现完好，`ctx.subagents.startContinuable()` 也仍接受 `fork`；改动的只有随附的 `cordis.yml` 行。`tool-subagent` 在挂载时同时知道提供方的 `inheritsParentContext` 与自身的 `backgroundMode`，因此一个加载期拒绝该组合的检查是可行的，而这里刻意不加：该组合并非普遍错误。它只在某个 child 作用域增量位于继承历史之前时才是错的，而产生该增量的包——[`dsh-tool-subagent-report`](../../../../packages/subagent/tool-subagent-report/README.zh.md)——是独立安装的，并且按其自身设计对 `tool-subagent` 不可见。一个不安装 report 包的部署可以在前缀完好的前提下运行可继续的 fork child。把某一份插件清单的后果写成委派工具的不变量，会让该工具断言它无法观察到的事实。
 
 重新开放的条件记录为 `prepareContinuable` 方法上的 `TODO(fork-continuable-prefix-reuse)` 标记——随附组合不调用这个方法——并由 issue #2124 跟踪：当 child 的系统提示词与工具 schema 能与其 parent 逐字节一致时，可继续 fork 即可重新开放。
 
@@ -32,7 +32,7 @@ one-shot child——前台与后台皆然——经由 `SubagentRuntime.start()` 
 
 **照常随附可继续的 fork child 并接受这份损失。** 否决的原因是这份损失是全额而非边际的：复用在继承历史之前就已中断，于是 child 为一份自己复制过来、目的恰恰是不必付费的 transcript 付了全额预填充。想要一个没有继承上下文的长期 child 的部署，本来就有 `spawn`。
 
-**让 `report` 对每个 Agent 可见。** 全局注册会通过让 parent 与 child 拥有相同的 schema 与 section 来恢复逐字节相同的前缀。否决的原因是根 agent、one-shot child、远端 child 与无 agent 调用方都会宣告一件推导不出收件方的工具，而执行期拒绝会让 schema 可见性与权限彼此矛盾——这正是[report 工具 Agent Note](../feature/2026-07-30-continuable-subagent-report-tool.md)已经定下的作用域局部决策。
+**让 `report` 对每个 Agent 可见。** 全局注册会通过让 parent 与 child 拥有相同的 schema 与 section 来恢复逐字节相同的前缀。否决的原因是根 agent、one-shot child、远端 child 与无 agent 调用方都会宣告一件推导不出收件方的工具，而执行期拒绝会让 schema 可见性与权限彼此矛盾——这正是[report 工具 Agent Note](../feature/2026-07-30-continuable-subagent-report-tool.zh.md)已经定下的作用域局部决策。
 
 **把 child 作用域增量安装到继承历史之后。** 否决的原因是它无法表达：在每个提供方的协议格式中，系统提示词与工具 schema 都是请求头部结构，因此它们内部的任何排序都无法把仅属于 child 的添加放到消息列表之后。
 

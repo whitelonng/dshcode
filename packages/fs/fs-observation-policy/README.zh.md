@@ -55,7 +55,7 @@ await ctx.plugin(FsPolicy)
 
 #### 模型看到的内容
 
-该插件不添加提示词或 schema。没有先前观测时，它会以代码 `FS_NOT_OBSERVED` 和精确消息 `edit requires reading "<path>" first` 拒绝编辑；编辑刚被观测为缺失的目标会返回 `FS_NOT_FOUND`。正向观测陈旧时，带防护的变更会传播由提供方拥有的 `FS_STALE_VERSION` 错误。[`dsh-tool-fs`](../tool-fs/README.md) 拥有面向模型的错误包装，会为 `FS_STALE_VERSION` 消息追加恢复指令（`— re-read the file, then retry`）、为 `FS_NOT_OBSERVED` 消息追加恢复指令（`— read the file, then retry`），同时保留错误码。外部删除目标后，遵循陈旧恢复指令会记录缺失：下一次带防护的写入可以通过 `createIfAbsent` 重新创建该目标，而提供方会以原子方式保留任何并发创建者写入的文件。
+该插件不添加提示词或 schema。没有先前观测时，它会以代码 `FS_NOT_OBSERVED` 和精确消息 `edit requires reading "<path>" first` 拒绝编辑；编辑刚被观测为缺失的目标会返回 `FS_NOT_FOUND`。正向观测陈旧时，带防护的变更会传播由提供方拥有的 `FS_STALE_VERSION` 错误。[`dsh-tool-fs`](../tool-fs/README.zh.md) 拥有面向模型的错误包装，会为 `FS_STALE_VERSION` 消息追加恢复指令（`— re-read the file, then retry`）、为 `FS_NOT_OBSERVED` 消息追加恢复指令（`— read the file, then retry`），同时保留错误码。外部删除目标后，遵循陈旧恢复指令会记录缺失：下一次带防护的写入可以通过 `createIfAbsent` 重新创建该目标，而提供方会以原子方式保留任何并发创建者写入的文件。
 
 #### Token 影响
 
@@ -70,4 +70,4 @@ await ctx.plugin(FsPolicy)
 - **已观察状态无法在会话恢复后保留**：`WeakMap` 记录的持久化工作延期处理，因此恢复的会话必须重新读取文件，才能执行防护写入/编辑。
 - **没有 agent（智能体）会话的参与者绝无法满足策略**：它们的编辑会抛出 `FS_NOT_OBSERVED`，写入总会解析为 `createIfAbsent`，因此非 agent 调用方无法通过门禁覆盖现有文件。
 - **直接 `ctx.fs` 读取不会发出 `fs/observed`**：在 `read` 工具之外读取的文件仍未观察；后续防护编辑会以 `FS_NOT_OBSERVED` 拒绝，直到工具读取该文件。
-- **授权依据是版本新鲜度，而非视图完整性**：任何窗口读取都会授权对未变文件执行全文件覆盖，这有意弱于完整视图规则（见 [seam 拆分 Agent Note](../../../.agents/notes/implemented/simplification/2026-06-26-fsspec-style-fs-seam.md)）。
+- **授权依据是版本新鲜度，而非视图完整性**：任何窗口读取都会授权对未变文件执行全文件覆盖，这有意弱于完整视图规则（见 [seam 拆分 Agent Note](../../../.agents/notes/implemented/simplification/2026-06-26-fsspec-style-fs-seam.zh.md)）。

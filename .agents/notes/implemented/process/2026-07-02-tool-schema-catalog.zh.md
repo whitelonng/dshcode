@@ -21,7 +21,7 @@ Cordis 目录是纯 TypeScript AST 遍历，因为每个事件/服务名都是�
 - `tool-subagent` 的工具名是 `config.toolName ?? 'subagent'`——加载时选定，并非字面量。
 - MCP 插件可以通过 `ctx.tools.register()` 直接注册**原始 JSON Schema**，完全不经过 `defineTool`，因此结构化枚举 `defineTool(` 调用点会遗漏。
 
-唯一准确的真源，是插件加载后注册表实际持有的 schema。启动插件是把[测试策略](../../../../docs/testing.md)中「验证现实，而非自我报告」的准则应用到文档生成器：读取已发布产物，而非重新推导一份。
+唯一准确的真源，是插件加载后注册表实际持有的 schema。启动插件是把[测试策略](../../../../docs/testing.zh.md)中「验证现实，而非自我报告」的准则应用到文档生成器：读取已发布产物，而非重新推导一份。
 
 ### 恢复「不会静默遗漏」的保证
 
@@ -44,7 +44,7 @@ schema 块使用 ` ```json `，而非自定义的 `ts` 系围栏。`doc-typechec
 ## 曾考虑的替代方案
 
 - **纯 TypeScript AST 遍历，如 Cordis 目录**：工具 schema 在静态层面不可知（见上文核心要点）：运行时展开、字符串拼接、配置选定的名称，以及原始 `ctx.tools.register()` 注册，都会让 AST 推导出的文档说谎。
-- **从各包的 inject 推断启动配方**：属于[发现包清单提案](../../proposed/process/2026-06-20-discover-package-inventory.md)所警告的「过度聪明」路径；配方保持为手写策略，清单由文件系统发现并由完整性守卫把关。
+- **从各包的 inject 推断启动配方**：属于[发现包清单提案](../../proposed/process/2026-06-20-discover-package-inventory.zh.md)所警告的「过度聪明」路径；配方保持为手写策略，清单由文件系统发现并由完整性守卫把关。
 - **为 schema 块使用自定义 `ts` 系围栏**：不必要。普通 ` ```json ` 围栏对 `doc-typecheck` 不可见，无需 `BlockKind` 白名单。
 
 ## 后果

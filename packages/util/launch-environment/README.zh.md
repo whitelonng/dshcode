@@ -32,5 +32,5 @@ const endpoint = launchEnvironmentOf(ctx).get('DEEPSEEK_BASE_URL')?.value
 
 ## 已知限制与暂缓事项
 
-- **快照不是子进程边界**：每一层同样会被物化进 `process.env`，因此项目里的普通变量会按 [`dsh-subprocess`](../../subprocess/subprocess/README.md) 的清洗规则抵达子进程。产品启动器的 [`.env` 约定](../../boot/app-boot/README.md#profiles) 会在物化之前拒绝 bootstrap 变量。
+- **快照不是子进程边界**：每一层同样会被物化进 `process.env`，因此项目里的普通变量会按 [`dsh-subprocess`](../../subprocess/subprocess/README.zh.md) 的清洗规则抵达子进程。产品启动器的 [`.env` 约定](../../boot/app-boot/README.zh.md#profiles) 会在物化之前拒绝 bootstrap 变量。
 - **没有按工作区划分的层**：项目层是*调用*目录，在启动时固定。之后在 Web UI 中选择的工作区不贡献任何内容，这是刻意的：跟随它等于让模型自己的工作区在会话中途改变 harness 的环境。

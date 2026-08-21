@@ -55,11 +55,11 @@ root
             └─ models (order 10)         ui-settings-models 注册
 ```
 
-section/item contribution 使用 `ctx.slots.inject()`，不依赖 client manifest（元数据清单）的 apply 顺序；本地化 label 走 [全量接入 Note](../../implemented/architecture/2026-07-30-client-locale-full-rollout.md) 的 label thunk。SlotMap 类型分家：trigger/header/close/section 正家在 ui-settings 约定（消费方 general/models 均依赖壳，无环）；`settings.general.item` 正家在 locale 包——它是全部 item 注册方的最低公共依赖（设置行必带文案），而声明方 general 的约定对 locale/ui-theme 不可达（会成环）；ui-theme 经 re-export 出口消费。
+section/item contribution 使用 `ctx.slots.inject()`，不依赖 client manifest（元数据清单）的 apply 顺序；本地化 label 走 [全量接入 Note](../../implemented/architecture/2026-07-30-client-locale-full-rollout.zh.md) 的 label thunk。SlotMap 类型分家：trigger/header/close/section 正家在 ui-settings 约定（消费方 general/models 均依赖壳，无环）；`settings.general.item` 正家在 locale 包——它是全部 item 注册方的最低公共依赖（设置行必带文案），而声明方 general 的约定对 locale/ui-theme 不可达（会成环）；ui-theme 经 re-export 出口消费。
 
 ### slot 声明是一等可注入等待对象
 
-`SlotRegistry.inject()` 直接等待有类型约束的 ledger key；它不会将声明桥接为合成的 `slot:<name>` Cordis 服务。回调会跟随声明折叠与重新声明，而其控制器仍归贡献方插件 fiber 所有；直接向未声明 slot 注册仍会直接报错。这删除了基于陈旧 disposer 的在位状态机，以及容易因拼写错误出错的平行服务命名空间。完整的生命周期与失败约定见 [slot 声明注入决策](../../implemented/architecture/2026-08-05-slot-declaration-injection.md)。
+`SlotRegistry.inject()` 直接等待有类型约束的 ledger key；它不会将声明桥接为合成的 `slot:<name>` Cordis 服务。回调会跟随声明折叠与重新声明，而其控制器仍归贡献方插件 fiber 所有；直接向未声明 slot 注册仍会直接报错。这删除了基于陈旧 disposer 的在位状态机，以及容易因拼写错误出错的平行服务命名空间。完整的生命周期与失败约定见 [slot 声明注入决策](../../implemented/architecture/2026-08-05-slot-declaration-injection.zh.md)。
 
 ### 服务约定
 

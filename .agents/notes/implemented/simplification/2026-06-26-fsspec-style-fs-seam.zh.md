@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.md)中的文件系统能力目前让一个抽象 `FileSystem` 服务同时负责两项不同工作：
+[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.zh.md)中的文件系统能力目前让一个抽象 `FileSystem` 服务同时负责两项不同工作：
 
 1. **提供方操作**——解析目标、stat/版本元数据、文本读取/流式读取、原子写入，以及受保护的字面编辑。
 2. **面向 agent（智能体）的策略**——行窗口、字面编辑语义，以及读后写/编辑的观测状态。
@@ -30,7 +30,7 @@ provider      dsh-fs-local      local implementation of ctx.fs
 
 `dsh-tool-fs` 保持相同的面向模型的 `read`/`write`/`edit` schema。它是执行器：注入 `fs`（不是策略服务）并直接访问 `ctx.fs`，拥有读取窗口化逻辑，并分发 `fs/*` 事件以便 `dsh-fs-observation-policy` 进行门控和记录。
 
-本 Agent Note 决定了四层拆分、提供方约定和新鲜度策略。随后，[事件门禁 Agent Note](../architecture/2026-06-26-file-context-as-event-gate.md) 细化了工具↔策略耦合：`dsh-fs-observation-policy` 是通过 `fs/*` 事件参与的门禁插件，而非 `ctx.fileContext` 方法服务，因此工具不会在方法层与其耦合；读取窗口和 fs I/O 位于 `dsh-tool-fs`。本文描述已经落地的事件门禁形状；提供方的版本守卫可选（省略即无条件裸提供方）。
+本 Agent Note 决定了四层拆分、提供方约定和新鲜度策略。随后，[事件门禁 Agent Note](../architecture/2026-06-26-file-context-as-event-gate.zh.md) 细化了工具↔策略耦合：`dsh-fs-observation-policy` 是通过 `fs/*` 事件参与的门禁插件，而非 `ctx.fileContext` 方法服务，因此工具不会在方法层与其耦合；读取窗口和 fs I/O 位于 `dsh-tool-fs`。本文描述已经落地的事件门禁形状；提供方的版本守卫可选（省略即无条件裸提供方）。
 
 ## 提供方约定
 
@@ -65,7 +65,7 @@ type FsWriteIntent =
 
 这是一个*文本存储* seam，刻意比字节级 fsspec（`cat`/`open` 返回原始字节）高半个层次。UTF-8 解码、二进制/NUL 拒绝、受保护的全文件写入和受保护的字面文本编辑都在提供方内完成，因此策略层从不接触原始字节、不重新实现跨分片解码、也不将陈旧检查与变更临界区分离。面向模型的概念仍然不下沉到提供方：行窗口、带行号的行、渲染的页脚、观测状态存储都不会泄漏下去。
 
-从 `dsh-fs` 删除：`readPage`、`FsExpectation`、`FsView`、`FsStateSource`、`FsReadRequest`、`FsTextLine`、行/窗口常量、`formatReadBody` 和 observed-state `WeakMap`。`applyEdit` 由更窄的提供方原语 `editText` 取代，其约定是带版本守卫的字面文本变更，而非策略层读取授权。`FS_PARTIAL_OBSERVATION` 错误码也从 `FsErrorCode` 分类体系中移除：新鲜度授权没有部分/完整之分，因此没有任何路径会抛出它。`FsTargetKey` 和 `FsVersion` 按现有[品牌化 id Agent Note](../architecture/2026-06-20-branded-ids.md) 成为品牌化不透明 id。
+从 `dsh-fs` 删除：`readPage`、`FsExpectation`、`FsView`、`FsStateSource`、`FsReadRequest`、`FsTextLine`、行/窗口常量、`formatReadBody` 和 observed-state `WeakMap`。`applyEdit` 由更窄的提供方原语 `editText` 取代，其约定是带版本守卫的字面文本变更，而非策略层读取授权。`FS_PARTIAL_OBSERVATION` 错误码也从 `FsErrorCode` 分类体系中移除：新鲜度授权没有部分/完整之分，因此没有任何路径会抛出它。`FsTargetKey` 和 `FsVersion` 按现有[品牌化 id Agent Note](../architecture/2026-06-20-branded-ids.zh.md) 成为品牌化不透明 id。
 
 ## 策略约定
 
@@ -99,7 +99,7 @@ type FsWriteIntent =
 
 ## 取代
 
-本 Agent Note 推翻[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.md)中的两项决策，并收窄第三项：
+本 Agent Note 推翻[文件系统能力 seam](../architecture/2026-06-17-filesystem-capability-seam.zh.md)中的两项决策，并收窄第三项：
 
 - 读后写/编辑策略从 `ctx.fs` 移出，进入 `dsh-fs-observation-policy` 插件（通过 `fs/*` 事件门控）。
 - 文本读取不再返回后端编号的行记录或 `full`/`partial` 视图；授权基于版本新鲜度，因此窗口化读取在文件未变时即可授权编辑。
@@ -118,7 +118,7 @@ type FsWriteIntent =
 ## 曾考虑的替代方案
 
 - **字节级 fsspec（`cat`/`open` 返回原始字节）**：否决。该 seam 刻意定位为文本存储，比字节级高半个层次，这样 UTF-8 解码、二进制/NUL 拒绝和受保护的文本变更只在提供方实现一次，策略层从不接触原始字节，也不将陈旧检查与变更临界区分离。
-- **具体的 `ctx.fileContext` 方法服务**——本 Agent Note 最初的策略形状；[事件门禁 Agent Note](../architecture/2026-06-26-file-context-as-event-gate.md) 将其重做为门禁插件，使工具永远不会在方法层与策略耦合。
+- **具体的 `ctx.fileContext` 方法服务**——本 Agent Note 最初的策略形状；[事件门禁 Agent Note](../architecture/2026-06-26-file-context-as-event-gate.zh.md) 将其重做为门禁插件，使工具永远不会在方法层与策略耦合。
 - **在提供方保留 `readPage` 和 `full`/`partial` 视图授权**：「取代」一节所逆转的重构前形态。视图完整性不是编辑安全所需的，版本新鲜度才是；而视图规则使超过读取上限的大文件无法编辑。
 
 ## 后果

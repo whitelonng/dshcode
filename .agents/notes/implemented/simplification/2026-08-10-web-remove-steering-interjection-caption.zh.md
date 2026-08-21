@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[上下文来源与 steer 标识决策](../feature/2026-08-04-web-context-source-and-steer-marks.md)给每个持久与待处理的 steering 气泡加上了 `插话` / `Interjection` 标注，让 transcript（文本记录）能说明哪条右对齐气泡打断了正在运行的轮次。这个标注重复了消息流已经呈现的事实：steering 气泡位于轮次中途、夹在被它打断的助手内容之间，而开轮提示位于轮次边界。在每个 steer 气泡上方常驻一行三级文字，并没有让一个能看到位置的读者多读出任何信息，而且它是所有用户样式气泡中唯一带装饰的，还破坏了原本统一的右对齐节奏。
+[上下文来源与 steer 标识决策](../feature/2026-08-04-web-context-source-and-steer-marks.zh.md)给每个持久与待处理的 steering 气泡加上了 `插话` / `Interjection` 标注，让 transcript（文本记录）能说明哪条右对齐气泡打断了正在运行的轮次。这个标注重复了消息流已经呈现的事实：steering 气泡位于轮次中途、夹在被它打断的助手内容之间，而开轮提示位于轮次边界。在每个 steer 气泡上方常驻一行三级文字，并没有让一个能看到位置的读者多读出任何信息，而且它是所有用户样式气泡中唯一带装饰的，还破坏了原本统一的右对齐节奏。
 
 ## 决策
 
@@ -14,7 +14,7 @@ steering 完全按用户气泡渲染。`UserStyleBubble` 不再有 steering 标�
 
 运行时的区分保持不变。从持久 `agent/inbox/spliced` 历史投影 `SteeringMessageNode`、`data-pending-steering` 属性、待处理到持久的交接全部保留：待处理生命周期无论呈现如何都需要节点身份，测试也仍通过该属性定位待处理气泡。
 
-本决策部分取代[上下文来源与 steer 标识决策](../feature/2026-08-04-web-context-source-and-steer-marks.md)中的 steering 条款；其上下文来源与召回命名仍然有效。这个标注此前已经翻转过一次：[已归档的取消 steer 装饰决策](../../archived/simplification/2026-07-31-web-ui-no-steer-entry-or-interjection-chrome.md)在 composer 无法 steer 时移除了它，2026-08-04 的决策在 composer 获得 Steer 手势后把它加了回来。本次移除不重议手势本身——steering 入口、Queue dock 的插话发送操作、待处理生命周期各归其主——只判定 transcript 不需要为其结果命名。
+本决策部分取代[上下文来源与 steer 标识决策](../feature/2026-08-04-web-context-source-and-steer-marks.zh.md)中的 steering 条款；其上下文来源与召回命名仍然有效。这个标注此前已经翻转过一次：[已归档的取消 steer 装饰决策](../../archived/simplification/2026-07-31-web-ui-no-steer-entry-or-interjection-chrome.md)在 composer 无法 steer 时移除了它，2026-08-04 的决策在 composer 获得 Steer 手势后把它加了回来。本次移除不重议手势本身——steering 入口、Queue dock 的插话发送操作、待处理生命周期各归其主——只判定 transcript 不需要为其结果命名。
 
 ## 考虑过的替代方案
 

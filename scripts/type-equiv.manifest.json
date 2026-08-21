@@ -931,6 +931,16 @@
       "source": "packages/attachment/attachment/src/types.ts"
     },
     {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "ImageRequestPolicy",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
+      "symbol": "RequestImageAttachment",
+      "source": "packages/attachment/attachment/src/types.ts"
+    },
+    {
       "doc": "docs/subsystems/shell.md",
       "symbol": "ShellExecRequest",
       "source": "packages/shell/shell/src/types.ts"

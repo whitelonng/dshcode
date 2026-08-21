@@ -13,6 +13,7 @@ vi.mock('@earendil-works/pi-ai/api/openai-completions.lazy', () => ({
 
 import { PiAiAdapter } from '../src/adapter.ts'
 import { resolveProfiles } from '../src/config.ts'
+import { memoryAuth } from './auth-double.ts'
 
 afterEach(() => { streamSimple.mockReset() })
 
@@ -27,6 +28,7 @@ function gatewayAdapter(): PiAiAdapter {
       },
     }),
     resolveApiKey: () => Promise.resolve('test-key'),
+    auth: memoryAuth(),
   })
 }
 

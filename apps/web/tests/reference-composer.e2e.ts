@@ -30,6 +30,7 @@ import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './suppor
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/reference-composer', import.meta.url))
 const MENU_EXPECTED = join(SNAPSHOT_DIR, 'menu.expected.md')
 const ORDER_EXPECTED = join(SNAPSHOT_DIR, 'order.expected.md')
+const CARET_EXPECTED = join(SNAPSHOT_DIR, 'caret-edits.expected.md')
 const MODE = webSnapshotMode()
 const SOURCE_SESSION_ID = 'reference-source-session'
 const TARGET_SESSION_ID = 'reference-order-target-session'
@@ -110,6 +111,29 @@ function targetSessionFixture(): string {
   ].join('\n')
 }
 
+/**
+ * Project the composer backdrop into one stable block: the draft it paints and
+ * each segment in draft order, with the decoration a segment carries.
+ * @param page - the assembled app page.
+ * @returns the golden text for the composer's decoration layer.
+ */
+async function composerSegments(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const backdrop = document.querySelector('[data-input-backdrop]')
+    const textarea = document.querySelector('textarea')
+    if (backdrop === null || textarea === null) return 'composer absent'
+    const rows = [...backdrop.childNodes].map((node) => {
+      if (!(node instanceof HTMLElement)) return `plain    ${JSON.stringify(node.textContent ?? '')}`
+      const decoration = node.dataset['decoration'] ?? 'unknown'
+      const appearance = node.dataset['referenceAppearance']
+      const icons = node.querySelectorAll('svg').length
+      return `${decoration.padEnd(8)} ${JSON.stringify(node.textContent ?? '')}`
+        + `${appearance === undefined ? '' : ` appearance=${appearance}`} icons=${icons}`
+    })
+    return [`draft ${JSON.stringify(textarea.value)}`, ...rows].join('\n')
+  })
+}
+
 describe.skipIf(MODE === 'record')('web e2e: file and session references through the real host', () => {
   let scaffold: WebScaffold
   let browser: Browser
@@ -168,6 +192,42 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     expect(tripwire.warnings).toEqual([])
   })
 
+  it('keeps a structured reference across caret edits in front of it', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-caret-edits'))
+    const input = page.locator('textarea').first()
+    const menu = page.getByRole('listbox', { name: 'Trigger suggestions' })
+    const sessionReference = page.locator('[data-reference-appearance="session"]')
+
+    await input.fill('@Research')
+    await menu.getByRole('option', { name: /Session \u00b7 Research notes/ }).click()
+    await expect.poll(() => input.inputValue()).toBe('@Research notes ')
+
+    // Only the caret is placed programmatically; both edits below are real key
+    // presses, which is the whole point — the range a textarea reports for them
+    // is what the composer has to read, and no synthetic event can stand in.
+    await input.evaluate((el: HTMLTextAreaElement) => { el.focus(); el.setSelectionRange(0, 0) })
+    await input.press('@')
+    await expect.poll(() => input.inputValue()).toBe('@@Research notes ')
+    await expect.poll(() => sessionReference.count()).toBe(1)
+    await expect.poll(() => sessionReference.textContent()).toBe('@Research notes')
+    await expect.poll(() => sessionReference.locator('svg').count()).toBe(1)
+
+    // The decoration layer is aria-hidden, so the accessibility tree cannot see
+    // the chip; the golden projects the backdrop's own segments instead, which
+    // is where the surviving reference is observable at all.
+    await compareOrRefreshGolden(CARET_EXPECTED, await composerSegments(page), MODE)
+
+    // The caret sits after the typed trigger; this Backspace removes it with a
+    // collapsed selection, the gesture the reported range cannot describe alone.
+    await input.press('Backspace')
+    await expect.poll(() => input.inputValue()).toBe('@Research notes ')
+    await expect.poll(() => sessionReference.count()).toBe(1)
+    await expect.poll(() => sessionReference.textContent()).toBe('@Research notes')
+
+    expect(tripwire.pageErrors).toEqual([])
+    expect(tripwire.warnings).toEqual([])
+  })
+
   it('renders the durable direct-message then recall order', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-order'))
     const group = page.getByRole('treeitem', { name: /Ungrouped/ })
@@ -184,6 +244,6 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     expect(snapshot.indexOf('Research notes what changed?')).toBeLessThan(snapshot.indexOf('Session recall Research notes'))
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['menu.expected.md', 'order.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['caret-edits.expected.md', 'menu.expected.md', 'order.expected.md'])
   })
 })

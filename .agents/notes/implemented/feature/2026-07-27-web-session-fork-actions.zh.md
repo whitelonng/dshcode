@@ -10,7 +10,7 @@ Session store 已提供按完成轮前缀创建子会话的 fork 原语，但 We
 
 ## Decision
 
-本决策中的消息资格部分由[已完成轮次尾部决策](../bug-fix/2026-08-02-message-fork-actions-require-completed-turn-tail.md)收紧；共享运行时操作、注入归属、标题处理和同级列表决策仍然有效。
+本决策中的消息资格部分由[已完成轮次尾部决策](../bug-fix/2026-08-02-message-fork-actions-require-completed-turn-tail.zh.md)收紧；共享运行时操作、注入归属、标题处理和同级列表决策仍然有效。
 
 Web 的 session 行菜单与消息 IconActions 共用 client runtime 的 `sessions.fork` 操作。Session 行传 `{ sessionId, increaseTitle: true }`，因此在源会话最后一个已完成轮次处分支；符合条件且位于已完成轮次尾部的消息传 `{ sessionId, atSeq: node.seq, increaseTitle: true }`，因此在以该消息结束的轮次处分支。`increaseTitle` 只由 client 消费：子会话进入本地列表后，client 把源会话持久化标题尾部的 `(N)` 或 `（N）` 递增并保留括号样式，无编号时追加 ` (1)`，没有持久化标题时不改名；Host fork 请求仍只有 `sessionId` 与可选的 `atSeq`。改名成功后调用方才打开子会话；fork 或改名失败时保持源会话与当前选择不变，改名失败时已创建的子会话仍留在列表中。
 

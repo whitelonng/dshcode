@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-由插件负责、供交互式 UI 适配器使用的面向用户命令注册表。[插件命令注册 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-plugin-command-registration.md)定义了其边界与分发约定。
+由插件负责、供交互式 UI 适配器使用的面向用户命令注册表。[插件命令注册 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-plugin-command-registration.zh.md)定义了其边界与分发约定。
 
 ## 服务约定
 
@@ -24,7 +24,7 @@
 
 #### 模型看到的内容
 
-注册表自身不会提交任何内容。已知斜杠命令在 UI 命令平面执行，其 `CommandResult` 文本不会作为用户消息提交。已交付的适配器会拒绝未知斜杠命令输入，而不是将其变成模型提示词。命令生产方可以显式使用接收命令的 `Agent`；例如，[`dsh-plan-mode`](../../plan/plan-mode/README.md#model-and-human-interactions)在选择 plan mode 后，会提交 `/plan [message]` 中的可选消息。图片附件遵循同一规则：执行器只负责把它们准入为持久化附件对象，是否以及如何成为模型可见的消息内容由声明接受的生产方决定。
+注册表自身不会提交任何内容。已知斜杠命令在 UI 命令平面执行，其 `CommandResult` 文本不会作为用户消息提交。已交付的适配器会拒绝未知斜杠命令输入，而不是将其变成模型提示词。命令生产方可以显式使用接收命令的 `Agent`；例如，[`dsh-plan-mode`](../../plan/plan-mode/README.zh.md#model-and-human-interactions)在选择 plan mode 后，会提交 `/plan [message]` 中的可选消息。图片附件遵循同一规则：执行器只负责把它们准入为持久化附件对象，是否以及如何成为模型可见的消息内容由声明接受的生产方决定。
 
 #### Token 影响
 

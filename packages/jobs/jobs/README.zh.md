@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-后台任务注册表约定（`ctx.jobs`）。抽象的 `JobRegistry` 及其词汇类型在同一份约定下为长时间运行的生产方提供共享 id、owner 隔离、读取、取消、等待、通知和清理；进程局部注册表位于 [`dsh-jobs-local`](../jobs-local/README.md)。生产方插件使用其不透明 id namespace 扩展 `JobKindMap`。
+后台任务注册表约定（`ctx.jobs`）。抽象的 `JobRegistry` 及其词汇类型在同一份约定下为长时间运行的生产方提供共享 id、owner 隔离、读取、取消、等待、通知和清理；进程局部注册表位于 [`dsh-jobs-local`](../jobs-local/README.zh.md)。生产方插件使用其不透明 id namespace 扩展 `JobKindMap`。
 
 ## 服务约定
 
@@ -23,11 +23,11 @@
 
 实现还必须兑现约定的生命周期语义：注册的存续期长于生产方 fiber 与控制器 fiber，owner 释放和服务释放会取消仍在运行的工作并等待守约的生产方，结算遵循首次结果优先（一条终止记录、一轮异常受到隔离的监听器通知，然后释放等待方）。
 
-参见[任务类型目录](../../../docs/subsystems/jobs.md)、[运行时 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-20-generic-long-running-tool-runtime.md)和 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-26-job-registry-seam.md)。
+参见[任务类型目录](../../../docs/subsystems/jobs.zh.md)、[运行时 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-20-generic-long-running-tool-runtime.zh.md)和 [seam Agent Note](../../../.agents/notes/implemented/architecture/2026-07-26-job-registry-seam.zh.md)。
 
 ## 模型体验
 
-通过生产方插件和 [`dsh-tool-jobs`](../tool-jobs/README.md) 间接影响；它们会渲染 job id、输出、状态、取消和完成通知。
+通过生产方插件和 [`dsh-tool-jobs`](../tool-jobs/README.zh.md) 间接影响；它们会渲染 job id、输出、状态、取消和完成通知。
 
 #### KV Cache 影响
 

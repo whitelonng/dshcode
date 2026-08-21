@@ -4,7 +4,7 @@
 
 DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：通过领域数据形式存储持久 workspace 记录、稳定 workspace 顺序和按新到旧排列的候选会话索引。消费方看到 `Workspace` 接口；实体实现保持包私有。
 
-实体／存储理由见[领域 Agent Note](../../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md)；仅使用头部的引导初始化和 GUI 排序见 [Workspace UI 产品流 Agent Note](../../../.agents/notes/implemented/feature/2026-07-25-workspace-ui-product-flow.md)。
+实体／存储理由见[领域 Agent Note](../../../.agents/notes/proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.zh.md)；仅使用头部的引导初始化和 GUI 排序见 [Workspace UI 产品流 Agent Note](../../../.agents/notes/implemented/feature/2026-07-25-workspace-ui-product-flow.zh.md)。
 
 ## 结构
 
@@ -40,5 +40,5 @@ DeepSeek Harness 的 Workspace 实体注册表（`ctx.workspaceRegistry`）：�
 
 ## 已知限制与暂缓事项
 
-- 会话删除与破坏性的文件夹移除是彼此独立且尚未提供的功能；删除 Workspace 注册记录绝不能替代二者（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)）。
+- 会话删除与破坏性的文件夹移除是彼此独立且尚未提供的功能；删除 Workspace 注册记录绝不能替代二者（参见[决策记录](../../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）。
 - 头部索引会在启动时刷新，也会在 attach 必须解析未缓存持久 id 时刷新；另一进程执行的删除或造成的 cwd 损坏会在下次刷新或重启后被发现。

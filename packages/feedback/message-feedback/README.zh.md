@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本包提供由 Host 拥有、针对单条已完成 assistant 消息的可编辑反馈。它注册 `ctx.messageFeedback`，在 storage-domain 中为每个 Session 持久化一条绑定生命周期的伴随记录（sidecar），并发布 Host `messageFeedback.list`、`messageFeedback.put` 与 `messageFeedback.delete` 一元 Remote 契约。它与不可变的 Session 级 `feedback/record` 事件相互独立，不执行遥测交接。[消息反馈伴随记录 Agent Note](../../../.agents/notes/implemented/architecture/2026-08-10-message-feedback-sidecar.md)拥有其设计边界。
+本包提供由 Host 拥有、针对单条已完成 assistant 消息的可编辑反馈。它注册 `ctx.messageFeedback`，在 storage-domain 中为每个 Session 持久化一条绑定生命周期的伴随记录（sidecar），并发布 Host `messageFeedback.list`、`messageFeedback.put` 与 `messageFeedback.delete` 一元 Remote 契约。它与不可变的 Session 级 `feedback/record` 事件相互独立，不执行遥测交接。[消息反馈伴随记录 Agent Note](../../../.agents/notes/implemented/architecture/2026-08-10-message-feedback-sidecar.zh.md)拥有其设计边界。
 
 公开的请求、值、版本与失败类型从包根入口及 `@deepseek-ai/dsh-message-feedback/types` 导出；其源码为 [`src/types.ts`](src/types.ts)。
 

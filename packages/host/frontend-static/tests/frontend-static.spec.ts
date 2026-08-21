@@ -1,9 +1,9 @@
 /**
  * REAL-composition coverage: a test-only cordis.yml booted through the
  * vendored Loader mounts the webserver and frontend-static rows, and every
- * assertion observes the served HTTP surface — asset serving, MIME fallback,
- * SPA index fallback with index taps, traversal rejection, 405 on non-GET/
- * HEAD, and seat release on fiber disposal (HMR safety).
+ * assertion observes the served HTTP surface — asset serving, explicit index
+ * entry points with index taps, 404 misses, traversal rejection, 405 on non-
+ * GET/HEAD, and seat release on fiber disposal (HMR safety).
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -37,6 +37,7 @@ async function loadComposition(): Promise<Context> {
   await writeFile(join(dist, 'app.js'), 'export {}')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
+  await mkdir(join(dist, 'empty'))
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
     "- name: '@deepseek-ai/dsh-host-webserver'",
@@ -84,7 +85,7 @@ async function request(port: number, path: string, init?: RequestInit): Promise<
 }
 
 describe('real Loader composition', () => {
-  it('serves the dist with SPA fallback, taps, traversal rejection, and method gating', { timeout: 60_000 }, async () => {
+  it('serves explicit index entries and files while preserving HTTP error semantics', { timeout: 60_000 }, async () => {
     const loaded = await loadComposition()
     const unloaded = [...loaded.loader.entries()]
       .filter(entry => entry.fiber === undefined && !entry.disabled)
@@ -100,27 +101,67 @@ describe('real Loader composition', () => {
       type: 'application/manifest+json',
       body: '{}',
     })
+    expect(await request(port, '/app.js', { method: 'HEAD' })).toEqual({
+      status: 200,
+      type: 'text/javascript; charset=utf-8',
+      body: '',
+    })
     await writeFile(join(root!, 'dist', 'app.js'), 'export const rebuilt = true')
     expect(await request(port, '/app.js')).toMatchObject({ status: 200, body: 'export const rebuilt = true' })
 
     // Unknown extension ships as octet-stream.
     expect(await request(port, '/blob.bin')).toMatchObject({ status: 200, type: 'application/octet-stream', body: 'BLOB' })
 
-    // `/`, the index path, and any miss all render index.html (SPA routing)
-    // through the registered index taps.
+    // Only the root and index path render index.html through registered taps.
     const untap = server.tapIndex(html => html.replace('<head>', '<head><script>window.__T__=1</script>'))
-    for (const path of ['/', '/index.html', '/no/such/route']) {
+    for (const path of ['/', '/index.html', '/?fixture']) {
       const got = await request(port, path)
       expect(got.status).toBe(200)
+      expect(got.type).toBe('text/html; charset=utf-8')
       expect(got.body).toContain('__T__')
       expect(got.body).toContain('shell')
     }
+    expect(await request(port, '/', { method: 'HEAD' })).toEqual({
+      status: 200,
+      type: 'text/html; charset=utf-8',
+      body: '',
+    })
     untap()
     expect((await request(port, '/')).body).not.toContain('__T__')
 
-    // Traversal outside the dist root is 403; non-GET/HEAD is 405.
+    // A missing configured index follows the same empty-404 contract for both
+    // of its public entry paths and for both supported methods.
+    await rm(join(root!, 'dist', 'index.html'))
+    for (const path of ['/', '/index.html']) {
+      const get = await request(port, path)
+      const head = await request(port, path, { method: 'HEAD' })
+      expect(get).toEqual({ status: 404, type: null, body: '' })
+      expect(head).toEqual(get)
+    }
+
+    // Ordinary unknown paths and static-resource misses are empty 404s for
+    // both GET and HEAD; neither class can be mistaken for the HTML shell.
+    const ordinaryMisses = ['/no/such/route', '/api/no/such/route', '/empty', '/app.js/child']
+    const assetMisses = [
+      '/missing.js',
+      '/missing.css',
+      '/missing.mjs',
+      '/missing.js.map',
+      '/missing.webmanifest',
+      '/missing.manifest',
+    ]
+    for (const path of [...ordinaryMisses, ...assetMisses]) {
+      const get = await request(port, path)
+      const head = await request(port, path, { method: 'HEAD' })
+      expect(get).toEqual({ status: 404, type: null, body: '' })
+      expect(head).toEqual(get)
+    }
+
+    // Traversal outside the dist root is 403, non-GET/HEAD is 405, and a
+    // malformed filesystem target still reaches the webserver's 400 guard.
     expect((await request(port, '/..%2f..%2fetc%2fpasswd')).status).toBe(403)
-    expect((await request(port, '/nowhere', { method: 'POST' })).status).toBe(405)
+    expect((await request(port, '/app.js', { method: 'POST' })).status).toBe(405)
+    expect((await request(port, '/bad%00path')).status).toBe(400)
 
     // HMR safety: disposing the frontend row releases the fallback seat (the
     // unclaimed webserver answers 404) and the seat is claimable again.

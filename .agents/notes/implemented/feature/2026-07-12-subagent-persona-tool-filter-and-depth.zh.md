@@ -32,6 +32,8 @@ subagent 启动有三个独立的组合控制：`persona`、`toolFilter` 和 `ma
 
 这使用的是常规的系统提示词注册机制，而非第二条人设通道。因此第一次提示词看到的命名贡献与后续提示词和提示词检查工具看到的一致。
 
+<a id="tool-filtering-is-one-live-global-view-rule"></a>
+
 ### 工具过滤是一条作用于实时全局视图的规则
 
 工具过滤同时控制能力可见性和可执行查找。进程内提供方在发布前于子 agent 作用域中安装 `ToolRuntime.restrict()`，注册表的单一解析器对协议格式（wire format）的工具 schema、查找、执行和 Code Mode SDK 生成施加相同的结果。独立注册的系统提示词段落不在 `ToolRuntime` 内，因此过滤一个工具不会移除该插件的独立指导文本。

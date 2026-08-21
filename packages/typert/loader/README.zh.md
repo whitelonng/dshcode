@@ -12,7 +12,7 @@
 
 ## 模型体验
 
-无。loader 只向 [`ctx.typert`](../registry/README.md) 提供注册项；任何模型可见投影均由消费方负责。
+无。loader 只向 [`ctx.typert`](../registry/README.zh.md) 提供注册项；任何模型可见投影均由消费方负责。
 
 #### KV Cache 影响
 

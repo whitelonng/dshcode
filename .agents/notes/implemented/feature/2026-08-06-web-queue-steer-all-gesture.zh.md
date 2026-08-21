@@ -22,7 +22,7 @@ Status: implemented
 
 ## 相关决策
 
-逐条「插话发送」动作及其严格 steer 边界由 [将一条 Web 排队消息插话到活动轮次](../feature/2026-07-30-web-queue-steer-action.md) 记录；本笔记只在其之上增加整队列键盘手势。
+逐条「插话发送」动作及其严格 steer 边界由 [将一条 Web 排队消息插话到活动轮次](../feature/2026-07-30-web-queue-steer-action.zh.md) 记录；本笔记只在其之上增加整队列键盘手势。
 
 ## 曾考虑的替代方案
 

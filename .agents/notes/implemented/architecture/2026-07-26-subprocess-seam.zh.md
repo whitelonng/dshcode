@@ -6,13 +6,13 @@ Status: implemented
 
 ## 问题
 
-`dsh-bash-local` 原先把两项因不同原因而变化的能力捆绑在一起：*运行一条 bash 命令*（命令默认值补全、超时分类、对模型友好的终端环境、bash 工具所渲染的 stdout/stderr 合并）与*运行并管理一个子进程*（detached 进程组、附带 spill 文件的有界尾部保留输出、凭据清除与 `DSH_*` 合并次序、SIGTERM→宽限期→SIGKILL 升级、先终止再等待退出的 dispose（资源释放））。进程这一半（`run.ts`）约占整个包的一半，却没有属于自己的 seam：未来的非 shell 运行器（直接执行 argv 的执行器、worker supervisor）将不得不重新实现这套机制，或者探入 bash 内部；而共享的 `DSH_*`/`CollectedOutput` 词汇则存放在一个名字承诺 shell 语义的包里。这种捆绑还把后台进程的存续期系在执行器的 fiber 上：重载 bash 执行器会杀死每一个存活的后台进程。这一点不同于兄弟的[任务注册表](2026-07-26-job-registry-seam.md)：后者的注册存续期刻意长于生产方 fiber。
+`dsh-bash-local` 原先把两项因不同原因而变化的能力捆绑在一起：*运行一条 bash 命令*（命令默认值补全、超时分类、对模型友好的终端环境、bash 工具所渲染的 stdout/stderr 合并）与*运行并管理一个子进程*（detached 进程组、附带 spill 文件的有界尾部保留输出、凭据清除与 `DSH_*` 合并次序、SIGTERM→宽限期→SIGKILL 升级、先终止再等待退出的 dispose（资源释放））。进程这一半（`run.ts`）约占整个包的一半，却没有属于自己的 seam：未来的非 shell 运行器（直接执行 argv 的执行器、worker supervisor）将不得不重新实现这套机制，或者探入 bash 内部；而共享的 `DSH_*`/`CollectedOutput` 词汇则存放在一个名字承诺 shell 语义的包里。这种捆绑还把后台进程的存续期系在执行器的 fiber 上：重载 bash 执行器会杀死每一个存活的后台进程。这一点不同于兄弟的[任务注册表](2026-07-26-job-registry-seam.zh.md)：后者的注册存续期刻意长于生产方 fiber。
 
 ## 决策
 
 新的 `subprocess/` 能力家族拥有「运行并管理一个进程」；bash 家族保留「运行一条 bash 命令」，并成为前者的消费方：
 
-- **`@deepseek-ai/dsh-subprocess`（Service Definition）**——拥有 `ctx.subprocess` 的抽象 `SubprocessRuntime`：可执行文件查找、完全显式的普通 spawn，以及[可移植执行环境决策](2026-07-28-portable-execution-world-consumers.md)新增的终端原语。每条 stdio 流独立选择 `'pipe'`、`'inherit'` 或有界收集 `{ maxBytes, spill? }`；stdin 选择 `'ignore'`、`'pipe'` 或 `{ data }`。`SubprocessOutcome` 只承载刻意不含超时／取消分类的退出事实，收集输出在结算后仍留在句柄上。该 Service Definition 还拥有进程与终端句柄、共享凭据清除，以及 `DSH_ENV_PREFIX`/`DshEnvironment`/`CollectedOutput`；`argv` 绝不经过 shell 解释。
+- **`@deepseek-ai/dsh-subprocess`（Service Definition）**——拥有 `ctx.subprocess` 的抽象 `SubprocessRuntime`：可执行文件查找、完全显式的普通 spawn，以及[可移植执行环境决策](2026-07-28-portable-execution-world-consumers.zh.md)新增的终端原语。每条 stdio 流独立选择 `'pipe'`、`'inherit'` 或有界收集 `{ maxBytes, spill? }`；stdin 选择 `'ignore'`、`'pipe'` 或 `{ data }`。`SubprocessOutcome` 只承载刻意不含超时／取消分类的退出事实，收集输出在结算后仍留在句柄上。该 Service Definition 还拥有进程与终端句柄、共享凭据清除，以及 `DSH_ENV_PREFIX`/`DshEnvironment`/`CollectedOutput`；`argv` 绝不经过 shell 解释。
 - **`@deepseek-ai/dsh-subprocess-local`（Service Provider）**——`LocalSubprocessRuntime` 构建在原 `run.ts` 管道（现为 `spawn.ts`）与 `node-pty` 之上：detached 进程组、有界收集与私有 spill 文件、可执行文件查找、前台／会话检查，以及终止每个受管进程并等待其退出的 dispose。`terminate()` 拥有面向进程树的 TERM→宽限→KILL，`waitForExit()` 观察进程树存活性，可注入的 `taskkill /T` 覆盖 Windows。普通与终端 spawn 都先应用 Service Definition 对 `KEY`/`PASSWORD`/`SECRET`/`TOKEN` 不区分大小写的清除，再合并显式 env。该 Service Provider 没有配置；每项限制都随 spec 到达，Bash 与 PTY 的呈现环境覆盖仍归各自 Consumer 所有。
 - **`dsh-bash-local`（Consumer）**——`inject: ['subprocess']`；把每个解析后的 `ShellExecSpec` 映射为一个 `SubprocessSpawnSpec`（`['bash', '-c', command]`），并保留自身配置、`resolve()` 默认值补全、基于融合 deadline 的 `timedOut`/`aborted` 分类、带 `[stderr]` 标记的后台读取合并及其消费游标，以及 `onProcessDone` 子类钩子。`dsh-bash-sandbox` 除了重新声明继承来的 inject 之外没有变化；它仍在命令字符串层面做包装，并重新进入继承的 spawn 路径。
 - **`dsh-shell`（Service Definition）**——把迁走的词汇从 `dsh-subprocess` 重导出，因此没有任何 bash Consumer 需要改动导入；`ShellExecRequest`/`ShellExecSpec`/`ShellProcess` 与沙箱事实仍归 bash 所有。
@@ -25,7 +25,7 @@ Status: implemented
 
 ## 曾考虑的替代方案
 
-**把进程管道留在 `dsh-bash-local` 里（维持现状）。**否决的理由与[任务注册表拆分](2026-07-26-job-registry-seam.md)得以落地的理由相同：这条边界既稳定，也早已记录在代码里（`run.ts` 的模块文档曾写明「this layer reacts to an abort signal; the executor owns deadlines and classifies causes」），而若继续将它保持私有，未来每个非 shell 运行器就只能要么 fork 这套机制，要么为非 bash 工作去依赖一个以 bash 命名的包。本次变更对用户可见的动因正是这一拆分。
+**把进程管道留在 `dsh-bash-local` 里（维持现状）。**否决的理由与[任务注册表拆分](2026-07-26-job-registry-seam.zh.md)得以落地的理由相同：这条边界既稳定，也早已记录在代码里（`run.ts` 的模块文档曾写明「this layer reacts to an abort signal; the executor owns deadlines and classifies causes」），而若继续将它保持私有，未来每个非 shell 运行器就只能要么 fork 这套机制，要么为非 bash 工作去依赖一个以 bash 命名的包。本次变更对用户可见的动因正是这一拆分。
 
 **保留最初只支持批量的接口，让流式消费方继续各自实现。**否决：已观察到的 LSP、ACP 与 PTY 形状表明，这会继续保留重复的私有进程树信号与环境清除。Node 形状的处置方式覆盖这些消费方，又不缓冲管道化流。
 

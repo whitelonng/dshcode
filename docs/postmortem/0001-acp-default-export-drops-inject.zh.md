@@ -103,7 +103,7 @@ if (!ctx.fiber.runtime) return ctx.reflect.get(prop, false)   // ← direct glob
 - **`AgentLoop.resume` 使用 `this.ctx.get('sessionPersistence')`**（`packages/core/agent-loop/src/index.ts`）——Bug #2 的修复，附注释说明 shadow 遍历陷阱。
 - **无需 key 的 `session/new` e2e，通过真实 stdio 运行**（`examples/acp-agent/tests/acp.e2e.ts`）：以子进程方式通过真实 Loader 启动示例，并断言 `session/new` 正常返回。无需 API key 即可明确暴露 Bug #1。已验证恢复 `export default apply` 时测试失败。
 - **e2e spawn 中设置 `TSX_TSCONFIG_PATH`**：子进程从临时 cwd 运行，tsx 无法通过向上搜索找到仓库根的 tsconfig `paths` 映射——因此 dsh-* 的 import 静默回退到已构建的 `lib/`。将 tsx 指向仓库 tsconfig 使解析不依赖 cwd，确保测试运行的是*源码*而非可能陈旧的构建产物。
-- **[docs/testing.md](../testing.md) 规则**：「测试真实入口路径」，行覆盖率不等于行为覆盖率——将这一教训编纂为所有未来插件的规则。
+- **[docs/testing.md](../testing.zh.md) 规则**：「测试真实入口路径」，行覆盖率不等于行为覆盖率——将这一教训编纂为所有未来插件的规则。
 
 ## 经验教训
 

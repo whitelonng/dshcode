@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cookbook/adding-a-conversation-node.md
 adding-a-conversation-node.md: c1965dc8a3081eebb8c1026ac53d2f7b8964edb7
-adding-a-conversation-node.zh.md: 92445e1432369a4e42cc372b5d5869c3cdeada4a
+adding-a-conversation-node.zh.md: 2986f695b351cd17637d7ff99112c38042950692

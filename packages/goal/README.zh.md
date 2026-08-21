@@ -6,9 +6,9 @@ agent 会话的持久目标状态，独立于消费它的面向模型工具与�
 
 | 包 | 职责 | ctx 键 |
 |---|---|---|
-| [`goal/`](goal/README.md) | 目标状态与生命周期 | `ctx.goals` |
-| [`goal-round-driver/`](goal-round-driver/README.md) | 同会话目标续行 | 无 |
-| [`tool-goal/`](tool-goal/README.md) | 面向模型的目标工具 | 无 |
-| [`command-goal/`](command-goal/README.md) | 面向用户的目标命令 | 无 |
+| [`goal/`](goal/README.zh.md) | 目标状态与生命周期 | `ctx.goals` |
+| [`goal-round-driver/`](goal-round-driver/README.zh.md) | 同会话目标续行 | 无 |
+| [`tool-goal/`](tool-goal/README.zh.md) | 面向模型的目标工具 | 无 |
+| [`command-goal/`](command-goal/README.zh.md) | 面向用户的目标命令 | 无 |
 
-子系统参考——goal 标识、生命周期快照、激活、变更记录——见 [docs/subsystems/goal.md](../../docs/subsystems/goal.md)。
+子系统参考——goal 标识、生命周期快照、激活、变更记录——见 [docs/subsystems/goal.md](../../docs/subsystems/goal.zh.md)。

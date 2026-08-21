@@ -10,4 +10,6 @@ Keep canonical prose and generated catalogs in their owning `docs/` tier, then e
 
 The projector writes disposable Markdown to the ignored `website/.generated/` directory. Never edit or commit `.generated/`, `.cache/`, or `.dist/`.
 
+The build also emits each route's raw-Markdown twin (with a parent-level alias per index route) and a root `llms.txt` index into `.dist/`, so a page's URL, minus any trailing slash, plus `.md` serves it as plain Markdown. Both derive from the publication manifest at build time; neither is ever a file in this tree.
+
 Run `pnpm docs:check` after changing this subtree; the gate rejects additional non-ignored Markdown under `website/`.

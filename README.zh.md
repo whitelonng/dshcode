@@ -52,7 +52,7 @@ DSHCode inherits the full DeepSeek Harness capability set and adds a one-click d
 
 <p align="center"><img src="assets/readme/readme-notifications.png" alt="Native OS notifications" width="60%"></p>
 
-See the [Web UI guide](docs/user/guide/index.md) for a walkthrough and the [desktop application guide](apps/desktop/README.md) for architecture, platform targets, and current limitations.
+See the [Web UI guide](docs/user/guide/index.zh.md) for a walkthrough and the [desktop application guide](apps/desktop/README.zh.md) for architecture, platform targets, and current limitations.
 
 ## Download
 
@@ -85,7 +85,7 @@ pnpm run build
 pnpm dsh web
 ```
 
-The command prints the local Web UI address. See the [Web UI guide](docs/user/guide/index.md).
+The command prints the local Web UI address. See the [Web UI guide](docs/user/guide/index.zh.md).
 
 ## Desktop application
 
@@ -140,7 +140,7 @@ DSHCode is an independent community project. Unless DeepSeek grants explicit aut
 
 ## Development
 
-Start with the [development guide](docs/development.md), [architecture documentation](docs/architecture.md), and [desktop application guide](apps/desktop/README.md). For agents, follow [AGENTS.md](AGENTS.md).
+Start with the [development guide](docs/development.zh.md), [architecture documentation](docs/architecture.zh.md), and [desktop application guide](apps/desktop/README.zh.md). For agents, follow [AGENTS.md](AGENTS.md).
 
 ## Acknowledgements
 

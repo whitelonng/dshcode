@@ -14,7 +14,7 @@ Status: rejected — 完整输出恢复是真实的 bash 行为。未来的产�
 
 保留尾部截断，移除完整输出 spill 文件。bash 结果包含有界的尾部内容加一个明确的截断标记；不输出路径。如果用户需要恢复完整输出，则添加一个通用的产物／blob 服务（具有明确的所有权、清理和 UI 渲染），然后让 bash 将大体量输出附加到该服务。
 
-本提案可以独立于[通用长时间运行工具运行时](../../implemented/architecture/2026-06-20-generic-long-running-tool-runtime.md)落地。如果后台任务保留，`bash_output` 仍应报告输出已被丢弃，但不再提供 spill 路径。
+本提案可以独立于[通用长时间运行工具运行时](../../implemented/architecture/2026-06-20-generic-long-running-tool-runtime.zh.md)落地。如果后台任务保留，`bash_output` 仍应报告输出已被丢弃，但不再提供 spill 路径。
 
 ## 验收标准
 
@@ -22,7 +22,7 @@ Status: rejected — 完整输出恢复是真实的 bash 行为。未来的产�
 - `OutputCollector` 仅保留有界缓冲区，删除临时文件机制。
 - `renderResult()` 报告截断时不包含文件系统路径。
 - 测试覆盖尾部截断，不再断言完整输出文件的内容。
-- [docs/defensive-patterns.md](../../../../docs/defensive-patterns.md) 中的安全指导不再将私有 spill 文件视为面向模型的接口。
+- [docs/defensive-patterns.md](../../../../docs/defensive-patterns.zh.md) 中的安全指导不再将私有 spill 文件视为面向模型的接口。
 
 ## 放弃的能力
 

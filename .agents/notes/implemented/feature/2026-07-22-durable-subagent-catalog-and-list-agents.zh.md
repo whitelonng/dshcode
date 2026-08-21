@@ -6,13 +6,13 @@ Status: implemented
 
 ## 问题
 
-可继续的后台 subagent 会公开稳定的 child id，并将重建数据持久化在该 child 的会话中，因此 `send_message` 无需任何列表查询操作即可恢复已知 child。发现功能有两类需求不同的消费方：UI 可以同时展示一次性工作和可继续对话，而模型只应收到适合使用 `send_message` 的 child。[可继续 subagent](../../implemented/feature/2026-07-28-continuable-subagent-conversations.md)负责持久化 Session 与 Activation 设计；本记录负责共享的持久化清单及面向模型的投影。
+可继续的后台 subagent 会公开稳定的 child id，并将重建数据持久化在该 child 的会话中，因此 `send_message` 无需任何列表查询操作即可恢复已知 child。发现功能有两类需求不同的消费方：UI 可以同时展示一次性工作和可继续对话，而模型只应收到适合使用 `send_message` 的 child。[可继续 subagent](../../implemented/feature/2026-07-28-continuable-subagent-conversations.zh.md)负责持久化 Session 与 Activation 设计；本记录负责共享的持久化清单及面向模型的投影。
 
 枚举必须交叉核对不可变的会话谱系、描述符有效性与实时优先的会话语料，而不能仅为展示就加载或恢复 Agent。追踪谱系可以提供候选项，却无法区分普通会话 fork 与 subagent，因此 child 日志需要持久化分类。约定还必须定义生命周期模式、缺失或损坏的记录、删除、不受支持的版本，以及反复加载大量 child 日志会如何影响服务与工具消费方。
 
 ## 决策
 
-**列表读路径已被取代。**[subagent 列表经投影单元读取身份](../architecture/2026-08-06-subagent-list-identity-projection.md)取代了本记录的枚举与逐 child 读取设计:`listChildren` 现在直接合并存活会话存储与可选的会话持久化,并从注册的 `subagent` projection unit 读取每个 child 的 mode/label——不依赖会话查询,也不在列表时扫描描述符;当前的列表语义(含 diagnostic 映射)以该记录为准。本记录仍是描述符持久化、以 mode 判别的描述符作为持久身份、直接 parent 鉴权与面向模型的 `list_agents` 投影的权威;下文基于追踪的读取机制是决策背景,不再是当前行为。
+**列表读路径已被取代。**[subagent 列表经投影单元读取身份](../architecture/2026-08-06-subagent-list-identity-projection.zh.md)取代了本记录的枚举与逐 child 读取设计:`listChildren` 现在直接合并存活会话存储与可选的会话持久化,并从注册的 `subagent` projection unit 读取每个 child 的 mode/label——不依赖会话查询,也不在列表时扫描描述符;当前的列表语义(含 diagnostic 映射)以该记录为准。本记录仍是描述符持久化、以 mode 判别的描述符作为持久身份、直接 parent 鉴权与面向模型的 `list_agents` 投影的权威;下文基于追踪的读取机制是决策背景,不再是当前行为。
 
 parent 到 child 的枚举是一项带消费方专用投影的服务功能。`SubagentRuntime.listChildren(parentSessionId: SessionId)`（[subagent/src/index.ts](../../../../packages/subagent/subagent/src/index.ts)）执行以下操作：
 
@@ -23,7 +23,7 @@ parent 到 child 的枚举是一项带消费方专用投影的服务功能。`Su
 - 将语料活动状态单独报告为 `running` 或 `inactive`，但不暗示已完成或可恢复；
 - 按 `createdAt` 升序、再按 child id 升序稳定返回所有结果 child。
 
-每次普通的本地启动都会收到带可选、由调用方拥有之显示标签的 `one-shot` 描述符，而继续执行管理器会持久化带标签、包含附加重建字段的 `continuable` 描述符。面向模型的委派工具已经拥有简短 `description`，会将其用于一次性显示；workflow 等底层调用方无需凭空构造展示元数据。面向模型的 `list_agents` 适配器会将服务结果过滤为可继续 child，并通过在线 Agent 注册表细化状态（`running`／`idle`，以及对应仅存于存储的 [`ready`](../bug-fix/2026-08-06-list-agents-residency-vocabulary.md)）；UI 可以消费两种模式，并为无标签的一次性历史选择基于 id 的回退展示。描述符持久化、按 id 查找、直接 parent 鉴权和不依赖提供方的冷恢复仍归已实现的 Activation 约定负责。列表查询消费这些事实，但不能削弱它们，也不能另行发明第二种描述符表示。
+每次普通的本地启动都会收到带可选、由调用方拥有之显示标签的 `one-shot` 描述符，而继续执行管理器会持久化带标签、包含附加重建字段的 `continuable` 描述符。面向模型的委派工具已经拥有简短 `description`，会将其用于一次性显示；workflow 等底层调用方无需凭空构造展示元数据。面向模型的 `list_agents` 适配器会将服务结果过滤为可继续 child，并通过在线 Agent 注册表细化状态（`running`／`idle`，以及对应仅存于存储的 [`ready`](../bug-fix/2026-08-06-list-agents-residency-vocabulary.zh.md)）；UI 可以消费两种模式，并为无标签的一次性历史选择基于 id 的回退展示。描述符持久化、按 id 查找、直接 parent 鉴权和不依赖提供方的冷恢复仍归已实现的 Activation 约定负责。列表查询消费这些事实，但不能削弱它们，也不能另行发明第二种描述符表示。
 
 ### 枚举决策
 
@@ -35,7 +35,7 @@ parent 到 child 的枚举是一项带消费方专用投影的服务功能。`Su
 
 已发布的逻辑记录同时也是活动状态来源：`SessionRecord.live` 表示 `running`，而 `live: false, persisted: true` 表示 `inactive`。活动状态直接来自追踪结果，不会导致额外加载 child 日志。`inactive` 既不表示执行成功，也不表示可恢复：它可能表示已结算的一次性历史，也可能表示 `send_message` 可以为其物化另一次 Activation 的可继续 child。反过来，`running` 只表示会话存活：位于继续执行管理器对应 Activation 之外的存活可继续 Agent 仍会显示为 `running`，但 `send_message` 会将其作为所有权冲突拒绝。child 会话发布前不可见，也不会添加进程内 Activation 条目作为第二个候选来源或活动状态来源。列表查询是一份快照，可能与发布、dispose 或后续消息发生竞态；`send_message` 仍是消息送达时的权威操作。
 
-subagent 服务将 `sessionQuery` 保持为可选依赖，因此没有该服务时仍可执行 start 和 follow-up。其公开的 `listChildren(parentSessionId: SessionId)` 方法只在被调用时才会解析这个可选服务，并动态加载可选的会话查询运行时；因此，普通 subagent 导入、start 和 follow-up 都不会触发该包求值。列表查询直接由 `SubagentRuntime` 负责：它解释查询返回的谱系、事件和存活状态，无需解析基于 Activation 的继续执行管理器，也不会查询 Agent 注册信息、Activation 或提供方；因此，仅包含会话、`subagents` 和 `sessionQuery` 的部署即使缺少 `agents` 也能执行列表查询。如果查询服务缺失，该方法会在加载运行时或执行查询工作前抛出 `SubagentError`，并携带稳定错误码 `SUBAGENT_CONTROL_SESSION_QUERY_UNAVAILABLE`。`@deepseek-ai/dsh-tool-subagent-control` 导出可分别加载的工具插件：`send_message` 适配器只要求 `subagents`，而 `list_agents` 适配器在加载时同时要求 `subagents` 和 `sessionQuery`。因此，部署可以在既不安装也不加载会话查询的情况下使用 `send_message`；列表工具 fiber 会在必需服务可用前保持未激活状态，而其他直接服务消费方会收到同一项明确的调用时约定。这一段的依赖姿态——可选 `sessionQuery`、其错误码与列表工具的加载要求——同属被取代的读路径：现行错误码（`SUBAGENT_CONTROL_PROJECTIONS_UNAVAILABLE`、`SUBAGENT_CONTROL_SESSION_STORE_UNAVAILABLE`）与收窄后的加载要求以[取代记录](../architecture/2026-08-06-subagent-list-identity-projection.md)为准。
+subagent 服务将 `sessionQuery` 保持为可选依赖，因此没有该服务时仍可执行 start 和 follow-up。其公开的 `listChildren(parentSessionId: SessionId)` 方法只在被调用时才会解析这个可选服务，并动态加载可选的会话查询运行时；因此，普通 subagent 导入、start 和 follow-up 都不会触发该包求值。列表查询直接由 `SubagentRuntime` 负责：它解释查询返回的谱系、事件和存活状态，无需解析基于 Activation 的继续执行管理器，也不会查询 Agent 注册信息、Activation 或提供方；因此，仅包含会话、`subagents` 和 `sessionQuery` 的部署即使缺少 `agents` 也能执行列表查询。如果查询服务缺失，该方法会在加载运行时或执行查询工作前抛出 `SubagentError`，并携带稳定错误码 `SUBAGENT_CONTROL_SESSION_QUERY_UNAVAILABLE`。`@deepseek-ai/dsh-tool-subagent-control` 导出可分别加载的工具插件：`send_message` 适配器只要求 `subagents`，而 `list_agents` 适配器在加载时同时要求 `subagents` 和 `sessionQuery`。因此，部署可以在既不安装也不加载会话查询的情况下使用 `send_message`；列表工具 fiber 会在必需服务可用前保持未激活状态，而其他直接服务消费方会收到同一项明确的调用时约定。这一段的依赖姿态——可选 `sessionQuery`、其错误码与列表工具的加载要求——同属被取代的读路径：现行错误码（`SUBAGENT_CONTROL_PROJECTIONS_UNAVAILABLE`、`SUBAGENT_CONTROL_SESSION_STORE_UNAVAILABLE`）与收窄后的加载要求以[取代记录](../architecture/2026-08-06-subagent-list-identity-projection.zh.md)为准。
 
 `listChildren(parentSessionId, signal?)` 会把调用方的取消信号转发给 `traceSession()` 和条件性精确 `readEvent()` 操作。`listEvents()` 不接受取消参数，因此列表查询路径会在等待该操作的前后，以及每个候选处理完成后检查信号。如果取消信号触发后有查询操作以拒绝结算，服务会将结果归一化为 `SubagentError`，并携带稳定错误码 `CANCELLED`；后端中止错误或可映射为 diagnostic 的查询错误均不会逃逸，也不会使调用以成功的部分列表返回。
 
@@ -52,7 +52,7 @@ subagent 服务将 `sessionQuery` 保持为可选依赖，因此没有该服务�
 
 有效描述符产生一个 child 条目，逐 child 检查失败产生一个 diagnostic 条目，缺少描述符的候选不产生条目。`mode` 是持久化创建策略；`activity` 是进程本地语料快照。活动状态既不是 `AgentStatus`、管理器内部的 Activation 状态，也不是持久化结果，结果不公开内部 `createdAt` 排序键。成功完成、失败、取消和停止原因等精确 Activation 状态与持久化结果需要单独的持久化激活记录，不在本功能范围内。
 
-面向模型的 `list_agents` 工具接受一个可选的 `scope: 'children' | 'descendants'` 参数，从当前执行 Agent 推导根 id，并在执行或渲染前通过显式的 request-to-spec 步骤解析请求（`undefined` → `children`）。解析后的 `children` scope 调用 `SubagentRuntime.listChildren(rootSessionId)`，`descendants` scope 则调用 `SubagentRuntime.listDescendants(rootSessionId)`。其内部输出投影中的 `id` 与 `parent` 会一直保持为品牌化的 `SessionId` 值，直到工具 JSON 边界。它保留 diagnostic，丢弃 `one-shot` child 条目，状态取自在线 Agent 注册表——driver 活跃为 `running`，驻留但处于轮次之间为 `idle`，没有在线 Agent 时为 `ready`（可恢复而非终态）——然后按稳定目录顺序渲染 `<id> [<status>] — <label>` 或 `<id> [diagnostic: <reason>]`。`descendants` scope 从一份实时优先语料按稳定 pre-order 展平完整树，遍历普通与一次性中间节点以发现更深的可继续 agent，依据枚举生命周期重新校验每个冷候选，并为每个条目附加 `parentId`／`depth`。工具会在 label 之前插入 ` parent=<id> depth=<n>`；`parent` 是持久化直接 parent 会话 id，可能指向被省略的普通会话。对于当前调用方，只有 depth-1 child 条目可作为 `send_message` 候选，更深的 child 条目则可供 `interrupt_agent` 选择（[中断约定](2026-08-06-continuable-subagent-interrupt.md)）。发现结果只是提示——follow-up 权限仍仅属于确切直接 parent，中断权限仍由服务的在线 lineage 检查决定。空投影渲染为 `(no subagents)`。
+面向模型的 `list_agents` 工具接受一个可选的 `scope: 'children' | 'descendants'` 参数，从当前执行 Agent 推导根 id，并在执行或渲染前通过显式的 request-to-spec 步骤解析请求（`undefined` → `children`）。解析后的 `children` scope 调用 `SubagentRuntime.listChildren(rootSessionId)`，`descendants` scope 则调用 `SubagentRuntime.listDescendants(rootSessionId)`。其内部输出投影中的 `id` 与 `parent` 会一直保持为品牌化的 `SessionId` 值，直到工具 JSON 边界。它保留 diagnostic，丢弃 `one-shot` child 条目，状态取自在线 Agent 注册表——driver 活跃为 `running`，驻留但处于轮次之间为 `idle`，没有在线 Agent 时为 `ready`（可恢复而非终态）——然后按稳定目录顺序渲染 `<id> [<status>] — <label>` 或 `<id> [diagnostic: <reason>]`。`descendants` scope 从一份实时优先语料按稳定 pre-order 展平完整树，遍历普通与一次性中间节点以发现更深的可继续 agent，依据枚举生命周期重新校验每个冷候选，并为每个条目附加 `parentId`／`depth`。工具会在 label 之前插入 ` parent=<id> depth=<n>`；`parent` 是持久化直接 parent 会话 id，可能指向被省略的普通会话。对于当前调用方，只有 depth-1 child 条目可作为 `send_message` 候选，更深的 child 条目则可供 `interrupt_agent` 选择（[中断约定](2026-08-06-continuable-subagent-interrupt.zh.md)）。发现结果只是提示——follow-up 权限仍仅属于确切直接 parent，中断权限仍由服务的在线 lineage 检查决定。空投影渲染为 `(no subagents)`。
 
 在已被取代的追踪读路径中，diagnostic 使用三种固定原因。格式错误的事件 surface、精确加载 child 时发现的 header 冲突、读取结果中的不可变 header 与追踪到的候选不一致或不再指向请求的直接 parent、读取目标不再是先前定位的描述符事件、格式错误的描述符内容和多个描述符事件映射为 `corrupt`。未知描述符版本映射为 `unsupported`。逐 child 读取产生的 `SESSION_QUERY_SESSION_NOT_FOUND`、`SESSION_QUERY_EVENT_NOT_FOUND` 和 `SESSION_QUERY_PERSISTENCE_FAILED` 映射为 `unavailable`。这项阶段边界是有意为之：初始追踪期间发生持久化故障会让操作失败，而同一故障如果始于候选读取期间，可能会让每个受影响的 child 分别产生一条相同的 `unavailable` diagnostic；第一版既不合并这些 diagnostic，也不会把它们提升为全局失败。缺少描述符则作为非 subagent 排除，且不产生 diagnostic。配置错误、窗口错误和未识别的失败不属于 child diagnostic，会作为操作失败继续向上传播。每条 diagnostic 都标识 child id 及原因，不暴露对模型隐藏的描述符内容；系统会排除该候选，而其他健康的 sibling 仍然可见。系统绝不会读取不属于追踪结果直接后代的会话，也不会为它们产生 diagnostic。
 

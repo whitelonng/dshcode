@@ -6,18 +6,18 @@ Status: implemented
 
 ## 问题
 
-harness 在每个平台只说一种 shell 方言：`bash`。Windows 主机只能通过 WSL 或 Git-Bash 垫片运行它，而交付的 `dsh-bash-local` 执行器仅限 POSIX（硬编码 `bash`，进程组语义是 POSIX 的）。Windows 路线图——让主机默认 `pwsh`，之后再做 pwsh TUI/GUI 渲染——没有执行基础：既没有 bash 执行器 seam 的 PowerShell 实现，也没有教模型 PowerShell 方言的面向模型工具。bash 工具也大于 Windows 优先画像的严格所需——尤其持久 PTY 孪生是 `pwsh` 工具至今仍不背负的 bash 形状表面。最初的最小画像也没有后台任务与沙箱升级：后台随 [parity 决策](2026-08-02-pwsh-tool-bash-parity.md) 到来，沙箱面（拒绝渲染加 `sandbox_permissions` 升级）随 [Windows ACL sandbox 决策](2026-08-08-windows-acl-restricted-token-sandbox.md) 到来——最小工具当初按 danger-full-access 的 Windows 姿态裁剪，这一前提在 sandbox PR（Pull Request）于 Windows 上重新启用隔离与审批时终结。
+harness 在每个平台只说一种 shell 方言：`bash`。Windows 主机只能通过 WSL 或 Git-Bash 垫片运行它，而交付的 `dsh-bash-local` 执行器仅限 POSIX（硬编码 `bash`，进程组语义是 POSIX 的）。Windows 路线图——让主机默认 `pwsh`，之后再做 pwsh TUI/GUI 渲染——没有执行基础：既没有 bash 执行器 seam 的 PowerShell 实现，也没有教模型 PowerShell 方言的面向模型工具。bash 工具也大于 Windows 优先画像的严格所需——尤其持久 PTY 孪生是 `pwsh` 工具至今仍不背负的 bash 形状表面。最初的最小画像也没有后台任务与沙箱升级：后台随 [parity 决策](2026-08-02-pwsh-tool-bash-parity.zh.md) 到来，沙箱面（拒绝渲染加 `sandbox_permissions` 升级）随 [Windows ACL sandbox 决策](2026-08-08-windows-acl-restricted-token-sandbox.zh.md) 到来——最小工具当初按 danger-full-access 的 Windows 姿态裁剪，这一前提在 sandbox PR（Pull Request）于 Windows 上重新启用隔离与审批时终结。
 
 ## 决策
 
 在 `packages/shell/` 下新增两个包：
 
 - **`@deepseek-ai/dsh-pwsh-local`** —— `ctx.shell` 执行器 seam 的本地实现，基于 `ctx.subprocess`，逐调用镜像 `dsh-bash-local`：`resolve()` 从配置默认化并设上限，`run()` 通过一个 deadline 融合配置夹取的超时与调用方信号，`start()` 返回消费式后台句柄，其进程归属于 subprocess 服务。命令字符串作为单个 argv 参数传给 `pwsh -NoLogo -NoProfile -NonInteractive -Command`，由 PowerShell 解析，不存在 shell 引号层。可执行文件解析（`resolvePwshPath`）是 `(configured, env, platform)` 的纯函数：先显式配置，再在 Windows 上探测 PowerShell 7 安装位置、PATH 条目（剥离引号）与 Windows PowerShell 5.1，否则返回裸命令名 `pwsh`，交由进程启动时按 PATH 解析。
-- **`@deepseek-ai/dsh-tool-pwsh`** —— 基于 `ctx.shell` 的面向模型工具，约定是 PowerShell 方言，逐调用镜像 `dsh-tool-bash`：经通用任务运行时执行前台与 `run_in_background`，经共享 [`dsh-shell-env`](../feature/2026-08-02-pwsh-tool-bash-parity.md) 注册表管理 `DSH_*` 环境，bash 的 marker/截断渲染机制（干净退出不产生 marker），以及——自 Windows ACL sandbox 决策以来——沙箱拒绝渲染与 `sandbox_permissions` 升级面，外加工具描述中的 Windows 专属 ConstrainedLanguage 与命名管道约定。parity 决策取代了本 Agent Note 的最小画像工具描述。
+- **`@deepseek-ai/dsh-tool-pwsh`** —— 基于 `ctx.shell` 的面向模型工具，约定是 PowerShell 方言，逐调用镜像 `dsh-tool-bash`：经通用任务运行时执行前台与 `run_in_background`，经共享 [`dsh-shell-env`](../feature/2026-08-02-pwsh-tool-bash-parity.zh.md) 注册表管理 `DSH_*` 环境，bash 的 marker/截断渲染机制（干净退出不产生 marker），以及——自 Windows ACL sandbox 决策以来——沙箱拒绝渲染与 `sandbox_permissions` 升级面，外加工具描述中的 Windows 专属 ConstrainedLanguage 与命名管道约定。parity 决策取代了本 Agent Note 的最小画像工具描述。
 
 Windows vitest 覆盖率刻意不属本次改动：仓库的 Windows CI 通道负责构建/静态门禁，单元覆盖在 Linux 上运行，两个包的套件在那里以真实 `pwsh` 运行（GitHub 托管 runner 预装）或缺失时自行跳过。vitest 的 `windowsUnsupportedPackages` 排除从 `packages/shell/*` 收窄为真正需要 bash 的包，使 pwsh 套件也能在 Windows 开发机上原生运行。
 
-本决策之后的路线图——让 Windows 主机默认 `pwsh`（关闭 bash）与 pwsh TUI/GUI 渲染——已另行记录为 [Windows 默认 pwsh 决策](2026-08-01-windows-pwsh-default.md)。
+本决策之后的路线图——让 Windows 主机默认 `pwsh`（关闭 bash）与 pwsh TUI/GUI 渲染——已另行记录为 [Windows 默认 pwsh 决策](2026-08-01-windows-pwsh-default.zh.md)。
 
 ## 备选方案
 

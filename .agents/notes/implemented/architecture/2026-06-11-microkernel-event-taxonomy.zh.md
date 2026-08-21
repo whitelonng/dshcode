@@ -25,7 +25,7 @@ Status: implemented
 
 ## 后果
 
-- 每个 MVP 功能都映射到一个监听器（[功能→机制映射](../../../../docs/cookbook/extension-cookbook.md#the-feature--mechanism-map)是证明义务，保持更新）。
+- 每个 MVP 功能都映射到一个监听器（[功能→机制映射](../../../../docs/cookbook/extension-cookbook.zh.md#the-feature--mechanism-map)是证明义务，保持更新）。
 - HMR 与 dispose 无需额外工作：监听器和注册均为 Cordis effect。
 - waterfall 语义（调用 `next()` 或短路）不直观，需要教学——在 AGENTS.md 中记录，并由组合测试覆盖。
 - 循环必须具备防御性：插件异常在轮次级别被隔离，来自任何扩展点的 steering（中途引导）永远不会被搁置（有回归测试保障）。

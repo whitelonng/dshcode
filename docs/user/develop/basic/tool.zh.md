@@ -2,7 +2,7 @@
 
 [English](tool.md) | 中文
 
-本教程会在 Web UI 中添加一个 `greet` 工具。请先完成[第一个插件](./)，并保留其中的 `scratch-plugin` 目录。
+本教程会在 Web UI 中添加一个 `greet` 工具。请先完成[第一个插件](./index.zh.md)，并保留其中的 `scratch-plugin` 目录。
 
 ## 创建工具插件
 
@@ -47,6 +47,6 @@ pnpm dsh web --patch ./scratch-plugin/cordis.yml
 
 ## 下一步
 
-- [插件配置](./config.md) — 让问候语可配置。
-- [工具编写参考](../../../cookbook/adding-a-tool.md) — 查阅嵌套 schema、规范值、后台工作、策略钩子、Code Mode 和 UI 卡片。
-- [能力分层](../practice/) — 将可替换能力拆分为 Service Definition、Service Provider 和 Consumer 三类包。
+- [插件配置](./config.zh.md) — 让问候语可配置。
+- [工具编写参考](../../../cookbook/adding-a-tool.zh.md) — 查阅嵌套 schema、规范值、后台工作、策略钩子、Code Mode 和 UI 卡片。
+- [能力分层](../practice/index.zh.md) — 将可替换能力拆分为 Service Definition、Service Provider 和 Consumer 三类包。

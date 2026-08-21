@@ -17,9 +17,11 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   normalizeSessionLog,
+  normalizeSessionSnapshot,
   normalizeStdout,
   refreshFixtureReplacements,
   scrubRequestHeaders,
+  scrubSessionSnapshot,
   stabilizeFixtureMessageIds,
   stabilizeRefreshLog,
   tokenizeSessionFixtureCwd,
@@ -362,7 +364,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         await mkdir(scenarioDir, { recursive: true })
         const existing = await Promise.all(files.map(async file => existsSync(file) ? readFile(file, 'utf8') : ''))
         const fixtures = stabilizeFixtureMessageIds(
-          ordered.map(log => scrubRequestHeaders(tokenizeSessionFixtureCwd(log.content))),
+          ordered.map(log => scrubSessionSnapshot(tokenizeSessionFixtureCwd(log.content))),
           existing,
         )
         await Promise.all(fixtures.map(async (fixture, index) => {
@@ -385,7 +387,7 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         const refreshed = ordered.map((log, index) => {
           const existing = expectedContents[index]
           if (existing === undefined) throw new Error(`no fixture for persisted log ${index}`)
-          return scrubRequestHeaders(tokenizeSessionFixtureCwd(
+          return scrubSessionSnapshot(tokenizeSessionFixtureCwd(
             stabilizeRefreshLog(log.content, existing, replacements, actualContext),
           ))
         })
@@ -407,8 +409,8 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
       for (const [index, log] of ordered.entries()) {
         const expected = expectedContents[index]
         if (expected === undefined) throw new Error(`no fixture for persisted log ${index}`)
-        expect(scrubRequestHeaders(normalizeSessionLog(log.content, actualContext)))
-          .toBe(scrubRequestHeaders(normalizeSessionLog(expected, expectedContext)))
+        expect(normalizeSessionSnapshot(log.content, actualContext))
+          .toBe(normalizeSessionSnapshot(expected, expectedContext))
       }
 
       // The SDK-visible wire stream and turn result match their expected outputs.

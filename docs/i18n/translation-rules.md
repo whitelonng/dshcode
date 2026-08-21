@@ -21,14 +21,14 @@ How to translate between the two sides of a documentation pair in this repo. Bot
 
 ## Structure preservation
 
-The pairing gate checks heading depths, fenced code blocks, table row and column counts, list kinds, ordered-list starts, list item counts, and link targets. Preserve the rest of the frame manually; the paired files MUST match one to one in:
+The pairing gate checks heading depths, fenced code blocks, table row and column counts, list kinds, ordered-list starts, list item counts, link locale, and semantic targets. Preserve the rest of the frame manually; the paired files MUST match one to one in:
 
 - heading hierarchy (same levels, same order — heading TEXT is translated),
 - list shape and numbering,
 - tables (same columns, same row order; header cells translated per terminology),
 - fenced code blocks — **byte-identical, including comments**; the pairing signature compares their info strings and contents, and ` ```ts ` blocks compile under `doc-typecheck`,
 - inline code spans (commands, flags, config keys, file paths, event names, API names, version numbers) — verbatim, never translated or reformatted,
-- links and anchors: every relative link MUST point at the same target in both files — by convention the `.md` path, not the `.zh.md` sibling — so links never dangle when one pair lands before its neighbors. The ONLY zh-specific link is the language switcher. A README rendered outside GitHub MAY use the canonical public repository URL to its exact counterpart as documented in [README.md](README.md). Link TEXT is translated; the target is not.
+- links and anchors: every relative document link MUST keep the same semantic target and exact query/fragment suffix. When the target belongs to the active bilingual corpus, the English side uses its `.md` path and the Chinese side uses its `.zh.md` path; a missing counterpart in that corpus is an error, while targets outside it keep the original path. External URLs, images, and pure in-page fragments stay unchanged. The language switcher remains the explicit cross-locale exception, and a README rendered outside GitHub MAY use the canonical public repository URL to its exact counterpart as documented in [README.md](README.md). Link TEXT is translated.
 
 The repo's Markdown conventions apply to `.zh.md` files unchanged: one physical line per paragraph (`verify-md-wrap`), resolving relative links (`verify-md-links`), exactly one trailing newline.
 

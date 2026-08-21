@@ -3,10 +3,10 @@
  * the host Loader's entries for packages declaring `dsh.client`, composes the
  * `window.__DSH_BOOT__` entry graph (wire single source: {@link WebBootEntry}
  * in `./client/manifest.ts`) in module-graph order, serves
- * `/plugins/<id>/client.js` and its source map, taps the index render to
- * inject the boot manifest plus the parser-blocking bootstrap preloads, and
- * provides the `clientModuleHost` service (the HMR node half's
- * registration/notification face).
+ * `/plugins/<id>/client.js` and its source map, contributes the boot manifest
+ * plus the parser-blocking bootstrap preloads to the webserver's index
+ * injection table, and provides the `clientModuleHost` service (the HMR node
+ * half's registration/notification face).
  *
  * Scanning is incremental per package — there is no full-rescan code path.
  * Every cordis `internal/plugin` emission (fiber construction/disposal) marks
@@ -30,7 +30,7 @@ import { dirname, join } from 'node:path'
 import { Service } from '@deepseek-ai/cordis'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import type {} from '@deepseek-ai/dsh-host-webserver'
+import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 import { optionalStringArray, stripClientSuffix } from './client/manifest.ts'
 import type { WebBootEntry, WebBootGraph } from './client/manifest.ts'
 
@@ -254,31 +254,19 @@ const CLIENT_RUNTIME_ID = '@deepseek-ai/dsh-client-runtime'
 /** Ordinary dynamic bundles the HTML parser executes before the Vite shell. */
 const PARSER_PRELOAD_IDS = [CLIENT_MODULES_ID, CLIENT_RUNTIME_ID] as const
 
-/** Escape a graph URL before placing it in a quoted HTML attribute. */
-function escapeHtmlAttribute(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-}
-
 /**
- * Inject the boot protocol into index.html. The inline registration queue precedes
- * blocking classic scripts for modules' and runtime's ordinary
+ * The boot protocol as index injection rows. The inline registration queue
+ * precedes blocking classic scripts for modules' and runtime's ordinary
  * `lib/client.js` artifacts. Its `create()` method materializes the modules
  * bundle, delegates construction to that bundle, and leaves the same facade
- * in live-registration mode. The graph script follows before the shell reads
- * it. `<` is escaped in JSON so a plugin-controlled string cannot break out
- * of the script element.
- * @param html - the index.html source.
+ * in live-registration mode. The graph global follows before the shell reads
+ * it.
  * @param graph - the composed entry graph.
- * @returns the html with the graph script injected.
+ * @returns head rows in execution order: queue script, preload scripts, graph global.
  */
-export function injectBootManifest(html: string, graph: WebBootGraph): string {
-  const json = JSON.stringify(graph).replaceAll('<', '\\u003c')
+export function bootInjections(graph: WebBootGraph): IndexInjection[] {
   const bootstrapId = JSON.stringify(CLIENT_MODULES_ID)
-  const queue = `<script>(()=>{
+  const queue = `(()=>{
 const pendingQueue=[]
 window.__ModuleLoader__={
   mode:"queue",
@@ -299,21 +287,20 @@ window.__ModuleLoader__={
     return exports.createClientModuleSystem(this,{id:registration.id,exports},options)
   }
 }
-})()</script>`
+})()`
   const preload = PARSER_PRELOAD_IDS.map(id => graph.entries.find(entry => entry.id === id))
     .filter((entry): entry is WebBootEntry => entry !== undefined)
-    .map(entry => `<script src="${escapeHtmlAttribute(entry.url)}"></script>`)
-    .join('')
-  const script = `${queue}${preload}<script>window.__DSH_BOOT__ = ${json}</script>`
-  const head = html.indexOf('<head>')
-  if (head !== -1) return `${html.slice(0, head + 6)}${script}${html.slice(head + 6)}`
-  // Headless fixture pages may lack <head>; prepending keeps the read-before-shell ordering.
-  return `${script}${html}`
+    .map((entry): IndexInjection => ({ kind: 'script-src', placement: 'head', src: entry.url }))
+  return [
+    { kind: 'script', placement: 'head', text: queue },
+    ...preload,
+    { kind: 'global', name: '__DSH_BOOT__', value: graph },
+  ]
 }
 
 /**
  * The web plugin table service: incremental `dsh.client` scan + wire composition
- * + bundle route + index tap. Construction runs the activation scan
+ * + bundle route + index injection rows. Construction runs the activation scan
  * synchronously — a malformed declaration or missing bundle among the
  * already-loaded entries aggregates into one loud throw (FAILED fiber; the
  * boot activation audit reports it).
@@ -379,10 +366,9 @@ export class ClientModuleRegistry extends Service {
       () => ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
       'client-modules: bundle route',
     )
-    ctx.effect(
-      () => ctx.webServer.tapIndex(html => injectBootManifest(html, this.composed)),
-      'client-modules: boot manifest injection',
-    )
+    ctx.on('webserver/index-inject', (table) => {
+      table.push(...bootInjections(this.composed))
+    })
   }
 
   /**

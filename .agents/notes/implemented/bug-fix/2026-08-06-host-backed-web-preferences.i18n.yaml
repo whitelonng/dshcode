@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-06-host-backed-web-preferences.md
 2026-08-06-host-backed-web-preferences.md: 2e33d05417bf6c347a57b5c0b6c7281ff1392b5b
-2026-08-06-host-backed-web-preferences.zh.md: 1d3518bb33d334d89408916a5f5210a45b938a01
+2026-08-06-host-backed-web-preferences.zh.md: 79c15af723347b92fb0b0a15ccb8de80841dd3b0

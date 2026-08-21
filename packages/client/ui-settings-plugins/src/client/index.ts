@@ -72,7 +72,7 @@ export function apply(ctx: ClientContext): void {
   // scope publishes nothing when one is written. This is the only signal that
   // a key written on another surface reached the Host.
   ctx.effect(
-    () => ctx.remote.$on('credentials/updated', (ref) => {
+    () => ctx.remote.$on('credentials/reference-updated', (ref) => {
       describeImage.refreshCredential(ref)
       webSearch.refreshCredential(ref)
     }),

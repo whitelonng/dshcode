@@ -2,11 +2,11 @@
 
 [English](jobs.md) | 中文
 
-长时间运行的生产方、`ctx.jobs` 与任务控制命令共用的类型。[运行时 Agent Note](../../.agents/notes/implemented/architecture/2026-06-20-generic-long-running-tool-runtime.md) 负责设计；本页记录 [`packages/jobs/jobs/src/types.ts`](../../packages/jobs/jobs/src/types.ts) 中的确切字段和变体。
+长时间运行的生产方、`ctx.jobs` 与任务控制命令共用的类型。[运行时 Agent Note](../../.agents/notes/implemented/architecture/2026-06-20-generic-long-running-tool-runtime.zh.md) 负责设计；本页记录 [`packages/jobs/jobs/src/types.ts`](../../packages/jobs/jobs/src/types.ts) 中的确切字段和变体。
 
 ## ID 与状态
 
-`JobId` 是按 `<kind>-N` 生成的[品牌化 id](core.md#branded-ids)。访问控制依赖拥有者授权，而非 id 的保密性。`JobKind` 派生自可合并扩展的 map；注册表将各个 kind 视为不透明的 id 命名空间。
+`JobId` 是按 `<kind>-N` 生成的[品牌化 id](core.zh.md#branded-ids)。访问控制依赖拥有者授权，而非 id 的保密性。`JobKind` 派生自可合并扩展的 map；注册表将各个 kind 视为不透明的 id 命名空间。
 
 ```ts type-equiv
 /**
@@ -154,7 +154,7 @@ interface JobRead {
 
 ## 服务行为
 
-抽象的 [`JobRegistry`](../../packages/jobs/jobs/src/index.ts) Service Definition 规定原子 `start`、限定调用方作用域的 `get` 和 `list`、`read`、`kill`、有界 `wait`、故障隔离的 `onJobDone` 与 `onJobsChanged` 监听器，以及 `attachController` 何时可用；[`LocalJobRegistry`](../../packages/jobs/jobs-local/src/index.ts) 是其进程局部 Service Provider。授权会比较拥有者会话；拥有者清理与准入会使用确切的已注册 `Agent` 实例。本地 Service Provider 的 `maxConcurrentJobsPerOwner` 配置必须是正的安全整数，默认值为 `10`；它按确切 owner 统计 `running` 与 `stopping` 记录，所有无 owner 任务共享一个服务级桶，并在生产方终止结算后释放容量。Service Definition 约定见 [`dsh-jobs`](../../packages/jobs/jobs/README.md)，注册表生命周期与准入策略见 [`dsh-jobs-local`](../../packages/jobs/jobs-local/README.md)，面向模型的 Consumer 见 [`dsh-tool-jobs`](../../packages/jobs/tool-jobs/README.md)。
+抽象的 [`JobRegistry`](../../packages/jobs/jobs/src/index.ts) Service Definition 规定原子 `start`、限定调用方作用域的 `get` 和 `list`、`read`、`kill`、有界 `wait`、故障隔离的 `onJobDone` 与 `onJobsChanged` 监听器，以及 `attachController` 何时可用；[`LocalJobRegistry`](../../packages/jobs/jobs-local/src/index.ts) 是其进程局部 Service Provider。授权会比较拥有者会话；拥有者清理与准入会使用确切的已注册 `Agent` 实例。本地 Service Provider 的 `maxConcurrentJobsPerOwner` 配置必须是正的安全整数，默认值为 `10`；它按确切 owner 统计 `running` 与 `stopping` 记录，所有无 owner 任务共享一个服务级桶，并在生产方终止结算后释放容量。Service Definition 约定见 [`dsh-jobs`](../../packages/jobs/jobs/README.zh.md)，注册表生命周期与准入策略见 [`dsh-jobs-local`](../../packages/jobs/jobs-local/README.zh.md)，面向模型的 Consumer 见 [`dsh-tool-jobs`](../../packages/jobs/tool-jobs/README.zh.md)。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -162,7 +162,7 @@ interface JobRead {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxjobs--jobregistry-abstract-seam"></a>
 
@@ -284,7 +284,7 @@ abstract onJobsChanged(listener: JobsChangedListener): () => void
 abstract attachController(name: string): () => void
 ```
 
-Types: [Agent](core.md)
+Types: [Agent](core.zh.md)
 
-Source: [`packages/jobs/jobs/src/index.ts:62`](../../packages/jobs/jobs/src/index.ts)
+Source: [`packages/jobs/jobs/src/index.ts`](../../packages/jobs/jobs/src/index.ts)
 <!-- END GENERATED cordis-surface -->

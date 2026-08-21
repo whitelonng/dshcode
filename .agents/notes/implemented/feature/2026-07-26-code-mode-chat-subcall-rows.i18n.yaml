@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-07-26-code-mode-chat-subcall-rows.md
 2026-07-26-code-mode-chat-subcall-rows.md: 4bf608c36de78818b3ab40c6798ee6eafabe99a1
-2026-07-26-code-mode-chat-subcall-rows.zh.md: dc0ccf4b2304177998811b44bf9bfef565603c54
+2026-07-26-code-mode-chat-subcall-rows.zh.md: 6e11f65313fb35dc202cb2cd230884b8862d9f13

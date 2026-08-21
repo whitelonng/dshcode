@@ -1,6 +1,6 @@
-[English](README.md) | 中文
-
 # dsh-client-ui-settings-plugin-installer
+
+[English](README.md) | 中文
 
 Web 插件设置中的合并插件列表标签页（`settings.plugins.tab`，id `plugins`）。该标签页提供：
 

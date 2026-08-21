@@ -34,8 +34,10 @@ export {
 export {
   extractSnapshotSpillPaths,
   normalizeSessionLog,
+  normalizeSessionSnapshot,
   normalizeStdout,
   scrubRequestHeaders,
+  scrubSessionSnapshot,
   scrubSystemPrompts,
   scrubToolSchemas,
   tokenizeSessionFixtureCwd,

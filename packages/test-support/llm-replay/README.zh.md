@@ -8,7 +8,7 @@
 
 ## fixture 的工作方式
 
-fixture 就是持久化的会话日志（`<scenario>/session.jsonl`）。其 `assistant/chunk` 事件包含每个 `StreamChunk`，因此按 `(turn, step)` 分组即可重建每次 agent loop（智能体循环）的 `stream()` 调用的分片序列。压缩（compaction）摘要器成功时，日志记录方式有所不同：当 `compaction/summary` 携带 `llmStreamCall: true` 和完整的 `rawOutput` 时，回放会在该事件的位置重建一条规范成功流，其中每个块各使用一对 `block-start`/`block-end`，带上已记录的用量（如有），并以 `stop` 终止。提供方增量的精确切分不属于持久压缩结果。不带该标记的 `rawOutput` 并不意味着发生了本地 LLM 调用，因为模板摘要器和远程摘要器即使未使用此上下文的适配器，也可能保留完整输出。
+fixture 是持久化会话日志（`<scenario>/session.jsonl`）的投影：它保留 header 与每个事件 payload，但省略正文的 `seq`/`time` envelope（打包行使用 `seq0`/`time0`）。回放在解析时恢复连续的 synthetic envelope；同一文件的正文必须全部采用投影行或完整持久化行，不能混用。运行时持久化仍写入完整日志。fixture 的 `assistant/chunk` 事件包含每个 `StreamChunk`，因此按 `(turn, step)` 分组即可重建每次 agent loop（智能体循环）的 `stream()` 调用的分片序列。压缩（compaction）摘要器成功时，日志记录方式有所不同：当 `compaction/summary` 携带 `llmStreamCall: true` 和完整的 `rawOutput` 时，回放会在该事件的位置重建一条规范成功流，其中每个块各使用一对 `block-start`/`block-end`，带上已记录的用量（如有），并以 `stop` 终止。提供方增量的精确切分不属于持久压缩结果。不带该标记的 `rawOutput` 并不意味着发生了本地 LLM 调用，因为模板摘要器和远程摘要器即使未使用此上下文的适配器，也可能保留完整输出。
 
 因此，录制就是「运行一次真实 agent 并收集 `.jsonl`」，由快照 harness 完成；该插件本身不录制。fixture 的 `request/header` 内容可能被标记化为 `{{system}}`/`{{tools}}`（harness 会在一个场景中固定该内容，并清除其余场景中的内容）；回放不受影响，因为派生过程只读取 `assistant/chunk` 和 `compaction/summary` 事件以及第 0 行的会话 header。
 
@@ -59,12 +59,12 @@ fixture 就是持久化的会话日志（`<scenario>/session.jsonl`）。其 `as
 - `installLlmReplay(ctx, config)`：安装已配置回放适配器或 catch-all `llm/stream` 监听器；返回 `ReplayHandle`（包含用于保证 HMR（热模块替换）安全的 `dispose()`，以及清理阶段执行的 `assertConsumed()` 检查；后者确保每个已记录脚本都绑定到实时会话，且每个已绑定游标都已耗尽，从而将场景静默驱动的模型调用少于记录数转换为明确诊断）。在测试中使用它，可以不通过 Loader 或 env var 驱动回放。
 - `loadSessionScripts(config)`：解析场景中有序的 `SessionScript[]`（主会话 + 子会话），准备按首次调用顺序绑定到实时会话。
 - `loadReplayScript(config)`：只解析主会话的 `ReplayEntry[]`（如果伴随文件存在，则使用经校验的替换或补丁；否则从 JSONL 派生；fixture 缺失时明确报错）。
-- `deriveReplayScript(events)` / `parseSessionLog(text)` / `parseSessionHeader(text)` / `resolveScriptedEntry(entry, messages)`：将已记录会话日志中的普通 loop 分片和显式标记的本地压缩输出转换为脚本、读取其 header `id`/`createdAt`、并针对单次实时请求解析 `{{fromRequest:...}}` 占位符的纯辅助工具。派生的 assistant 分组必须以 `finish` 分片结束；没有该分片的分组是 `stream()` 抛出异常的指纹，必须改用 override 伴随文件表达。
+- `deriveReplayScript(events)` / `parseSessionLog(text)` / `parseSessionHeader(text)` / `resolveScriptedEntry(entry, messages)`：将持久化或投影后会话日志中的普通 loop 分片和显式标记的本地压缩输出转换为脚本、读取其 header `id`/`createdAt`、并针对单次实时请求解析 `{{fromRequest:...}}` 占位符的纯辅助工具。派生的 assistant 分组必须以 `finish` 分片结束；没有该分片的分组是 `stream()` 抛出异常的指纹，必须改用 override 伴随文件表达。
 - 类型 `ReplayEntry` / `ReplayOverrideDoc` / `ReplayOverridePatch` / `SessionScript` / `ReplayConfig` / `ReplayProviderConfig` / `ReplayModelConfig` / `ReplayHandle` / `Config`。
 
 ## 插件导出形态
 
-命名导出 `name` / `inject` / `Config` / `apply`，且**没有默认导出**：Cordis Loader 的 `unwrapExports` 执行 `exports.default ?? exports`，因此意外的默认导出会将模块折叠为函数本身，并丢弃 `inject` 命名空间（见 [docs/postmortem/0001](../../../docs/postmortem/0001-acp-default-export-drops-inject.md)）。
+命名导出 `name` / `inject` / `Config` / `apply`，且**没有默认导出**：Cordis Loader 的 `unwrapExports` 执行 `exports.default ?? exports`，因此意外的默认导出会将模块折叠为函数本身，并丢弃 `inject` 命名空间（见 [docs/postmortem/0001](../../../docs/postmortem/0001-acp-default-export-drops-inject.zh.md)）。
 
 ## 模型体验
 

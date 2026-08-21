@@ -2,11 +2,11 @@
 
 [English](extension-cookbook.md) | 中文
 
-harness 扩展的参考模式。代码片段省略了 import 和辅助实现，无法直接复制运行。具体编写路径见[包检查清单](adding-a-package.md)、[第一个工具教程](../user/develop/basic/tool.md)、[工具参考](adding-a-tool.md)和 [LLM（大语言模型）适配器指南](adding-an-llm-adapter.md)；系统与扩展点映射由[架构文档](../architecture.md)负责。
+harness 扩展的参考模式。代码片段省略了 import 和辅助实现，无法直接复制运行。具体编写路径见[包检查清单](adding-a-package.zh.md)、[第一个工具教程](../user/develop/basic/tool.zh.md)、[工具参考](adding-a-tool.zh.md)和 [LLM（大语言模型）适配器指南](adding-an-llm-adapter.zh.md)；系统与扩展点映射由[架构文档](../architecture.zh.md)负责。
 
 ## 工具插件
 
-工具在 `ctx.tools` 上注册。带注解的 `defineTool` 示例（类型化的 `execute` 参数、结果构造、`run_in_background` 模式）见 [adding-a-tool.md](adding-a-tool.md)——该指南是工具定义的真源。`ctx.tools.register()` 也直接接受原始 JSON Schema `ToolDefinition`（MCP 来源的工具就是这样到达的）；`defineTool` 是第一方工具使用的类型化辅助函数。
+工具在 `ctx.tools` 上注册。带注解的 `defineTool` 示例（类型化的 `execute` 参数、结果构造、`run_in_background` 模式）见 [adding-a-tool.md](adding-a-tool.zh.md)——该指南是工具定义的真源。`ctx.tools.register()` 也直接接受原始 JSON Schema `ToolDefinition`（MCP 来源的工具就是这样到达的）；`defineTool` 是第一方工具使用的类型化辅助函数。
 
 <a id="a-hook-plugin-permission-gate-example"></a>
 
@@ -32,11 +32,11 @@ export function apply(ctx: Context) {
 }
 ```
 
-这个 waterfall（瀑布式事件）是可重排的策略层。当不变式需要单调的最终拒绝时使用 `ctx.tools.guard()`；当插件需要包裹实际分发生命周期时（超时/重试/指标；仅 `exec.signal` 可替换）使用 `tools/execute`；显式结果变换使用 `tools/post-execute`；对不可变最终结果的受限观察使用 `tools/result`。选择规则见[添加工具指南](adding-a-tool.md#execution-policy-and-observation)。
+这个 waterfall（瀑布式事件）是可重排的策略层。当不变式需要单调的最终拒绝时使用 `ctx.tools.guard()`；当插件需要包裹实际分发生命周期时（超时/重试/指标；仅 `exec.signal` 可替换）使用 `tools/execute`；显式结果变换使用 `tools/post-execute`；对不可变最终结果的受限观察使用 `tools/result`。选择规则见[添加工具指南](adding-a-tool.zh.md#execution-policy-and-observation)。
 
 ## UI 插件
 
-UI 插件从 `session/event` 事件流渲染（助手 token 流以 `assistant/chunk` 形式到达，加上轮次/步骤边界与工具活动），并通过 `agent.followup()` / `agent.steer()` 将输入驱动回去。如果浏览器插件要向内建 Web Client 贡献业务行，则应注册 `ConversationNodeDefinition` 与 keyed Chat renderer；具体步骤见 [Conversation Node 指南](adding-a-conversation-node.md)。
+UI 插件从 `session/event` 事件流渲染（助手 token 流以 `assistant/chunk` 形式到达，加上轮次/步骤边界与工具活动），并通过 `agent.followup()` / `agent.steer()` 将输入驱动回去。如果浏览器插件要向内建 Web Client 贡献业务行，则应注册 `ConversationNodeDefinition` 与 keyed Chat renderer；具体步骤见 [Conversation Node 指南](adding-a-conversation-node.zh.md)。
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
@@ -66,7 +66,7 @@ export function apply(ctx: Context) {
 
 *协议驱动*将协议对端接入 `ctx.agents`；它可以服务于 UI 或自动化客户端。stdio 驱动拥有 stdout，通过工厂创建或恢复 agent（智能体），并将协议请求映射为 `followup()` 或 `cancel()`。底层提示词请求返回其持久入队回执；它不会通过关联 `MessageId` 与 `turn/end` 获得结果。整个 agent 的状态应单独发布。自动化方法可以从回执等待到下一次 idle，并概括这一显式拥有的区间；UI 通常则会持续观察开放式事件流。通过 `AgentHandle.dispose()` 拆除 agent，以使 dispose（资源释放）达到完全停稳。
 
-[`packages/acp/acp`](../../packages/acp/acp) 是仅面向自动化的完整示例：它通过 ACP（Agent Client Protocol）JSON-RPC stdio 提供全新文本会话，发出已提交的助手文本，并为其拥有的 agent 注册一次性机器权限应答器。其 [README](../../packages/acp/acp/README.md) 定义确切的方法、事件顺序和生命周期约定。
+[`packages/acp/acp`](../../packages/acp/acp) 是仅面向自动化的完整示例：它通过 ACP（Agent Client Protocol）JSON-RPC stdio 提供全新文本会话，发出已提交的助手文本，并为其拥有的 agent 注册一次性机器权限应答器。其 [README](../../packages/acp/acp/README.zh.md) 定义确切的方法、事件顺序和生命周期约定。
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
@@ -94,9 +94,11 @@ export function apply(ctx: Context) {
 
 可运行叶子从 `examples/*/cordis.yml` 加载各自的插件树；根目录的 `demo:*` 脚本和这些叶子目录是权威清单。产品 `dsh` 启动器负责 Web 和一次性 headless 执行，ACP 叶子使用 [`@deepseek-ai/dsh-acp-demo`](../../packages/examples/acp-demo)，JSON-RPC 叶子使用 [`@deepseek-ai/dsh-sdk-jsonrpc-demo`](../../packages/examples/jsonrpc-demo)。headless 快照叶节点显式挂载 [`@deepseek-ai/dsh-agent-spine-demo`](../../packages/examples/agent-spine-demo) 和 JSONL 持久化，再通过示例自有的测试 fixture（测试前置数据）驱动这些组件，而不是通过已交付的 app 包。
 
+<a id="the-feature--mechanism-map"></a>
+
 ## 功能→机制映射
 
-每个产品功能都映射到一个文档化扩展点上的监听器——微内核声明由此可验证（[微内核 Agent Note](../../.agents/notes/implemented/architecture/2026-06-11-microkernel-event-taxonomy.md)）。没有任何一行修改循环本身。
+每个产品功能都映射到一个文档化扩展点上的监听器——微内核声明由此可验证（[微内核 Agent Note](../../.agents/notes/implemented/architecture/2026-06-11-microkernel-event-taxonomy.zh.md)）。没有任何一行修改循环本身。
 
 `system-prompt/assemble` 是一个专家协作式的整体装配变换：其返回的装配结果具有权威性，因此监听器作者有责任保留活跃的 Code Mode 和结构化输出协议的贡献。对于需要在展示、查找和执行之间保持对齐的工具过滤，优先使用 `ctx.tools.restrict()`。
 
@@ -107,7 +109,7 @@ export function apply(ctx: Context) {
 | `/loop` | 在 `turn/end` 会话事件上 `followup()` 下一次迭代；或强制继续 |
 | 动态工作流 | `ctx.workflowEngine` + worker-thread 引擎 + `workflow` 工具；结构化的进程内子任务通过作用域化的提示词/工具注册、单调工具守卫、最终 `tools/result` 提交（包括外层 `run_code`）和结构化输出执行的单调 `concludeTurn()` 标记来强制输出 |
 | 排队消息 + steering | 核心 `Agent.followup()` / `Agent.steer()` |
-| 上下文压缩（context compaction）（自动 + 手动） | `ctx.compaction` seam + `dsh-compaction-basic`；自动压力检查运行在串行 `agent/pre-step`，标准的溢出恢复机制运行在 `agent/request-error`，手动调用方使用同一个压缩服务（[压缩 Agent Note](../../.agents/notes/implemented/feature/2026-06-18-compaction-capability-seam.md)） |
+| 上下文压缩（context compaction）（自动 + 手动） | `ctx.compaction` seam + `dsh-compaction-basic`；自动压力检查运行在串行 `agent/pre-step`，标准的溢出恢复机制运行在 `agent/request-error`，手动调用方使用同一个压缩服务（[压缩 Agent Note](../../.agents/notes/implemented/feature/2026-06-18-compaction-capability-seam.zh.md)） |
 | 系统提示词可配置性 | `ctx.systemPrompt.section()`，支持排序与作用域局部覆盖 |
 | AGENTS.md（根目录） | 一个读取该文件的 section 提供方 |
 | AGENTS.md（子目录，按需触发）+ 文件变更通知 | 从 watcher / 工具结果监听器调用 `agent.inject()` |
@@ -118,7 +120,7 @@ export function apply(ctx: Context) {
 | 单调终端轮次策略 | 从成功的终端工具调用 `ToolExecution.concludeTurn()`；同一响应中后续工具调用仍可由守卫阻止，循环在该步骤后停止 |
 | 子进程沙箱（landlock / sandbox-exec） | 通过 `dsh-bash-sandbox` 使用 `ctx.sandbox` 后端；能力级别的拒绝使用 `tools/pre-execute` |
 | 权限系统 / AskUserQuestion | 从 `tools/pre-execute` 返回 `ask` 并通过 `ctx.approval` 应答；为普通用户提问注册一个独立的面向模型的 ask 工具 |
-| Plan mode | [`@deepseek-ai/dsh-plan-mode`](../../packages/plan/plan-mode/README.md)：落日志的 `plan/mode` 状态、`plan:policy` 引导段、`/plan [message]` 入口、`/plan off` 直接退出，以及经用户评审的 `exit_plan_mode` 出口；强制约束留在独立的沙箱/审批轴上 |
+| Plan mode | [`@deepseek-ai/dsh-plan-mode`](../../packages/plan/plan-mode/README.zh.md)：落日志的 `plan/mode` 状态、`plan:policy` 引导段、`/plan [message]` 入口、`/plan off` 直接退出，以及经用户评审的 `exit_plan_mode` 出口；强制约束留在独立的沙箱/审批轴上 |
 | subagent 委派 | `ctx.subagents` 提供方注册表（`dsh-subagent-spawn-in-process`/`-fork`/`-acp`/`-codex`/`-claude-code`/`-dsh-sdk`）+ `dsh-tool-subagent` 向模型暴露一个已配置的提供方 |
 | MCP | 每个服务器一个插件：发现工具 → `ctx.tools.register()` |
 | skill（技能） | section + 工具注册；调用时通过 `inject()` 注入 skill 内容 |

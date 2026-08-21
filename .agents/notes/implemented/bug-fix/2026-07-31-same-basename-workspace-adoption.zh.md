@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-Workspace 的身份由其稳定 id 和规范目录路径确定，标题则是可变的显示元数据。然而，只要新规范路径按 basename 派生出的标题与另一个 Workspace 相同，注册表就会拒绝该路径。因此，`/a/xx` 和 `/b/xx` 等常见目录布局无法同时出现在 Web UI 中，尽管[领域设计](../../proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md)早已允许标题重复，而且每项客户端操作都通过 id 定位 Workspace。
+Workspace 的身份由其稳定 id 和规范目录路径确定，标题则是可变的显示元数据。然而，只要新规范路径按 basename 派生出的标题与另一个 Workspace 相同，注册表就会拒绝该路径。因此，`/a/xx` 和 `/b/xx` 等常见目录布局无法同时出现在 Web UI 中，尽管[领域设计](../../proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.zh.md)早已允许标题重复，而且每项客户端操作都通过 id 定位 Workspace。
 
 ## 决策
 
@@ -14,7 +14,7 @@ Workspace 的身份由其稳定 id 和规范目录路径确定，标题则是可
 
 Host 的 `workspace.create({ path })` 接纳入口沿用该规则。Workspace 管理器、选择器、分组树、选择、重命名、删除和 Session 创建仍使用 `WorkspaceId`，因此相同标签既不会合并记录，也不会把操作指向其他记录。需要区分相同标签时，侧边栏悬停详情卡会显示各自的规范路径。
 
-显式命名仍采用更严格的规则。`workspace.rename` 仍会拒绝已注册的标题，具体见[手动 Workspace 命名](../feature/2026-07-25-session-list-browsing-and-manual-order.md)。这既防止用户主动引入另一个难以区分的标签，又允许既有目录名称造成的重名。路径接纳规则仅取代 [Workspace 产品流](../feature/2026-07-25-workspace-ui-product-flow.md)和[原生目录选择器](../feature/2026-07-27-native-workspace-directory-picker.md)中的标题冲突条款。
+显式命名仍采用更严格的规则。`workspace.rename` 仍会拒绝已注册的标题，具体见[手动 Workspace 命名](../feature/2026-07-25-session-list-browsing-and-manual-order.zh.md)。这既防止用户主动引入另一个难以区分的标签，又允许既有目录名称造成的重名。路径接纳规则仅取代 [Workspace 产品流](../feature/2026-07-25-workspace-ui-product-flow.zh.md)和[原生目录选择器](../feature/2026-07-27-native-workspace-directory-picker.zh.md)中的标题冲突条款。
 
 持久化 schema 未变：Workspace 记录本就分别存储 id、path 和 title，引导初始化可以派生出相同的 basename，启动校验检查的是重复路径而非重复标题。
 

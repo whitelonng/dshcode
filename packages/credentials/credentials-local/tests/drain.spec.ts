@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials'
 import { LocalCredentialProvider } from '../src/index.ts'
 
 // The atomic write is the gated asynchronous hold point inside a queued
@@ -29,6 +29,8 @@ async function setGate(next: Promise<void>): Promise<void> {
 
 const KEY = credentialRef('DSH_CRED_DRAIN_A')
 const OTHER = credentialRef('DSH_CRED_DRAIN_B')
+const RECORD = credentialKey('llm-drain', 'alpha')
+const OTHER_RECORD = credentialKey('llm-drain', 'beta')
 
 const cleanups: Array<() => Promise<void>> = []
 
@@ -67,5 +69,33 @@ describe('write-drain teardown', () => {
     await secondRejects
     expect(await service.resolve(KEY)).toEqual({ value: 'one', source: 'file' })
     expect(await service.resolve(OTHER)).toBeUndefined()
+  })
+
+  it('fails a queued record write after disposal on the same terms', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-credentials-drain-record-'))
+    cleanups.push(() => rm(dir, { recursive: true, force: true }))
+    const ctx = new Context()
+    const fiber = ctx.plugin(LocalCredentialProvider, { path: join(dir, '.credentials.yaml'), watch: false })
+    await fiber
+    const service = ctx.credentials
+
+    let release!: () => void
+    await setGate(new Promise<void>((resolveGate) => {
+      release = resolveGate
+    }))
+    const first = service.modifyRecord(RECORD, () => Promise.resolve({ kind: 'grant', payload: { v: 1 } }))
+    await new Promise(resolvePause => setTimeout(resolvePause, 5))
+    const queuedModify = expect(service.modifyRecord(OTHER_RECORD, () => Promise.resolve({ kind: 'api-key' })))
+      .rejects.toThrow(/disposed before the queued/)
+    const queuedDelete = expect(service.deleteRecord(OTHER_RECORD)).rejects.toThrow(/disposed before the queued/)
+    const disposal = fiber.dispose()
+    await new Promise(resolvePause => setTimeout(resolvePause, 10))
+    release()
+    await disposal
+
+    await expect(first).resolves.toEqual({ kind: 'grant', payload: { v: 1 } })
+    await queuedModify
+    await queuedDelete
+    expect(await service.readRecord(OTHER_RECORD)).toBeUndefined()
   })
 })

@@ -231,7 +231,7 @@ interface TypertClientRemote extends TypertRemoteNamespaceMap {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxapiproxy--apiproxy"></a>
 
@@ -248,7 +248,7 @@ Root interface of the unified API. New client-request domain = one new file pair
 respond(message: ClientResponse): Promise<RpcReceipt>
 ```
 
-Source: [`packages/host/apiproxy/src/api/index.ts:22`](../../packages/host/apiproxy/src/api/index.ts)
+Source: [`packages/host/apiproxy/src/api/index.ts`](../../packages/host/apiproxy/src/api/index.ts)
 
 <a id="ctxtypert--typertregistry"></a>
 
@@ -314,7 +314,7 @@ toJSONSchema(key: string, params?: z.core.ToJSONSchemaParams): z.core.JSONSchema
 
 Types: [TypertContribution](invariants.md) · [TypertFace](invariants.md) · [TypertPackageFilter](invariants.md) · [TypertPackageRecord](invariants.md) · [TypertSchemaFilter](invariants.md) · [TypertSchemaRecord](invariants.md)
 
-Source: [`packages/typert/registry/src/service.ts:446`](../../packages/typert/registry/src/service.ts)
+Source: [`packages/typert/registry/src/service.ts`](../../packages/typert/registry/src/service.ts)
 
 <a id="ctxtypertgateway--typertgatewayservice"></a>
 
@@ -332,5 +332,5 @@ Resolve strict generated definitions or conservative SRC markers against current
 async invoke(request: InvokeRemoteRequest): Promise<unknown>
 ```
 
-Source: [`packages/api/gateway/src/index.ts:90`](../../packages/api/gateway/src/index.ts)
+Source: [`packages/api/gateway/src/index.ts`](../../packages/api/gateway/src/index.ts)
 <!-- END GENERATED cordis-surface -->

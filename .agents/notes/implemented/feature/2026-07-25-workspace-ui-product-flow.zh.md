@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-[Domain KV storage 与 Workspace entity](../../proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.md)定义了 Workspace 的持久实体、路径规范和有序 Session 账本，但没有定义 Host 接线、历史数据初始化或 GUI 动线。GUI 同时呈现 Workspace 和 Session；用户进入 New Session 后必须能够立即输入，即使此时还没有 Host Session，甚至没有 Host Workspace。
+[Domain KV storage 与 Workspace entity](../../proposed/architecture/2026-07-24-domain-kv-storage-and-workspace.zh.md)定义了 Workspace 的持久实体、路径规范和有序 Session 账本，但没有定义 Host 接线、历史数据初始化或 GUI 动线。GUI 同时呈现 Workspace 和 Session；用户进入 New Session 后必须能够立即输入，即使此时还没有 Host Session，甚至没有 Host Workspace。
 
 待创建 Workspace、待创建 Session、输入保留与 Host 实体发布必须具有明确所有者，并在 RPC completion 与 Host frame 以任意顺序到达时保持同一页面身份。若零态提前创建 Host Session，则无输入的页面状态会进入 Host 生命周期。历史 Session 又只有轻量 `SessionHeader.cwd` 可用于归组，初始化不能读取事件正文。
 
@@ -25,7 +25,7 @@ Host 在 Workspace entity 上提供以下 GUI 接线：
 | `session.create({ workspaceId, sessionId? })` | 从 Workspace 解析 cwd，以可选预分配 id 幂等创建 Session 并 attach |
 | `session.create({ cwd })` | 保留给非 Workspace 调用方，创建 Ungrouped Session |
 
-Host 流推送 Workspace 与 Session 增量，包括 `host/workspace-removed`；Client 重连后分别刷新 `workspace.list` 与 `session.list` 基线。删除注册记录的所有权与安全边界由 [Workspace 注册记录删除 Agent Note](2026-07-27-workspace-registration-deletion.md)定义。
+Host 流推送 Workspace 与 Session 增量，包括 `host/workspace-removed`；Client 重连后分别刷新 `workspace.list` 与 `session.list` 基线。删除注册记录的所有权与安全边界由 [Workspace 注册记录删除 Agent Note](2026-07-27-workspace-registration-deletion.zh.md)定义。
 
 Workspace 的 `sessionIds` 是有序候选索引。成员投影同时要求 id 位于索引且对应 `SessionHeader.cwd` canonical 后等于 Workspace path；SessionHeader 不增加 `workspaceId`。cwd 匹配但未入索引的 Session 保持 Ungrouped，索引命中但 header 缺失、cwd 无效或 cwd 不匹配的 id 被过滤。同一 Session 被两个 Workspace 索引占用属于损坏状态并明确报错。
 
@@ -50,9 +50,9 @@ Session 自己持有首条输入并驱动一条内部流水线：必要时以预
 
 完全没有 Workspace 时，页面创建默认名为 `workspace` 的前端 Workspace 对象和指向它的前端 Session。两者不写 Host，composer 始终可输入；首次发送才依次 materialize Workspace、attach Session、发送消息。
 
-顶部 New Session、Workspace 行内加号和 Workspace picker 最终都调用同一 New Session 动作：显式 Workspace id 直接成为目标，未指定时先使用当前 Session 所属 Workspace，再使用最近 Workspace；没有真实 Workspace 时进入空白 New Session 页面。Workspace picker 的单一 Add workspace 动作（见[单一路径 Note](../simplification/2026-07-31-one-route-to-add-a-workspace.md)；本决策做出时是 Use an existing folder 与按名称创建两个动作）会在用户确认目录时立即创建真实 Workspace，再将前端 Session 的目标改为该 Workspace；即使用户不发送消息，显式创建的空 Workspace 也保留。
+顶部 New Session、Workspace 行内加号和 Workspace picker 最终都调用同一 New Session 动作：显式 Workspace id 直接成为目标，未指定时先使用当前 Session 所属 Workspace，再使用最近 Workspace；没有真实 Workspace 时进入空白 New Session 页面。Workspace picker 的单一 Add workspace 动作（见[单一路径 Note](../simplification/2026-07-31-one-route-to-add-a-workspace.zh.md)；本决策做出时是 Use an existing folder 与按名称创建两个动作）会在用户确认目录时立即创建真实 Workspace，再将前端 Session 的目标改为该 Workspace；即使用户不发送消息，显式创建的空 Workspace 也保留。
 
-新建 Workspace 的显示名取自其所在目录。不同 canonical path 可以拥有相同的 basename 派生显示名（见[身份决策](../bug-fix/2026-07-31-same-basename-workspace-adoption.md)）；显式的重命名操作仍保留显示名重名检查。跨 Workspace 移动 Session、从 Ungrouped 手动收编以及分别输入显示名和目录名仍不在此动线范围内。
+新建 Workspace 的显示名取自其所在目录。不同 canonical path 可以拥有相同的 basename 派生显示名（见[身份决策](../bug-fix/2026-07-31-same-basename-workspace-adoption.zh.md)）；显式的重命名操作仍保留显示名重名检查。跨 Workspace 移动 Session、从 Ungrouped 手动收编以及分别输入显示名和目录名仍不在此动线范围内。
 
 ### 首次发送与恢复
 
@@ -70,7 +70,7 @@ RPC 响应丢失、Host frame 先于 completion 和 completion 先于 Host frame
 
 Workspace 组使用 Host 返回的持久顺序。Bootstrap 一次性确定历史顺序，显式创建的新 Workspace 放在首位，`workspace.insertBefore` 则持久应用用户拖拽顺序；Session 活跃不会移动 Workspace 组。
 
-Host 记账保持手动的 `Workspace.sessionIds` 顺序：新 attach 的 Session 放在首位，活动不会改动该顺序。分组浏览器可以改选浏览器本地的最近更新视图；当 Session 的 `updatedAt` 增大时该视图会把它移到首位，同时仍允许手动调整。每个打开的 Workspace 默认显示五条 Session，用户可临时展开其余条目。持久 Workspace 重排序和浏览器本地 Session 顺序见 [Workspace 侧边栏顺序与折叠](2026-08-11-workspace-sidebar-order-and-folding.md)。
+Host 记账保持手动的 `Workspace.sessionIds` 顺序：新 attach 的 Session 放在首位，活动不会改动该顺序。分组浏览器可以改选浏览器本地的最近更新视图；当 Session 的 `updatedAt` 增大时该视图会把它移到首位，同时仍允许手动调整。每个打开的 Workspace 默认显示五条 Session，用户可临时展开其余条目。持久 Workspace 重排序和浏览器本地 Session 顺序见 [Workspace 侧边栏顺序与折叠](2026-08-11-workspace-sidebar-order-and-folding.zh.md)。
 
 当前空白 Session 会显示为一条「New session」行，但不显示数量、时间标签或行菜单；其他空白 Session 保持隐藏，并可由对应 Workspace 复用。搜索会排除空白行。
 

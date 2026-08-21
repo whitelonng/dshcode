@@ -1,5 +1,6 @@
 /** Run serial browser owners before one bounded snapshot pool. */
 import { spawn } from 'node:child_process'
+import { pnpmInvocation } from './pnpm-invocation.ts'
 
 const serialFiles = [
   'apps/web/tests/hmr-live.e2e.ts',
@@ -10,20 +11,15 @@ const workers = Number.parseInt(workerRaw ?? '', 10)
 if (!Number.isSafeInteger(workers) || workers < 2 || String(workers) !== workerRaw) {
   throw new Error(`DSH_WEB_SNAPSHOT_WORKERS must be an integer greater than 1, got ${JSON.stringify(workerRaw)}.`)
 }
-const pnpmEntrypoint = process.env.npm_execpath
-if (pnpmEntrypoint === undefined || pnpmEntrypoint === '') {
-  throw new Error('parallel web snapshots must be invoked through a pnpm package script.')
-}
-
-const baseArgs = [pnpmEntrypoint, 'exec', 'vitest', 'run', '--config', 'vitest.web.config.ts']
+const invocation = pnpmInvocation(['exec', 'vitest', 'run', '--config', 'vitest.web.config.ts'])
 let serialStatus = 0
 for (const file of serialFiles) {
-  serialStatus = await run([...baseArgs, file])
+  serialStatus = await run(invocation.command, [...invocation.args, file])
   if (serialStatus !== 0) break
 }
 if (serialStatus === 0) {
-  process.exitCode = await run([
-    ...baseArgs,
+  process.exitCode = await run(invocation.command, [
+    ...invocation.args,
     ...serialFiles.map(file => `--exclude=${file}`),
     '--fileParallelism',
     `--maxWorkers=${String(workers)}`,
@@ -32,9 +28,9 @@ if (serialStatus === 0) {
   process.exitCode = serialStatus
 }
 
-function run(args: string[]): Promise<number> {
+function run(command: string, args: string[]): Promise<number> {
   return new Promise((resolveRun, reject) => {
-    const child = spawn(process.execPath, args, { stdio: 'inherit' })
+    const child = spawn(command, args, { stdio: 'inherit' })
     child.once('error', reject)
     child.once('exit', (exitCode, signalCode) => {
       if (signalCode !== null) {

@@ -79,7 +79,7 @@ interface LspService {
 
 映射键规范化为带前导点的小写扩展名，并按 `filePath` 的最后一个扩展名选择；语言 id 仅用于文档同步。seam 中的位置和范围从零开始按 UTF-16 计数。`findReferences` 始终包含声明：提供方在内部执行该约束，本地映射设置 `context.includeDeclaration: true`，调用方不能配置。封闭结果联合将导航统一为位置，将 `hover` 统一为内容或 `null`；导航结果携带提供方的规范工作区 URI，使消费方在执行世界的命名空间内相对化文件 URI。seam 不公开协议类型、进程或文档控制，也不提供通用请求逃生口。
 
-`dsh-lsp-stdio` 负责服务器配置、JSON-RPC、进程与临时文档状态和协议转换。它通过 `ctx.fs` 读取，通过 `ctx.subprocess` 启动，只依赖二者的 Service Definition 包而非具体提供方；[可移植执行环境决策](2026-07-28-portable-execution-world-consumers.md)负责定义这种配对。服务器表的键是提供方 id。插件在注册前解析每个服务器的本地设置；如果后续映射无效或发生冲突，插件会撤销此前的注册，并为每个提供方保留独立进程池。`dsh-tool-lsp` 在运行时只注入 `tools`、`lsp` 和 `systemPrompt`，通过包内的 `sessionCwd(exec)` 辅助函数从 `exec.agent?.session.header.cwd` 取得工作区，其取值方式与文件系统工具一致，也不导入提供方。
+`dsh-lsp-stdio` 负责服务器配置、JSON-RPC、进程与临时文档状态和协议转换。它通过 `ctx.fs` 读取，通过 `ctx.subprocess` 启动，只依赖二者的 Service Definition 包而非具体提供方；[可移植执行环境决策](2026-07-28-portable-execution-world-consumers.zh.md)负责定义这种配对。服务器表的键是提供方 id。插件在注册前解析每个服务器的本地设置；如果后续映射无效或发生冲突，插件会撤销此前的注册，并为每个提供方保留独立进程池。`dsh-tool-lsp` 在运行时只注入 `tools`、`lsp` 和 `systemPrompt`，通过包内的 `sessionCwd(exec)` 辅助函数从 `exec.agent?.session.header.cwd` 取得工作区，其取值方式与文件系统工具一致，也不导入提供方。
 
 ## 面向模型的约定
 

@@ -10,9 +10,9 @@ GUI 的凭据引导从 DeepSeek 专用的就绪状态检查开始，但内部测
 
 ## 决策
 
-**设置外壳协调有序步骤。** `settings.onboarding` 仍是根作用域 list，但 `ui-settings` 会把其中各条目的 id 和顺序投影到一个协调器中，并且只挂载第一个未完成的步骤。当前注册方会收到 `complete()` 和 `openSection(id)`；所有权转移前，不会挂载后续步骤。`ui-settings-models` 现在以顺序 `-100` 注册恢复后的欢迎声明，以顺序 `0` 注册 DeepSeek 条件式凭据步骤；两者当前的共用展示由[共用弹窗引导决策](2026-08-13-shared-modal-product-onboarding.md)持有。
+**设置外壳协调有序步骤。** `settings.onboarding` 仍是根作用域 list，但 `ui-settings` 会把其中各条目的 id 和顺序投影到一个协调器中，并且只挂载第一个未完成的步骤。当前注册方会收到 `complete()` 和 `openSection(id)`；所有权转移前，不会挂载后续步骤。`ui-settings-models` 现在以顺序 `-100` 注册恢复后的欢迎声明，以顺序 `0` 注册 DeepSeek 条件式凭据步骤；两者当前的共用展示由[共用弹窗引导决策](2026-08-13-shared-modal-product-onboarding.zh.md)持有。
 
-**产品欢迎步骤按版本管理并归功能插件所有。** 该声明曾由[移除首次启动内测声明](../simplification/2026-08-13-remove-first-run-beta-notice.md)历史决策移除，现在以新的测试阶段文案恢复在 `ui-settings-models` 中。`ui-settings-general` 仍不注册任何引导步骤；持有当前两个步骤的插件也持有文案、store 和共用弹窗。
+**产品欢迎步骤按版本管理并归功能插件所有。** 该声明曾由[移除首次启动内测声明](../simplification/2026-08-13-remove-first-run-beta-notice.zh.md)历史决策移除，现在以新的测试阶段文案恢复在 `ui-settings-models` 中。`ui-settings-general` 仍不注册任何引导步骤；持有当前两个步骤的插件也持有文案、store 和共用弹窗。
 
 **持久化的 `ui-onboarding` 分节持有确认状态。** 宿主端在 user-settings seam 中注册它，存入当前 `$DSH_HOME/settings.yaml`；当前欢迎 store 通过既有公开 settings API 读写其中的 `welcomeNoticeVersion`。connection 插件通过 `ctx.connection.isLoopback` 统一发布当前页面是否使用 loopback authority；hostname 判定留在 connection 包内，其他客户端插件只消费服务状态，而不导入其实现。API Proxy 在可配置提供方 namespace 之外，通过封闭的允许列表暴露这一个产品 namespace，同时不会把它的变更视为模型目录失效事件。
 

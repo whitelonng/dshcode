@@ -24,6 +24,7 @@ import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerBarProps } from '../contract/slots.ts'
 import { deriveDecorations } from '../input/decorations.ts'
 import type { DraftDecorations } from '../input/decorations.ts'
+import type { EditRange } from '../input/contract.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
@@ -33,6 +34,45 @@ import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
 const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], hint: null }
+
+/** The selection and edit family a `beforeinput` recorded, with the draft length it applied to. */
+interface PendingEdit {
+  readonly start: number
+  readonly end: number
+  readonly draftLength: number
+  readonly inputType: string
+}
+
+/**
+ * Resolve one edit's range from the record taken before it applied.
+ * A selection the edit replaces is the range outright. A caret delete replaces
+ * nothing and reports the bare caret, so the removed span is whatever the draft
+ * lost, on the side `inputType` names — measured, because one caret gesture can
+ * remove a multi-unit grapheme, a word, or a line.
+ * @param pending - record taken at `beforeinput`, null when none was seen.
+ * @param prevLength - length of the draft the edit applied to.
+ * @param nextLength - length of the resulting draft.
+ * @returns the exact range, or undefined when the record cannot describe this
+ * edit and the machine's diff scan has to recover it.
+ */
+function editRangeOf(pending: PendingEdit | null, prevLength: number, nextLength: number): EditRange | undefined {
+  if (pending === null || pending.draftLength !== prevLength) return undefined
+  const { start, end, inputType } = pending
+  // A DOM selection cannot invert; the check keeps that a precondition of the
+  // math below rather than an assumption about the element.
+  if (start > end || end > prevLength) return undefined
+  const insertedLength = nextLength - prevLength + (end - start)
+  if (insertedLength >= 0) return { start, end, insertedLength }
+  if (start !== end) return undefined
+  const removed = prevLength - nextLength
+  if (inputType.endsWith('Backward')) {
+    return removed <= start ? { start: start - removed, end: start, insertedLength: 0 } : undefined
+  }
+  if (inputType.endsWith('Forward')) {
+    return start + removed <= prevLength ? { start, end: start + removed, insertedLength: 0 } : undefined
+  }
+  return undefined
+}
 
 export type InputBarProps = ComposerBarProps
 
@@ -277,6 +317,34 @@ export function InputBar({
   })
   /* oxlint-enable typescript/no-unnecessary-condition */
 
+  // The machine's occurrence math needs the edit's real range, and a controlled
+  // textarea's change event carries only the resulting string. `beforeinput`
+  // fires while the element still holds the pre-edit selection, which is
+  // exactly the range about to be replaced; a textarea exposes it no other way
+  // (`getTargetRanges()` is empty for form controls). Recovering the range by
+  // diffing the two drafts instead is ambiguous whenever the typed text repeats
+  // what it lands against — typing the trigger char before a reference reads as
+  // landing inside that reference, which drops it. One lifetime, like the wheel
+  // listener above: the textarea is never unmounted.
+  const pendingEditRef = useRef<PendingEdit | null>(null)
+  useEffect(() => {
+    const el = inputRef.current
+    if (el === null) return
+    const onBeforeInput = (e: InputEvent): void => {
+      // Only the families whose reported selection describes the edit. A
+      // history replay reports wherever the caret happens to sit, which would
+      // survive every check in editRangeOf while naming the wrong span.
+      if (!e.inputType.startsWith('insert') && !e.inputType.startsWith('delete')) {
+        pendingEditRef.current = null
+        return
+      }
+      const { start, end } = selectionOf(el)
+      pendingEditRef.current = { start, end, draftLength: el.value.length, inputType: e.inputType }
+    }
+    el.addEventListener('beforeinput', onBeforeInput)
+    return () => { el.removeEventListener('beforeinput', onBeforeInput) }
+  }, [])
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (workspaceTrigger) {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -371,8 +439,10 @@ export function InputBar({
     if (keyboard === undefined || locked) return // disabled/read-only states cannot edit the draft
     if (machineBusy) return // submitting is the read-only span; adjudicating holds the pending lock
     const next = e.target.value
+    const pending = pendingEditRef.current
+    pendingEditRef.current = null
     safariNativeShrinkRef.current = safari && next.length < draft.length
-    keyboard.setDraft(next)
+    keyboard.setDraft(next, editRangeOf(pending, draft.length, next.length))
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
     // oxlint-disable-next-line typescript/no-unnecessary-condition
     keyboard.track(next, e.target.selectionStart ?? next.length)
@@ -535,10 +605,10 @@ export function InputBar({
     }
     type Boundary =
       | { at: number; kind: 'chip'; chip: (typeof deco.chips)[number] }
-      | { at: number; kind: 'text-ref'; ref: (typeof deco.textRefs)[number] }
+      | { at: number; kind: 'text-ref'; ref: (typeof deco.textRefs)[number]; ordinal: number }
     const boundaries: Boundary[] = [
       ...deco.chips.map(chip => ({ at: chip.offset, kind: 'chip' as const, chip })),
-      ...deco.textRefs.map(ref => ({ at: ref.start, kind: 'text-ref' as const, ref })),
+      ...deco.textRefs.map((ref, ordinal) => ({ at: ref.start, kind: 'text-ref' as const, ref, ordinal })),
     ].sort((a, b) => a.at - b.at)
     for (const b of boundaries) {
       if (b.at < cursor) continue // claim-token overlap: the leading mark wins
@@ -570,9 +640,14 @@ export function InputBar({
       } else {
         // Plain-range highlight: the glyphs stay the
         // textarea's (advance untouched); the mark paints the chip look.
+        // The key is the draft-order ordinal: a fresh scan derives these
+        // ranges every render, so none of them carries identity past its
+        // position, and a draft-offset key would unmount the mark and its
+        // icon for every character typed ahead of it. Structured references
+        // key by occurrenceId, the identity their occurrence table owns.
         const text = draft.slice(b.ref.start, b.ref.end)
         backdrop.push(
-          <mark key={`ref-${b.ref.start}`} className={css.textRef} data-decoration="text-ref">
+          <mark key={`ref-${b.ordinal}`} className={css.textRef} data-decoration="text-ref">
             {b.ref.appearance === 'folder'
               ? (
                 <>

@@ -2,12 +2,13 @@
 
 [English](README.md) | 中文
 
-持久投影缓存（`ctx.sessionProjectionCache`）：把每个已注册投影单元的状态持久化为检查点，基于域数据形态（domain data form）每会话一条记录（`session_projcache` 域——出厂 JSON 后端将其落在配置的存储根目录下、`workspace.json` 旁边）。设计权威：[session-projection RFC](../../../.agents/notes/proposed/architecture/2026-07-27-session-projection-and-command-log.md)（persisted projection cache 一节）。
+持久投影缓存（`ctx.sessionProjectionCache`）：把每个投影单元的状态保存为检查点，基于域数据形态（domain data form）每会话一条记录（`session_projcache` 域——出厂 JSON 后端将其落在配置的存储根目录下、`workspace.json` 旁边）。设计权威：[session-projection RFC](../../../.agents/notes/proposed/architecture/2026-07-27-session-projection-and-command-log.zh.md)（persisted projection cache 一节）。
 
 一条存储行 `(key → {ver, seq, val})` 是折叠捷径，绝不是权威：可能陈旧（`seq` 精确说明陈旧到哪），但绝不会错。实现据此承诺：
 
 - **每次后台写入都 fail-soft。** 持久写失败只记一条警告并保持缓存陈旧；下一次写入或冷读自愈。两次写之间崩溃的代价是更长的尾部回放，绝不是错误的值。
 - **`ver` 与当前运行单元的 `stateVersion` 不匹配即丢弃，绝不迁移。** 单元递增版本会在读取时使其行失效；该 key 从日志重新折叠。
+- **存储行必须通过当前单元的 `stateSchema`。** 畸形行从零 I/O view 中省略，并被 restore 拒绝，使冷读阶梯从日志重新折叠。
 - **整记录写入。** 每次写入替换该会话的完整检查点（注册表切面始终是完整的），并经无损 JSON 边界快照——违反纯 JSON 约定的单元状态会显式失败并报错。
 - **记录绑定到日志生命周期，而不只是 id。** 每条记录存储其折叠来源的 header 身份（`createdAt`、`cwd`）；每次读取先以活 header 或存储 header 为证验证它，再接受任何行——被删后重建的 id、或缓存幸存而持久化存储被换掉时，无关记录被整体丢弃，绝不播种幻影值。
 - **日志领先，缓存跟随。** 活会话检查点先把缓冲事件持久 flush，缓存行才落地，因此崩溃只会让缓存落后于日志（更长的尾部回放），绝不领先于它。
@@ -27,7 +28,7 @@
 
 ## 列表读（`cachedSnapshot(meta)`）
 
-零 I/O 一档：从身份匹配的存储记录直接 view 全量值（仅版本匹配的 key），以 `{asOfSeq, values}` 切面返回——`asOfSeq` 取所服务行的最低水位，客户端在 higher-seq-wins 规则下播种值存储时，陈旧列表块永远压不过更新的推送帧。无可用记录（未知 id、无关生命周期、无版本匹配行）时返回 `undefined`；api-proxy 列表载体将其转为列缺席。
+零 I/O 一档：从身份匹配的存储记录直接 view 客户端值（仅版本与 state schema 均匹配的 key），以 `{asOfSeq, values}` 切面返回——`asOfSeq` 取所服务行的最低水位，客户端在 higher-seq-wins 规则下播种值存储时，陈旧列表块永远压不过更新的推送帧。host-only 行永不返回。无可用客户端行（未知 id、无关生命周期、无可用行）时返回 `undefined`；api-proxy 列表载体将其转为列缺席。
 
 ## 冷读（`coldSnapshot(id, signal?)`）
 

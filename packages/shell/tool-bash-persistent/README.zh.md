@@ -19,7 +19,7 @@
 
 #### 模型所见
 
-生成的 [`bash` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash-persistent)，其中包含配置的 `description`。本插件不贡献独立系统提示词段；persona 与环境指导由部署负责。
+生成的 [`bash` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-bash-persistent)，其中包含配置的 `description`。本插件不贡献独立系统提示词段；persona 与环境指导由部署负责。
 
 #### Token 影响
 

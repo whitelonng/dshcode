@@ -32,7 +32,7 @@ Status: implemented
 - 中途引导与注入的上下文以与普通用户提示词相同的权重到达模型。
 - transcript 不再区分注入内容与用户消息；需要这一区分的消费方读取持久事件日志，其中事件类型、`source` 和 `meta` 完整保留。
 - `hook-{cc,codex}-stop-continue` ACP（Agent Client Protocol）快照已重新录制：旧录制捕获的是模型把 steering 当作第三方元数据而拒绝服从，正是本次修复针对的失败模式。
-- [内容块词汇表 Agent Note](../architecture/2026-06-11-content-block-vocabulary.md) 中关于带标签封套的条款已修订为指向本文。
+- [内容块词汇表 Agent Note](../architecture/2026-06-11-content-block-vocabulary.zh.md) 中关于带标签封套的条款已修订为指向本文。
 
 ## 推迟事项
 

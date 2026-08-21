@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-agent（智能体）作用域机制（[决策](2026-07-08-agent-scope-contexts.md)、[运行时设计](2026-07-12-agent-scope-runtime-design.md)）让支持作用域的注册表反复呈现同一种形态：一个全局注册层，加上一个与具体 agent 精确对应的层。七个注册门面都采用这一形态：`tools.register`、`tools.restrict` 和 `tools.guard`（位于 `dsh-tools`）；`SystemPrompt.section`、`SystemPrompt.tools` 和 `SystemPrompt.variable`（位于 `dsh-system-prompt`）；以及 `CommandRuntime.register`（位于 `dsh-commands`）。
+agent（智能体）作用域机制（[决策](2026-07-08-agent-scope-contexts.zh.md)、[运行时设计](2026-07-12-agent-scope-runtime-design.zh.md)）让支持作用域的注册表反复呈现同一种形态：一个全局注册层，加上一个与具体 agent 精确对应的层。七个注册门面都采用这一形态：`tools.register`、`tools.restrict` 和 `tools.guard`（位于 `dsh-tools`）；`SystemPrompt.section`、`SystemPrompt.tools` 和 `SystemPrompt.variable`（位于 `dsh-system-prompt`）；以及 `CommandRuntime.register`（位于 `dsh-commands`）。
 
 如果没有共享原语，每个门面都要围绕自己的领域状态重复相同的生命周期编排：从调用方上下文导出可见性，按需创建专属容器，把属主绑定到同一个 Cordis fiber，先装入 undo 再通知观察者，原样返回 Cordis 的 disposer，并回收空的专属状态。各自分离的映射与集合类型也会让服务缺少一个表示某个 scope 完整贡献的对象。
 

@@ -45,7 +45,7 @@ Use session_search to find relevant work from prior sessions, or session_event_s
 
 #### 模型看到的内容
 
-模型会看到生成的 [`session_search`、`session_event_search`、`session_trace`、`session_event_trace` 和 `session_event_read` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-session-query)。搜索过滤器会增加固定 schema token，而游标、工作区路径、输出分页和模型可控结果上限仍不存在。
+模型会看到生成的 [`session_search`、`session_event_search`、`session_trace`、`session_event_trace` 和 `session_event_read` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-session-query)。搜索过滤器会增加固定 schema token，而游标、工作区路径、输出分页和模型可控结果上限仍不存在。
 
 #### Token 影响
 

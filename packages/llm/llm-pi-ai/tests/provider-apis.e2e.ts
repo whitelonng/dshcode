@@ -1,10 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { AttachmentId, AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import { AttachmentId, AttachmentStore, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type {
   ImageAttachmentLimits,
   ImageAttachmentRef,
+  ImageRequestPolicy,
+  RequestImageAttachment,
   SaveImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
@@ -87,6 +89,24 @@ async function harness(image?: StoredImageAttachment): Promise<Context> {
           return Promise.reject(new Error('unknown e2e attachment fixture'))
         }
         return Promise.resolve(fixture)
+      }
+
+      override readImageRequest(ref: ImageAttachmentRef, _policy: ImageRequestPolicy): Promise<RequestImageAttachment> {
+        if (ref.attachmentId !== fixture.ref.attachmentId) {
+          return Promise.reject(new Error('unknown e2e attachment fixture'))
+        }
+        return Promise.resolve({
+          variantId: ImageVariantId(`sha256:${'f'.repeat(64)}`),
+          attachment: fixture.ref,
+          data: fixture.data,
+          mediaType: fixture.ref.mediaType,
+          bytes: fixture.data.byteLength,
+          width: fixture.ref.width,
+          height: fixture.ref.height,
+          depth: 'uchar',
+          space: 'srgb',
+          hasAlpha: fixture.ref.mediaType === 'image/png',
+        })
       }
     }
     await ctx.plugin(E2eAttachmentStore)

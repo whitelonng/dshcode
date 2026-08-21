@@ -10,7 +10,7 @@ CLI（命令行界面）共享 base 配置了空的部署 persona，Web overlay 
 
 ## 决策
 
-Web profile 会组合 `dsh-base` 与 `dsh-web-app` 两个组合包。Web 组合包提供一段简洁的编码 agent persona，其中包含解析后的 `{{model}}` 与会话 `{{cwd}}`；当 `surfaceContext` 为 true 时，其 `web-runtime` 插件会添加 `app:web-surface` 提示词段。挂载 profile 配置树前，`dsh web` 别名会读取组合后的同一项设置，并且仅在启用界面上下文时安装现有的 `harness:source` 提示词段。无头组合包和拥有完整提示词的 profile 都会设置 `surfaceContext: false`，从而抑制 Web 提示词与受管 shell 事实；Web 别名也会抑制源码提示词段，而无需检查 overlay 路径。每项已挂载的提示词贡献仍会在 agent loop（智能体循环）等消费方发出 request header 前激活。源码提示词段的措辞，以及其中不得从一条路径推断另一条路径的警告，均由另行记录的[源码 checkout 与工作目录区分决策](2026-07-30-source-checkout-workdir-distinction.md)负责。
+Web profile 会组合 `dsh-base` 与 `dsh-web-app` 两个组合包。Web 组合包提供一段简洁的编码 agent persona，其中包含解析后的 `{{model}}` 与会话 `{{cwd}}`；当 `surfaceContext` 为 true 时，其 `web-runtime` 插件会添加 `app:web-surface` 提示词段。挂载 profile 配置树前，`dsh web` 别名会读取组合后的同一项设置，并且仅在启用界面上下文时安装现有的 `harness:source` 提示词段。无头组合包和拥有完整提示词的 profile 都会设置 `surfaceContext: false`，从而抑制 Web 提示词与受管 shell 事实；Web 别名也会抑制源码提示词段，而无需检查 overlay 路径。每项已挂载的提示词贡献仍会在 agent loop（智能体循环）等消费方发出 request header 前激活。源码提示词段的措辞，以及其中不得从一条路径推断另一条路径的警告，均由另行记录的[源码 checkout 与工作目录区分决策](2026-07-30-source-checkout-workdir-distinction.zh.md)负责。
 
 Web 提示词段把未限定的「这个页面」「这个 GUI」或「这个应用」解释为 DeepSeek Harness Web GUI。同时，它会明确说明浏览器不会隐式提供 DOM、路由或截图上下文，使模型能够识别产品，但不会声称掌握未收到的视觉状态。组装后的文本会记录在 `request/header` 中，从而保持「模型可见内容必须有日志记录」这一不变量。
 

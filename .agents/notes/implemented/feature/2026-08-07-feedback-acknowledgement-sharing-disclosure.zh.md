@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-遥测 seam（`@deepseek-ai/dsh-session-telemetry`）现在拥有与后端无关的共享词汇：`SessionTelemetrySharingStatus`（`full` | `feedback-only` | `disabled`），并在 `SessionTelemetryBackend` 服务类上增加一个必需的抽象 `sharing` 成员——每个后端都必须披露其策略，因此消费方只有在未挂载任何遥测服务时才渲染「未配置」。`@deepseek-ai/dsh-session-telemetry-otel` 在构造函数中把序列化的 `SessionTelemetryMode`（模式语义由[反馈门控投递决策](2026-08-05-feedback-gated-session-telemetry.md)负责）映射到该状态并披露，包括 `DISABLED` 模式。`/feedback` 处理器通过插件上下文读取已挂载的服务（`ctx.get('telemetry')`，绝不是声明的注入，因此命令在无遥测时也能加载和运行），并在确认文本后追加一句共享披露：`Feedback recorded for session {id}. <句子>`。无服务 → `Session sharing is not configured.`；`disabled` → `Session sharing is disabled.`；`feedback-only` → `Session sharing is feedback-gated; recording feedback releases the session prefix for sharing.`；`full` → `Session sharing is enabled.`
+遥测 seam（`@deepseek-ai/dsh-session-telemetry`）现在拥有与后端无关的共享词汇：`SessionTelemetrySharingStatus`（`full` | `feedback-only` | `disabled`），并在 `SessionTelemetryBackend` 服务类上增加一个必需的抽象 `sharing` 成员——每个后端都必须披露其策略，因此消费方只有在未挂载任何遥测服务时才渲染「未配置」。`@deepseek-ai/dsh-session-telemetry-otel` 在构造函数中把序列化的 `SessionTelemetryMode`（模式语义由[反馈门控投递决策](2026-08-05-feedback-gated-session-telemetry.zh.md)负责）映射到该状态并披露，包括 `DISABLED` 模式。`/feedback` 处理器通过插件上下文读取已挂载的服务（`ctx.get('telemetry')`，绝不是声明的注入，因此命令在无遥测时也能加载和运行），并在确认文本后追加一句共享披露：`Feedback recorded for session {id}. <句子>`。无服务 → `Session sharing is not configured.`；`disabled` → `Session sharing is disabled.`；`feedback-only` → `Session sharing is feedback-gated; recording feedback releases the session prefix for sharing.`；`full` → `Session sharing is enabled.`
 
 披露只陈述当前的共享策略，绝不承诺投递或留存：交接是后端的非阻塞入队，批处理、重试与丢失策略仍归后端 SDK，且后续重新配置可能改变已共享的内容，因此句子不声称任何内容已到达采集端，也不声称未来的留存。披露不新增任何会话事件，也绝不会进入模型 surface；Web 客户端通过现有的命令行（`CommandNode` 的结果文本）原样渲染，无需客户端改动。
 

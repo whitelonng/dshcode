@@ -6,13 +6,13 @@ Status: implemented
 
 ## 问题
 
-[交付清单决策](2026-07-31-even-out-shipped-tool-rosters.md)把 `tool-session-query` 设为共享 [`cordis.patch.yml`](../../../../packages/bundle/base/cordis.patch.yml) 的默认行，于是交付的 TUI 与 Web surface 把这五个会话搜索工具（`session_search`、`session_event_search`、`session_trace`、`session_event_trace`、`session_event_read`）呈现给了模型。这与[面向模型的会话查询工具决策](2026-07-24-model-facing-session-query-tools.md)相抵触，该决策持需显式启用的立场，包 README 将其记录为「shipped host compositions do not mount it by default」。这项默认设置还交付了一个提示词段，向模型讲授一套既往工作搜索工作流，而没有任何用户要求过。
+[交付清单决策](2026-07-31-even-out-shipped-tool-rosters.zh.md)把 `tool-session-query` 设为共享 [`cordis.patch.yml`](../../../../packages/bundle/base/cordis.patch.yml) 的默认行，于是交付的 TUI 与 Web surface 把这五个会话搜索工具（`session_search`、`session_event_search`、`session_trace`、`session_event_trace`、`session_event_read`）呈现给了模型。这与[面向模型的会话查询工具决策](2026-07-24-model-facing-session-query-tools.zh.md)相抵触，该决策持需显式启用的立场，包 README 将其记录为「shipped host compositions do not mount it by default」。这项默认设置还交付了一个提示词段，向模型讲授一套既往工作搜索工作流，而没有任何用户要求过。
 
 ## 决策
 
 交付的 TUI、Web 与无头 surface 均不挂载 `@deepseek-ai/dsh-tool-session-query`，交付的 agent preset 也都不包含它。该消费方仍保持 opt-in，与面向模型的会话查询工具决策所述完全一致：ACP（Agent Client Protocol）示例的 [`session-query.cordis.yml`](../../../../examples/acp-agent/session-query.cordis.yml) 及其快照对侧文件仍是挂载参考，自定义组合也可以连同超时与 spill 策略一起挂载该包。
 
-`ctx.sessionQuery` 服务本身保持挂载。`session-query-sqlite` 仍是 base 的一行，TUI 的 `session-reference` 消费它来实现 `/resume`；其全文索引默认关闭（`openAt: never`，见[内容搜索 opt-in 决策](../architecture/2026-08-13-session-content-search-opt-in.md)），Web overlay 保留内存索引取值，供启用内容搜索的部署使用。被移除的只有面向模型的消费方。
+`ctx.sessionQuery` 服务本身保持挂载。`session-query-sqlite` 仍是 base 的一行，TUI 的 `session-reference` 消费它来实现 `/resume`；其全文索引默认关闭（`openAt: never`，见[内容搜索 opt-in 决策](../architecture/2026-08-13-session-content-search-opt-in.zh.md)），Web overlay 保留内存索引取值，供启用内容搜索的部署使用。被移除的只有面向模型的消费方。
 
 ## 曾考虑的替代方案
 

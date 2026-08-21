@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { inspectSiteFragments } from './verify-doc-site-fragments.ts'
+import { inspectSiteFragments, missingSiteFiles } from './verify-doc-site-fragments.ts'
 
 const roots: string[] = []
 
@@ -83,5 +83,15 @@ describe('inspectSiteFragments', () => {
         fragment: 'missing',
       },
     ])
+  })
+})
+
+describe('missingSiteFiles', () => {
+  it('reports the expected files a build did not emit', () => {
+    const root = fixture()
+    writeFileSync(join(root, 'guide/start.md'), '# Ready\n')
+
+    expect(missingSiteFiles(root, ['guide/start.md', 'guide/absent.md', 'llms.txt']))
+      .toEqual(['guide/absent.md', 'llms.txt'])
   })
 })

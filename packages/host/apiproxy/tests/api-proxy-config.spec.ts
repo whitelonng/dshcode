@@ -18,7 +18,15 @@ import type { GenerateOptions, LlmModelInfo, LlmProviderInfo, StreamChunk } from
 import { SettingsProvider, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
-import type { CredentialInfo, CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
+import type {
+  CredentialInfo,
+  CredentialKey,
+  CredentialRecord,
+  CredentialRecordEntry,
+  CredentialRecordInfo,
+  CredentialRef,
+  ResolvedCredential,
+} from '@deepseek-ai/dsh-credentials'
 import type { HostFrame } from '../src/api/index.ts'
 import type { RpcRequest, RpcResponse } from '../src/api/rpc.ts'
 import { RpcId } from '../src/api/rpc.ts'
@@ -115,7 +123,7 @@ class MemoryCredentials extends CredentialProvider {
       return Promise.reject(new Error(`credentials: ${ref} is shadowed by the read-only environment`))
     }
     this.values.set(ref, value)
-    this.ctx.emit('credentials/updated', ref)
+    this.ctx.emit('credentials/reference-updated', ref)
     return Promise.resolve()
   }
 
@@ -124,7 +132,32 @@ class MemoryCredentials extends CredentialProvider {
       return Promise.reject(new Error(`credentials: ${ref} is shadowed by the read-only environment`))
     }
     this.values.delete(ref)
-    this.ctx.emit('credentials/updated', ref)
+    this.ctx.emit('credentials/reference-updated', ref)
+    return Promise.resolve()
+  }
+
+  // The record half has no wire face on this proxy, so the double answers the
+  // empty store rather than modelling storage the tests never exercise.
+  readRecord(): Promise<CredentialRecord | undefined> {
+    return Promise.resolve(undefined)
+  }
+
+  describeRecord(): Promise<CredentialRecordInfo> {
+    return Promise.resolve({ configured: false, writable: true })
+  }
+
+  listRecords(): Promise<readonly CredentialRecordEntry[]> {
+    return Promise.resolve([])
+  }
+
+  modifyRecord(
+    _key: CredentialKey,
+    mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>,
+  ): Promise<CredentialRecord | undefined> {
+    return mutate(undefined)
+  }
+
+  deleteRecord(): Promise<void> {
     return Promise.resolve()
   }
 }
@@ -603,8 +636,8 @@ describe('credentials domain', () => {
       expectOk(await api.credentials.unset(request({ ref: 'OPENAI_API_KEY' })))
     })
     expect(frames).toEqual([
-      { type: 'host/remote-event', event: 'credentials/updated', args: ['OPENAI_API_KEY'] },
-      { type: 'host/remote-event', event: 'credentials/updated', args: ['OPENAI_API_KEY'] },
+      { type: 'host/remote-event', event: 'credentials/reference-updated', args: ['OPENAI_API_KEY'] },
+      { type: 'host/remote-event', event: 'credentials/reference-updated', args: ['OPENAI_API_KEY'] },
     ])
   })
 

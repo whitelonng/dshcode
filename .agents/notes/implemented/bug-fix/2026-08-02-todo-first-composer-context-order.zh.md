@@ -14,7 +14,7 @@ composer 上下文堆栈将 Goal 渲染在 Todo 之前，但 Harness 设计稿�
 
 Todo、Goal 与可见的 Queue 面板共用 800px composer 宽度上限内的 752px 卡片列。Queue 保留 776px 包装层，并在两侧各留 12px 透明内缩，因为该包装层负责与 composer 重叠。Todo 是独立卡片，而非包装层，因此其响应式宽度和最大宽度都会直接扣除两层内缩。Goal 使用相同的响应式卡片列，并将内层横条的宽度上限设为 752px，从而在低于桌面宽度上限时也保持边缘对齐。
 
-[composer 堆栈约定](2026-07-30-composer-context-stack-order.md)继续规定卡片间距，以及仅限 Queue 与 composer 重叠。本决策只取代该记录中 Goal 优先的顺序。
+[composer 堆栈约定](2026-07-30-composer-context-stack-order.zh.md)继续规定卡片间距，以及仅限 Queue 与 composer 重叠。本决策只取代该记录中 Goal 优先的顺序。
 
 ## 验证
 

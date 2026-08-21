@@ -8,7 +8,7 @@ Status: implemented
 
 `Agent.followup()` 会标识一条用户消息并将其排入队列，但单次 follow-up 并不拥有随后发生的活动。在 agent（智能体）下一次进入 idle 前，steering（中途引导）、注入的上下文、工具续行、恢复和后续排队消息都可能参与活动。因此，`MessageId` 可以证明消息已获 inbox 准入，但不能标识哪一条 assistant 消息或哪一个 `turn/end` 是该输入的结果。
 
-[one-send-one-turn 决策](../simplification/2026-07-17-one-send-one-turn.md) 已经在核心 API 中排除了按 send 返回完成句柄的设计。凡是把一项提示词请求与一个轮次结果配对的协议层和 SDK 层，都会在下游人为构造这一缺失的关系。一旦活动准入更多输入，该配对就会产生歧义，还会把轮次机制暴露为提示词级结果。
+[one-send-one-turn 决策](../simplification/2026-07-17-one-send-one-turn.zh.md) 已经在核心 API 中排除了按 send 返回完成句柄的设计。凡是把一项提示词请求与一个轮次结果配对的协议层和 SDK 层，都会在下游人为构造这一缺失的关系。一旦活动准入更多输入，该配对就会产生歧义，还会把轮次机制暴露为提示词级结果。
 
 ## 决策
 
@@ -16,7 +16,7 @@ Status: implemented
 
 底层 SDK 协议在入队成功后立即以 `{ messageId }` 响应 `session/prompt`。它通过 `session.event` 流式传输持久事实，通过 `session.status` 发布整个 agent 的状态转换，且不包含 `session.finished`。底层客户端可以观察该回执和之后的 idle，但不会收到提示词结果。
 
-只有明确拥有一个活动区间时，高层自动化 API 才返回 `RunResult`。TypeScript 和 Python SDK 的 `run()` 方法从已提交消息的持久 inbox 回执开始收集，直至整个 agent 下一次进入 `idle`；其最终响应是该区间内最后一条已提交的 assistant 消息，而不是按因果关系归属于已提交提示词的响应。Python SDK 还把根会话最后一个轮次的结束原因 kind 作为运行级 [`finish_reason`](../bug-fix/2026-08-11-owned-run-finish-reason.md) 返回，但不会将其归因于已提交的提示词。单次 CLI（命令行界面）拥有相应的 idle 到 idle 区间。隔离的子 agent 运行可以报告结果，因为调用方拥有完整的子级生命周期，任何 steering 都属于该运行。
+只有明确拥有一个活动区间时，高层自动化 API 才返回 `RunResult`。TypeScript 和 Python SDK 的 `run()` 方法从已提交消息的持久 inbox 回执开始收集，直至整个 agent 下一次进入 `idle`；其最终响应是该区间内最后一条已提交的 assistant 消息，而不是按因果关系归属于已提交提示词的响应。Python SDK 还把根会话最后一个轮次的结束原因 kind 作为运行级 [`finish_reason`](../bug-fix/2026-08-11-owned-run-finish-reason.zh.md) 返回，但不会将其归因于已提交的提示词。单次 CLI（命令行界面）拥有相应的 idle 到 idle 区间。隔离的子 agent 运行可以报告结果，因为调用方拥有完整的子级生命周期，任何 steering 都属于该运行。
 
 ACP（Agent Client Protocol）必须返回协议规定的 `stopReason`。其桥接层对每个 ACP 会话中的提示词进行串行处理，确保一次只有一个提示词正在处理，等待整个 agent 进入 idle，其他情况均报告通用的 `end_turn`。token 上限的轮次结束不归因于提示词：它们以 `end_turn` 结算。与该提示词关联的轮次上的模型错误会立即以该错误拒绝提示词（错误按其所属轮次归因），而无轮次的 slot（准入已丢弃提示词）会在 idle 时以 `cancelled` 结算，与显式 ACP 取消或 dispose（资源释放）并列。
 

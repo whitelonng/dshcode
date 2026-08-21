@@ -8,7 +8,7 @@ Status: implemented
 
 CPython code-runtime 后端（`@deepseek-ai/dsh-code-runtime-python`，分多个 PR 落地）在一个全新的 `python3 -I` 子进程里运行每个模型程序，并把 binding 调用和完成值通过子进程的 fd 3 桥接。这条通道需要两侧一致的 wire protocol，而 host 不能信任它：模型代码对 fd 3 有完全访问权、可以伪造任意帧，所以每个入站帧都是 host 必须先校验并重建才能读取的敌意输入。协议还必须承载无深度限制的 lossless JSON，因为 seam 的 `CodeJsonValue` 深度无界，而 `JSON.stringify`/`json.dumps` 都有递归深度限制。
 
-本层只交付这个协议，使得庞大的 `PythonCodeRuntime` 实现及其真子进程集成测试能落在一个已 review 的 wire contract 之上，而不是与它揉在一起到达。父 stack 把 [#436](https://github.com/deepseek-harness/deepseek-harness/pull/436)——一个 9000 行的单一 PR——拆成可 review 的层；本 PR 是协议层，base 是 [seam 扩展](2026-07-31-code-runtime-portable-identifier-seam.md)。
+本层只交付这个协议，使得庞大的 `PythonCodeRuntime` 实现及其真子进程集成测试能落在一个已 review 的 wire contract 之上，而不是与它揉在一起到达。父 stack 把 [#436](https://github.com/deepseek-harness/deepseek-harness/pull/436)——一个 9000 行的单一 PR——拆成可 review 的层；本 PR 是协议层，base 是 [seam 扩展](2026-07-31-code-runtime-portable-identifier-seam.zh.md)。
 
 ## Decision
 

@@ -12,7 +12,7 @@ Status: implemented
 
 `Agent` 将 `followup()`、`steer()` 和 `inject()` 作为完整的交付约定公开。`ReactLoopAgent` 保留私有的 `send()` 辅助方法，供这三个方法共用路由机制；`dsh-agent` 不再导出 `SendTarget` 和 `SendOptions`。
 
-公开接口无法在不唤醒驱动器的情况下让一个轮次入队。`followup()` 始终请求执行，`steer()` 请求最近的步骤，`inject()` 则提供面向模型的上下文而不请求执行。本决策部分取代[统一交付决策](../architecture/2026-07-22-unified-send-and-coalesced-user-messages.md)中关于公开接口的内容，同时保留其内部路由与统一的 `user/message` 表示。
+公开接口无法在不唤醒驱动器的情况下让一个轮次入队。`followup()` 始终请求执行，`steer()` 请求最近的步骤，`inject()` 则提供面向模型的上下文而不请求执行。本决策部分取代[统一交付决策](../architecture/2026-07-22-unified-send-and-coalesced-user-messages.zh.md)中关于公开接口的内容，同时保留其内部路由与统一的 `user/message` 表示。
 
 ## 曾考虑的替代方案
 

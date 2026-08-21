@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-`dsh-cmdline`（[应用自有命令行](../architecture/2026-08-06-app-owned-command-line.md)）的 `parseCmdline` 曾带着一个自造的回调：`CmdlinePlan<T> = (program, ctx) => T`，在解析成功后于该适配器的 catch 之内调用，使 plan 的 `program.error(...)` 与 help/解析错误共用同一条退出路径；它还带有只被测试使用、类型不健全的默认值 `(() => ({}) as T)`，以及没有任何 plan 读取的 `ctx` 参数。这整条接缝复制了 commander 本就定义的席位：命令的 action 处理器在 `parse` 内部运行，从中抛出的 `program.error(...)` 与语法拒绝一样遵循 `exitOverride`。
+`dsh-cmdline`（[应用自有命令行](../architecture/2026-08-06-app-owned-command-line.zh.md)）的 `parseCmdline` 曾带着一个自造的回调：`CmdlinePlan<T> = (program, ctx) => T`，在解析成功后于该适配器的 catch 之内调用，使 plan 的 `program.error(...)` 与 help/解析错误共用同一条退出路径；它还带有只被测试使用、类型不健全的默认值 `(() => ({}) as T)`，以及没有任何 plan 读取的 `ctx` 参数。这整条接缝复制了 commander 本就定义的席位：命令的 action 处理器在 `parse` 内部运行，从中抛出的 `program.error(...)` 与语法拒绝一样遵循 `exitOverride`。
 
 ## Decision
 

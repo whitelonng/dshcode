@@ -12,7 +12,7 @@ Status: implemented
 
 选择 merge-forward 时，每次观察到的 base 分支顶端提交都保留为独立的合并检查点。如果处理期间 base 分支继续前移，先完成并验证正在进行的合并，再将其提交；任务授权推送时，还要完成推送。完成这些步骤后，才能获取较新的 base，并通过单独的合并提交将其合入。在这条 merge-forward 序列中，不得放弃或重写任何检查点。
 
-[原生堆叠与可选 rebase 决策](2026-08-02-native-github-stacks-and-optional-rebases.md)也允许独立或堆叠 PR 使用受 lease 保护的 rebase，评审后同样如此。本文只负责 merge-forward 路径。[堆叠 PR 落地 skill（技能）](../../../skills/dsh-merging-stacked-prs/SKILL.md)根据根 [AGENTS.md](../../../../AGENTS.md) 选择其中一种历史更新方式，[堆叠评审指南](../../../../docs/cookbook/responding-to-pr-review-on-a-stack.md)则负责说明如何在依赖层之间传播修复。
+[原生堆叠与可选 rebase 决策](2026-08-02-native-github-stacks-and-optional-rebases.zh.md)也允许独立或堆叠 PR 使用受 lease 保护的 rebase，评审后同样如此。本文只负责 merge-forward 路径。[堆叠 PR 落地 skill（技能）](../../../skills/dsh-merging-stacked-prs/SKILL.md)根据根 [AGENTS.md](../../../../AGENTS.md) 选择其中一种历史更新方式，[堆叠评审指南](../../../../docs/cookbook/responding-to-pr-review-on-a-stack.zh.md)则负责说明如何在依赖层之间传播修复。
 
 ## 曾考虑的替代方案
 

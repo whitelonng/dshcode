@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-12-plugin-owned-settings-surface.md
 2026-08-12-plugin-owned-settings-surface.md: 722e6cfbe890418e8305f89790e76976027d7775
-2026-08-12-plugin-owned-settings-surface.zh.md: 93e5227d5f6a629fd32f5a2fe22e9882c7f7c5ac
+2026-08-12-plugin-owned-settings-surface.zh.md: ddb1d70aed5427e58720a9be558a83a5e034c335

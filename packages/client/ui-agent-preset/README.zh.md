@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-agent preset 的各个表层：General 设置中的一行，用于选择新建会话据以组装的 [preset](../../preset/agent-presets/README.md)；新建会话界面上的一枚 chip，用于选择**下一个会话**的 preset；会话标题旁的一个只读标签；以及一个设置页分区，用于管理名单——复制、删除、默认值，以及通往 preset 自身文件的入口。
+agent preset 的各个表层：General 设置中的一行，用于选择新建会话据以组装的 [preset](../../preset/agent-presets/README.zh.md)；新建会话界面上的一枚 chip，用于选择**下一个会话**的 preset；会话标题旁的一个只读标签；以及一个设置页分区，用于管理名单——复制、删除、默认值，以及通往 preset 自身文件的入口。
 
 ## 为什么它是"新建会话"的偏好设置
 
@@ -48,9 +48,9 @@ preset 自行发布描述，长度不限，而网格让每一行卡片等高—�
 
 名单行携带 `broken`（宿主的形状检查发现组装缺失或不可加载）时渲染为标记卡片：红色边框、「加载失败」徽记（discovery 观察到的事实，而非断言文件已损坏——常见起因是用户刚编辑或删除了组装文件）、原样展示的原因、卡片主体禁用——它不能成为默认——复制也禁用，因为损坏 preset 的副本只是又一个损坏的 preset。损坏的自定义行保留位置与删除动作：文件正是修复它的地方，而删除正是清掉幽灵目录（组装文件被手动删除、目录仍占着 id）的方式；损坏的内置行连查看器也不提供——没有可读的组装可展示。两个选择器（通用设置行与新会话 chip）则完全不列出损坏的 preset：它们选的是下一个会话的组装，列出无法组装的选项只会把失败推迟到会话启动。
 
-设置默认值写入的是 `agent-presets` settings 命名空间，宿主需将其暴露给配置客户端（[`dsh-apiproxy`](../../host/apiproxy/README.md) 维护一份显式白名单——不在其中的命名空间会让选择器动一下然后悄悄忘记）。
+设置默认值写入的是 `agent-presets` settings 命名空间，宿主需将其暴露给配置客户端（[`dsh-apiproxy`](../../host/apiproxy/README.zh.md) 维护一份显式白名单——不在其中的命名空间会让选择器动一下然后悄悄忘记）。
 
-`agentPreset.read`、`copy`、`openDocument` 与 `remove` 被固定在环回地址（见 [`dsh-client-connection`](../connection/README.md)）：组装指明了一个会话所运行的插件，因此读取它是侦察，其余几个则管理名单并驱动宿主桌面。`agentPreset.list` 不在其中——它携带 id、信任级别与两个不含路径的能力标志，而局域网客户端的选择器需要它。
+`agentPreset.read`、`copy`、`openDocument` 与 `remove` 被固定在环回地址（见 [`dsh-client-connection`](../connection/README.zh.md)）：组装指明了一个会话所运行的插件，因此读取它是侦察，其余几个则管理名单并驱动宿主桌面。`agentPreset.list` 不在其中——它携带 id、信任级别与两个不含路径的能力标志，而局域网客户端的选择器需要它。
 
 ## 何时不显示这些表层
 
@@ -58,7 +58,7 @@ preset 自行发布描述，长度不限，而网格让每一行卡片等高—�
 
 ## 模型体验
 
-Indirectly, through the preset a later session is composed from; [`dsh-agent-presets`](../../preset/agent-presets/README.md) owns what that composition puts in front of the model.
+Indirectly, through the preset a later session is composed from; [`dsh-agent-presets`](../../preset/agent-presets/README.zh.md) owns what that composition puts in front of the model.
 
 #### KV Cache effect
 

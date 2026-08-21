@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-可选的子级作用域 `report` 工具是 `ctx.subagents.reportFrom()` 之上的轻量适配器。它为每个可继续的进程内子级提供一条返回通道，指向启动该子级的 Agent（智能体），并安装指示子级使用该通道的提示词 section。本包注册的是可继续子级设置贡献，而不是全局工具，因此该工具及其指引只存在于这些子级内部。根 Agent、一次性 subagent、远程 subagent 提供方、同级作用域以及不关联 Agent 的工具执行都不会提供或执行它。安装本包只授予这项子级作用域能力；父到子方向仍由独立的 [`@deepseek-ai/dsh-tool-subagent-control`](../tool-subagent-control/README.md) 负责，可继续模式不依赖这两个包中的任一个。
+可选的子级作用域 `report` 工具是 `ctx.subagents.reportFrom()` 之上的轻量适配器。它为每个可继续的进程内子级提供一条返回通道，指向启动该子级的 Agent（智能体），并安装指示子级使用该通道的提示词 section。本包注册的是可继续子级设置贡献，而不是全局工具，因此该工具及其指引只存在于这些子级内部。根 Agent、一次性 subagent、远程 subagent 提供方、同级作用域以及不关联 Agent 的工具执行都不会提供或执行它。安装本包只授予这项子级作用域能力；父到子方向仍由独立的 [`@deepseek-ai/dsh-tool-subagent-control`](../tool-subagent-control/README.zh.md) 负责，可继续模式不依赖这两个包中的任一个。
 
 子级作用域的 `tool:report` 提示词 section 要求子级在结束前调用一次 `report` 并给出自足的答案，并在部分发现会改变父级下一步动作时提前上报。该指令是引导而非强制：机制本身仍接受一个轮次中调用零次或多次，也没有任何运行时路径会拒绝从不上报的子级。调用成功既不会结束轮次或结算 Activation，也不会阻止父级后续消息；轮次结束也绝不会自动上报。该工具不接受接收方参数：`exec.agent` 是发送方确切在线的 Agent，也是权限凭据；服务根据该子级持久化的 `parentSession` 推导唯一接收方。成功时返回父级已接受消息的稳定 `MessageId`，不表示已读回执、inbox 中该次出现的 id、父级日志确认、轮次完成回执或持久化刷盘。父级解析由注册表中的存在性决定：父级不在注册表时，调用失败并返回 `direct parent is not live; report was not delivered`；已开始由宿主管理的 dispose（资源释放）但仍在注册表中的父级在其日志仍接受追加时仍会接受。服务不会执行注入、父级冷恢复或离线 mailbox 写入；持久化子级 transcript（文本记录）仍是恢复依据，且工具调用失败不能证明未送达（后续 `tools/post-execute` 否决可能让报告已被接受的调用以失败结束）。
 
@@ -18,7 +18,7 @@
 
 #### 模型看到的内容
 
-已生成的 [`report` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-subagent-report)：包含一个必填 `output` 字符串。其描述说明子级必须在结束前上报一次，上报只会到达启动该子级的 Agent，并且不会结束轮次。它不包含接收方或投递模式参数。独立的 `tool:report` 提示词 section 在 schema 之外重申该义务，使忽略工具描述的子级仍能读到。
+已生成的 [`report` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-subagent-report)：包含一个必填 `output` 字符串。其描述说明子级必须在结束前上报一次，上报只会到达启动该子级的 Agent，并且不会结束轮次。它不包含接收方或投递模式参数。独立的 `tool:report` 提示词 section 在 schema 之外重申该义务，使忽略工具描述的子级仍能读到。
 
 #### Token 影响
 

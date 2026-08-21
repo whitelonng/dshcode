@@ -28,4 +28,4 @@ Status: implemented
 
 ## Related
 
-[在每个诊断边界渲染错误 cause 链](../../implemented/bug-fix/2026-07-20-error-cause-chain-diagnostics.md) 拥有通用 cause 链渲染器；本记录只给启动与预设挂载两个边界补充加载器聚合专用的「一行一个失败行」形式。
+[在每个诊断边界渲染错误 cause 链](../../implemented/bug-fix/2026-07-20-error-cause-chain-diagnostics.zh.md) 拥有通用 cause 链渲染器；本记录只给启动与预设挂载两个边界补充加载器聚合专用的「一行一个失败行」形式。

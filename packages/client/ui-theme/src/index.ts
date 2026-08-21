@@ -3,7 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-import { injectBootTheme } from './boot-theme.ts'
+import { bootThemeInjection } from './boot-theme.ts'
 import {
   DEFAULT_PREFERENCE, THEME_SETTINGS_NAMESPACE, ThemeSettingsSchema,
   type ThemePreference, type ThemeSettings,
@@ -26,18 +26,16 @@ function readPreference(ctx: Context): ThemePreference {
 }
 
 /**
- * Register the durable theme section and initial-theme index transform when
- * their optional Host services are composed.
- * @param ctx - Host context that may acquire settings and HTTP services.
+ * Register the durable theme section when the optional settings service is
+ * composed, and answer every index injection collection with the current
+ * theme bootstrap row.
+ * @param ctx - Host context that may acquire the settings service.
  */
 export function apply(ctx: Context): void {
   ctx.inject(['settings'], (settingsCtx) => {
     settingsCtx.settings.register(THEME_NAMESPACE, ThemeSettingsSchema)
   })
-  ctx.inject(['webServer'], (httpCtx) => {
-    httpCtx.effect(
-      () => httpCtx.webServer.tapIndex(html => injectBootTheme(html, readPreference(ctx))),
-      'client-ui-theme: initial theme bootstrap',
-    )
+  ctx.on('webserver/index-inject', (table) => {
+    table.push(bootThemeInjection(readPreference(ctx)))
   })
 }

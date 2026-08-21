@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Temporary branch-convergence command for canonical packed session fixtures.
+ * Temporary branch-convergence command for canonical projected session fixtures.
  *
  * @see ../.agents/notes/proposed/process/2026-07-26-remove-packed-session-fixture-migrator.md
  */
@@ -18,4 +18,4 @@ for (const fixture of changed) {
   writeFileSync(resolve(root, fixture.path), fixture.canonical)
   console.log(fixture.path)
 }
-console.log(`packed session fixtures: ${changed.length} rewritten, ${fixtures.length} inspected`)
+console.log(`session snapshot fixtures: ${changed.length} rewritten, ${fixtures.length} inspected`)

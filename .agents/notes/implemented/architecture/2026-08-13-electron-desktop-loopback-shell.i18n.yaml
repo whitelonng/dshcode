@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-13-electron-desktop-loopback-shell.md
 2026-08-13-electron-desktop-loopback-shell.md: 13f975ad887243bc7e5d401b290c6d83307f0b0c
-2026-08-13-electron-desktop-loopback-shell.zh.md: 33c445dbe6881016b59adfbde5e9baa8f14428a9
+2026-08-13-electron-desktop-loopback-shell.zh.md: 267e9989a5deb0e5463c153ae3faac0a8dca4d06

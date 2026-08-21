@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-16-note-image-policy-text-only-model-selection.md
 2026-08-16-note-image-policy-text-only-model-selection.md: c257dc688bf6d8c7351a00ff4041a5d40fe4fb1f
-2026-08-16-note-image-policy-text-only-model-selection.zh.md: 358d77b5c7babacc5b7d0133421ce4a419c6d26c
+2026-08-16-note-image-policy-text-only-model-selection.zh.md: bdc7701ba224621a6f9a97f07d06f59b401c2b5c

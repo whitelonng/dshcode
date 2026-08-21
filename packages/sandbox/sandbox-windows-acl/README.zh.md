@@ -6,7 +6,7 @@
 
 一句话机制：把调用者令牌复制为 `WRITE_RESTRICTED` 受限令牌，其 restricting SIDs 携带彼此独立的工作区能力与私有临时目录能力。工作区 SID 由规范工作区路径确定性派生（`workspaceWriteSid`），因此工作区根目录 ACE 每台机器每个工作区只物化一次，之后每次会话、调用或重启都命中精确 ACE 跳过。每个活跃的会话/工作区对则获得一个随机临时目录，以及一个从该路径派生的 SID（`tempWriteSid`），因此各会话共享预期的工作区权限，却不会继承彼此的临时目录权限。此后 Windows 只在「调用者正常权限」与「restricting SID 交集」同时允许时才放行写入。这些 SID 是主要白名单，在系统其余位置不授予任何权限；但该检查还会继承**其他** restricting SID 的环境写 ACE（保活组登录 SID + Everyone），而 NTFS ACL 属于文件对象而非路径。Everyone 与硬链接边界正是该档报告部分而非完整强制执行的原因。
 
-直接构建在原生 ACL 机制上是记录在案的设计选择：它实现两种隔离模式，且不背负被否决的容器方案的问题——见[设计笔记](../../../.agents/notes/implemented/feature/2026-08-08-windows-acl-restricted-token-sandbox.md)（[mxc](https://github.com/microsoft/mxc/blob/main/docs/process-container/os-version-support.md) 要求 Windows 11 24H2 的 OS 下限，且任意路径读取需要整体改写宿主 DACL；AppContainer 根本无法任意路径读取）。
+直接构建在原生 ACL 机制上是记录在案的设计选择：它实现两种隔离模式，且不背负被否决的容器方案的问题——见[设计笔记](../../../.agents/notes/implemented/feature/2026-08-08-windows-acl-restricted-token-sandbox.zh.md)（[mxc](https://github.com/microsoft/mxc/blob/main/docs/process-container/os-version-support.md) 要求 Windows 11 24H2 的 OS 下限，且任意路径读取需要整体改写宿主 DACL；AppContainer 根本无法任意路径读取）。
 
 ## 用法
 
@@ -86,7 +86,7 @@ koffi 结构体定义在模块加载时对照探针断言其大小，因此头�
 
 ## 模型体验
 
-间接地通过 [`dsh-bash-sandbox`](../../shell/bash-sandbox/README.md)、[`dsh-pwsh-sandbox`](../../shell/pwsh-sandbox/README.md) 及其工具呈现：它们渲染此后端的部分强制执行与拒绝事实（工具层通过 `denialSignatures` 分类的受限 stderr），而 [`dsh-sandbox`](../sandbox/README.md) seam 拥有 `SANDBOX_UNAVAILABLE` 文本与 runner 选择。
+间接地通过 [`dsh-bash-sandbox`](../../shell/bash-sandbox/README.zh.md)、[`dsh-pwsh-sandbox`](../../shell/pwsh-sandbox/README.zh.md) 及其工具呈现：它们渲染此后端的部分强制执行与拒绝事实（工具层通过 `denialSignatures` 分类的受限 stderr），而 [`dsh-sandbox`](../sandbox/README.zh.md) seam 拥有 `SANDBOX_UNAVAILABLE` 文本与 runner 选择。
 
 #### KV Cache 影响
 

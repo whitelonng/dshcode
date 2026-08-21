@@ -33,7 +33,11 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include, { type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import Group from '@deepseek-ai/cordis-plugin-group'
-import { scrubRequestHeaders, stabilizeFixtureMessageIds } from '@deepseek-ai/dsh-acp-snapshot'
+import {
+  scrubRequestHeaders,
+  scrubSessionSnapshot,
+  stabilizeFixtureMessageIds,
+} from '@deepseek-ai/dsh-acp-snapshot'
 import {
   assertEntriesLoaded,
   composeEntries,
@@ -44,7 +48,7 @@ import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type {
-  LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, StreamChunk,
+  LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, RetryPolicyConfig, StreamChunk,
 } from '@deepseek-ai/dsh-llm'
 import type { ReplayHandle } from '@deepseek-ai/dsh-llm-replay'
 import { installLlmReplay, parseSessionLog } from '@deepseek-ai/dsh-llm-replay'
@@ -227,6 +231,12 @@ export interface LaunchOptions {
    * recorded chunks; replay/refresh only.
    */
   replayOverride?: string
+  /**
+   * Retry policy registered on every replay provider route, for failure-
+   * injection scenarios that must exhaust recovery quickly instead of walking
+   * the shared normal default's five backed-off retries; replay/refresh only.
+   */
+  replayRetryPolicy?: RetryPolicyConfig
   /** Per-chunk replay pacing (ms) so the browser observes genuinely incremental SSE; replay/refresh only. */
   paceMs?: number
   /** Synthetic model capacity for UI scenarios whose seeded history must remain uncompacted. */
@@ -602,7 +612,10 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     if (mode !== 'record' && options.replayFixture !== undefined) {
       replayHandle = installLlmReplay(ctx, {
         file: options.replayFixture,
-        providers: replayProviders(options.replayContextWindow),
+        providers: replayProviders(options.replayContextWindow).map(provider => ({
+          ...provider,
+          ...(options.replayRetryPolicy === undefined ? {} : { retryPolicy: options.replayRetryPolicy }),
+        })),
         ...(options.replayOverride === undefined ? {} : { overrideFile: options.replayOverride }),
         ...(options.replayChildFixtures === undefined ? {} : { childFiles: options.replayChildFixtures }),
         ...(options.paceMs === undefined ? {} : { paceMs: options.paceMs }),
@@ -707,7 +720,7 @@ function rawSessionLog(session: Session): string {
 export async function recordFixture(scaffold: WebScaffold, sessionId: SessionId, fixturePath: string): Promise<void> {
   const agent = scaffold.ctx.agents.get(sessionId)
   if (agent === undefined) throw new Error(`record harvest: no live agent for ${sessionId}`)
-  const fresh = scrubRequestHeaders(rawSessionLog(agent.session))
+  const fresh = scrubSessionSnapshot(rawSessionLog(agent.session))
     .split(sessionId).join('{{sessionId}}')
     .split(scaffold.workspaceCwd).join('{{cwd}}')
     .replace(/"rpcId":"[^"]+"/g, '"rpcId":"{{rpcId}}"')
@@ -737,7 +750,10 @@ export function fixtureUserPrompts(fixtureText: string): string[] {
  * plugin — the semantic-checkpoint precedent), never raw file writes: no
  * knowledge of bucket hashing, filename encoding, or compression, and
  * malformed session events fail loud at seed time. The fixture's tokenized identity
- * ({{sessionId}}/{{cwd}}) is realized for this world before parsing.
+ * ({{sessionId}}/{{cwd}}) is realized for this world before parsing. Event
+ * times are materialized from event order against the fixture header's
+ * creation time, or the seeded creation time when normalization replaced the
+ * header value with zero.
  * @param scaffold - the target scaffold.
  * @param fixtureText - raw recorded session.jsonl contents.
  * @param id - the seeded session id (stable for deterministic goldens).
@@ -766,13 +782,48 @@ export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, i
     : realized.split(fixtureCwd).join(scaffold.workspaceCwd)
 }
 
+/**
+ * Parse a committed web seed fixture through the replay reader.
+ * @param fixtureText - session JSONL fixture contents.
+ * @returns the original header line, parsed header, and logical events.
+ */
+export function parseSeedFixture(fixtureText: string): {
+  headerLine: string
+  header: Record<string, unknown>
+  events: SessionEvent[]
+} {
+  const headerLine = fixtureText.split(/\r?\n/).find(line => line.trim().length > 0)
+  if (headerLine === undefined) throw new Error('seed fixture has no session header')
+  const header = JSON.parse(headerLine) as Record<string, unknown>
+  if (header.type !== 'session') throw new Error('seed fixture must start with a session header')
+  return { headerLine, header, events: parseSessionLog(fixtureText) }
+}
+
+/**
+ * Render logical events as an envelope-free web seed fixture.
+ * @param headerLine - original session header line.
+ * @param events - logical session events in order.
+ * @returns projected session JSONL.
+ */
+export function renderSeedFixture(
+  headerLine: string,
+  events: readonly ({ readonly seq: number; readonly time: number } & object)[],
+): string {
+  return [
+    headerLine,
+    ...events.map(({ seq: _seq, time: _time, ...event }) => JSON.stringify(event)),
+    '',
+  ].join('\n')
+}
+
 export async function seedSession(
   scaffold: WebScaffold,
   fixtureText: string,
   id: string,
   agentPreset?: string,
 ): Promise<SessionId> {
-  const events = parseSessionLog(realizeSeedFixture(scaffold, fixtureText, id))
+  const decoded = parseSeedFixture(realizeSeedFixture(scaffold, fixtureText, id))
+  const events = decoded.events
   if (events.length === 0) throw new Error('seed fixture has no events')
   const last = events[events.length - 1]!
   // An open final turn would be mutated by resume's crash repair on first
@@ -786,7 +837,13 @@ export async function seedSession(
     delegationDepth: 0,
     ...agentPreset === undefined ? {} : { agentPreset },
   }
-  await persistSeedSession(scaffold, meta, events)
+  const fixtureCreatedAt = decoded.header.createdAt
+  if (typeof fixtureCreatedAt !== 'number') {
+    throw new Error('seed fixture requires a numeric createdAt header')
+  }
+  const timeAnchor = fixtureCreatedAt === 0 ? meta.createdAt : fixtureCreatedAt
+  const materializedEvents = events.map((event, index) => ({ ...event, time: timeAnchor + index }))
+  await persistSeedSession(scaffold, meta, materializedEvents)
   return meta.id
 }
 
@@ -856,6 +913,7 @@ function normalizeAria(snapshot: string, workspaceCwd: string): string {
       /~\d+(?:y(?: \d+mo)?|mo(?: \d+d)?)|\b(?:\d+d(?: \d+h(?: \d+m \d+s)?)?|\d+h \d+m \d+s|\d+m ?\d+s|\d+(?:\.\d+)?s|\d+(?:\.\d+)?ms)\b/g,
       duration => duration.startsWith('~') ? duration : '{{duration}}',
     )
+    .replace(/\b\d[\d,]*(?:\.\d+)? ms\b/g, '{{duration}}')
     .replace(
       /约\d+(?:年(?:\d+个月)?|个月(?:\d+天)?)|\d+(?:天(?:\d+小时(?:\d+分\d+秒)?)?|小时\d+分\d+秒|分\d+秒|(?:\.\d+)?秒)/g,
       duration => duration.startsWith('约') ? duration : '{{duration}}',

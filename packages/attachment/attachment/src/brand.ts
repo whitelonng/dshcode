@@ -13,3 +13,15 @@ export type AttachmentId = Branded<'AttachmentId'>
 export function AttachmentId(value: string): AttachmentId {
   return value as AttachmentId
 }
+
+/** Opaque deterministic identity for one request-image transformation. */
+export type ImageVariantId = Branded<'ImageVariantId'>
+
+/**
+ * Brand a validated request-image transformation identifier.
+ * @param value - attachment-provider-produced opaque identifier.
+ * @returns the branded identifier.
+ */
+export function ImageVariantId(value: string): ImageVariantId {
+  return value as ImageVariantId
+}

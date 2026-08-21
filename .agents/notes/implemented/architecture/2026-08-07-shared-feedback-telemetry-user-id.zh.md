@@ -8,7 +8,7 @@ Status: implemented
 
 OpenTelemetry 后端已在 `$DSH_HOME/.anonymous-user-id` 中持久化一个匿名 UUID。`/feedback` 需要同时报告接收反馈的会话 id 与用户 id，以便运维人员将确认文本与导出的记录相关联。复制该身份或单独生成身份会使报告的用户失去意义；从 `session-telemetry-otel` 导入身份则会让直接命令依赖导出后端，并在遥测侧挂载反馈导出时形成依赖环。
 
-早先的[匿名用户 id 决策](../feature/2026-07-31-telemetry-anonymous-user-id.md)刻意将辅助函数留在 OTel 后端内，直至出现第二个真实消费方。反馈成为第二个消费方，[直连 DeepSeek 请求身份](../feature/2026-08-11-deepseek-request-user-id-header.md)则是第三个。
+早先的[匿名用户 id 决策](../feature/2026-07-31-telemetry-anonymous-user-id.zh.md)刻意将辅助函数留在 OTel 后端内，直至出现第二个真实消费方。反馈成为第二个消费方，[直连 DeepSeek 请求身份](../feature/2026-08-11-deepseek-request-user-id-header.zh.md)则是第三个。
 
 ## 决策
 

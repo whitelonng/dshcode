@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-仓库通过根目录的 `pnpm` 脚本支持从源码运行。`package.json` 中的 `dsh` 项通过 `node --import tsx/esm` 直接启动 `apps/cli/src/bin.ts`；产物生成是独立的 `pnpm run build` 操作，由[源码启动与构建分离决策](2026-08-12-separate-source-launch-from-build.md)规定。该包脚本会转发参数并继承调用方环境；当支持环境代理的 Node 版本必须遵循 `HTTP_PROXY` 和 `HTTPS_PROXY` 时，调用方可设置 `NODE_USE_ENV_PROXY=1`。用户使用 `pnpm dsh web` 选择 Web，使用 `pnpm dsh --profile headless "task"` 选择无头执行。独立的 ACP（Agent Client Protocol）示例仍可通过 `pnpm run demo:acp` 运行。
+仓库通过根目录的 `pnpm` 脚本支持从源码运行。`package.json` 中的 `dsh` 项通过 `node --import tsx/esm` 直接启动 `apps/cli/src/bin.ts`；产物生成是独立的 `pnpm run build` 操作，由[源码启动与构建分离决策](2026-08-12-separate-source-launch-from-build.zh.md)规定。该包脚本会转发参数并继承调用方环境；当支持环境代理的 Node 版本必须遵循 `HTTP_PROXY` 和 `HTTPS_PROXY` 时，调用方可设置 `NODE_USE_ENV_PROXY=1`。用户使用 `pnpm dsh web` 选择 Web，使用 `pnpm dsh --profile headless "task"` 选择无头执行。独立的 ACP（Agent Client Protocol）示例仍可通过 `pnpm run demo:acp` 运行。
 
 仓库不分发源码安装器、安装器测试套件，也不分发依赖受管理的 `current` 符号链接和带时间戳 staging worktree 的 skill。源码检出的存放位置、Git 更新，以及用户在仓库外创建的任何启动器均由用户负责。
 

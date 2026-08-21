@@ -12,7 +12,7 @@ harness 中存在两种有用但不同的上下文概念。Cordis `Context` 负�
 
 ## 决策
 
-必需的 `ctx.agents` 服务使用 Node `AsyncLocalStorage` 携带发起 Agent。它直接存储同一个 `Agent`，不引入只有一个字段的帧；另一个私有运行标记只记录嵌套边界的谱系，供 teardown 记账使用，不携带身份。[核心数据目录](../../../../docs/subsystems/core.md#initiating-agent)标明了所携带的类型。
+必需的 `ctx.agents` 服务使用 Node `AsyncLocalStorage` 携带发起 Agent。它直接存储同一个 `Agent`，不引入只有一个字段的帧；另一个私有运行标记只记录嵌套边界的谱系，供 teardown 记账使用，不携带身份。[核心数据目录](../../../../docs/subsystems/core.zh.md#initiating-agent)标明了所携带的类型。
 
 `currentInitiator()` 用于可选读取，`requireInitiator()` 抛出 `no initiating agent is active`，`withInitiator(agent, operation)` 保留操作返回的同步值或 Promise 本身。`withoutInitiator(operation)` 会建立清空边界，供不得继承 Agent 的工作使用。会话仍通过 `agent.session` 推导；轮次、步骤、工具调用、`signal`、模型、`cwd`、沙箱和授权继续由现有归属方管理。
 
@@ -28,7 +28,7 @@ harness 中存在两种有用但不同的上下文概念。Cordis `Context` 负�
 
 宿主感知的传输层可以从 `ctx.agents.requireInitiator().session.id` 推导由部署方拥有的 `X-Harness-Session-Id` 等请求头；模型可见 schema 和参数中不包含该请求头。本决策不让现有生产 MCP 或 Web 传输层采用此请求头。测试替身传输层用于证明可信边界，而不会把宿主路由策略分配给现有的提供方无关 seam。
 
-本决策扩展 [Agent 注册作用域约定](2026-07-08-agent-scope-contexts.md)及其[运行时设计](2026-07-12-agent-scope-runtime-design.md)，不会改变其中 `agent.ctx` 的静态含义。
+本决策扩展 [Agent 注册作用域约定](2026-07-08-agent-scope-contexts.zh.md)及其[运行时设计](2026-07-12-agent-scope-runtime-design.zh.md)，不会改变其中 `agent.ctx` 的静态含义。
 
 ## 验证
 

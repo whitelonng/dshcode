@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-19-gui-layering-and-rpc-protocol.md) | 中文
 
-> 分工线：本篇 = 分层模型 + 通道无关的 RPC 协议；协议的 Web 实现由 HTTP 上行加 [WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.md)组成，浏览器对象层见 [Web 客户端架构笔记](2026-07-19-gui-web-client-architecture.md)，DSHCode 交付方式见 [Electron 桌面外壳笔记](2026-08-13-electron-desktop-loopback-shell.md)。
+> 分工线：本篇 = 分层模型 + 通道无关的 RPC 协议；协议的 Web 实现由 HTTP 上行加 [WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.zh.md)组成，浏览器对象层见 [Web 客户端架构笔记](2026-07-19-gui-web-client-architecture.zh.md)，DSHCode 交付方式见 [Electron 桌面外壳笔记](2026-08-13-electron-desktop-loopback-shell.zh.md)。
 
 ## Problem
 
@@ -23,13 +23,13 @@ Status: implemented
 目录按照如下分层：
 - `packages/host/*`：包只提供 Host 侧能力（代表了以现在 Harness 实体插件系统为主体的 Node.js 代码核心工程），除此之外，还包含
     - 统一后端协议（fetch、HTTP、流式接口等）定义和支持，见本篇「消息协议」起各节
-- `packages/client/*`：包只提供 Client 侧能力，每包单边不混。这里住三类包（两条轴归 [client 插件装载笔记](2026-07-23-client-plugin-loading-model.md) 所有）：
+- `packages/client/*`：包只提供 Client 侧能力，每包单边不混。这里住三类包（两条轴归 [client 插件装载笔记](2026-07-23-client-plugin-loading-model.zh.md) 所有）：
     - **纯库**（`ui-slots`、`web-react`、`ui-primitives`，外加内核包 `loader`）：普通根入口包，静态打包进壳；前三者播种进模块表。
     - **静态到达 entry 包**（`connection`、`runtime`、`ui-theme`、`i18n`、`hmr`）：无 `dsh.client` 键、无浏览器 bundle——壳把它们的 `src/client/` 半边打进自己的 bundle 并向 `ctx.modules` 登记；它们与其余单元一样，作为 host 独家撰写的图里的 entry 受治理。
     - **fetch 到达插件包**（`ui-layout`、`ui-sidebar`、`ui-conversation`、`ui-trajectory`）：双入口——根入口是 node 半边（空 `apply`，其存在是为了让 host Loader 管辖生命周期、让 web 插件注册表发现 package.json 的 `dsh.client` 声明）；实现住在 `src/client/` 下，经 `./client` 子路径发布（tsdown 闭包工厂 bundle）。跨插件消费 `/client` 只限类型；值层面的协作走 cordis 服务。
 - `apps/` 作为对外导出的应用入口，可以由 Client / Host 混合组装。
     - `apps/web`（`dsh-web-frontend`）是 vite 应用：`dsh-client-web` 导出的壳 API 之上的一层薄 `main.ts`。
-    - `apps/cli`（`@deepseek-ai/dsh`）分发命令：`dsh web` = Host + webserver + 构建出的 `dsh-web-frontend` dist；`dsh --profile headless` = [直接使用核心 Agent／Session 的入口](2026-08-09-headless-direct-core-entry-point.md)，不含 Host、HTTP 或浏览器层。
+    - `apps/cli`（`@deepseek-ai/dsh`）分发命令：`dsh web` = Host + webserver + 构建出的 `dsh-web-frontend` dist；`dsh --profile headless` = [直接使用核心 Agent／Session 的入口](2026-08-09-headless-direct-core-entry-point.zh.md)，不含 Host、HTTP 或浏览器层。
     - `apps/desktop`（`@dshcode/desktop`）在 Electron 主进程中启动同一个 Web profile，并通过现有回环 HTTP／WebSocket 载体显示；IPC 载体仍是尚未实现的替代方案。
 
 ```
@@ -50,9 +50,9 @@ harness core packages ──────────────────┘ 
 - `runtime → apiproxy` 单向；apiproxy 仅依赖类型定义。
 - client 侧包**永不 import** host 侧包的运行时（只吃 `/api`、`/client` 两个浏览器安全子路径）。
 - `webserver` 不依赖 `runtime`：它提供 `{ fetch }` 特定实现 ——「webserver ← runtime」只是运行时注入关系，不是包依赖。
-- client 侧跨包 import 插件包一律走 `/client` 子路径，且插件包之间只限类型 import——跨插件值 import 在 tsdown 纯度门禁处即构建错误（值层面的协作走 cordis 服务；边规则归 [client 插件装载笔记](2026-07-23-client-plugin-loading-model.md) 所有）。
+- client 侧跨包 import 插件包一律走 `/client` 子路径，且插件包之间只限类型 import——跨插件值 import 在 tsdown 纯度门禁处即构建错误（值层面的协作走 cordis 服务；边规则归 [client 插件装载笔记](2026-07-23-client-plugin-loading-model.zh.md) 所有）。
 
-TypeScript 以 solution 根引用的**两个聚合 program** 检查（`tsconfig.json` = solution；`tsconfig.host.json` = host 侧 + 测试，排除 `packages/client`；`tsconfig.client.json` = client 各包及其测试）：两侧在相同键（`sessions`、`loader`）下以不同服务合并 cordis `Context` 接口，单一 program 会同时看到两份声明合并而报冲突。共享叶子包（session/llm/tools/apiproxy 等）只构建一次，由两个 program 共同引用（[拓扑](../process/2026-07-22-tsconfig-solution-root-two-aggregates.md)）。
+TypeScript 以 solution 根引用的**两个聚合 program** 检查（`tsconfig.json` = solution；`tsconfig.host.json` = host 侧 + 测试，排除 `packages/client`；`tsconfig.client.json` = client 各包及其测试）：两侧在相同键（`sessions`、`loader`）下以不同服务合并 cordis `Context` 接口，单一 program 会同时看到两份声明合并而报冲突。共享叶子包（session/llm/tools/apiproxy 等）只构建一次，由两个 program 共同引用（[拓扑](../process/2026-07-22-tsconfig-solution-root-two-aggregates.zh.md)）。
 
 协议侧：TS interface（`packages/host/apiproxy/src/api/`，零 Node 依赖，浏览器可 import）；wire 消息统一为**双向模型**——每条逻辑消息按「谁发起 × request/response」分类（两轴四格，后文称四象限），与物理通道解耦；客户端统一继承 `AbstractApiClient`（协议不变量全在基类，平台差异只是 `doFetch` 传输切面）。
 
@@ -167,7 +167,7 @@ export type ResponseValue<K> =
 
 ### 帧（server→client，具名 union）
 
-两条逻辑流：mux 流（`/api/events.mux`，全 session 聚合）与 host 流（`/api/events.host`，host 级事件）。浏览器通过每流一条下行 WebSocket 消费，进程内 fetch 载体以 SSE 保持同构；物理边界见 [WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.md)。帧示例一行：
+两条逻辑流：mux 流（`/api/events.mux`，全 session 聚合）与 host 流（`/api/events.host`，host 级事件）。浏览器通过每流一条下行 WebSocket 消费，进程内 fetch 载体以 SSE 保持同构；物理边界见 [WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.zh.md)。帧示例一行：
 
 | 帧 type | 载荷 | 何时发 |
 |---|---|---|
@@ -214,7 +214,7 @@ export type ResponseValue<K> =
 | 子类 | 所在包 | doFetch | 用途 |
 |---|---|---|---|
 | `InProcessApiClient` | apiproxy 本包 | 注入的 `{ fetch }` handler | **同构点**：`new InProcessApiClient(toFetchHandler(api))` 全程不过网络但真跑 wire 序列化/zod/SSE 帧；载体测试与调用方可以在不打开端口的情况下运行这套协议，而产品 `dsh --profile headless` 直接驱动 core |
-| `WebApiClient` | dsh-client-connection | `globalThis.fetch` 上行 + 每逻辑流一条同源 WebSocket 下行 | 浏览器客户端；物理边界见 [WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.md) |
+| `WebApiClient` | dsh-client-connection | `globalThis.fetch` 上行 + 每逻辑流一条同源 WebSocket 下行 | 浏览器客户端；物理边界见 [WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.zh.md) |
 | `FixtureApiClient` | dsh-client-connection | 不用（协议层覆写） | 无 server 的 UI 开发（`?fixture`）：覆写 `callUnary`/`openMux`/`openHost`/`respond` 虚方法，自己就是假 server（帧 rpcId 由它 mint，语义自洽） |
 | IPC 桥子类（假想示例——尚无 IPC 实现） | Electron 壳 | IPC 序列化往返 | 只需换 doFetch，约定/基类零改 |
 

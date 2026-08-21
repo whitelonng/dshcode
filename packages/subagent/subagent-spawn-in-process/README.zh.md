@@ -6,7 +6,7 @@ spawn 提供方会在当前进程中创建一个全新的子 `Agent`。子 agent
 
 ## 行为
 
-`start(request)` 不传入 seed，直接委托给 [`startInProcessRun`](../subagent-in-process-driver/README.md)，并在子 agent 发布后才返回。子 agent 获得父 agent 的工作目录/会话谱系，并默认继承父 agent 模型（除非覆盖），但以空对话开始运行。
+`start(request)` 不传入 seed，直接委托给 [`startInProcessRun`](../subagent-in-process-driver/README.zh.md)，并在子 agent 发布后才返回。子 agent 获得父 agent 的工作目录/会话谱系，并默认继承父 agent 模型（除非覆盖），但以空对话开始运行。
 
 共享驱动器负责深度检查、persona 与工具过滤器设置、结构化输出、通过必需的信号执行取消、单次执行、结果读取和完全停稳后的 dispose（资源释放）。启动遭拒不会留下已发布的子 agent；启动调用兑现后卸载提供方，也不会撤销由持有方拥有的运行。
 

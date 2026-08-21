@@ -12,7 +12,7 @@ Status: implemented
 
 `apps/cli/config/` 下交付的 `dsh` 配置树既不挂载 `@deepseek-ai/dsh-invariants`，也不挂载任何包拥有的 `./invariant` 伴随插件。因此，CLI 包不再直接依赖不变式服务。
 
-不变式支持仍可供聚焦测试、示例组合包、生成的 SDK 组合，以及显式选择诊断的自定义部署使用。会话验证、快照、冻结和来源事件引用验证始终启用，且不依赖可选服务，具体由[源端拥有的不可变性决策](../architecture/2026-06-11-dev-invariants-over-deep-readonly.md)规定。
+不变式支持仍可供聚焦测试、示例组合包、生成的 SDK 组合，以及显式选择诊断的自定义部署使用。会话验证、快照、冻结和来源事件引用验证始终启用，且不依赖可选服务，具体由[源端拥有的不可变性决策](../architecture/2026-06-11-dev-invariants-over-deep-readonly.zh.md)规定。
 
 构建后 CLI 的配置转储测试会检查两个交付的 surface，并拒绝服务条目或任何 `@deepseek-ai/dsh-*/invariant` 条目。
 

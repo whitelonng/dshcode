@@ -39,13 +39,7 @@
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:^",
-    "ws": "^8.21.0",
-    "@deepseek-ai/dsh-attachment": "workspace:^",
-    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
-    "@deepseek-ai/dsh-commands": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-session": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^"
+    "ws": "^8.21.0"
   },
   "files": [
     "lib/index.js",

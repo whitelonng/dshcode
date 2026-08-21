@@ -2,7 +2,7 @@
 
 [English](tools.md) | 中文
 
-[dsh-tools](../../packages/core/tools) 的工具流水线。[core.md](core.md) 介绍了核心包共用、用于编写流水线的类型 `ToolDefinition`；面向模型的 [`ToolSchema`](llm-streaming.md#the-model-request-and-result) 协议类型与模型请求一起声明。本页记录 `ToolDefinition` 的每个字段、用于构建它的类型化 schema DSL、带守卫的执行类型和 UI 展示类型。
+[dsh-tools](../../packages/core/tools) 的工具流水线。[core.md](core.zh.md) 介绍了核心包共用、用于编写流水线的类型 `ToolDefinition`；面向模型的 [`ToolSchema`](llm-streaming.zh.md#the-model-request-and-result) 协议类型与模型请求一起声明。本页记录 `ToolDefinition` 的每个字段、用于构建它的类型化 schema DSL、带守卫的执行类型和 UI 展示类型。
 
 源码：[`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts) · [`packages/core/tools/src/schema.ts`](../../packages/core/tools/src/schema.ts) · [`packages/core/tools/src/presentation.ts`](../../packages/core/tools/src/presentation.ts)
 
@@ -463,9 +463,9 @@ type ObjectJsonSchema = JsonSchemaNode & { type: 'object' }
 - `ToolCallView`（待执行）：`{ card: 'generic', title, kind?, rawInput?, content?, locations? }`（默认卡片；`locations` 是 `{ path, line? }[]`，表示调用读取/修改的文件，供编辑器跟随）、`{ card: 'terminal', title, description?, cwd? }`（shell 命令→终端卡片）、或 `{ card: 'diff', title, diffs, locations? }`（文件创建/修改→行内 diff 卡片；`diffs` 是 `{ path, oldText, newText }[]`，新文件时 `oldText: null`）。
 - `ToolResultView`（已完成）：`{ card: 'generic', title?, content? }`、`{ card: 'terminal', title?, output?, exitCode?, signal? }`（捕获的运行输出 + 退出状态；有能力的 UI 显示退出状态标签，其他 UI 可以派生围栏 ` ```console ` 回退）、`{ card: 'diff', title?, diffs }`（已完成的文件变更→要展示的变更，通常是从变更前后内容计算出带上下文行的已应用 hunk，或在没有前像时的整文件 diff）、`{ card: 'search', shape, title?, truncated, total, … }`（已完成的发现型搜索→`shape: 'matches'`（grep）为按文件分组的匹配，`shape: 'paths'`（glob）为扁平路径列表；`truncated`/`total` 报告内联结果是否被截断，使 UI 永不把部分结果当作完整结果呈现；该视图不携带结果文本——无 search 卡片的 UI 回退到原始结果内容）、`{ card: 'read', title?, path, offset, lines, totalLines, lang?, content? }`（已完成的文件读取→带行号、可选语法高亮的代码视图；`offset` 是窗口请求的 1-based 起始行，即使 `lines` 为空也保留；`lang` 是从扩展名推得的语言提示，`content` 是无读取能力的 UI 回退时使用的去信封文本）、或 `{ card: 'web', kind: 'search' | 'fetch', title?, … }`（已完成的 web 检索；`kind: 'search'` 携带结构化的 `sources`/`answer?`/`truncated`，`kind: 'fetch'` 携带 `url`/`statusCode`/`truncated`，不具备 `web` 能力的 UI 回退到原始结果内容——正文不会重复进视图）。已完成视图会替换待执行视图，因此变更工具即使与调用时的片段重复也要返回 diff 结果；搜索和 web 检索都没有 `card` 的调用时对应视图（其 pending 状态保持为 generic 卡片，因为结构化结果只在 `execute` 之后才存在）。
 
-`ToolCallKind`（`'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'fetch' | 'other'`）用于为通用卡片选择图标。`FileLocation`（`{ path, line? }`）、`FileDiff`（`{ path, oldText, newText }`）与 `ReadFileLine`（`{ number, text }`，读取窗口中一行带 1-based 行号的内容）是共享的文件卡片词汇。该设计由[渲染意图联合类型 Agent Note](../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.md)固定；host/client 运行时将这套中性词汇投影为各自的视图。
+`ToolCallKind`（`'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'fetch' | 'other'`）用于为通用卡片选择图标。`FileLocation`（`{ path, line? }`）、`FileDiff`（`{ path, oldText, newText }`）与 `ReadFileLine`（`{ number, text }`，读取窗口中一行带 1-based 行号的内容）是共享的文件卡片词汇。该设计由[渲染意图联合类型 Agent Note](../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.zh.md)固定；host/client 运行时将这套中性词汇投影为各自的视图。
 
-完整的展示字段文档见 [`packages/core/tools/src/presentation.ts`](../../packages/core/tools/src/presentation.ts)。`bash` schema 与执行器见 [shell.md](shell.md)；通用后台控制见 [jobs.md](jobs.md)。
+完整的展示字段文档见 [`packages/core/tools/src/presentation.ts`](../../packages/core/tools/src/presentation.ts)。`bash` schema 与执行器见 [shell.md](shell.zh.md)；通用后台控制见 [jobs.md](jobs.zh.md)。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -473,7 +473,7 @@ type ObjectJsonSchema = JsonSchemaNode & { type: 'object' }
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxtools--toolruntime"></a>
 
@@ -569,9 +569,9 @@ executionMode(exec: ToolExecutionInput): ToolExecutionMode
 async execute(exec: ToolExecutionInput): Promise<ToolExecutionResult>
 ```
 
-Types: [ScopeKey](scope.md)
+Types: [ScopeKey](scope.zh.md)
 
-Source: [`packages/core/tools/src/index.ts:787`](../../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
 <a id="tools-events"></a>
 
@@ -596,7 +596,7 @@ A tool was registered or unregistered, or a scoped restriction changed (the avai
 'tools/change'(): void
 ```
 
-Source: [`packages/core/tools/src/index.ts:207`](../../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
 <a id="toolscode-dispatch-log--waterfall"></a>
 
@@ -621,9 +621,9 @@ Allow a listener to replace content in the DURABLE LOG COPY of one `run_code` su
 'tools/code-dispatch-log'(this: Scoped<ToolRuntime>, dispatch: CodeDispatchLog, next: () => Promise<ContentBlock[]>): Promise<ContentBlock[]>
 ```
 
-Types: [ContentBlock](llm-streaming.md) · [Scoped](scope.md)
+Types: [ContentBlock](llm-streaming.zh.md) · [Scoped](scope.zh.md)
 
-Source: [`packages/core/tools/src/index.ts:189`](../../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
 <a id="toolsexecute--waterfall"></a>
 
@@ -645,9 +645,9 @@ Around-dispatch waterfall for timeout, retry, or metrics. `next()` returns a nor
 'tools/execute'(this: Scoped<ToolRuntime>, exec: ToolDispatchExecution, next: () => Promise<ToolExecutionResult>): Promise<ToolExecutionResult>
 ```
 
-Types: [Scoped](scope.md)
+Types: [Scoped](scope.zh.md)
 
-Source: [`packages/core/tools/src/index.ts:163`](../../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
 <a id="toolspost-execute--waterfall"></a>
 
@@ -670,9 +670,9 @@ Accept, replace, enrich, or block a normalized dispatch result. `next()` accepts
 'tools/post-execute'(this: Scoped<ToolRuntime>, exec: ToolExecution, result: Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>): Promise<PostToolDecision>
 ```
 
-Types: [Scoped](scope.md)
+Types: [Scoped](scope.zh.md)
 
-Source: [`packages/core/tools/src/index.ts:175`](../../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
 <a id="toolspre-execute--waterfall"></a>
 
@@ -693,9 +693,9 @@ Allow, deny, or ask before dispatch. `next()` delegates to allow; missing approv
 'tools/pre-execute'(this: Scoped<ToolRuntime>, exec: ToolExecution, next: () => Promise<PreToolDecision>): Promise<PreToolDecision>
 ```
 
-Types: [Scoped](scope.md)
+Types: [Scoped](scope.zh.md)
 
-Source: [`packages/core/tools/src/index.ts:152`](../../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 
 <a id="toolsresult--emit"></a>
 
@@ -714,7 +714,7 @@ Observe the frozen, lossless-JSON final outcome. Listener failures are contained
 'tools/result'(this: Scoped<ToolRuntime>, exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>): undefined
 ```
 
-Types: [Scoped](scope.md)
+Types: [Scoped](scope.zh.md)
 
-Source: [`packages/core/tools/src/index.ts:197`](../../packages/core/tools/src/index.ts)
+Source: [`packages/core/tools/src/index.ts`](../../packages/core/tools/src/index.ts)
 <!-- END GENERATED cordis-surface -->

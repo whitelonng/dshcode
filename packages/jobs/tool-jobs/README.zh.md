@@ -63,7 +63,7 @@ Track every background job id you start. You are notified in-session when a job 
 
 #### 模型看到的内容
 
-该工具集可见时，会看到生成的 [`job_output`、`job_list` 和 `job_kill` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-jobs)。
+该工具集可见时，会看到生成的 [`job_output`、`job_list` 和 `job_kill` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-jobs)。
 
 #### Token 影响
 

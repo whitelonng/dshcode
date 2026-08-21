@@ -16,7 +16,7 @@ Status: implemented
 
 `@deepseek-ai/dsh-token-meter` 是 `packages/llm/` 下的单个具体包，并注册 `ctx.tokenMeter`。在第二种实现出现之前，它不会被拆成接口与后端。`TokenMeter` 本身公开 `measure(session, requestHeader?)` 与 `estimateMessage(message)`；消费方直接调用这个单例服务。
 
-服务没有配置。估算采用固定的每 token 四个字符启发式规则，并加上结构开销。服务不提供模型 profile、容量设置、密度设置、分词器后端或语言专用策略。对精确提供方/模型容量的查询由适配器单独负责，具体见[路由模型上下文与压缩策略 Agent Note](2026-07-20-routed-model-context-and-compaction-policy.md)。
+服务没有配置。估算采用固定的每 token 四个字符启发式规则，并加上结构开销。服务不提供模型 profile、容量设置、密度设置、分词器后端或语言专用策略。对精确提供方/模型容量的查询由适配器单独负责，具体见[路由模型上下文与压缩策略 Agent Note](2026-07-20-routed-model-context-and-compaction-policy.zh.md)。
 
 ### 逐会话回放折叠
 

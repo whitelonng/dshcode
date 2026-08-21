@@ -21,7 +21,7 @@ schema 提供针对绝对路径的 `view`、`create`、`str_replace` 与 `insert
 
 #### 模型看到的内容
 
-生成的 [`str_replace_editor` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-str-replace-editor)，其中包含配置的 `description`。本插件不贡献独立系统提示词段。
+生成的 [`str_replace_editor` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-str-replace-editor)，其中包含配置的 `description`。本插件不贡献独立系统提示词段。
 
 #### Token 影响
 

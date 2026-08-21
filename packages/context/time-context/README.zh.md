@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-可选的持久上下文，包含当前带时区时间、附加到当前开放请求的浏览器时区，以及在模型请求准备期间采样的经过时长。默认组合不启用它；Schedule Web overlay 会挂载它，使模型可以按用户的浏览器时区解释未明确限定时区的日期和时间。决策记录：[持久 time-context Agent Note](../../../.agents/notes/implemented/feature/2026-07-16-durable-per-step-time-context.md)。
+可选的持久上下文，包含当前带时区时间、附加到当前开放请求的浏览器时区，以及在模型请求准备期间采样的经过时长。默认组合不启用它；Schedule Web overlay 会挂载它，使模型可以按用户的浏览器时区解释未明确限定时区的日期和时间。决策记录：[持久 time-context Agent Note](../../../.agents/notes/implemented/feature/2026-07-16-durable-per-step-time-context.zh.md)。
 
 ## 配置
 

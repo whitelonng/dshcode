@@ -41,7 +41,7 @@ fold 跟踪完整请求标头快照、步骤边界、表层追加与替换、成
 
 这是刻意的选择。占用率百分比是面向用户的参考数字，既不是计费记录，也不是门控输入：harness 中没有任何环节依据它做决策，压缩改为直接读取 `measure()`。UI 用测得的压力除以为所选模型单独解析出的容量来计算占用率。
 
-[Agent Note](../../../.agents/notes/implemented/architecture/2026-07-29-projected-token-usage-and-request-context.md) 记录了否决「让这对值保持原子」方案的那次对比。需要同一边界精确数字的消费方应在自己的请求边界调用 `measure()`，而不是读取该投影。
+[Agent Note](../../../.agents/notes/implemented/architecture/2026-07-29-projected-token-usage-and-request-context.zh.md) 记录了否决「让这对值保持原子」方案的那次对比。需要同一边界精确数字的消费方应在自己的请求边界调用 `measure()`，而不是读取该投影。
 
 ## 组合
 

@@ -16,7 +16,7 @@ Status: implemented
 
 agent loop（智能体循环）通过同一条设置与发布流水线消费这两种形式：先取得准备对象，围绕 `preparation.session` 构建私有 agent 上下文，等待可选设置完成，再发布该精确 Session 和 agent，并在所有退出路径上对准备对象执行 dispose（资源释放）。发布后，实时生命周期由现有 Session 与 agent 存储接管；`SessionPreparation` 本身不负责任何 agent 行为。
 
-该机制细化了 [agent 生命周期与所有权决策](2026-06-18-agent-lifecycle-and-ownership-contracts.md)中的发布边界，但不替换其所有权模型。
+该机制细化了 [agent 生命周期与所有权决策](2026-06-18-agent-lifecycle-and-ownership-contracts.zh.md)中的发布边界，但不替换其所有权模型。
 
 ## 持久化准备生命周期
 
@@ -26,7 +26,7 @@ agent loop（智能体循环）通过同一条设置与发布流水线消费这�
 
 `prepare(id, signal?)` 独占预留准备完成的 Session。它先确认保留的 revision，再提交撕裂尾部和中断轮次修复、建立持久游标，最后返回可 dispose 的准备对象。陈旧源会被丢弃并重新读取，不会参与修复或发布。修复成功后也会丢弃修复前的源，并在预留前重新实体化已提交日志，以免把较新的 revision 关联到较旧的事件对象图。同 id 的另一个准备请求会等待当前预留发布或释放。发布只接受精确的预留 Session，并直接附接已提交游标，无需重建历史。设置失败或取消时，未发生变化的未发布 Session 会返回 LRU；发生变更或完成附接后，系统会消费该预留。
 
-存量 `load(id)` API 使用相同的准备和修复机制，随后丢弃其预留并返回不可变逻辑视图。它保留为兼容 API，不承担历史到恢复的复用路径。该生命周期扩展了[共享持久化协调器](2026-06-18-shared-persistence-write-coordinator.md)，同时继续遵循[会话持久化决策](2026-06-14-session-persistence.md)所规定的存储与恢复规则。
+存量 `load(id)` API 使用相同的准备和修复机制，随后丢弃其预留并返回不可变逻辑视图。它保留为兼容 API，不承担历史到恢复的复用路径。该生命周期扩展了[共享持久化协调器](2026-06-18-shared-persistence-write-coordinator.zh.md)，同时继续遵循[会话持久化决策](2026-06-14-session-persistence.zh.md)所规定的存储与恢复规则。
 
 ## 历史与恢复复用
 
@@ -34,7 +34,7 @@ agent loop（智能体循环）通过同一条设置与发布流水线消费这�
 
 如果持久日志在检查后发生变化，其 revision 也会变化。下一次历史读取或恢复会丢弃保留且处于就绪阶段的 Session，并实体化新日志，因此旧事件对象图不会被关联到较新的快照 revision。已经由进行中恢复操作取得的源不会被淘汰：其独占所有者会持有它直至发布或释放，并发历史读取可以借用同一个不可变视图。
 
-冷 continuable subagent 访问沿用同一路径。系统先检查子会话并完成 descriptor 授权，再由 `ctx.agents.resume()` 预留并发布保留的 Session。这样既遵循 [continuable subagent 会话决策](../feature/2026-07-28-continuable-subagent-conversations.md)中的生命周期与授权规则，也消除了重复冷读。
+冷 continuable subagent 访问沿用同一路径。系统先检查子会话并完成 descriptor 授权，再由 `ctx.agents.resume()` 预留并发布保留的 Session。这样既遵循 [continuable subagent 会话决策](../feature/2026-07-28-continuable-subagent-conversations.zh.md)中的生命周期与授权规则，也消除了重复冷读。
 
 ## 边界
 

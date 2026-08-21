@@ -118,6 +118,9 @@ function descriptorPayload(label: string, version = SUBAGENT_DESCRIPTOR_VERSION)
 }
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    subagentListHostileProbe: { poisoned?: boolean | undefined }
+  }
   interface SessionProjectionMap {
     /** Test-only hostile probe proving per-child isolation of foreign unit failures. */
     subagentListHostileProbe: null
@@ -130,20 +133,23 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
  * through it), while the poisoned state detonates only when a listing read
  * folds or serves this child through the registry.
  */
-const hostileProjectionDefinition: ProjectionDefinition<'subagentListHostileProbe', { poisoned?: boolean }> = {
+const hostileProjectionDefinition = {
   key: 'subagentListHostileProbe',
-  schema: z.null(),
+  stateSchema: z.object({ poisoned: z.boolean().optional() }),
   init: () => ({}),
   apply: (state, event) =>
     event.type === 'subagent/descriptor' && (event.data as { label?: string }).label === 'poison me'
       ? { poisoned: true }
       : state,
-  view: (state) => {
-    if (state.poisoned === true) throw new Error('hostile unit rejects the poisoned log')
-    return null
+  wire: {
+    viewSchema: z.null(),
+    view: (state) => {
+      if (state.poisoned === true) throw new Error('hostile unit rejects the poisoned log')
+      return null
+    },
   },
   stateVersion: 1,
-}
+} satisfies ProjectionDefinition<'subagentListHostileProbe', { poisoned?: boolean | undefined }>
 
 describe('SubagentRuntime.listChildren', () => {
   it('lists live children without persistence, query services, or the continuation runtime', async () => {

@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-bash 工具的调用与结果都声明 `card: 'terminal'`（[渲染意图联合类型](../architecture/2026-07-02-tool-render-intent-union.md)）：调用视图携带命令、一段可选的模型撰写描述以及工作目录，结果视图携带输出、退出码与终止信号。该视图早已抵达浏览器——host、connection 与 runtime 把它投递到 `ConversationSnapshot` 的 `callView`/`resultView` 上——原 TUI 曾把它渲染为带 `$` 提示符的卡片，附退出行与首尾高度上限。
+bash 工具的调用与结果都声明 `card: 'terminal'`（[渲染意图联合类型](../architecture/2026-07-02-tool-render-intent-union.zh.md)）：调用视图携带命令、一段可选的模型撰写描述以及工作目录，结果视图携带输出、退出码与终止信号。该视图早已抵达浏览器——host、connection 与 runtime 把它投递到 `ConversationSnapshot` 的 `callView`/`resultView` 上——原 TUI 曾把它渲染为带 `$` 提示符的卡片，附退出行与首尾高度上限。
 
 Web client 却对它视而不见。`packages/client/ui-tool/src/client/tool/models/tool-call-model.ts` 仅从原始工具参数推导每一行，`skeleton/DetailsPanel.tsx` 则把所有工具的内容块压平进一个 `<pre>`，样式为 `white-space: pre-wrap; word-break: break-word`。软换行加上没有高度约束，带来两个缺陷：多列输出（`ls`、表格、框线图）被折成一段文字，丢掉了这类输出赖以存在的列对齐；而单列的长列表会把详情面板拉长到与列表等长。
 
@@ -25,6 +25,8 @@ Web client 却对它视而不见。`packages/client/ui-tool/src/client/tool/mode
 
 几何尺寸、圆角与字体沿用 `CodeBlock`，因此终端卡片与围栏代码块在视觉上一致；`white-space: pre` 加横向滚动是有意的分歧。两个组件都需要的剪贴板写入从 `CodeBlock` 中提取到包内部的 `src/clipboard.ts`，不对外导出，因此它仍是这两个块的实现细节。
 
+<a id="inline-output-in-the-chat-row-reverses-a-stated-convention"></a>
+
 ### 聊天行内嵌输出推翻了一条既有约定
 
 `packages/client/ui-tool/src/client/tool/components/ToolRow.tsx` 与 `packages/client/ui-tool/src/client/tool/models/tool-call-model.ts` 都断言过「绝不内嵌输出——完整结果在详情面板」。在行内显示终端块推翻了这一点，依据是 owner 的明确决定。
@@ -33,7 +35,7 @@ Web client 却对它视而不见。`packages/client/ui-tool/src/client/tool/mode
 
 余下的约束：行内上限为 `CHAT_TERMINAL_MAX_LINES`（8），是组件默认值的一半，而面板沿用默认值——消息流是跨多次调用阅读的摘要表面，面板才是单次调用的阅读表面。只有 terminal 意图内嵌渲染；generic 工具的内容依旧只在面板中。
 
-这一划分的一个前提此后被削弱了：[工具行已不再是详情面板的点击目标](2026-07-28-tool-call-file-open-in-os.md)，且没有任何手势接替它，因此该面板在组装后的应用中当前不可达。于是行内上限成为读者实际拥有的唯一长输出表面，由展开控件承担。恢复面板入口属于那次改动的后续，而非本次改动——但在它落地之前，「面板仍是查看完整输出的地方」并不成立，行内的展开控件独自承担了这一职责。
+这一划分的一个前提此后被削弱了：[工具行已不再是详情面板的点击目标](2026-07-28-tool-call-file-open-in-os.zh.md)，且没有任何手势接替它，因此该面板在组装后的应用中当前不可达。于是行内上限成为读者实际拥有的唯一长输出表面，由展开控件承担。恢复面板入口属于那次改动的后续，而非本次改动——但在它落地之前，「面板仍是查看完整输出的地方」并不成立，行内的展开控件独自承担了这一职责。
 
 ## 考虑过的替代方案
 
@@ -41,7 +43,7 @@ Web client 却对它视而不见。`packages/client/ui-tool/src/client/tool/mode
 
 **复用 `CodeBlock` 并传入 `console` 语言，而不新建组件。** 已否决：`CodeBlock` 会软换行，而软换行正是本次要修的缺陷，且它没有退出状态、没有 cwd 提示符行、没有高度上限、也不处理 ANSI。把四项终端专属关注点加进共享的代码围栏组件，等于把它们强加给每一个 markdown 围栏。两个组件改为共享几何与字体 token，那是唯一一处「一套实现对两者都正确」的部分。
 
-**手写 SGR 解析器。** 已否决：SGR 解析器恰是[优先采用维护良好的依赖而非手写](../process/2026-07-26-dependencies-over-hand-rolling.md)所指明不该自持的那类实现——它的边界情形（256 色板与 truecolor 形式、`reverse`、多参数分段、未终止的序列）各自只在没人会写进测试的输出上失效，因此手写版本会在很长时间内一直微妙地出错。对照那条策略的门槛：`anser` **并未**删除任何既有自持代码。它是一次能力增补，而那条 Agent Note 把这与净删除式的简化区分开来；它达到的是健康度与边界契合这两方面的门槛。`anser` 未覆盖而仍由我们手写的部分是：主题 token 的颜色映射、非 CSI 序列的剥除、回车重绘，以及供高度上限切片的逐行 span 折叠。
+**手写 SGR 解析器。** 已否决：SGR 解析器恰是[优先采用维护良好的依赖而非手写](../process/2026-07-26-dependencies-over-hand-rolling.zh.md)所指明不该自持的那类实现——它的边界情形（256 色板与 truecolor 形式、`reverse`、多参数分段、未终止的序列）各自只在没人会写进测试的输出上失效，因此手写版本会在很长时间内一直微妙地出错。对照那条策略的门槛：`anser` **并未**删除任何既有自持代码。它是一次能力增补，而那条 Agent Note 把这与净删除式的简化区分开来；它达到的是健康度与边界契合这两方面的门槛。`anser` 未覆盖而仍由我们手写的部分是：主题 token 的颜色映射、非 CSI 序列的剥除、回车重绘，以及供高度上限切片的逐行 span 折叠。
 
 ## 后果
 
@@ -65,6 +67,6 @@ Web client 却对它视而不见。`packages/client/ui-tool/src/client/tool/mode
 
 ## 相关
 
-- [Tagged render-intent union for tool-call presentation](../architecture/2026-07-02-tool-render-intent-union.md)——本次消费的 `card` 标签词汇；Web client 现在是 `terminal` 分支的完整消费方，而不再只消费参数。
-- [Web client syntax highlighting](../process/2026-07-26-web-syntax-highlighting-shiki.md)——它拥有 `CodeBlock` 及其 shiki 分支，并记录了工具输出为何有意不做语法高亮；这里的 ANSI 颜色是作者指定的颜色，不是猜出来的语法。
-- [Web client architecture](../architecture/2026-07-19-gui-web-client-architecture.md)——两个渲染点所处的 slot 与快照分层。
+- [Tagged render-intent union for tool-call presentation](../architecture/2026-07-02-tool-render-intent-union.zh.md)——本次消费的 `card` 标签词汇；Web client 现在是 `terminal` 分支的完整消费方，而不再只消费参数。
+- [Web client syntax highlighting](../process/2026-07-26-web-syntax-highlighting-shiki.zh.md)——它拥有 `CodeBlock` 及其 shiki 分支，并记录了工具输出为何有意不做语法高亮；这里的 ANSI 颜色是作者指定的颜色，不是猜出来的语法。
+- [Web client architecture](../architecture/2026-07-19-gui-web-client-architecture.zh.md)——两个渲染点所处的 slot 与快照分层。

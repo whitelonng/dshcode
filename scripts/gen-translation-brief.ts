@@ -16,11 +16,13 @@ import { existsSync, globSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { basename, join, resolve, sep } from 'node:path'
 import {
+  isTranslationPairingManifestExcluded,
   isTranslationScopeFile,
   pairAnchorOfArgument,
   parseTranslationMarkdown,
   parseTranslationPairingManifest,
   TRANSLATION_SCOPE_GLOB_EXCLUDES,
+  translationPairSourcePredicate,
   translationStructureDiff,
   translationStructureSignature,
 } from './translation-pairing.ts'
@@ -41,10 +43,11 @@ import {
 
 const root = resolve(import.meta.dirname, '..')
 const manifest = parseTranslationPairingManifest(readFileSync(join(root, 'scripts/translation-pairing.manifest.json'), 'utf8'))
+const isTranslationPairSource = translationPairSourcePredicate(manifest)
 const terminology = readFileSync(join(root, 'docs/i18n/terminology.md'), 'utf8')
 
 function isExcluded(file: string): boolean {
-  return manifest.excluded.some(entry => (entry.endsWith('/') ? file.startsWith(entry) : file === entry))
+  return isTranslationPairingManifestExcluded(file, manifest)
 }
 
 /** Recorded hashes of one consistency record: basename → blob hash. */
@@ -215,12 +218,23 @@ function planScope(
 /** Validate a computed mechanical counterpart and write it. */
 function applyMechanical(counterpartPath: string, sourceCurrent: string, result: string): void {
   const counterpartBase = basename(counterpartPath)
+  const sourcePath = counterpartPath.endsWith('.zh.md')
+    ? counterpartPath.replace(/\.zh\.md$/, '.md')
+    : counterpartPath.replace(/\.md$/, '.zh.md')
   const sourceBase = counterpartBase.endsWith('.zh.md')
     ? counterpartBase.replace(/\.zh\.md$/, '.md')
     : counterpartBase.replace(/\.md$/, '.zh.md')
   const errors = translationStructureDiff(
-    translationStructureSignature(parseTranslationMarkdown(sourceCurrent), counterpartBase),
-    translationStructureSignature(parseTranslationMarkdown(result), sourceBase),
+    translationStructureSignature(
+      parseTranslationMarkdown(sourceCurrent),
+      counterpartBase,
+      { repoRoot: root, sourcePath, isTranslationPairSource, markdown: sourceCurrent },
+    ),
+    translationStructureSignature(
+      parseTranslationMarkdown(result),
+      sourceBase,
+      { repoRoot: root, sourcePath: counterpartPath, isTranslationPairSource, markdown: result },
+    ),
   )
   if (errors.length > 0) {
     throw new Error(`gen-translation-brief: computed mechanical update for ${counterpartPath} violates the pair structure: ${errors.join('; ')}`)

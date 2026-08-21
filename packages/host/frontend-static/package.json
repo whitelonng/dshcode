@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-host-frontend-static",
-  "description": "SPA dist server for the Web shell: owns the webserver fallback seat, serving the built frontend with index-tap injection, traversal rejection, and SPA index fallback",
+  "description": "SPA dist server for the Web shell: owns the webserver fallback seat, serving explicit index entries and static assets with traversal rejection and 404 misses",
   "version": "1.0.5",
   "publishConfig": {
     "access": "public"

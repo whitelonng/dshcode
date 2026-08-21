@@ -28,5 +28,5 @@ printf '%s\n' "$root/usr/bin" >> "$GITHUB_PATH"
 sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \
   || echo 'apparmor userns knob absent — the functional probe decides'
 "$root/usr/bin/bwrap" --version
-"$root/usr/bin/bwrap" --ro-bind / / --dev /dev --proc /proc --die-with-parent -- true
+"$root/usr/bin/bwrap" --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent -- true
 echo 'bubblewrap functional probe passed'

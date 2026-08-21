@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-03-package-anchored-subsystem-pages.md
 2026-08-03-package-anchored-subsystem-pages.md: 40f330d0feaca519bdc683e1992597b4be46cd8e
-2026-08-03-package-anchored-subsystem-pages.zh.md: 823ede723f49defa6f9ccca485dc6098783f2b16
+2026-08-03-package-anchored-subsystem-pages.zh.md: 25f96e7411728e5cb49cd663dc5cd087688b068c

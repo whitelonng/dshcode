@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-被 git 忽略的个人指导文件（`AGENTS.local.md` / `CLAUDE.local.md`）是 Claude Code 的一项约定，用于存放刻意不提交、每位开发者各自的覆盖内容。[agent-instructions 插件](2026-06-24-workspace-context.md)每个目录只加载一个候选，因此只有把某个 `.local.` 名字加进 `instructionFileCandidates` 才能读到它；而由于一个目录只有一个胜出者，这样做只会让它*遮蔽*已提交的基础文件，而不是补充它。这与这些名字所暗示的「基础文件加个人覆盖层」的叠加模型正好相反，而且它默认是关闭的。
+被 git 忽略的个人指导文件（`AGENTS.local.md` / `CLAUDE.local.md`）是 Claude Code 的一项约定，用于存放刻意不提交、每位开发者各自的覆盖内容。[agent-instructions 插件](2026-06-24-workspace-context.zh.md)每个目录只加载一个候选，因此只有把某个 `.local.` 名字加进 `instructionFileCandidates` 才能读到它；而由于一个目录只有一个胜出者，这样做只会让它*遮蔽*已提交的基础文件，而不是补充它。这与这些名字所暗示的「基础文件加个人覆盖层」的叠加模型正好相反，而且它默认是关闭的。
 
 ## 决策
 
-插件为每个项目目录额外加载第二个独立的候选列表。`localInstructionFileCandidates` 默认为 `['AGENTS.local.md', 'CLAUDE.local.md']`，并与 `instructionFileCandidates` 采用相同的同目录校验来解析。在从项目根到会话 cwd 的每个项目目录中，插件先加载基础候选，然后叠加加载本地候选；本地文件排在基础文件之后，因此在字节预算之内其内容优先级更高。两个列表都会在[按目录内容去重](2026-07-21-instruction-load-all-dedup.md)之下完整加载。将 `localInstructionFileCandidates` 置空即可关闭该覆盖层。
+插件为每个项目目录额外加载第二个独立的候选列表。`localInstructionFileCandidates` 默认为 `['AGENTS.local.md', 'CLAUDE.local.md']`，并与 `instructionFileCandidates` 采用相同的同目录校验来解析。在从项目根到会话 cwd 的每个项目目录中，插件先加载基础候选，然后叠加加载本地候选；本地文件排在基础文件之后，因此在字节预算之内其内容优先级更高。两个列表都会在[按目录内容去重](2026-07-21-instruction-load-all-dedup.zh.md)之下完整加载。将 `localInstructionFileCandidates` 置空即可关闭该覆盖层。
 
 该默认值定义在插件的 `Config` schema 中，而非某个产品的 `cordis.yml` 里，因此每个嵌入方（TUI、ACP、headless）读取 `.local.` 文件的行为一致，部署方也可以在一处覆盖或关闭该行为。这与插件自身持有的 `instructionFileCandidates` 默认值保持对称。
 
@@ -18,7 +18,7 @@ Status: implemented
 
 ## 每个候选各自独立的 scope
 
-同一目录下的基础候选与本地候选，在基线冻结、待定窗口、版本缓存和协调过程中都必须彼此独立，因此对其中一个的改动绝不能抑制另一个。现在每个 `(directory, candidateName)` 对都是各自独立的 scope 键——参见[按候选划分的 scope 键](2026-07-21-instruction-load-all-dedup.md)，它取代了此前基础/本地的层级哨兵。发现过程在每个项目目录中先遍历基础列表、再遍历本地列表，`reconcileInstructionContext` 为每个目录枚举每个配置的候选，`probeScopeInstruction` 则解码候选名以精确读取该文件。面向模型的提示词从文件的展示路径推导出供人阅读的目录标签，因此 scope 键永远不会到达模型。
+同一目录下的基础候选与本地候选，在基线冻结、待定窗口、版本缓存和协调过程中都必须彼此独立，因此对其中一个的改动绝不能抑制另一个。现在每个 `(directory, candidateName)` 对都是各自独立的 scope 键——参见[按候选划分的 scope 键](2026-07-21-instruction-load-all-dedup.zh.md)，它取代了此前基础/本地的层级哨兵。发现过程在每个项目目录中先遍历基础列表、再遍历本地列表，`reconcileInstructionContext` 为每个目录枚举每个配置的候选，`probeScopeInstruction` 则解码候选名以精确读取该文件。面向模型的提示词从文件的展示路径推导出供人阅读的目录标签，因此 scope 键永远不会到达模型。
 
 ## 备选方案
 
@@ -34,4 +34,4 @@ Status: implemented
 
 ## 后果
 
-`.local.` 指导在所有产品中默认被读取，无需按部署单独配置，与邻近工具保持一致。每个项目目录可以为每个存在的候选贡献一个持久 scope 而非仅一个，因此动态发现、编辑和移除会分别独立地协调基础文件与本地文件。scope 键现在[按候选划分](2026-07-21-instruction-load-all-dedup.md)；`dsh-session` 对旧会话不作兼容承诺，因此这是一次无成本的改动。用户全局 scope 仍然只有基础文件，这一点作为已知限制记录在包 README 中。
+`.local.` 指导在所有产品中默认被读取，无需按部署单独配置，与邻近工具保持一致。每个项目目录可以为每个存在的候选贡献一个持久 scope 而非仅一个，因此动态发现、编辑和移除会分别独立地协调基础文件与本地文件。scope 键现在[按候选划分](2026-07-21-instruction-load-all-dedup.zh.md)；`dsh-session` 对旧会话不作兼容承诺，因此这是一次无成本的改动。用户全局 scope 仍然只有基础文件，这一点作为已知限制记录在包 README 中。

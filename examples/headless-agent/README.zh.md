@@ -13,7 +13,7 @@
 pnpm dsh --profile headless "fix the failing test in this workspace"
 ```
 
-产品命令是 [`dsh --profile headless`](../../apps/cli/README.md)：它接受一项非空任务，创建并持久化新会话，打印最终 assistant 文本，然后退出。
+产品命令是 [`dsh --profile headless`](../../apps/cli/README.zh.md)：它接受一项非空任务，创建并持久化新会话，打印最终 assistant 文本，然后退出。
 
 快照套件通过 [`tests/fixtures/headless-driver.ts`](tests/fixtures/headless-driver.ts) 运行本目录的配置。这个未导出且仅供测试使用的进程会在结果记录之前，以 JSONL 发出规范会话事件。该事件流属于测试基础设施，不是受支持的 CLI（命令行界面）输出格式。子会话只通过父会话的工具事件和结果对外显示。
 

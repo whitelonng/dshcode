@@ -33,4 +33,4 @@ Status: implemented
 
 ## 相关
 
-- [pnpm 委托、SRI 完整性与插件发现层](2026-08-15-pnpm-delegation-and-plugin-discovery.md) 拥有本变更用 `disableControlsOnInstall` 扩展的网关配置；[合并插件列表标签页](2026-08-15-merged-plugin-list-tab.md) 拥有冲突规则所禁用的预设产品行。
+- [pnpm 委托、SRI 完整性与插件发现层](2026-08-15-pnpm-delegation-and-plugin-discovery.zh.md) 拥有本变更用 `disableControlsOnInstall` 扩展的网关配置；[合并插件列表标签页](2026-08-15-merged-plugin-list-tab.zh.md) 拥有冲突规则所禁用的预设产品行。

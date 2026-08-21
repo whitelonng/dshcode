@@ -688,7 +688,12 @@ describe('built-in conversation node Definitions', () => {
     const retryNode = node(snapshot(retry), 'model-retry')
     const retryData = retryNode?.data as RetryChatData
     expect(retryData.attempts.map(attempt => attempt.retryState)).toEqual(['started', 'cancelled'])
-    expect(node(snapshot(retry), 'turn-error')).toBeUndefined()
+    expect(node(snapshot(retry), 'turn-error')?.data).toMatchObject({
+      kind: 'turn-error',
+      turn: 1,
+      message: 'failed',
+      code: 'TRANSPORT',
+    })
 
     const compactions = assembler([
       at(10, 'command/run', {
@@ -872,7 +877,7 @@ describe('built-in conversation node Definitions', () => {
     expect(node(snapshot(value), 'tool-call')).toBeUndefined()
   })
 
-  it('suppresses a turn error when the loaded tail contains only a later retry attempt', () => {
+  it('renders the exhausted-retry turn error in a partial tail window and after prepending the chain', () => {
     const value = assembler([
       at(5, 'llm/retry', {
         retryId: 'retry-paged',
@@ -894,7 +899,13 @@ describe('built-in conversation node Definitions', () => {
     ], true)
 
     expect(node(snapshot(value), 'model-retry')).toBeUndefined()
-    expect(node(snapshot(value), 'turn-error')).toBeUndefined()
+    expect(node(snapshot(value), 'turn-error')?.data).toMatchObject({
+      kind: 'turn-error',
+      seq: 7,
+      turn: 1,
+      message: 'failed',
+      code: 'TRANSPORT',
+    })
 
     value.prepend([
       at(1, 'turn/start', { turn: 1 }),
@@ -919,7 +930,13 @@ describe('built-in conversation node Definitions', () => {
 
     const retry = node(snapshot(value), 'model-retry')
     expect((retry?.data as RetryChatData).attempts).toHaveLength(2)
-    expect(node(snapshot(value), 'turn-error')).toBeUndefined()
+    expect(node(snapshot(value), 'turn-error')?.data).toMatchObject({
+      kind: 'turn-error',
+      seq: 7,
+      turn: 1,
+      message: 'failed',
+      code: 'TRANSPORT',
+    })
   })
 
   it('materializes a max-tokens notice and keeps completed and error turns clean', () => {

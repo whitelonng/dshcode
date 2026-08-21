@@ -28,7 +28,7 @@ Status: implemented
 
 **保留首尾折叠，仅对展开区域加滚动。** 否决：一个关注点上两套重叠机制。一旦整份列表始终渲染，折叠的算术、展开/折叠状态与那个按钮都是累赘；仅靠滚动即可约束高度。
 
-**把滚动高度做成插件配置字段。** 否决：该高度约束的是卡片在屏幕上的几何形状，而非部署策略，因此它属于 `WebBlock.module.css`，与 [Web result 卡片前端笔记](2026-07-30-web-result-card-frontend.md) 已作为本卡片几何固定在那里的圆角、表面与外边距并列。
+**把滚动高度做成插件配置字段。** 否决：该高度约束的是卡片在屏幕上的几何形状，而非部署策略，因此它属于 `WebBlock.module.css`，与 [Web result 卡片前端笔记](2026-07-30-web-result-card-frontend.zh.md) 已作为本卡片几何固定在那里的圆角、表面与外边距并列。
 
 ## 后果
 
@@ -42,5 +42,5 @@ jsdom 不解析 CSS Modules 布局，对任何元素都报 `scrollHeight === cli
 
 ## 相关文档
 
-- [Web result card](2026-07-30-web-result-card.md) —— 本卡片消费的 `card: 'web'` 渲染意图分支与 `presentationMeta` 路由；最终有界列表的来源。
-- [Web result 卡片前端](2026-07-30-web-result-card-frontend.md) —— `WebBlock`、唯一的 `web-card-model` 派生，以及绘制该卡片的各渲染点由它拥有；本笔记替换掉它所规定的来源列表折叠，它的其余决策（一个组件绘制两种 kind、http(s) 链接 allowlist、单一派生、常驻姿态）依然成立。
+- [Web result card](2026-07-30-web-result-card.zh.md) —— 本卡片消费的 `card: 'web'` 渲染意图分支与 `presentationMeta` 路由；最终有界列表的来源。
+- [Web result 卡片前端](2026-07-30-web-result-card-frontend.zh.md) —— `WebBlock`、唯一的 `web-card-model` 派生，以及绘制该卡片的各渲染点由它拥有；本笔记替换掉它所规定的来源列表折叠，它的其余决策（一个组件绘制两种 kind、http(s) 链接 allowlist、单一派生、常驻姿态）依然成立。

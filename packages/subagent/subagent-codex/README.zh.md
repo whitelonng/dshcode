@@ -2,11 +2,11 @@
 
 [English](README.md) | 中文
 
-本包注册由 Profile 命名、默认名称为 `codex` 的 Codex subagent 提供方。每次接受运行请求后，它都会在发起委托的会话工作区中使用 `app-server --stdio` 启动官方包内 Codex wrapper，创建一个临时 Codex 线程，提交一个自包含的文本任务，并通过共享的 [`dsh-subagent`](../subagent/README.md) 结果约定返回选定的最终答案或独立的安全失败诊断。
+本包注册由 Profile 命名、默认名称为 `codex` 的 Codex subagent 提供方。每次接受运行请求后，它都会在发起委托的会话工作区中使用 `app-server --stdio` 启动官方包内 Codex wrapper，创建一个临时 Codex 线程，提交一个自包含的文本任务，并通过共享的 [`dsh-subagent`](../subagent/README.zh.md) 结果约定返回选定的最终答案或独立的安全失败诊断。
 
 ## 启动与所有权
 
-`start(request)` 只接受非空的文本块序列，并根据父会话确定子级 cwd。随后，它通过 [`dsh-subprocess`](../../subprocess/subprocess/README.md) spawn 固定命令，依次执行 `initialize` → `initialized`，把 Profile 选择的模式映射为官方 `thread/start` approval／reviewer／sandbox 字段并与 `{ cwd, ephemeral: true }` 一起发送，且仅在 Codex 返回有效的临时线程后才发布此次运行。若在发布前发生失败或取消，它会关闭通信链路、终止受管进程树并等待其退出，然后拒绝 `start()` 调用。非取消拒绝只公开固定的 `initialize` 或 `thread-start` 阶段及已经观测到的进程结果；原始产品与 Host 错误只保留在内部 cause 链中。
+`start(request)` 只接受非空的文本块序列，并根据父会话确定子级 cwd。随后，它通过 [`dsh-subprocess`](../../subprocess/subprocess/README.zh.md) spawn 固定命令，依次执行 `initialize` → `initialized`，把 Profile 选择的模式映射为官方 `thread/start` approval／reviewer／sandbox 字段并与 `{ cwd, ephemeral: true }` 一起发送，且仅在 Codex 返回有效的临时线程后才发布此次运行。若在发布前发生失败或取消，它会关闭通信链路、终止受管进程树并等待其退出，然后拒绝 `start()` 调用。非取消拒绝只公开固定的 `initialize` 或 `thread-start` 阶段及已经观测到的进程结果；原始产品与 Host 错误只保留在内部 cause 链中。
 
 已发布的 `run.result` 恰好启动一个轮次。它只接受与此次运行的线程和轮次匹配的通知，随后等待权威的终止通知 `turn/completed`。以最后一条 `phase: "final_answer"` 的 `agentMessage` 为准；若 Codex 没有发出明确的最终阶段，则以最后一条 `phase: null` 的消息作为兼容性回退。过程说明绝不会取代上述任一答案；成功完成的轮次若没有非空白答案，结果也会判为错误。
 
@@ -27,7 +27,7 @@
 | `providerName` | `codex` | `ctx.subagents` 中的非空注册名称；每个已挂载实例都需要唯一值。 |
 | `env` | `{}` | 显式指定的子进程环境，叠加在由子进程 seam 清除凭证后的父环境之上。 |
 | `permissionMode` | `never` | 为该提供方实例的每个线程固定原生非交互审批与沙箱模式。 |
-| `disposeGraceMs` | `3000` | 共享进程树责任方各终止层级之间的宽限期，单位为毫秒且须为正有限值，并不得大于仓库共享的 [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.md)；随后资源释放会等待整棵进程树退出。 |
+| `disposeGraceMs` | `3000` | 共享进程树责任方各终止层级之间的宽限期，单位为毫秒且须为正有限值，并不得大于仓库共享的 [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.zh.md)；随后资源释放会等待整棵进程树退出。 |
 
 | `permissionMode` 值 | `thread/start` 字段 | 原生行为 |
 |---|---|---|

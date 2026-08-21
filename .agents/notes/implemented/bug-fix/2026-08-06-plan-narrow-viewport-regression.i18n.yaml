@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-06-plan-narrow-viewport-regression.md
 2026-08-06-plan-narrow-viewport-regression.md: 945d014e0c51cbaf4080e72f50ee60763d851698
-2026-08-06-plan-narrow-viewport-regression.zh.md: 37060129364c65b02cc1729331fc7334797863db
+2026-08-06-plan-narrow-viewport-regression.zh.md: 56b305645484060693dbd38397228676be73645c

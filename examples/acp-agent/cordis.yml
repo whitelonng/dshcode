@@ -14,6 +14,8 @@
     models:
       - id: deepseek-v4-flash
       - id: deepseek-v4-pro
+      - id: deepseek-v4-flash-vision-exp
+        inputModalities: [text, image]
 
 # The default composition confines bash AND the filesystem tools to the
 # workspace and asks before a wider retry. Snapshot runs select

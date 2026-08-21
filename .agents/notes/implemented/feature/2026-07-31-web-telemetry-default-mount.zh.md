@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-遥测 seam 与 OTel 后端（[revival Note](2026-07-23-session-telemetry-otel-revival.md)）自完成以来从未接入任何部署组合：没有 roster 行、没有开关、没有节奏口径，内部部署对用户会话的可观测性为零。需要一个部署决策：哪些 surface 上报、报到哪、什么节奏、怎么关、CI 怎么隔离。
+遥测 seam 与 OTel 后端（[revival Note](2026-07-23-session-telemetry-otel-revival.zh.md)）自完成以来从未接入任何部署组合：没有 roster 行、没有开关、没有节奏口径，内部部署对用户会话的可观测性为零。需要一个部署决策：哪些 surface 上报、报到哪、什么节奏、怎么关、CI 怎么隔离。
 
 ## 决策
 
-共享 dsh 基础组合包（`packages/bundle/base/cordis.patch.yml`）挂载带有内置生产 endpoint 的 `session-telemetry-otel` 配置行，使每个 profile 都具有一致的遥测能力。[默认关闭决策](2026-08-10-telemetry-default-off.md)让该配置行保持 `DISABLED` 模式，除非部署方显式选择 `FULL` 或 `FEEDBACK_ONLY`；仅配置 endpoint 不构成上报授权。Web 与 headless 在 SIGINT/SIGTERM 时使用[有界、可升级的进程关闭控制器](../bug-fix/2026-08-03-cli-signal-shutdown-escalation.md)，在启动器 5 秒上限到期前，先给已启用的后端 3 秒关闭截止时间完成排空。
+共享 dsh 基础组合包（`packages/bundle/base/cordis.patch.yml`）挂载带有内置生产 endpoint 的 `session-telemetry-otel` 配置行，使每个 profile 都具有一致的遥测能力。[默认关闭决策](2026-08-10-telemetry-default-off.zh.md)让该配置行保持 `DISABLED` 模式，除非部署方显式选择 `FULL` 或 `FEEDBACK_ONLY`；仅配置 endpoint 不构成上报授权。Web 与 headless 在 SIGINT/SIGTERM 时使用[有界、可升级的进程关闭控制器](../bug-fix/2026-08-03-cli-signal-shutdown-escalation.zh.md)，在启动器 5 秒上限到期前，先给已启用的后端 3 秒关闭截止时间完成排空。
 
 | 决策项 | 取值 | 理由 |
 |---|---|---|
@@ -32,10 +32,10 @@ Status: implemented
 
 **开关做成 config 字段而非 env patch。** 不可行：cordis 行没有 config 层的 disable 语义，且 `exporter.url` 校验在插件构造期 fail-loud，开关必须在 Loader 之前生效——AppCLIEntry patch 层是唯一落点。
 
-**退出时 `Promise.race` 兜底超时。** 最初暂缓，是因为 SDK 参数看似已经将后端排空耗时限制在约 1.5-3s（通常 <100ms），实测 SIGINT 到退出耗时 110ms-1.1s。后来在 Linux 沙箱中复现并证明，`BatchLogRecordProcessor.shutdown()` 可能在 `exporter.forceFlush()` 中永久等待，无法进入受 `exportTimeoutMillis` 限制的完成 Promise。因此，[CLI 关闭修复](../bug-fix/2026-08-03-cli-signal-shutdown-escalation.md) 既为这一特定缺口增加 3 秒后端上限，也为整棵插件树增加 5 秒进程级上限和重复信号退出途径。
+**退出时 `Promise.race` 兜底超时。** 最初暂缓，是因为 SDK 参数看似已经将后端排空耗时限制在约 1.5-3s（通常 <100ms），实测 SIGINT 到退出耗时 110ms-1.1s。后来在 Linux 沙箱中复现并证明，`BatchLogRecordProcessor.shutdown()` 可能在 `exporter.forceFlush()` 中永久等待，无法进入受 `exportTimeoutMillis` 限制的完成 Promise。因此，[CLI 关闭修复](../bug-fix/2026-08-03-cli-signal-shutdown-escalation.zh.md) 既为这一特定缺口增加 3 秒后端上限，也为整棵插件树增加 5 秒进程级上限和重复信号退出途径。
 
 ## 后果
 
 - 开发者运行没有遥测配置的 `dsh web` 时，不会发出遥测网络请求。内部部署需设置 `DSH_TELEMETRY_MODE`，并可让 `DSH_TELEMETRY_OTLP_URL` 指向其他 collector。
-- **没有挂载任何脱敏规则**：显式启用的导出即原始捕获副本（用户/助手消息全文、工具参数与工具结果、系统提示词、`session.cwd` 本地路径）。跨信任边界前必须先挂载 `session-telemetry/record` 规则；脱敏规则、其余身份 Resource 属性和使用情况指标仍是独立的部署工作。匿名 user id 由[匿名 user id Note](2026-07-31-telemetry-anonymous-user-id.md)交付。
+- **没有挂载任何脱敏规则**：显式启用的导出即原始捕获副本（用户/助手消息全文、工具参数与工具结果、系统提示词、`session.cwd` 本地路径）。跨信任边界前必须先挂载 `session-telemetry/record` 规则；脱敏规则、其余身份 Resource 属性和使用情况指标仍是独立的部署工作。匿名 user id 由[匿名 user id Note](2026-07-31-telemetry-anonymous-user-id.zh.md)交付。
 - 测试载具默认将数据留在本地；显式启用上传模式的测试提供自己的 collector 和模式。

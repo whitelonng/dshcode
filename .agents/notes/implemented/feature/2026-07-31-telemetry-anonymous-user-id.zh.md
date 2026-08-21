@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-session telemetry 已默认挂载（[默认挂载 Note](2026-07-31-web-telemetry-default-mount.md)），但 OTel Resource 只有 `service.name`/`service.version`，没有任何用户级标识——接收端无法按用户聚合、无法数活跃用户。此前唯一相关口径是一条未实现的「hostname/本机 IP 哈希派生 user.id」裁定。需要给 OTel 回流一个语义干净的匿名用户身份。
+session telemetry 已默认挂载（[默认挂载 Note](2026-07-31-web-telemetry-default-mount.zh.md)），但 OTel Resource 只有 `service.name`/`service.version`，没有任何用户级标识——接收端无法按用户聚合、无法数活跃用户。此前唯一相关口径是一条未实现的「hostname/本机 IP 哈希派生 user.id」裁定。需要给 OTel 回流一个语义干净的匿名用户身份。
 
 ## 决策
 
-`getOrCreateAnonymousUserId()` 返回 `$DSH_HOME/.anonymous-user-id`（`resolveDshHome` 解析，`$DSH_HOME` > `~/.dsh`）中的裸 UUID 行，首用生成随机 UUID v4 并落盘；后端构造时把它作为 Resource 的 `user.id`（OTel semconv 标准用户属性）随每批导出携带一次。原始实现位于 `session-telemetry-otel`，因为当时不存在第二个真实消费方。`/feedback` 后来成为该消费方，因此[共享 id 决策](../architecture/2026-08-07-shared-feedback-telemetry-user-id.md)将所有权移交给 `@deepseek-ai/dsh-anonymous-user-id`，但不改变本 Note 记录的存储、匿名、并发与丢失语义。[直连 DeepSeek 请求身份](2026-08-11-deepseek-request-user-id-header.md)是同一 id 的第三个消费方。
+`getOrCreateAnonymousUserId()` 返回 `$DSH_HOME/.anonymous-user-id`（`resolveDshHome` 解析，`$DSH_HOME` > `~/.dsh`）中的裸 UUID 行，首用生成随机 UUID v4 并落盘；后端构造时把它作为 Resource 的 `user.id`（OTel semconv 标准用户属性）随每批导出携带一次。原始实现位于 `session-telemetry-otel`，因为当时不存在第二个真实消费方。`/feedback` 后来成为该消费方，因此[共享 id 决策](../architecture/2026-08-07-shared-feedback-telemetry-user-id.zh.md)将所有权移交给 `@deepseek-ai/dsh-anonymous-user-id`，但不改变本 Note 记录的存储、匿名、并发与丢失语义。[直连 DeepSeek 请求身份](2026-08-11-deepseek-request-user-id-header.zh.md)是同一 id 的第三个消费方。
 
 | 裁定 | 取值 | 理由 |
 |---|---|---|
@@ -40,4 +40,4 @@ session telemetry 已默认挂载（[默认挂载 Note](2026-07-31-web-telemetry
 - 一个 `$DSH_HOME` 在 OTel 回流中是一个稳定用户；不同 home 在构造上就是不同用户，无跨 home 关联机制。
 - OTel 回流、`/feedback` 与直连 DeepSeek 请求共享 `.anonymous-user-id`。
 - 删除 `.anonymous-user-id` 即重置身份（下次启动生效）；home 不可写时每进程各自持有一个内存 id 直至恢复可写。
-- [默认挂载 Note](2026-07-31-web-telemetry-default-mount.md) 的身份 follow-up 中「匿名用户 id」项由本决定关闭；hostname/surface 维度与脱敏规则、usage-metrics track 仍是待办。
+- [默认挂载 Note](2026-07-31-web-telemetry-default-mount.zh.md) 的身份 follow-up 中「匿名用户 id」项由本决定关闭；hostname/surface 维度与脱敏规则、usage-metrics track 仍是待办。

@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-23-toolview-dissolution.md) | 中文
 
-> 范围：独立工具环（ToolViewRegistry/ctx.toolviews/outlet）为何退役、被什么取代。本决策产出的落地态叙述归 [Web 客户端架构注](2026-07-19-gui-web-client-architecture.md)；一切现在所运行其上的注册模型归 [slot 体系标准](2026-07-22-slot-type-chain-implementation.md) 所有。后续的 [Client Tool 展示所有权](2026-08-08-client-tool-presentation-ownership.md) 决策仅取代本篇的 per-view 放置方式：Tool 名称分发仍使用 keyed slot，而非平行注册表。
+> 范围：独立工具环（ToolViewRegistry/ctx.toolviews/outlet）为何退役、被什么取代。本决策产出的落地态叙述归 [Web 客户端架构注](2026-07-19-gui-web-client-architecture.zh.md)；一切现在所运行其上的注册模型归 [slot 体系标准](2026-07-22-slot-type-chain-implementation.zh.md) 所有。后续的 [Client Tool 展示所有权](2026-08-08-client-tool-presentation-ownership.zh.md) 决策仅取代本篇的 per-view 放置方式：Tool 名称分发仍使用 keyed slot，而非平行注册表。
 
 ## Problem
 
@@ -14,7 +14,7 @@ Status: implemented
 
 工具环作为独立基础设施已消失：工具行是**各视图为自己声明的 keyed 子槽**，client 全域只剩一种注册模型。上述理由是空的——keyed slot 的 *key 空间*本就运行时开放（SlotMap 声明槽、从不声明 key；ask-user composer 的 `key: 'question'` 即先例），开放的 tool 名集合天然适配 `entryKey` 分发。
 
-本决策最初把 `'conversation.chat.toolview'` 放在 chat 条目下，由 chat 渲染点逐行分发。后续的 [Tool 展示所有权](2026-08-08-client-tool-presentation-ownership.md) 将该放置方式移入整体 Tool 席位，并让 `ui-tool` 拥有一个 keyed `'tool.call.toolview'` 子 slot。后续决策改变的是展示所有者，而非本决策的核心约束：Tool 注册继续使用普通 keyed-slot 机制，激活、替换、缓存、错误隔离、版本与 fallback 行为仍归框架所有。
+本决策最初把 `'conversation.chat.toolview'` 放在 chat 条目下，由 chat 渲染点逐行分发。后续的 [Tool 展示所有权](2026-08-08-client-tool-presentation-ownership.zh.md) 将该放置方式移入整体 Tool 席位，并让 `ui-tool` 拥有一个 keyed `'tool.call.toolview'` 子 slot。后续决策改变的是展示所有者，而非本决策的核心约束：Tool 注册继续使用普通 keyed-slot 机制，激活、替换、缓存、错误隔离、版本与 fallback 行为仍归框架所有。
 
 ## 接受的语义变化
 

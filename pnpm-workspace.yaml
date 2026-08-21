@@ -25,6 +25,9 @@ packages:
 linkWorkspacePackages: true
 
 overrides:
+  # knip: upstream CI resolves 6.16.1 from the committed lockfile; newer
+  # releases report workspace-package imports as unlisted (fork tree noise).
+  knip: 6.16.1
   '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
   '@deepseek-ai/schemastery': 'link:vendor/schemastery'
 

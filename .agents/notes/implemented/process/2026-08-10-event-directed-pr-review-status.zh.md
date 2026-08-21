@@ -12,7 +12,7 @@ Issue 所在 Project 中的状态记录了解决工作的下一步由谁负责�
 
 ## 决策
 
-Issue 生命周期工作流把评审 webhook 视为命令。`pull_request.review_requested`（包括重复请求）将目标状态指定为 `In review`。`pull_request_review.submitted` 将目标状态指定为 `In progress`，但仅在 `review.state` 为 `changes_requested` 时生效；submitted 事件仍不可省略，因为评审人即使没有先触发 review-request 事件，也可以直接提出修改要求。对于 approved 和 commented 提交，工作流会在生命周期作业创建 Project token 前跳过该作业；dismissed 评审则不在订阅范围内。
+Issue 生命周期工作流把评审 webhook 视为命令。`pull_request.review_requested`（包括重复请求）将目标状态指定为 `In review`。`pull_request_review.submitted` 将目标状态指定为 `In progress`，但仅在 `review.state` 为 `changes_requested` 时生效；submitted 事件仍不可省略，因为评审人即使没有先触发 review-request 事件，也可以直接提出修改要求。对于 approved 和 commented 提交，生命周期作业会运行但空操作（不会走到创建 Project token 一步）；dismissed 评审则不在订阅范围内。
 
 工作流订阅的普通 PR 事件仍是只向前推进的实现信号：它们可以将 `Inbox`、`Backlog` 或 `Ready` 推进至 `In progress`，但不能让 `In review` 倒退。请求评审命令可将任意较早的活跃状态推进至 `In review`。请求修改命令可将较早的活跃状态推进至 `In progress`；它也可以让 `In review` 状态回退，但仅在目标 Project 的最新状态事件由配置的生命周期执行主体写入时进行。若最新状态事件的执行主体是人工用户或未知主体，则保留当前状态。
 

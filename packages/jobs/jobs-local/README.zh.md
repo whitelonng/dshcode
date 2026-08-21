@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[`@deepseek-ai/dsh-jobs`](../jobs/README.md) 注册表约定的进程本地实现：`LocalJobRegistry` 把每条记录保存在内存中，按 kind 签发 `<kind>-N` id，并且只交出全新快照，从不交出实时状态。作为插件加载后即注册为 `ctx.jobs`。
+[`@deepseek-ai/dsh-jobs`](../jobs/README.zh.md) 注册表约定的进程本地实现：`LocalJobRegistry` 把每条记录保存在内存中，按 kind 签发 `<kind>-N` id，并且只交出全新快照，从不交出实时状态。作为插件加载后即注册为 `ctx.jobs`。
 
 ## 准入
 
@@ -22,7 +22,7 @@
 
 ## 模型体验
 
-通过生产方插件和 [`dsh-tool-jobs`](../tool-jobs/README.md) 间接影响；它们会呈现 job id、输出、状态、取消和完成通知。
+通过生产方插件和 [`dsh-tool-jobs`](../tool-jobs/README.zh.md) 间接影响；它们会呈现 job id、输出、状态、取消和完成通知。
 
 #### KV Cache 影响
 

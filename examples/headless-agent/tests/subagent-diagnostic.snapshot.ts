@@ -8,7 +8,7 @@ import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
-import { normalizeSessionLog, scrubRequestHeaders, type NormalizeContext } from '@deepseek-ai/dsh-acp-snapshot'
+import { normalizeSessionSnapshot, type NormalizeContext } from '@deepseek-ai/dsh-acp-snapshot'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SESSION_FORMAT_VERSION, SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
@@ -101,7 +101,7 @@ describe('descriptor-less cold child diagnostic snapshot', () => {
         expect(parent).toContain(`${childId} [diagnostic: corrupt]`)
 
         const context: NormalizeContext = { sessionIds: [parentId, childId], cwd }
-        const normalizedParent = scrubRequestHeaders(normalizeSessionLog(parent, context))
+        const normalizedParent = normalizeSessionSnapshot(parent, context)
         if (refreshing) {
           await writeFile(parentExpected, normalizedParent)
         }

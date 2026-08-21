@@ -13,6 +13,8 @@ export interface MockServer {
   requests: unknown[]
   /** Header bags of received requests, in order (parallel to `requests`). */
   headers: IncomingMessage['headers'][]
+  /** Parsed Files API operations, excluded from chat request ordering. */
+  fileRequests: Array<{ method: string; path: string; filename?: string; bytes?: number }>
   script: Behavior[]
   close(): Promise<void>
 }
@@ -36,36 +38,111 @@ export const textEvents = [
 export async function mockServer(script: Behavior[]): Promise<MockServer> {
   const requests: unknown[] = []
   const headers: IncomingMessage['headers'][] = []
+  const fileRequests: MockServer['fileRequests'] = []
+  const files = new Map<string, { id: string; object: 'file'; bytes: number; created_at: number; filename: string; purpose: 'user_data'; expires_at: number }>()
+  let nextFile = 1
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
-    let body = ''
-    request.on('data', (chunk: Buffer) => { body += chunk.toString('utf8') })
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => { chunks.push(chunk) })
     request.on('end', () => {
-      requests.push(JSON.parse(body))
-      headers.push(request.headers)
-      const behavior = script.shift()
-      if (!behavior) {
-        response.writeHead(500).end('mock script exhausted')
-        return
-      }
-      if (behavior.kind === 'http-error') {
-        response.writeHead(behavior.status, {
-          'content-type': behavior.contentType ?? 'application/json',
-          ...behavior.headers,
-        })
-        response.end(behavior.body)
-        return
-      }
-      response.writeHead(200, { 'content-type': 'text/event-stream' })
-      const write = (index: number): void => {
-        if (index >= behavior.events.length) {
-          if (behavior.kind === 'sse') response.end()
-          else response.destroy() // close-early: drop the socket mid-stream
+      void (async () => {
+        const url = new URL(request.url ?? '/', 'http://localhost')
+        const body = Buffer.concat(chunks)
+        if (url.pathname === '/files' && request.method === 'POST') {
+          const headers = new Headers()
+          for (const [name, value] of Object.entries(request.headers)) {
+            if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value)
+          }
+          const form = await new Request('http://localhost/files', {
+            method: 'POST',
+            headers,
+            body,
+          }).formData()
+          const blob = form.get('file')
+          if (!(blob instanceof Blob)) throw new Error('mock upload omitted file')
+          const name = 'name' in blob && typeof blob.name === 'string' ? blob.name : 'uploaded_file'
+          const id = `file-api-${nextFile}`
+          const createdAt = Math.floor(Date.now() / 1_000)
+          nextFile += 1
+          const expiresSeconds = Number(form.get('expires_after[seconds]'))
+          const file = {
+            id,
+            object: 'file' as const,
+            bytes: blob.size,
+            created_at: createdAt,
+            filename: name,
+            purpose: 'user_data' as const,
+            expires_at: createdAt + expiresSeconds,
+          }
+          files.set(id, file)
+          fileRequests.push({ method: 'POST', path: url.pathname, filename: name, bytes: blob.size })
+          response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(file))
           return
         }
-        response.write(`data: ${behavior.events[index]}\n\n`)
-        setTimeout(() => { write(index + 1) }, behavior.kind === 'sse' ? behavior.delayMs ?? 0 : 5)
-      }
-      write(0)
+        if (url.pathname === '/files' && request.method === 'GET') {
+          fileRequests.push({ method: 'GET', path: `${url.pathname}${url.search}` })
+          const data = [...files.values()]
+          response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+            object: 'list',
+            data,
+            first_id: data[0]?.id,
+            last_id: data.at(-1)?.id,
+            has_more: false,
+          }))
+          return
+        }
+        if (url.pathname.startsWith('/files/') && request.method === 'DELETE') {
+          const id = decodeURIComponent(url.pathname.slice('/files/'.length))
+          files.delete(id)
+          fileRequests.push({ method: 'DELETE', path: url.pathname })
+          response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+            id, object: 'file', deleted: true,
+          }))
+          return
+        }
+        if (url.pathname.startsWith('/files/') && request.method === 'GET') {
+          const id = decodeURIComponent(url.pathname.slice('/files/'.length))
+          fileRequests.push({ method: 'GET', path: url.pathname })
+          const file = files.get(id)
+          if (file === undefined) {
+            response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({
+              error: { message: 'file not found', code: 'file_not_found' },
+            }))
+          } else {
+            response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(file))
+          }
+          return
+        }
+
+        requests.push(JSON.parse(body.toString('utf8')))
+        headers.push(request.headers)
+        const behavior = script.shift()
+        if (!behavior) {
+          response.writeHead(500).end('mock script exhausted')
+          return
+        }
+        if (behavior.kind === 'http-error') {
+          response.writeHead(behavior.status, {
+            'content-type': behavior.contentType ?? 'application/json',
+            ...behavior.headers,
+          })
+          response.end(behavior.body)
+          return
+        }
+        response.writeHead(200, { 'content-type': 'text/event-stream' })
+        const write = (index: number): void => {
+          if (index >= behavior.events.length) {
+            if (behavior.kind === 'sse') response.end()
+            else response.destroy() // close-early: drop the socket mid-stream
+            return
+          }
+          response.write(`data: ${behavior.events[index]}\n\n`)
+          setTimeout(() => { write(index + 1) }, behavior.kind === 'sse' ? behavior.delayMs ?? 0 : 5)
+        }
+        write(0)
+      })().catch((error: unknown) => {
+        response.writeHead(500, { 'content-type': 'text/plain' }).end(String(error))
+      })
     })
   })
   servers.push(server)
@@ -76,6 +153,7 @@ export async function mockServer(script: Behavior[]): Promise<MockServer> {
     url: `http://127.0.0.1:${address.port}`,
     requests,
     headers,
+    fileRequests,
     script,
     close: () => new Promise(resolve => server.close(() => { resolve() })),
   }

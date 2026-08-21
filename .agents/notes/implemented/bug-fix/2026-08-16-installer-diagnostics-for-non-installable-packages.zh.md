@@ -29,4 +29,4 @@ Status: implemented
 
 ## Related
 
-[pnpm 委托与插件发现](../../implemented/architecture/2026-08-15-pnpm-delegation-and-plugin-discovery.md) 拥有本诊断所扩展的委托安装路径。
+[pnpm 委托与插件发现](../../implemented/architecture/2026-08-15-pnpm-delegation-and-plugin-discovery.zh.md) 拥有本诊断所扩展的委托安装路径。

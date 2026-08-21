@@ -12,7 +12,7 @@ Agent Teams 的服务与工具约定仍在变化，但它需要使用真实 Sess
 
 ## 决策
 
-`packages/experimental/agent-team` 与 `packages/experimental/tool-agent-team` 是私有 workspace 包。[实验性包命名决策](2026-08-19-experimental-package-name-prefix.md)负责其 npm 名和 promotion 重命名；本记录负责其目录归属、发布排除与依赖隔离。
+`packages/experimental/agent-team` 与 `packages/experimental/tool-agent-team` 是私有 workspace 包。[实验性包命名决策](2026-08-19-experimental-package-name-prefix.zh.md)负责其 npm 名和 promotion 重命名；本记录负责其目录归属、发布排除与依赖隔离。
 
 dsh pack 与 publish 集合以及本地 baseline 发布器均排除 `packages/experimental/` 下的所有 manifest。`release:dsh` 仍会让这些 manifest 跟随 dsh 共享版本递增，但不会创建发布 tag。workspace 约束要求每个实验性包设置 `private: true` 并省略 `publishConfig`。同一个顶层检查会拒绝发布包、发布 app 或 Python runtime 通过 `dependencies`、`optionalDependencies` 或 `peerDependencies` 依赖实验性包。实验性包可以依赖发布包和其他实验性包；测试可以通过 `devDependencies` 使用它们，示例可以显式加载它们。
 

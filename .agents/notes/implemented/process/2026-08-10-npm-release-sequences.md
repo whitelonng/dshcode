@@ -22,8 +22,8 @@ Two hard blockers sat in the way. All 217 workspace manifests set `private: true
 
 | Sequence | Members | Version baseline | Tag | Workflow |
 |---|---|---|---|---|
-| dsh | Publish set: non-experimental `packages/*/*` + `apps/*`; private experimental packages join only the shared version bump | one version for the publish set, private dsh packages, and workspace root, `0.0.x` | `dsh-v<version>` | `release.yml` |
-| vendored framework | the nine `vendor/*` packages | each package on its own version line | `vendor-<package>-v<version>` (one per package) | `release-vendor.yml` |
+| dsh | Publish set: non-experimental `packages/*/*` + `apps/*`; private experimental packages join only the shared version bump | one version for the publish set, private dsh packages, and workspace root, `0.0.x` | `dsh-v<version>` | `release.yml` (pack) / `release-publish.yml` (publish) |
+| vendored framework | the nine `vendor/*` packages | each package on its own version line | `vendor-<package>-v<version>` (one per package) | `release-vendor.yml` (pack) / `release-vendor-publish.yml` (publish) |
 | native | `native/landlock-run/packages/*` | its own `0.0.x` | `landlock-run-v<version>` | `landlock-run-release.yml` |
 
 All three publish to the `@deepseek-ai` scope on npmjs.com, and access is per sequence rather than per scope: the vendored framework and the native packages are `public`, the dsh family is `restricted` ([rationale](2026-08-13-public-vendor-and-native-sequences.md)). No publish path passes `--access`, because one flag cannot serve sequences that disagree and would override the manifest that owns the level.
@@ -105,13 +105,13 @@ The entity in this domain is a **release family**: a set of packages sharing one
 
 The dsh family applies the repository's publication payload policy, which rejects sources and declaration maps. The vendored family keeps upstream's payload, because those manifests export `./src/*` and dropping `src` would publish an export map pointing at absent files.
 
-### Workflow shape: pack everything at once, then publish as one set
+### Workflow shape: pack on PR/push, publish from a manual dispatch workflow
 
-The `pack` job walks the whole release set once, packing each member into one directory, writes the upload order, and uploads that directory as one artifact; the `publish` job downloads that artifact and publishes each entry in order. The release set is one unit — half the packages can never reach the registry while the other half is still building.
+The `pack` job walks the whole release set once, packing each member into one directory, writes the upload order, and uploads that directory as one artifact; it lives in `release.yml` / `release-vendor.yml`. The release set is one unit — half the packages can never reach the registry while the other half is still building.
 
-`pack` carries no credentials and runs on every pull request and master push, so a pull request proves the release set still packs. `publish` is a manual dispatch, sits behind the `npm-publish` environment for human approval, and neither builds nor rebuilds — it uploads the bytes pack produced. Pack runs are grouped per ref so concurrent pull requests do not displace each other; the publish job carries the global group, because dist-tags are shared registry state.
+`pack` carries no credentials and runs on every pull request and master push, so a pull request proves the release set still packs. Publication lives in a separate `release-publish.yml` / `release-vendor-publish.yml` workflow that is `workflow_dispatch`-only (so it never appears as a PR check): it repacks the current tree and then publishes each entry in order, behind the `npm-publish` environment for human approval. Pack runs are grouped per ref so concurrent pull requests do not displace each other; the `publish` job carries the global `Release-publish` group, because dist-tags are shared registry state.
 
-A dsh verification installs the vendored family's pack output too. The harness packages declare the vendored framework as a peer, those packages live in another sequence, and the credential-free job cannot fetch them from a private registry — so `release.yml` packs the vendored family for verification while publishing only its own set.
+A dsh verification installs the vendored family's pack output too. The harness packages declare the vendored framework as a peer, those packages live in another sequence, and the credential-free job cannot fetch them from a private registry — so the dsh `pack` job packs the vendored family for verification while publishing only the dsh set. The publish workflow (`release-publish.yml`) repacks the current tree and publishes only the dsh set.
 
 The verification also packs the Landlock entry, which `dsh-sandbox-local` declares as a plain dependency, and omits optional dependencies. The platform packages behind those optional entries need a musl toolchain and one build per architecture, so a job on one runner cannot produce them; a consumer that cannot install them must still start, which is what optional means here. The verification therefore reads a directory by its contents rather than a pack order, because a directory can hold tarballs packed only to satisfy a cross-sequence dependency.
 

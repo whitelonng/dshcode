@@ -16,6 +16,10 @@ import type { ToolEventView } from './events.ts'
 import type { WorkspaceId } from './workspace.ts'
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    sessionListMetadata: SessionListMetadata
+    imageLimits: null
+  }
   interface SessionProjectionMap {
     /**
      * Session-list hints persisted by the projection cache. `blank: false`

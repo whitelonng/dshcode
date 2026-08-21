@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-遥测（telemetry）Service Definition 声明 `SessionTelemetrySink` 后端约定，捕获协调器把会话记录传给实现该约定的任意上报 SDK 后端。捕获侧可跟随实时会话事件，也可按需回放权威会话日志前缀。本包调用 `emit()` 后就停止处理：批处理、重试、排队与丢失策略都属于后端自身的 SDK，本包既不规定也不包装。设计依据与被否决的替代方案见[复活 Agent Note](../../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.md)、[反馈门控投递](../../../.agents/notes/implemented/feature/2026-08-05-feedback-gated-session-telemetry.md)与[无缓冲反馈回放](../../../.agents/notes/implemented/simplification/2026-08-06-buffer-free-feedback-telemetry.md)。
+遥测（telemetry）Service Definition 声明 `SessionTelemetrySink` 后端约定，捕获协调器把会话记录传给实现该约定的任意上报 SDK 后端。捕获侧可跟随实时会话事件，也可按需回放权威会话日志前缀。本包调用 `emit()` 后就停止处理：批处理、重试、排队与丢失策略都属于后端自身的 SDK，本包既不规定也不包装。设计依据与被否决的替代方案见[复活 Agent Note](../../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.zh.md)、[反馈门控投递](../../../.agents/notes/implemented/feature/2026-08-05-feedback-gated-session-telemetry.zh.md)与[无缓冲反馈回放](../../../.agents/notes/implemented/simplification/2026-08-06-buffer-free-feedback-telemetry.zh.md)。
 
 ## 后端约定
 
@@ -19,6 +19,8 @@
 ## 捕获点
 
 在 `live` 模式中，协调器的全部注册都经由组合方 fiber 的 effect 完成：`session/created`（收养：记录 header，并经投影从构造边界起回读日志；来自 fork 或恢复的构造函数种子绝不会在 firehose 上再次发出，也绝不会再次导出）、`session/event`（投影、深拷贝、脱敏，再交接；零 I/O）、`session/flush`（转发可选的 `flush()` 提示并返回 void；循环所等待的并行任务绝不能等待遥测）、`session/disposed`（在会话自身的终止边缘捕获该会话的 `shutdown` 运维记录，然后将其退役）、`agent/error`（唯一的实时总线转发；会话事件词汇有意不包含运维错误记录）、一个 dispose effect（捕获每个仍存活会话的 shutdown，再等待后端的 `shutdown()`；失败只发出警告而不抛出），以及对 `ctx.sessions.list()` 的收养扫描（热重载不会重放 `session/created`）。在 `on-demand` 模式中，协调器只注册 dispose effect：`captureSession()` 读取权威日志，直至可选的序列号边界（含边界）；flush 提示与运维事件留在本地。
+
+<a id="the-redact-waterfall"></a>
 
 ## 脱敏 waterfall（瀑布式事件）
 
@@ -46,6 +48,6 @@
 
 ## 已知限制与暂缓事项
 
-- **尽力而为的投递**：游标标记的是已交接而非已投递；在重载窗口内被拆除的会话无法重新收养；崩溃时留在后端队列中的内容会丢失。持久化 outbox（spool、每 sink 游标、at-least-once）推迟到有部署方提出明确的崩溃丢失要求时再实现；见[复活 Agent Note](../../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.md)。
+- **尽力而为的投递**：游标标记的是已交接而非已投递；在重载窗口内被拆除的会话无法重新收养；崩溃时留在后端队列中的内容会丢失。持久化 outbox（spool、每 sink 游标、at-least-once）推迟到有部署方提出明确的崩溃丢失要求时再实现；见[复活 Agent Note](../../../.agents/notes/implemented/feature/2026-07-23-session-telemetry-otel-revival.zh.md)。
 - **不内置脱敏规则**：未挂载 `sessionTelemetry/record` 监听器时，记录以捕获时的原样离开进程，包括文件内容或命令输出中内嵌的任何凭据；向共享 collector 导出的部署方自行负责其规则集。
 - **按需脱敏使用当前状态**：未捕获的事件只存在于权威会话日志中。后续的 `captureSession()` 会使用当时挂载的策略，深拷贝并脱敏其当前值；不存在捕获时的遥测快照或持久化的捕获前 spool。

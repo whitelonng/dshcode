@@ -2,13 +2,13 @@
 
 [English](compaction.md) | 中文
 
-压缩 seam 是一个[能力 seam](../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md)，与 bash 一样分为 Service Definition（[dsh-compaction](../../packages/compaction/compaction)，`ctx.compaction`）、Service Provider（例如 [dsh-compaction-basic](../../packages/compaction/compaction-basic) 后端）和面向用户的 Consumer（[dsh-command-compact](../../packages/compaction/command-compact)）。压缩是**一项可选能力**，不属于 agent loop（智能体循环）主干，因此其词汇定义在此而非 [core.md](core.md) 中。基于 tokenizer 或模板的后端是实现同一接口的兄弟包。与 bash 不同，该接口必然依赖 `dsh-session` 和 `dsh-llm`：其动词作用于 agent 所有的 `Session`，而其持久摘要事件使用 `ContentBlock` 词汇（见[压缩能力 seam Agent Note](../../.agents/notes/implemented/feature/2026-06-18-compaction-capability-seam.md)）。
+压缩 seam 是一个[能力 seam](../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.zh.md)，与 bash 一样分为 Service Definition（[dsh-compaction](../../packages/compaction/compaction)，`ctx.compaction`）、Service Provider（例如 [dsh-compaction-basic](../../packages/compaction/compaction-basic) 后端）和面向用户的 Consumer（[dsh-command-compact](../../packages/compaction/command-compact)）。压缩是**一项可选能力**，不属于 agent loop（智能体循环）主干，因此其词汇定义在此而非 [core.md](core.zh.md) 中。基于 tokenizer 或模板的后端是实现同一接口的兄弟包。与 bash 不同，该接口必然依赖 `dsh-session` 和 `dsh-llm`：其动词作用于 agent 所有的 `Session`，而其持久摘要事件使用 `ContentBlock` 词汇（见[压缩能力 seam Agent Note](../../.agents/notes/implemented/feature/2026-06-18-compaction-capability-seam.zh.md)）。
 
 源码：[`packages/compaction/compaction/src/types.ts`](../../packages/compaction/compaction/src/types.ts)
 
 ## `compaction/*` 会话事件
 
-压缩通过声明合并为 [`SessionEventMap`](session.md) 扩展三种事件类型。三者都**仅写入日志**——它们记录锁、摘要、选中范围、被遮蔽事件 seq、token 数以及模型调用，绝不进入 surface。这里有意不扩展 `SurfaceEventType`（只有产生消息的事件才到达模型），因此摘要本身承载在另一条带有 `surfaceOp: { op: 'replace', start, end }` 的 `user/message` 上——这是摘要压缩执行的唯一 surface 变更。[Agent Note](../../.agents/notes/implemented/feature/2026-06-18-compaction-capability-seam.md) 负责复用 `user/message` 的决策依据。
+压缩通过声明合并为 [`SessionEventMap`](session.zh.md) 扩展三种事件类型。三者都**仅写入日志**——它们记录锁、摘要、选中范围、被遮蔽事件 seq、token 数以及模型调用，绝不进入 surface。这里有意不扩展 `SurfaceEventType`（只有产生消息的事件才到达模型），因此摘要本身承载在另一条带有 `surfaceOp: { op: 'replace', start, end }` 的 `user/message` 上——这是摘要压缩执行的唯一 surface 变更。[Agent Note](../../.agents/notes/implemented/feature/2026-06-18-compaction-capability-seam.zh.md) 负责复用 `user/message` 的决策依据。
 
 | 事件 | 载荷 | 作用 |
 |---|---|---|
@@ -66,7 +66,7 @@ interface CompactionResult {
 type CompactionTrigger = 'pressure' | 'context-overflow'
 ```
 
-`CompactionEngine` 暴露 `compactIfNeeded(agent, trigger, signal)` 以执行自动 `pressure` 或 `context-overflow` 策略，暴露 `compactNow(agent, signal)` 以便即使未达到压力也对空闲会话进行一次有效缩减，还针对显式、两端均包含的 surface 范围暴露 `compactRegion(...)`。`compactNow()` 作为轮次之间的 agent maintenance 运行；没有有效范围时返回 `null` 且不写入；在摘要前记录独立的 `turn: null` 标记对，并在后续排队提示词能够从新表层派生前 flush 已闭合尝试。每个后端都使用 `compactCheckpointSource(compactionId, sourceCommandId?)` 创建替换用 `user/message` 的源；client 与 wire 消费方从无 Cordis 的 `@deepseek-ai/dsh-compaction/checkpoint` 子路径导入该构造函数、`CompactionCheckpointSource` 和 `isCompactCheckpointSource()`，包根则为 host 消费方重新导出它们。必填的事务身份会关联替换检查点，而该判定函数使检查点识别不依赖任一特定后端。实现必须把传入的 signal 转发给摘要流程。该 seam 不拥有计价 API：单例 [`ctx.tokenMeter`](token-meter.md) 直接拥有估算与回放，而 `dsh-compaction-basic` 拥有保留策略、事件排序、按路由执行的摘要调用及其配置。
+`CompactionEngine` 暴露 `compactIfNeeded(agent, trigger, signal)` 以执行自动 `pressure` 或 `context-overflow` 策略，暴露 `compactNow(agent, signal)` 以便即使未达到压力也对空闲会话进行一次有效缩减，还针对显式、两端均包含的 surface 范围暴露 `compactRegion(...)`。`compactNow()` 作为轮次之间的 agent maintenance 运行；没有有效范围时返回 `null` 且不写入；在摘要前记录独立的 `turn: null` 标记对，并在后续排队提示词能够从新表层派生前 flush 已闭合尝试。每个后端都使用 `compactCheckpointSource(compactionId, sourceCommandId?)` 创建替换用 `user/message` 的源；client 与 wire 消费方从无 Cordis 的 `@deepseek-ai/dsh-compaction/checkpoint` 子路径导入该构造函数、`CompactionCheckpointSource` 和 `isCompactCheckpointSource()`，包根则为 host 消费方重新导出它们。必填的事务身份会关联替换检查点，而该判定函数使检查点识别不依赖任一特定后端。实现必须把传入的 signal 转发给摘要流程。该 seam 不拥有计价 API：单例 [`ctx.tokenMeter`](token-meter.zh.md) 直接拥有估算与回放，而 `dsh-compaction-basic` 拥有保留策略、事件排序、按路由执行的摘要调用及其配置。
 
 预期的手动失败使用 `ManualCompactionErrorCode`：
 
@@ -83,9 +83,9 @@ type ManualCompactionErrorCode =
 
 `changed` 和 `summary` 保持会话表层不变，但仍会闭合失败尝试并将其持久化到日志。`commit` 可能发生在部分变更之后；`persistence` 表示内存中的标记对已闭合，但 flush 失败。取消独立于这些失败，并在完成必要清理后抛出原始 abort 原因。
 
-压力压缩在串行 `agent/pre-step` 中运行，先于请求推导。一旦压力或规范化溢出满足条件，compaction-basic 会在选择范围前调用可选的 [`ctx.toolResultPruner`](../../packages/compaction/compaction-tool-result-pruner/README.md)，再通过 `ctx.tokenMeter` 重新测量，并且可以在不生成摘要的情况下推进 surface。失败请求的恢复在失败的步骤关闭后通过 `agent/request-error` 运行；仅当 surface replacement generation 前进时才返回重试动作，即便后续摘要工作在剪枝后抛异常亦如此；取消仍然优先。区域边界保持工具调用/结果配对，但不保持整个轮次，因此一个过大轮次中较早关闭的步骤可以被压缩。`dsh-compaction-basic` 拥有阈值、保留尾部策略、溢出上限与失败处理。
+压力压缩在串行 `agent/pre-step` 中运行，先于请求推导。一旦压力或规范化溢出满足条件，compaction-basic 会在选择范围前调用可选的 [`ctx.toolResultPruner`](../../packages/compaction/compaction-tool-result-pruner/README.zh.md)，再通过 `ctx.tokenMeter` 重新测量，并且可以在不生成摘要的情况下推进 surface。失败请求的恢复在失败的步骤关闭后通过 `agent/request-error` 运行；仅当 surface replacement generation 前进时才返回重试动作，即便后续摘要工作在剪枝后抛异常亦如此；取消仍然优先。区域边界保持工具调用/结果配对，但不保持整个轮次，因此一个过大轮次中较早关闭的步骤可以被压缩。`dsh-compaction-basic` 拥有阈值、保留尾部策略、溢出上限与失败处理。
 
-该 Service Definition 导出 `toolPairingBalancedBefore(session, seq)` 与 `toolPairingBalancedAfter(session, seq)`，用于检查 seq 之前与之后的工具调用/结果配对。两者都会验证当前 surface 成员关系，并拒绝缺失的 seq 与遗留结果；[包约定](../../packages/compaction/compaction/README.md#tool-pairing-boundaries)定义其缓存行为。
+该 Service Definition 导出 `toolPairingBalancedBefore(session, seq)` 与 `toolPairingBalancedAfter(session, seq)`，用于检查 seq 之前与之后的工具调用/结果配对。两者都会验证当前 surface 成员关系，并拒绝缺失的 seq 与遗留结果；[包约定](../../packages/compaction/compaction/README.zh.md#tool-pairing-boundaries)定义其缓存行为。
 
 ## 工具结果剪枝产出
 
@@ -123,7 +123,7 @@ interface PruneResult {
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxcompaction--compactionengine-abstract-seam"></a>
 
@@ -190,9 +190,9 @@ abstract compactNow( agent: ManualCompactAgentContext, signal: AbortSignal, sour
 abstract compactRegion( start: number, end: number, agent: CompactionAgentContext, signal?: AbortSignal, ): Promise<CompactionResult>
 ```
 
-Types: [CommandId](commands.md)
+Types: [CommandId](commands.zh.md)
 
-Source: [`packages/compaction/compaction/src/index.ts:96`](../../packages/compaction/compaction/src/index.ts)
+Source: [`packages/compaction/compaction/src/index.ts`](../../packages/compaction/compaction/src/index.ts)
 
 <a id="ctxtoolresultpruner--toolresultpruner"></a>
 
@@ -232,7 +232,7 @@ pruneContent(blocks: readonly ContentBlock[]): ContentBlock[] | null
 pruneSession(session: Session): PruneResult
 ```
 
-Types: [ContentBlock](llm-streaming.md) · [Session](session.md)
+Types: [ContentBlock](llm-streaming.zh.md) · [Session](session.zh.md)
 
-Source: [`packages/compaction/compaction-tool-result-pruner/src/index.ts:44`](../../packages/compaction/compaction-tool-result-pruner/src/index.ts)
+Source: [`packages/compaction/compaction-tool-result-pruner/src/index.ts`](../../packages/compaction/compaction-tool-result-pruner/src/index.ts)
 <!-- END GENERATED cordis-surface -->

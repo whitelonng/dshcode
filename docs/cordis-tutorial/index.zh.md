@@ -6,15 +6,15 @@ Cordis 是 DeepSeek Harness 底层的插件框架：它是一个小型运行时�
 
 本教程面向 agent 开发者。你不需要深入掌握 TypeScript；下文的 [TypeScript 说明](#typescript-notes)会解释可能陌生的语法，并且每一章都会给出确切命令和预期输出。
 
-如果你想阅读精简的概念参考，而不是逐步实践，请参阅 [Cordis 入门](../cordis-primer.md)。详尽的 API 参考见[子系统页面](../subsystems/core.md)上生成的 `cordis-surface` 区块，以及 [Cordis 核心 API](../cordis-api/context.md) 页面。
+如果你想阅读精简的概念参考，而不是逐步实践，请参阅 [Cordis 入门](../cordis-primer.zh.md)。详尽的 API 参考见[子系统页面](../subsystems/core.zh.md)上生成的 `cordis-surface` 区块，以及 [Cordis 核心 API](../cordis-api/context.zh.md) 页面。
 
-如果你要为 harness 本身编写插件——由 `cordis.yml` 加载、在 Web UI 中驱动，而不是下面这个启动器——请从[第一个 Harness 插件](../user/develop/basic/index.md)开始。
+如果你要为 harness 本身编写插件——由 `cordis.yml` 加载、在 Web UI 中驱动，而不是下面这个启动器——请从[第一个 Harness 插件](../user/develop/basic/index.zh.md)开始。
 
 <a id="setup"></a>
 
 ## 准备工作
 
-你需要克隆本仓库并安装依赖；[开发指南](../development.md#setup-tutorial)列出了前置条件。本教程不需要 API 密钥；所有示例均可在无密钥环境中运行。
+你需要克隆本仓库并安装依赖；[开发指南](../development.zh.md#setup-tutorial)列出了前置条件。本教程不需要 API 密钥；所有示例均可在无密钥环境中运行。
 
 ```sh
 git clone https://github.com/deepseek-ai/deepseek-harness.git
@@ -39,13 +39,13 @@ node --import tsx ../../vendor/cordis/bin.js
 
 ## 章节
 
-1. [你的第一个插件](01-first-plugin.md)：插件是函数，由 loader 挂载。
-2. [生命周期与 effect](02-lifecycle-and-effects.md)：由 Cordis 管理的注册会在所属插件卸载时撤销。
-3. [服务](03-services.md)：在 `ctx` 上公开一项能力，并通过 `inject` 依赖它。
-4. [事件](04-events.md)：类型化事件、广播分发和 waterfall（瀑布式事件）的短路行为。
-5. [配置](05-config.md)：读取 `cordis.yml` 中经过校验的配置，并在输入错误时明确报错。
-6. [组合与 HMR（热模块替换）](06-composition-and-hmr.md)：把配置文件作为插件树，使用热重载，并诊断始终无法加载的插件。
-7. [进入 harness](07-into-the-harness.md)：基于真实的 harness 服务注册一个可由模型调用的工具。
+1. [你的第一个插件](01-first-plugin.zh.md)：插件是函数，由 loader 挂载。
+2. [生命周期与 effect](02-lifecycle-and-effects.zh.md)：由 Cordis 管理的注册会在所属插件卸载时撤销。
+3. [服务](03-services.zh.md)：在 `ctx` 上公开一项能力，并通过 `inject` 依赖它。
+4. [事件](04-events.zh.md)：类型化事件、广播分发和 waterfall（瀑布式事件）的短路行为。
+5. [配置](05-config.zh.md)：读取 `cordis.yml` 中经过校验的配置，并在输入错误时明确报错。
+6. [组合与 HMR（热模块替换）](06-composition-and-hmr.zh.md)：把配置文件作为插件树，使用热重载，并诊断始终无法加载的插件。
+7. [进入 harness](07-into-the-harness.zh.md)：基于真实的 harness 服务注册一个可由模型调用的工具。
 
 <a id="typescript-notes"></a>
 

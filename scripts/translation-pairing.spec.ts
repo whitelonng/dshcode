@@ -1,11 +1,16 @@
 /** Regression tests for bilingual snapshots, corpus scope, and structure. */
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { gitBlobHash, readGitIndexBlob, storeGitBlob } from './translation-pairing-git.ts'
+import {
+  gitBlobHash,
+  gitIndexPaths,
+  readGitIndexBlob,
+  storeGitBlob,
+} from './translation-pairing-git.ts'
 import {
   parseTranslationPairingRecord,
   renderTranslationPairingRecord,
@@ -13,21 +18,44 @@ import {
 } from './translation-pairing-record.ts'
 import {
   blobHash,
+  isTranslationPairingManifestExcluded,
   isTranslationScopeFile,
   languageSwitcherTargets,
-  linksTo,
   pairAnchorOfArgument,
   parseTranslationMarkdown,
   parseTranslationPairingCliArgs,
   parseTranslationPairingManifest,
   partitionGeneratedRegions,
   requiresSourceLanguageSwitcher,
+  translationPairSourcePredicate,
   translationStructureDiff,
   translationStructureSignature,
 } from './translation-pairing.ts'
 
+const fixturePairSource = (): boolean => true
+
 function signature(markdown: string) {
-  return translationStructureSignature(parseTranslationMarkdown(markdown), 'counterpart.zh.md')
+  return translationStructureSignature(
+    parseTranslationMarkdown(markdown),
+    'counterpart.zh.md',
+    {
+      repoRoot: process.cwd(), sourcePath: 'counterpart.md',
+      isTranslationPairSource: fixturePairSource, markdown,
+    },
+  )
+}
+
+function fixtureSignature(
+  root: string,
+  sourcePath: string,
+  markdown: string,
+  switcherTarget: string,
+) {
+  return translationStructureSignature(
+    parseTranslationMarkdown(markdown),
+    switcherTarget,
+    { repoRoot: root, sourcePath, isTranslationPairSource: fixturePairSource, markdown },
+  )
 }
 
 function gitSupportsObjectFormat(format: 'sha256'): boolean {
@@ -106,6 +134,26 @@ describe('translation pairing snapshots', () => {
     }
   })
 
+  it('lists exact index files without treating a directory prefix as one entry', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-translation-pairing-index-'))
+    try {
+      execFileSync('git', ['init', '--quiet', root], {
+        env: { ...process.env, GIT_DEFAULT_HASH: 'sha1' },
+      })
+      mkdirSync(join(root, 'docs'), { recursive: true })
+      writeFileSync(join(root, 'docs/reference.md'), '# Reference\n')
+      writeFileSync(join(root, 'docs/reference.zh.md'), '# 参考\n')
+      execFileSync('git', ['-C', root, 'add', 'docs'])
+
+      expect(gitIndexPaths(root)).toEqual(new Set([
+        'docs/reference.md',
+        'docs/reference.zh.md',
+      ]))
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it.skipIf(!supportsSha256ObjectFormat)('rejects an object format that pairing records cannot represent', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-translation-pairing-'))
     try {
@@ -119,11 +167,16 @@ describe('translation pairing snapshots', () => {
 
 describe('translation pairing manifest', () => {
   it('accepts an exclusions-only manifest', () => {
-    expect(parseTranslationPairingManifest(JSON.stringify({
+    const manifest = parseTranslationPairingManifest(JSON.stringify({
       excluded: ['docs/generated/'],
-    }))).toEqual({
+    }))
+    expect(manifest).toEqual({
       excluded: ['docs/generated/'],
     })
+    expect(isTranslationPairingManifestExcluded('docs/generated/page.md', manifest)).toBe(true)
+    expect(translationPairSourcePredicate(manifest)('docs/generated/page.md')).toBe(false)
+    expect(translationPairSourcePredicate(manifest)('docs/guide.md')).toBe(true)
+    expect(translationPairSourcePredicate(manifest)('packages/example/guide.md')).toBe(false)
   })
 
   it.each([
@@ -156,16 +209,44 @@ describe('translation pairing switchers', () => {
 
   it('accepts only the canonical public URL for an absolute switcher', () => {
     const targets = languageSwitcherTargets('python/sdk/README.zh.md')
-    const canonical = parseTranslationMarkdown(
-      '[中文](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.zh.md)',
-    )
-    const wrongPath = parseTranslationMarkdown(
-      '[中文](https://github.com/deepseek-ai/deepseek-harness/blob/master/other/README.zh.md)',
-    )
+    const canonicalMarkdown = '# README\n\nEnglish | [中文](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.zh.md)\n'
+    const canonical = parseTranslationMarkdown(canonicalMarkdown)
+    const wrongMarkdown = '# README\n\nEnglish | [中文](https://github.com/deepseek-ai/deepseek-harness/blob/master/other/README.zh.md)\n'
+    const wrongPath = parseTranslationMarkdown(wrongMarkdown)
 
-    expect(linksTo(canonical, targets)).toBe(true)
-    expect(translationStructureSignature(canonical, targets).links).toEqual([])
-    expect(linksTo(wrongPath, targets)).toBe(false)
+    expect(translationStructureSignature(canonical, targets, {
+      repoRoot: process.cwd(),
+      sourcePath: 'python/sdk/README.md',
+      isTranslationPairSource: fixturePairSource,
+      markdown: canonicalMarkdown,
+    }).links).toEqual([])
+    expect(translationStructureSignature(wrongPath, targets, {
+      repoRoot: process.cwd(),
+      sourcePath: 'python/sdk/README.md',
+      isTranslationPairSource: fixturePairSource,
+      markdown: wrongMarkdown,
+    }).links).toEqual([
+      'https://github.com/deepseek-ai/deepseek-harness/blob/master/other/README.zh.md',
+    ])
+  })
+
+  it('excludes only the header switcher from the structural links', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-translation-switcher-'))
+    try {
+      writeFileSync(join(root, 'guide.md'), '# Guide\n')
+      writeFileSync(join(root, 'guide.zh.md'), '# 指南\n')
+      const markdown = '# 指南\n\n[English](guide.md) | 中文\n\n[正文](guide.md)\n'
+      expect(translationStructureSignature(
+        parseTranslationMarkdown(markdown),
+        languageSwitcherTargets('guide.md'),
+        {
+          repoRoot: root, sourcePath: 'guide.zh.md',
+          isTranslationPairSource: fixturePairSource, markdown,
+        },
+      ).links).toEqual(['dsh-translation-target:guide.md'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 
@@ -234,6 +315,81 @@ describe('translation scope discovery', () => {
 })
 
 describe('translation structural signature', () => {
+  it('retains external GFM autolinks without parsing inline-link syntax', () => {
+    const markdown = '<https://example.com/reference.md>\n'
+    expect(signature(markdown).links).toEqual(['https://example.com/reference.md'])
+  })
+
+  it('retains exact authored bytes for ordinary external link targets', () => {
+    const escaped = signature('[External](https://example.com/?x=1&amp;y=2)\n')
+    const literal = signature('[External](https://example.com/?x=1&y=2)\n')
+    expect(escaped.links).toEqual(['https://example.com/?x=1&amp;y=2'])
+    expect(translationStructureDiff(escaped, literal)).toEqual([
+      'link target #1 diverges between the pair: "https://example.com/?x=1&amp;y=2" vs "https://example.com/?x=1&y=2"',
+    ])
+  })
+
+  it('treats target-locale siblings as one semantic link target', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-translation-structure-'))
+    try {
+      writeFileSync(join(root, 'reference.md'), '# Reference\n')
+      writeFileSync(join(root, 'reference.zh.md'), '# 参考\n')
+      const sourceMarkdown = '[Reference](reference.md?view=full#section)\n'
+      const counterpartMarkdown = '[参考](reference.zh.md?view=full#section)\n'
+      const source = fixtureSignature(root, 'guide.md', sourceMarkdown, 'guide.zh.md')
+      const counterpart = fixtureSignature(root, 'guide.zh.md', counterpartMarkdown, 'guide.md')
+      expect(translationStructureDiff(source, counterpart)).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('includes reference-style document links but excludes image-only definitions', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-translation-structure-'))
+    try {
+      writeFileSync(join(root, 'reference.md'), '# Reference\n')
+      writeFileSync(join(root, 'reference.zh.md'), '# 参考\n')
+      const markdown = [
+        '[Reference][doc]',
+        '',
+        '![Preview][asset]',
+        '',
+        '[doc]: reference.md',
+        '[asset]: reference.zh.md',
+        '',
+      ].join('\n')
+      expect(translationStructureSignature(
+        parseTranslationMarkdown(markdown),
+        'guide.zh.md',
+        {
+          repoRoot: root, sourcePath: 'guide.md',
+          isTranslationPairSource: fixturePairSource, markdown,
+        },
+      ).links).toEqual(['dsh-translation-target:reference.md'])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('compares the first duplicate reference definition that CommonMark resolves', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-translation-structure-'))
+    try {
+      for (const name of ['reference', 'different', 'other']) {
+        writeFileSync(join(root, `${name}.md`), `# ${name}\n`)
+        writeFileSync(join(root, `${name}.zh.md`), `# ${name} zh\n`)
+      }
+      const sourceMarkdown = '[Reference][ref]\n\n[ref]: reference.md\n[ref]: other.md\n'
+      const counterpartMarkdown = '[参考][ref]\n\n[ref]: different.zh.md\n[ref]: other.zh.md\n'
+      const source = fixtureSignature(root, 'guide.md', sourceMarkdown, 'guide.zh.md')
+      const counterpart = fixtureSignature(root, 'guide.zh.md', counterpartMarkdown, 'guide.md')
+      expect(translationStructureDiff(source, counterpart)).toEqual([
+        'link target #1 diverges between the pair: "dsh-translation-target:reference.md" vs "dsh-translation-target:different.md"',
+      ])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('accepts matching list kinds, starts, and item counts', () => {
     const source = signature('3. One\n4. Two\n\n- A\n- B\n')
     const counterpart = signature('3. 一\n4. 二\n\n- 甲\n- 乙\n')

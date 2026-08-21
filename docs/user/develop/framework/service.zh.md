@@ -142,9 +142,9 @@ export function apply(ctx: Context) {
 
 ## Harness 内置服务
 
-服务名、公开方法和源码位置由仓库自动生成到各服务的[子系统页面](../../../subsystems/core.md)。开发插件时应以这些生成区块和服务的 TypeScript 接口为准，不要维护另一份静态清单。
+服务名、公开方法和源码位置由仓库自动生成到各服务的[子系统页面](../../../subsystems/core.zh.md)。开发插件时应以这些生成区块和服务的 TypeScript 接口为准，不要维护另一份静态清单。
 
 ## 下一步
 
-- [事件系统](./events.md) — 插件间松耦合通信
-- [能力分层](../practice/) — 将服务用作能力接口
+- [事件系统](./events.zh.md) — 插件间松耦合通信
+- [能力分层](../practice/index.zh.md) — 将服务用作能力接口

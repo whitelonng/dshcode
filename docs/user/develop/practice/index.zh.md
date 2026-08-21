@@ -2,7 +2,7 @@
 
 [English](index.md) | 中文
 
-本文分为两部分：先参考三种角色能力模式的概念，再通过高级教程构建一项能力。请先完成[基础插件路径](../basic/)和[服务教程](../framework/service.md)。
+本文分为两部分：先参考三种角色能力模式的概念，再通过高级教程构建一项能力。请先完成[基础插件路径](../basic/index.zh.md)和[服务教程](../framework/service.zh.md)。
 
 ## 概念参考
 
@@ -53,7 +53,7 @@
 - Consumer 依赖 Service Definition。
 - Service Provider 和 Consumer **互不依赖**。
 
-当前内置系列及其包链接由[能力 seam 参考](../../../capability-seams.md)负责。
+当前内置系列及其包链接由[能力 seam 参考](../../../capability-seams.zh.md)负责。
 
 ## 教程：开发三种角色的能力
 
@@ -152,4 +152,4 @@ export function apply(ctx: Context) {
 
 ## 下一步
 
-- [LLM（大语言模型）适配器](./llm-adapter.md)：实现一个 LLM 提供方
+- [LLM（大语言模型）适配器](./llm-adapter.zh.md)：实现一个 LLM 提供方

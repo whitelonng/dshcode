@@ -6,13 +6,13 @@ Status: implemented
 
 ## 问题
 
-[web 配置平面](../architecture/2026-07-30-web-config-plane.md)让提供方设置与凭据可以实时编辑，但首次使用的用户仍会进入空白对话 Hero；当随产品提供的 `deepseek-official` 路由缺少凭据时，界面没有给出可采取操作的说明。Models 页能修复该状态，但要求用户自行发现这个入口会削弱首次使用引导。界面不得混淆凭据缺失与适配器缺失：浏览器可以为现有凭据引用存入值，但无法动态挂载 `llm-deepseek` Cordis 插件。
+[web 配置平面](../architecture/2026-07-30-web-config-plane.zh.md)让提供方设置与凭据可以实时编辑，但首次使用的用户仍会进入空白对话 Hero；当随产品提供的 `deepseek-official` 路由缺少凭据时，界面没有给出可采取操作的说明。Models 页能修复该状态，但要求用户自行发现这个入口会削弱首次使用引导。界面不得混淆凭据缺失与适配器缺失：浏览器可以为现有凭据引用存入值，但无法动态挂载 `llm-deepseek` Cordis 插件。
 
 ## 决策
 
-**Models 与首次使用引导共享同一个就绪状态投影。**`ui-settings-models` 维护一个 store，把 `llm.providers({})`、共享 settings describe 镜像持有的已脱敏 namespace views 和批量调用的 `credentials.describe({refs})` 联接为同一份状态。首次使用投影选取由 `llm-deepseek` namespace 与空 settings path 持有的 `deepseek-official` 可配置提供方条目，读取生效的 `apiKeyEnv`，并检查对应的凭据描述符。同 provider id 但没有匹配可配置提供方声明的存活路由，在首次使用引导中视为适配器缺失。通过进程环境提供的凭据若已配置，则判定为就绪并保持只读。后续的 [settings describe 镜像决策](../architecture/2026-08-17-settings-describe-mirror.md)持有这次 settings 读取及其失效顺序。
+**Models 与首次使用引导共享同一个就绪状态投影。**`ui-settings-models` 维护一个 store，把 `llm.providers({})`、共享 settings describe 镜像持有的已脱敏 namespace views 和批量调用的 `credentials.describe({refs})` 联接为同一份状态。首次使用投影选取由 `llm-deepseek` namespace 与空 settings path 持有的 `deepseek-official` 可配置提供方条目，读取生效的 `apiKeyEnv`，并检查对应的凭据描述符。同 provider id 但没有匹配可配置提供方声明的存活路由，在首次使用引导中视为适配器缺失。通过进程环境提供的凭据若已配置，则判定为就绪并保持只读。后续的 [settings describe 镜像决策](../architecture/2026-08-17-settings-describe-mirror.zh.md)持有这次 settings 读取及其失效顺序。
 
-**设置外壳只贡献排序，不持有提供方策略。** `ui-settings` 声明一个根作用域的 `settings.onboarding` list slot，并在当前界面为空白 Hero 时，每次只挂载一个有序步骤。当前注册方会收到 `complete()` 和私有 `openSection(id)` 回调；完成当前步骤后，所有权转交给下一项。`ui-settings-models` 通过 `slots.inject()` 注册 DeepSeek 步骤、排在它之前的欢迎声明及 Models 分区，因此所有贡献都跟随同一个 client Cordis 插件的生命周期，两个弹窗也无法堆叠。它们的共用展示由[共用弹窗引导决策](2026-08-13-shared-modal-product-onboarding.md)持有。
+**设置外壳只贡献排序，不持有提供方策略。** `ui-settings` 声明一个根作用域的 `settings.onboarding` list slot，并在当前界面为空白 Hero 时，每次只挂载一个有序步骤。当前注册方会收到 `complete()` 和私有 `openSection(id)` 回调；完成当前步骤后，所有权转交给下一项。`ui-settings-models` 通过 `slots.inject()` 注册 DeepSeek 步骤、排在它之前的欢迎声明及 Models 分区，因此所有贡献都跟随同一个 client Cordis 插件的生命周期，两个弹窗也无法堆叠。它们的共用展示由[共用弹窗引导决策](2026-08-13-shared-modal-product-onboarding.zh.md)持有。
 
 **首次使用弹窗行内渲染既有凭据编辑器。** 适配器已挂载且处于活跃状态，其引用可解析、可写但尚未配置时，`ProviderEditor` 会以仅凭据模式渲染在共用引导弹窗中。同一个组件全权负责密码输入框、校验、`credentials.set({ref, value})`、写入失败处理和写入后刷新；仅凭据模式不会发出提供方 settings 变更。「稍后配置」只完成协调器当前这一轮。适配器缺失时仍跳过，因为浏览器不能挂载缺失的 Cordis 插件。
 

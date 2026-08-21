@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/simplification/2026-07-23-acp-automation-only-protocol.md
 2026-07-23-acp-automation-only-protocol.md: deeba55ebb48468af80a6c74a704b18e07f33477
-2026-07-23-acp-automation-only-protocol.zh.md: ab23280ca7d2f39b33b80f1d9fefe977345b8676
+2026-07-23-acp-automation-only-protocol.zh.md: 0b4d6b2886d34494d321b96abdc1cd30cb112312

@@ -777,6 +777,31 @@ export function WorkspaceBrowser({
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
   const sessionUpdatedAtByAccount = useStore(s => s.sessionUpdatedAtByAccount)
+  const currentBlankSessionId = useSessions((state) => {
+    const current = state.current
+    return current !== undefined && state.byId[current]?.blank === true ? current : undefined
+  })
+  const currentBlankAccount = currentBlankSessionId === undefined
+    ? undefined
+    : (workspaces.find(workspace => workspace.sessionIds.includes(currentBlankSessionId))
+      ?.workspaceId as string | undefined) ?? UNGROUPED_KEY
+  const promotedBlank = useRef<{ sessionId: SessionId; accountKey: string } | undefined>(undefined)
+  useEffect(() => {
+    if (currentBlankSessionId === undefined || currentBlankAccount === undefined) {
+      promotedBlank.current = undefined
+      return
+    }
+    if (promotedBlank.current?.sessionId === currentBlankSessionId
+      && promotedBlank.current.accountKey === currentBlankAccount) return
+    promotedBlank.current = { sessionId: currentBlankSessionId, accountKey: currentBlankAccount }
+    for (const accountKey of new Set([currentBlankAccount, FLAT_SESSION_ORDER_KEY])) {
+      const previous = sessionOrderByAccount[accountKey] ?? []
+      actions.setSessionOrder(accountKey, [
+        currentBlankSessionId,
+        ...previous.filter(id => id !== currentBlankSessionId),
+      ])
+    }
+  }, [actions.setSessionOrder, currentBlankAccount, currentBlankSessionId, sessionOrderByAccount])
   useEffect(() => {
     if (workspacePhase !== 'ready') return
     actions.retainAccountKeys([

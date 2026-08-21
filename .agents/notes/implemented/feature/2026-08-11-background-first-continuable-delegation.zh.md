@@ -8,7 +8,7 @@ Status: implemented
 
 可继续 child 已经具备持久化 id、独立轮次、后续消息以及由管理器负责的结算通知。如果把省略的 `run_in_background` 视为前台，模型就必须在每次调用时重复写出 `true`，才能得到这套生命周期。这样也会掩盖真正有用的调度判断：只有当 parent 的下一步动作需要 child 结果时，parent 才应等待。
 
-child 作用域的 `report` 提示词要求发送自包含的最终报告，而[由管理器负责的结算投递](2026-08-06-manager-owned-subagent-settlement-delivery.md)会独立发送本次运行的结束结果与收尾消息。已完成的 child 因而可能先用最终报告唤醒 parent，再用结算通知唤醒一次。后台优先调度会保留两次投递：由 child 编写的交接仍是强制提示词指引，由管理器生成的通知则不依赖模型是否遵循指令，覆盖每种终止路径。
+child 作用域的 `report` 提示词要求发送自包含的最终报告，而[由管理器负责的结算投递](2026-08-06-manager-owned-subagent-settlement-delivery.zh.md)会独立发送本次运行的结束结果与收尾消息。已完成的 child 因而可能先用最终报告唤醒 parent，再用结算通知唤醒一次。后台优先调度会保留两次投递：由 child 编写的交接仍是强制提示词指引，由管理器生成的通知则不依赖模型是否遵循指令，覆盖每种终止路径。
 
 ## 决策
 
@@ -20,7 +20,7 @@ child 作用域的 `report` 提示词要求发送自包含的最终报告，而[
 - `run_in_background` 参数说明具体生命周期的默认值以及何时覆盖；
 - `tool:<toolName>` 系统提示词 section 会告诉模型同时启动相互独立的委派、在它们运行时继续有用工作，并且仅当下一步动作依赖结果时选择前台。只有当该工具在组装作用域中仍可见时才会渲染这个 section，因此子级工具限制会同时移除 schema 与对应指引。
 
-[可继续 child 上报义务](2026-08-06-continuable-child-report-obligation.md)保持不变：child 提示词要求发送一份自包含的最终报告，并在发现会改变 parent 下一步动作的信息时提前报告。由管理器负责的结算仍然无条件执行，不检查报告是否已经到达。这两条消息可能重复最终内容，但作者和用途不同：`report` 是 child 的显式交接，结算则记录本次运行如何结束，并在 child 无法配合时保留终止输出。`reportDelivery` 仍是部署调度策略，默认值为 `next-step`，通过 parent inbox 保持报告先于结算的顺序。
+[可继续 child 上报义务](2026-08-06-continuable-child-report-obligation.zh.md)保持不变：child 提示词要求发送一份自包含的最终报告，并在发现会改变 parent 下一步动作的信息时提前报告。由管理器负责的结算仍然无条件执行，不检查报告是否已经到达。这两条消息可能重复最终内容，但作者和用途不同：`report` 是 child 的显式交接，结算则记录本次运行如何结束，并在 child 无法配合时保留终止输出。`reportDelivery` 仍是部署调度策略，默认值为 `next-step`，通过 parent inbox 保持报告先于结算的顺序。
 
 无密钥 headless `subagent-settlement` 场景省略 `run_in_background`，收到立即返回的 child id；尽管 fixture（测试前置数据）有意不调用 `report`，它仍通过管理器生成的结算通知到达 parent 最终答案。包测试另行固定了显式 `false` 的前台语义、parent 调度文本以及 child 的强制报告提示词。
 
