@@ -141,7 +141,10 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
     id: 'plugins',
-    order: 10,
+    // Distinct from the inventory tab's 10: both shipped order 10 once, and
+    // the stable tie then followed registration order, which varies with
+    // activation order — the two tabs swapped positions across environments.
+    order: 20,
     label: () => ctx.locale.bind(NS)('tab'),
     locale: NS,
     inject: injected,

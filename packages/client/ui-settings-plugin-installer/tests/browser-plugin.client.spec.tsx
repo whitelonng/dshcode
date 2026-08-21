@@ -119,7 +119,7 @@ describe('ui-settings-plugin-installer browser plugin', () => {
 
     const entry = requiredAt(b.slots.entries('settings.plugins.tab'), 0)
     expect(entry.component).toBe(PluginInstallerTab)
-    expect(entry.options).toMatchObject({ id: 'plugins', order: 10 })
+    expect(entry.options).toMatchObject({ id: 'plugins', order: 20 })
     expect(resolveSlotLabel(entry.options.label)).toBe('插件列表')
     expect(b.call).not.toHaveBeenCalled()
     expect(b.inventoryList).not.toHaveBeenCalled()

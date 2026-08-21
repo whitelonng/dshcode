@@ -14,7 +14,7 @@ fork 的 `web browser replay` 通道在 master 上因四个相互独立的原因
 
 **fork 的 replay 通道用 official profile 构建。** web job 现在设置 `DSH_BUILD_CLIENT_PROFILE: official`(与上游的兼容性冒烟一致),使 `ui-brand-official` 正常注册,`built-boot` 的字标 / `DSH Local Build` 断言成立。
 
-**「插件」分区的两个 tab 获得不同文案。** 上游的 `ui-settings-plugin-inventory`(运行时 fiber 清单)与 fork 的 `ui-settings-plugin-installer`(合并后的管理列表)都向 `settings.plugins.tab` 注册了标签「插件列表 / Plugin list」。清单 tab 改名为「插件状态 / Plugin status」;安装器保留「插件列表」,因为 settings e2e 将其固定为管理界面。
+**「插件」分区的两个 tab 获得不同文案与顺序。** 上游的 `ui-settings-plugin-inventory`(运行时 fiber 清单)与 fork 的 `ui-settings-plugin-installer`(合并后的管理列表)都向 `settings.plugins.tab` 注册了标签「插件列表 / Plugin list」。清单 tab 改名为「插件状态 / Plugin status」;安装器保留「插件列表」,因为 settings e2e 将其固定为管理界面。安装器同时改为 `order: 20`:两者原本都是 `order: 10`,分区的稳定排序随后跟随激活顺序决定的注册顺序,导致两个 tab 在不同环境间互换位置。
 
 **加固的是场景时序,不是产品。** `message-feedback-layout` 的 `settleAt` 现在要求三次间隔 150ms 的相同列宽读数——相邻两次读数会在窄视口翻转落定之前、以及轨道缓动的零速平台上各达成一次一致。`settings-chrome` 的启动主题场景只挂起异步插件包:modules 与 runtime 行是解析器阻塞的 head 预加载,启动队列需要它们,挂起它们会隐藏 `<body>`,加载页永远不出现。
 
