@@ -268,13 +268,16 @@ describe('SubagentHeaderLineage', () => {
 
     // Move the trigger before resize so the reposition is observable as a
     // style change, proving placeMenu re-reads the live trigger rectangle.
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+    // Spy on the prototype so the override holds regardless of the element
+    // identity placeMenu reads from triggerRef.
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
       x: 100, y: 200, width: 80, height: 24,
       top: 200, right: 180, bottom: 224, left: 100,
       toJSON: () => ({}),
     })
 
     fireEvent.resize(window)
+    expect(rect).toHaveBeenCalled()
     expect(menu.style.top).toBe(`${224 + 5}px`)
     expect(menu.style.left).toBe('100px')
 
