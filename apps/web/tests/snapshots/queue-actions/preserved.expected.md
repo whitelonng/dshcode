@@ -12,6 +12,10 @@
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -23,6 +27,8 @@
 - button "Good response":
   - img
 - button "Bad response":
+  - img
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img

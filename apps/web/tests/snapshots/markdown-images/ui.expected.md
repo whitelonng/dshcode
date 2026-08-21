@@ -21,6 +21,10 @@
 - paragraph: REMOTE_IMAGE_DONE
 - button "Copy":
   - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
 - button "Delete":
   - img
 - button "Branch into a new conversation":

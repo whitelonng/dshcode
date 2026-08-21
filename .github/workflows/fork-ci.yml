@@ -287,6 +287,7 @@ jobs:
       - name: Build and run keyless web browser replay
         env:
           DSH_SNAPSHOT: replay
+          DSH_BUILD_CLIENT_PROFILE: official
         run: pnpm run test:web
 
   coverage:

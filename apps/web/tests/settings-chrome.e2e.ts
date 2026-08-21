@@ -192,11 +192,21 @@ describe('web e2e: settings modal and General preferences', () => {
       .toMatch(/ui-theme:\n\s+preference: dark/)
     await page.keyboard.press('Escape')
 
-    // Hold real plugin bundles so the shell-owned loading page remains observable.
+    // Hold real plugin bundles so the shell-owned loading page remains
+    // observable. The modules and runtime rows are parser-blocking head
+    // preloads (the boot queue needs their registrations before the shell
+    // runs); holding them would block body parsing and hide the loading page
+    // entirely, so they pass through and the remaining plugin bundles hold
+    // the loader open.
     const pluginPattern = '**/plugins/**'
+    const preloadPathPattern = /\/plugins\/@deepseek-ai\/dsh-client-(?:modules|runtime)\/client\.js/
     let releaseBundles = (): void => {}
     const bundlesReleased = new Promise<void>((resolve) => { releaseBundles = resolve })
     await page.route(pluginPattern, async (route) => {
+      if (preloadPathPattern.test(new URL(route.request().url()).pathname)) {
+        await route.continue()
+        return
+      }
       await bundlesReleased
       await route.continue()
     })

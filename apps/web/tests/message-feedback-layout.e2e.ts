@@ -240,14 +240,21 @@ describe('web e2e: the feedback note editor floats above the column', () => {
    */
   const settleAt = async (width: number, editorOpen: boolean): Promise<PopoverMetrics> => {
     await page.setViewportSize({ width, height: 900 })
+    // The narrow-state flip that follows a resize lands a React render later,
+    // and the track ease starts with a zero-velocity plateau, so two adjacent
+    // reads can agree while the column is still far from its final width.
+    // Requiring the same width on three reads spaced 150ms apart skips both
+    // plateaus: the flip and the ease together outlast at most one gap, and a
+    // settled column reports the same width across all three.
     let previous = -1
+    let stableReads = 0
     await expect.poll(async () => {
       const current = await page.evaluate(() =>
         document.querySelector('[data-conversation-scroll]')?.clientWidth ?? -1)
-      const settled = current === previous
+      stableReads = current === previous ? stableReads + 1 : 0
       previous = current
-      return settled
-    }, { timeout: 10_000 }).toBe(true)
+      return stableReads >= 3
+    }, { timeout: 10_000, interval: 150 }).toBe(true)
     // The popover is JS-positioned from the trigger rect and re-places on
     // resize/scroll, so once the column width stops moving we nudge it to the
     // final layout; otherwise the panel can sit at a transient position from
