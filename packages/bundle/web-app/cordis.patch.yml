@@ -97,6 +97,11 @@
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
 
+    # Native-only multi-file chooser backing host.pickFiles (no remote browse
+    # twin: a remote client has no display to open a file chooser on).
+    - id: file-picker
+      name: '@deepseek-ai/dsh-host-file-picker-native'
+
     # Read-only projection of current Loader entries for trusted client RPCs.
     - id: plugin-inventory
       name: '@deepseek-ai/dsh-host-plugin-inventory'

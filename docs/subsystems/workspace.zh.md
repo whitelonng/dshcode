@@ -149,6 +149,22 @@ abstract capability(): DirectoryPickerCapability
 
 Source: [`packages/host/directory-picker/src/index.ts`](../../packages/host/directory-picker/src/index.ts)
 
+<a id="ctxfilepicker--filepicker-abstract-seam"></a>
+
+### `ctx.filePicker` — `FilePicker` (abstract seam)
+
+Abstract file-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.filePicker` (one implementation per context). The capability object must be stable for the service lifetime: consumers may capture it across calls.
+
+```ts cordis-catalog
+/**
+ * The backend's interaction capability.
+ * @returns the discriminated capability consumers switch on.
+ */
+abstract capability(): FilePickerCapability
+```
+
+Source: [`packages/host/file-picker/src/index.ts`](../../packages/host/file-picker/src/index.ts)
+
 <a id="ctxworkspaceregistry--workspaceregistry"></a>
 
 ### `ctx.workspaceRegistry` — `WorkspaceRegistry`

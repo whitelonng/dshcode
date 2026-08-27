@@ -3,6 +3,7 @@
  * together; introduce protocolVersion only when an independently released client appears.
  */
 
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { RpcRequest, RpcResponse } from './rpc.ts'
 
 /** One directory row of a listing: a child entry or a breadcrumb ancestor. */
@@ -30,6 +31,22 @@ export interface DirectoryListing {
   entries: DirectoryEntry[]
   /** True when the backend cut `entries` at its complete-result bound (the name-sorted tail is absent). */
   truncated: boolean
+}
+
+/** Settled result of one native file pick: cancellation versus the selected absolute paths. */
+export interface FilePickerResultView {
+  /** True when the operator dismissed the chooser; `paths` is then empty. */
+  cancelled: boolean
+  /** Absolute host paths in selection order; never interpreted as staged content. */
+  paths: string[]
+}
+
+/** One dragged name's located absolute paths (empty when no deterministic match). */
+export interface LocatedFilesItem {
+  /** The dragged file's basename as the client reported it. */
+  name: string
+  /** Absolute paths whose file basename equals `name`, in deterministic order. */
+  paths: string[]
 }
 
 /** Host-level unary methods. */
@@ -95,4 +112,26 @@ export interface HostApi {
     request: RpcRequest<{ path: string }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<{ opened: true }>>
+
+  /**
+   * Open the operating system's native file chooser (single or multiple).
+   * Dismissal returns `cancelled: true`; selection returns every absolute path.
+   * Only served under the `native` capability.
+   */
+  pickFiles(
+    request: RpcRequest<{ multiple?: boolean }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<FilePickerResultView>>
+
+  /**
+   * Resolve dragged file basenames to absolute paths against the target
+   * session's workspace. The browser can never read a dragged file's host path,
+   * so the host walks the workspace for exact-basename matches. Names with no
+   * match return an empty `paths` list; the caller invites the operator to use
+   * the native picker instead.
+   */
+  locateFiles(
+    request: RpcRequest<{ sessionId: SessionId; names: string[] }>,
+    signal: AbortSignal,
+  ): Promise<RpcResponse<{ items: LocatedFilesItem[] }>>
 }

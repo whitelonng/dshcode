@@ -30,6 +30,8 @@
   - text: Standard mode
   - img
 - textbox "Describe what you want to build"
+- button "Add files":
+  - img
 - button "Commands":
   - img
 - tooltip "Commands"

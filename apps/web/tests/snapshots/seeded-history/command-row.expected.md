@@ -52,6 +52,8 @@
 - img
 - text: permission preset read-only
 - textbox "Message the agent"
+- button "Add files":
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Read Only"': Read Only

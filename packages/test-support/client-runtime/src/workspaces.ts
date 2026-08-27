@@ -109,6 +109,30 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * File picker (recorded). The default cancels; stub to select paths.
+   * @returns cancellation plus selected absolute paths.
+   */
+  async pickFiles(): Promise<{ cancelled: boolean; paths: string[] }> {
+    this.calls.push({ method: 'pickFiles', args: [] })
+    const stub = this.stubs.get('pickFiles')
+    if (stub !== undefined) return await (stub() as Promise<{ cancelled: boolean; paths: string[] }>)
+    return { cancelled: true, paths: [] }
+  }
+
+  /**
+   * Drag-location (recorded). The default finds nothing; stub to resolve.
+   * @param sessionId - target session.
+   * @param names - dragged basenames.
+   * @returns one item per name, each with an empty `paths` list by default.
+   */
+  async locateFiles(sessionId: SessionId, names: string[]): Promise<Array<{ name: string; paths: string[] }>> {
+    this.calls.push({ method: 'locateFiles', args: [sessionId, names] })
+    const stub = this.stubs.get('locateFiles')
+    if (stub !== undefined) return await (stub(sessionId, names) as Promise<Array<{ name: string; paths: string[] }>>)
+    return names.map(name => ({ name, paths: [] }))
+  }
+
+  /**
    * Browse listing (recorded). The default serves an empty home level; stub
    * to shape a tree.
    * @param path - absolute directory to list; absent lists the home level.

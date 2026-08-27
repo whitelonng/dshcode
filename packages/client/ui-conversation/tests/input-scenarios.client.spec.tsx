@@ -159,6 +159,8 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
       file: new File([Uint8Array.of(1)], `${id}.png`, { type: 'image/png' }),
       previewUrl: `blob:${id}`,
     })),
+    pickFiles: () => Promise.resolve({ cancelled: true, paths: [] }),
+    locateFiles: () => Promise.resolve([]),
     resolveSubmitMode: () => 'queue',
     toggleCommandMenu: (selection) => {
       const snapshot = shell.snapshot
