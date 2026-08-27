@@ -701,6 +701,45 @@ describe('arbitrate', () => {
     expect(controller.menu.getSnapshot().open).toBe(false)
   })
 
+  it('tab completes the highlighted leading slash command as text, never a pick', async () => {
+    const cmd = readySource('/', 'command', [{ name: 'goal' }, { name: 'plan' }], () => undefined)
+    const { controller, actx } = controllerBench([cmd.source])
+    const texts: Array<{ text: string; span: unknown }> = []
+    actx.on('slash/input-insert-text', (req) => {
+      texts.push(req)
+      return true
+    })
+    controller.track('/g', 2, { tier: 'plain' }, 1)
+    await tick()
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(texts).toEqual([{ text: '/goal ', span: { start: 0, end: 2, draftRev: 1 } }])
+    // No pick: picking a bare command executes it; tab only completes text.
+    expect(cmd.picks).toEqual([])
+    expect(controller.menu.getSnapshot().open).toBe(false)
+  })
+
+  it('tab consumes without acting on a non-leading token or another trigger', async () => {
+    const inline = readySource('/', 'command', [{ name: 'goal' }], () => undefined)
+    const at = readySource('@', 'reference', [{ name: 'session' }], () => undefined)
+    const { controller, actx } = controllerBench([inline.source, at.source])
+    const texts: unknown[] = []
+    actx.on('slash/input-insert-text', (req) => {
+      texts.push(req)
+      return true
+    })
+    controller.track('prefix /g', 9, { tier: 'plain' }, 1)
+    await tick()
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(inline.picks).toEqual([])
+    expect(controller.menu.getSnapshot().open).toBe(true)
+    controller.track('@s', 2, { tier: 'plain' }, 1)
+    await tick()
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(at.picks).toEqual([])
+    expect(texts).toEqual([])
+    expect(controller.menu.getSnapshot().open).toBe(true)
+  })
+
   it('escape closes and consumes', async () => {
     const { controller } = await menuBench()
     expect(controller.arbitrate('escape', false)).toBe('consumed')
@@ -709,19 +748,23 @@ describe('arbitrate', () => {
 
   it('IME composition passes every key untouched', async () => {
     const { controller } = await menuBench()
-    for (const key of ['up', 'down', 'enter', 'escape'] as const) {
+    for (const key of ['up', 'down', 'enter', 'tab', 'escape'] as const) {
       expect(controller.arbitrate(key, true)).toBe('pass')
     }
     expect(controller.menu.getSnapshot().open).toBe(true)
   })
 
-  it('closed menu passes; an open menu without a highlight passes enter', () => {
+  it('closed menu passes; an open menu without a highlight consumes tab and passes enter', () => {
     const cmd = deferredSource('/', 'command')
     const { controller } = controllerBench([cmd.source])
     expect(controller.arbitrate('enter', false)).toBe('pass')
-    // Open with the only group still pending: nothing to pick yet.
+    expect(controller.arbitrate('tab', false)).toBe('pass')
+    // Open with the only group still pending: nothing to pick or complete yet
+    // — tab is consumed so the focus walk cannot escape the composer.
     controller.track('/g', 2, { tier: 'plain' }, 1)
     expect(controller.arbitrate('enter', false)).toBe('pass')
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(controller.menu.getSnapshot().open).toBe(true)
   })
 })
 

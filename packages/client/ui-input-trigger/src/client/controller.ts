@@ -196,12 +196,39 @@ export class InputTriggerController {
         this.reduce({ type: 'close' })
         return 'consumed'
       }
+      case 'tab': {
+        return this.complete(state)
+      }
       case 'enter': {
         if (state.highlight === null) return 'pass'
         this.pick(state.highlight.source, state.highlight.index)
         return 'pick-highlighted'
       }
     }
+  }
+
+  /**
+   * Tab arbitration: complete the highlighted leading slash command as plain
+   * text — never a pick, because picking a bare (argument-less) command
+   * executes it immediately. Every other open-menu state consumes the key
+   * without acting so the browser's focus walk cannot escape the composer
+   * while the menu is up.
+   * @param state - live menu state.
+   * @returns 'consumed' whenever the menu is open; 'pass' is unreachable here
+   * (the caller checks the open state first).
+   */
+  private complete(state: MenuState): ArbitrateOutcome {
+    const highlight = state.highlight
+    if (highlight === null) return 'consumed'
+    const hit = this.hit
+    if (hit === null || hit.trigger !== '/' || hit.position !== 'leading') return 'consumed'
+    const group = state.groups.find(g => g.source === highlight.source)
+    const candidate = group !== undefined && group.status === 'ready' ? group.items[highlight.index] : undefined
+    if (candidate === undefined) return 'consumed'
+    this.stopFetch()
+    this.reduce({ type: 'close' })
+    this.execute({ text: `/${candidate.name} ` }, hit.span)
+    return 'consumed'
   }
 
   /**

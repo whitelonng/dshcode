@@ -13,7 +13,7 @@ import {
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { ClientContext, ConversationSnapshot, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { ArbitrateKey, ArbitrateOutcome, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import { SessionInputShell } from '../src/client/input/facade.ts'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps,
@@ -98,6 +98,8 @@ interface BenchOptions {
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
+  /** The slash menu's keyboard-arbitration verdicts (the Tab-completion benches). */
+  arbitrate?: (key: ArbitrateKey, composing: boolean) => ArbitrateOutcome
 }
 
 /** One pending queue row (the runtime snapshot shape, as the dock tests build it). */
@@ -138,10 +140,11 @@ function bench(over?: BenchOptions) {
     // seat) plus the optional arbitrate face (menu-keyboard benches);
     // adjudication stays untouched (undefined slash methods are never
     // reached — plain-draft flows only).
-    ...(lex !== undefined
+    ...((lex !== undefined || over?.arbitrate !== undefined)
       ? {
         inputTriggers: (() => ({
           lexicon: { getSnapshot: () => lex ?? NO_LEXICON, subscribe: () => () => {} },
+          ...(over?.arbitrate !== undefined ? { arbitrate: over.arbitrate } : {}),
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
       : {}),
@@ -516,6 +519,19 @@ describe('Enter semantics', () => {
     fireEvent.keyDown(textarea, { key: 'a' })
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
     expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('Tab arbitration that consumed the key preventDefaults the focus walk', () => {
+    const arbitrate = vi.fn(() => 'consumed' as const)
+    const { textarea } = bench({ draft: '/go', arbitrate })
+    // false = the event was preventDefault'd: no focus walk to the toolbar.
+    expect(fireEvent.keyDown(textarea, { key: 'Tab' })).toBe(false)
+    expect(arbitrate).toHaveBeenCalledWith('tab', false)
+  })
+
+  it('Tab without an open menu passes through to native focus behavior', () => {
+    const { textarea } = bench({ draft: '/go', arbitrate: () => 'pass' })
+    expect(fireEvent.keyDown(textarea, { key: 'Tab' })).toBe(true)
   })
 
   it('Shift+Enter newline wins even inside IME composition (unconditional precedence)', () => {
