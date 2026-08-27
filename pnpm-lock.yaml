@@ -534,6 +534,12 @@ importers:
       '@deepseek-ai/dsh-host-directory-picker-native':
         specifier: workspace:^
         version: link:../../packages/host/directory-picker-native
+      '@deepseek-ai/dsh-host-file-picker':
+        specifier: workspace:^
+        version: link:../../packages/host/file-picker
+      '@deepseek-ai/dsh-host-file-picker-native':
+        specifier: workspace:^
+        version: link:../../packages/host/file-picker-native
       '@deepseek-ai/dsh-host-plugin-control':
         specifier: workspace:^
         version: link:../../packages/host/plugin-control
@@ -1834,6 +1840,12 @@ importers:
       '@deepseek-ai/dsh-host-directory-picker-native':
         specifier: workspace:^
         version: link:../../host/directory-picker-native
+      '@deepseek-ai/dsh-host-file-picker':
+        specifier: workspace:^
+        version: link:../../host/file-picker
+      '@deepseek-ai/dsh-host-file-picker-native':
+        specifier: workspace:^
+        version: link:../../host/file-picker-native
       '@deepseek-ai/dsh-host-frontend-static':
         specifier: workspace:^
         version: link:../../host/frontend-static
@@ -2353,6 +2365,9 @@ importers:
       '@deepseek-ai/dsh-compaction':
         specifier: workspace:^
         version: link:../../compaction/compaction
+      '@deepseek-ai/dsh-file-reference':
+        specifier: workspace:^
+        version: link:../../context/file-reference
       '@deepseek-ai/dsh-goal':
         specifier: workspace:^
         version: link:../../goal/goal
@@ -5808,6 +5823,31 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.22.4
+
+  packages/host/file-picker:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/host/file-picker-native:
+    dependencies:
+      '@deepseek-ai/dsh-host-file-picker':
+        specifier: workspace:^
+        version: link:../file-picker
+      '@deepseek-ai/dsh-native-command':
+        specifier: workspace:^
+        version: link:../../util/native-command
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
 
   packages/host/frontend-static:
     dependencies:
@@ -12888,6 +12928,7 @@ packages:
   '@xmldom/xmldom@0.8.14':
     resolution: {integrity: sha512-T4EDRUBVZYRldYApjEJiU0e1stYWaRAX7CuSnKzrpwdZKo53zGV8/pqfzV6FfwNl9YThD2OumQYvqtvjvgG7aQ==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@yarnpkg/cli-dist@4.17.1':
     resolution: {integrity: sha512-2tiSQuJNl/L3QwTdrq6lKWDpkcnp9MGvCT/rIldHcbu3SWfnLdmehvt3eulX1hT7FFt1Gjfq3CesF+kvhFip6g==}

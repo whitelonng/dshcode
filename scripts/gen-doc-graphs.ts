@@ -533,6 +533,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Discriminated interaction capability: the native backend opens one OS chooser on the host display, the browse backend serves listing/creation primitives for the in-app browser; dual-face backends fill ui-workspace directory-flow slots from their browser halves (no wire advertisement).',
   },
   {
+    key: 'filePicker',
+    pkg: 'file-picker',
+    title: 'File picking seam',
+    mode: 'seam',
+    implementations: ['file-picker-native'],
+    consumers: ['apiproxy'],
+    note: 'Native-only picking seam: the native backend opens one OS chooser on the host display and returns selected absolute paths without staging bytes; the basename location helper (./locate) walks the workspace tree to resolve a dragged file name, and apiproxy serves both through the host RPC surface.',
+  },
+  {
     key: 'webServer',
     pkg: 'webserver',
     title: 'HTTP route registration',

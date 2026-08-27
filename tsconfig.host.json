@@ -301,6 +301,8 @@
     { "path": "./packages/host/directory-picker-auto" },
     { "path": "./packages/host/directory-picker-browse" },
     { "path": "./packages/host/directory-picker-native" },
+    { "path": "./packages/host/file-picker" },
+    { "path": "./packages/host/file-picker-native" },
     { "path": "./packages/host/frontend-static" },
     { "path": "./packages/host/plugin-control" },
     { "path": "./packages/host/plugin-installer" },

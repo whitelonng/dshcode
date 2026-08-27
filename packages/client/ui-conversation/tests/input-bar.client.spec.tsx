@@ -40,6 +40,9 @@ const NATIVE_SET_START = Object.getOwnPropertyDescriptor(Range.prototype, 'setSt
 const SCTX = {} as ClientContext
 const SID = 's1' as SessionId
 
+/** Stable empty lexicon snapshot (uSES requires a same-reference idle answer). */
+const NO_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
+
 function snapshotOf(overrides: Partial<ConversationSnapshot> = {}): ConversationSnapshot {
   return {
     sessionId: SID, views: EMPTY_CONVERSATION_VIEWS, chat: EMPTY_CHAT_SNAPSHOT,
@@ -90,6 +93,8 @@ interface BenchOptions {
   rightItems?: React.ReactNode
   attachments?: readonly ComposerAttachment[]
   addImages?: (files: readonly File[]) => string | null
+  pickFiles?: () => Promise<{ cancelled: boolean; paths: string[] }>
+  locateFiles?: (names: string[]) => Promise<Array<{ name: string; paths: string[] }>>
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
@@ -129,12 +134,14 @@ function bench(over?: BenchOptions) {
       subscribe: fn => session.subscribe(fn),
     },
     ...(over?.steerQueue !== undefined ? { steerQueue: over.steerQueue } : {}),
-    // Lexicon-only stub: adjudication untouched (undefined slash methods are
-    // never reached — these benches drive plain-draft flows only).
+    // Slash stub: the lexicon face (read unconditionally by the useLexicon
+    // seat) plus the optional arbitrate face (menu-keyboard benches);
+    // adjudication stays untouched (undefined slash methods are never
+    // reached — plain-draft flows only).
     ...(lex !== undefined
       ? {
         inputTriggers: (() => ({
-          lexicon: { getSnapshot: () => lex, subscribe: () => () => {} },
+          lexicon: { getSnapshot: () => lex ?? NO_LEXICON, subscribe: () => () => {} },
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
       : {}),
@@ -171,6 +178,8 @@ function bench(over?: BenchOptions) {
     inputActions: shell.actions,
     keyboard: shell,
     addImages: over?.addImages ?? (() => null),
+    pickFiles: over?.pickFiles ?? (() => Promise.resolve({ cancelled: true, paths: [] })),
+    locateFiles: over?.locateFiles ?? (() => Promise.resolve([])),
     removeImage,
     draftImages: ids => ids.flatMap((id) => {
       const attachment = over?.attachments?.find(candidate => candidate.id === id)
@@ -292,27 +301,17 @@ describe('image draft rail', () => {
     expect(within.view.queryByRole('alert')).toBeNull()
   })
 
-  it('announces the format problem before any limit when the batch holds a non-image', () => {
-    const addImages = vi.fn(() => '仅支持 PNG、JPG、WebP、GIF 格式的图片')
-    const result = bench({
-      addImages,
-      imageLimits: {
-        maxImageBytes: 8,
-        maxImagesPerMessage: 1,
-        maxMessageImageBytes: 8,
-        maxImagePixels: 40_000_000,
-        maxImageDimension: 2000,
-        mediaTypes: ['image/png'] as const,
-      },
-    })
-    // Oversized AND over-count AND wrong type: the format rejection wins.
+  it('routes non-image files to basename location instead of the image rail', async () => {
+    const addImages = vi.fn(() => null)
+    const locateFiles = vi.fn((names: string[]) => Promise.resolve(names.map(name => ({ name, paths: [] }))))
+    const result = bench({ addImages, locateFiles })
     const files = [
       new File([new ArrayBuffer(64)], 'a.pdf', { type: 'application/pdf' }),
       new File([new ArrayBuffer(64)], 'b.pdf', { type: 'application/pdf' }),
     ]
     act(() => { attachmentOwner(result.slotCalls).onAddImages(files) })
-    expect(addImages).toHaveBeenCalledWith(files)
-    expect(result.view.getByRole('alert').textContent).toContain('仅支持 PNG、JPG、WebP、GIF 格式的图片')
+    expect(addImages).not.toHaveBeenCalled()
+    await vi.waitFor(() => { expect(locateFiles).toHaveBeenCalledWith(['a.pdf', 'b.pdf']) })
   })
 
   it('projects display-ready limits into the attachment slot', () => {
@@ -376,11 +375,13 @@ describe('image draft rail', () => {
     })
   })
 
-  it('announces an image-intake rejection as a fading toast, repeatable for the same reason', () => {
+  it('announces a failed file location as a fading toast, repeatable for the same reason', async () => {
     vi.useFakeTimers()
     try {
-      const addImages = vi.fn(() => '仅支持 PNG、JPG、WebP、GIF 格式的图片')
-      const { view, textarea } = bench({ addImages })
+      const { view, textarea } = bench({
+        addImages: vi.fn(() => null),
+        locateFiles: names => Promise.resolve(names.map(name => ({ name, paths: [] }))),
+      })
       const paste = () => {
         fireEvent.paste(textarea, {
           clipboardData: {
@@ -390,12 +391,12 @@ describe('image draft rail', () => {
         })
       }
       paste()
-      expect(view.getByRole('alert').textContent).toContain('仅支持 PNG、JPG、WebP、GIF 格式的图片')
+      await vi.waitFor(() => { expect(view.getByRole('alert').textContent).toContain('无法定位文件') })
       act(() => { vi.advanceTimersByTime(4000) })
       expect(view.queryByRole('alert')).toBeNull()
-      // The identical rejection re-announces: the toast is keyed per show.
+      // The identical miss re-announces: the toast is keyed per show.
       paste()
-      expect(view.getByRole('alert').textContent).toContain('仅支持 PNG、JPG、WebP、GIF 格式的图片')
+      await vi.waitFor(() => { expect(view.getByRole('alert').textContent).toContain('无法定位文件') })
     } finally {
       vi.useRealTimers()
     }
@@ -410,6 +411,37 @@ describe('image draft rail', () => {
       ])
     })
     expect(result.view.getByRole('alert').textContent).toContain('图片读取服务不可用')
+  })
+
+  it('inserts @path mentions from the native multi-file picker', async () => {
+    const pickFiles = vi.fn(async () => ({ cancelled: false, paths: ['/tmp/a.txt', '/tmp/b c.txt'] }))
+    const result = bench({ pickFiles })
+    const addButton = result.view.container.querySelector<HTMLButtonElement>('button[aria-label="添加文件"]')!
+    await act(async () => { fireEvent.click(addButton) })
+    expect(pickFiles).toHaveBeenCalled()
+    expect(result.shell.snapshot.draft).toBe('@/tmp/a.txt @"/tmp/b c.txt"')
+  })
+
+  it('inserts one @path mention when a dragged file resolves to exactly one match', async () => {
+    const locateFiles = vi.fn(async (names: string[]) => names.map(name => ({ name, paths: [`/work/${name}`] })))
+    const result = bench({ locateFiles })
+    act(() => {
+      attachmentOwner(result.slotCalls).onAddImages([new File(['x'], 'note.txt', { type: 'text/plain' })])
+    })
+    await vi.waitFor(() => {
+      expect(result.shell.snapshot.draft).toBe('@/work/note.txt')
+    })
+  })
+
+  it('announces a failed file-location lookup as a toast', async () => {
+    const locateFiles = vi.fn(async () => { throw new Error('location exploded') })
+    const result = bench({ locateFiles })
+    act(() => {
+      attachmentOwner(result.slotCalls).onAddImages([new File(['x'], 'note.txt', { type: 'text/plain' })])
+    })
+    await vi.waitFor(() => {
+      expect(result.view.getByRole('alert').textContent).toContain('location exploded')
+    })
   })
 })
 

@@ -56,6 +56,8 @@
   - text: "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}. Session sharing is not configured."
 - text: "Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}. Session sharing is not configured."
 - textbox "Message the agent"
+- button "Add files":
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Read Only"': Read Only

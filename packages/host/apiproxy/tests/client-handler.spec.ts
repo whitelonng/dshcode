@@ -80,6 +80,8 @@ function scriptedApi(overrides: {
       listDirectory: r => ok(r, { path: '/t', home: '/t', crumbs: [], entries: [], truncated: false }),
       createDirectory: r => ok(r, { path: '/t/new' }),
       openPath: r => ok(r, { opened: true as const }),
+      pickFiles: r => ok(r, { cancelled: true, paths: [] }),
+      locateFiles: r => ok(r, { items: r.payload.names.map((name: string) => ({ name, paths: [] })) }),
       ...overrides.host,
     },
     workspace: {

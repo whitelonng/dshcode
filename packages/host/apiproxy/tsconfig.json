@@ -93,6 +93,9 @@
       "path": "../directory-picker"
     },
     {
+      "path": "../file-picker"
+    },
+    {
       "path": "../../extensions/cordis-host-runner"
     },
     {

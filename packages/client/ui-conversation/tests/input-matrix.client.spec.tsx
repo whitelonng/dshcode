@@ -59,6 +59,8 @@ function mountBar(shell: SessionInputShell, over?: { running?: boolean; disabled
       file: new File([Uint8Array.of(1)], `${id}.png`, { type: 'image/png' }),
       previewUrl: `blob:${id}`,
     })),
+    pickFiles: () => Promise.resolve({ cancelled: true, paths: [] }),
+    locateFiles: () => Promise.resolve([]),
     resolveSubmitMode: () => 'queue',
     toggleCommandMenu: vi.fn(),
     useNotices: bindSnapshotSelector(shell.notices),
