@@ -99,6 +99,9 @@ import type {
 } from '@deepseek-ai/dsh-user-questions'
 import { UserQuestionError } from '@deepseek-ai/dsh-user-questions'
 import { DirectoryPickerError } from '@deepseek-ai/dsh-host-directory-picker'
+import { locateByName } from '@deepseek-ai/dsh-host-file-picker/locate'
+// Type-only: pulls the ctx.filePicker Context merge into this Host face.
+import type {} from '@deepseek-ai/dsh-host-file-picker'
 import {
   ApiRemoteSessionNotFound as SessionNotFound,
   ApiRemoteSubagentSessionOwnership as SubagentSessionOwnership,
@@ -3211,6 +3214,76 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return err(request, {
             code: 'internal',
             message: `directory picker failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: {},
+          })
+        }
+      },
+
+      async pickFiles(request, signal) {
+        const capability = ctx.filePicker.capability()
+        // oxlint-disable-next-line typescript/no-unnecessary-condition -- the seam is merge-extensible; future kinds fail loud here.
+        if (capability.kind !== 'native') {
+          return err(request, {
+            code: 'file-picker-unavailable',
+            message: `host.pickFiles needs the native capability; the composed picker serves "${String(capability.kind)}"`,
+            details: { capability: capability.kind },
+          })
+        }
+        try {
+          const result = await capability.pickFiles({ multiple: request.payload.multiple ?? false }, signal)
+          return ok(request, result === null ? { cancelled: true, paths: [] } : { cancelled: false, paths: result.paths })
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'file picker was aborted', details: {} })
+          }
+          return err(request, {
+            code: 'internal',
+            message: `file picker failed: ${error instanceof Error ? error.message : String(error)}`,
+            details: {},
+          })
+        }
+      },
+
+      async locateFiles(request, signal) {
+        try {
+          signal.throwIfAborted()
+          const names = request.payload.names
+          const sessionId = request.payload.sessionId
+          // Live agent first; a detached/cold session falls back to its persisted
+          // header cwd, never this process's launch directory (searching an
+          // unrelated tree could match and insert the WRONG file's path).
+          const liveCwd = ctx.agents.get(sessionId)?.session.header.cwd
+          let cwd = liveCwd
+          if (cwd === undefined) {
+            try {
+              cwd = (await inspectServable(sessionId)).meta.cwd
+            } catch (error: unknown) {
+              // A session with no cwd (or none at all) has no workspace to search:
+              // an empty result, not an internal failure.
+              if (error instanceof SessionNotFound) {
+                return ok(request, { items: names.map(name => ({ name, paths: [] })) })
+              }
+              throw error
+            }
+          }
+          // Type guard: inspectServable can name an optional cwd; a missing one
+          // is refused above, so nothing to search here either.
+          /* v8 ignore next 3 -- inspectServable throws without a cwd; this guard only narrows the type. */
+          if (cwd === undefined) {
+            return ok(request, { items: names.map(name => ({ name, paths: [] })) })
+          }
+          const items = await Promise.all(names.map(async name => ({
+            name,
+            paths: await locateByName(cwd, name, {}, signal),
+          })))
+          return ok(request, { items })
+        } catch (error: unknown) {
+          if (signal.aborted) {
+            return err(request, { code: 'cancelled', message: 'file location was aborted', details: {} })
+          }
+          return err(request, {
+            code: 'internal',
+            message: `file location failed: ${error instanceof Error ? error.message : String(error)}`,
             details: {},
           })
         }

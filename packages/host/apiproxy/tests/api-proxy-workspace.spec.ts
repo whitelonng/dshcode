@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -13,6 +13,7 @@ import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { DirectoryPickerError } from '@deepseek-ai/dsh-host-directory-picker'
 import type { DirectoryPickerCapability } from '@deepseek-ai/dsh-host-directory-picker'
+import type { FilePickerCapability } from '@deepseek-ai/dsh-host-file-picker'
 import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
 import type { HostFrame, WorkspaceId } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { RpcRequest, RpcResponse } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
@@ -67,6 +68,8 @@ async function harness(
     canOpenPath?: () => boolean
     /** Headers seeded into the persistence stub (sessions that are not live). */
     persisted?: readonly SessionHeader[]
+    /** Native file-picker capability (default: cancels). */
+    filePicker?: FilePickerCapability
   } = {},
 ) {
   const ctx = new Context()
@@ -83,6 +86,12 @@ async function harness(
     list: () => Promise.resolve([...persisted.values()]),
     // Mirrors the coordinator contract: a successful delete emits session/deleted.
     delete: async (id: SessionId) => { persisted.delete(id); ctx.emit('session/deleted', id) },
+    // Cold-session inspection: the header back one persisted session.
+    inspect: async (id: SessionId) => {
+      const header = persisted.get(id)
+      if (header === undefined) throw new Error(`no persisted session ${String(id)}`)
+      return { meta: header, events: [] }
+    },
   } as never)
   await ctx.plugin(WorkspaceRegistry)
 
@@ -110,6 +119,8 @@ async function harness(
   // Structural picker fake: the gateway only reads capability(); a stable
   // object per harness mirrors the seam's stability contract.
   ctx.provide('directoryPicker', { capability: () => picker } as never)
+  const filePicker = extras.filePicker ?? { kind: 'native', pickFiles: async () => null }
+  ctx.provide('filePicker', { capability: () => filePicker } as never)
   const api = createApiProxy(ctx, {
     defaultModelSelection: () => ({ provider: 'test', model: 'test-model' }),
     cwd: root,
@@ -163,6 +174,94 @@ describe('host.pickDirectory', () => {
       ok: false,
       error: { code: 'directory-picker-unavailable', details: { capability: 'browse' } },
     })
+  })
+})
+
+const FILE_SESSION = 'file-picker-session-1' as SessionId
+
+describe('host.pickFiles', () => {
+  it('returns selected paths or explicit cancellation', async () => {
+    const selected = await harness(undefined, undefined, {
+      filePicker: { kind: 'native', pickFiles: async () => ({ paths: ['/a/x.txt'] }) },
+    })
+    expect((await selected.api.host.pickFiles(request({ multiple: true }), new AbortController().signal)).result)
+      .toEqual({ ok: true, value: { cancelled: false, paths: ['/a/x.txt'] } })
+
+    const cancelled = await harness(undefined, undefined, {
+      filePicker: { kind: 'native', pickFiles: async () => null },
+    })
+    expect((await cancelled.api.host.pickFiles(request({}), new AbortController().signal)).result)
+      .toEqual({ ok: true, value: { cancelled: true, paths: [] } })
+  })
+
+  it('refuses under a non-native backend', async () => {
+    const { api } = await harness(undefined, undefined, {
+      filePicker: { kind: 'browse' } as unknown as FilePickerCapability,
+    })
+    const response = await api.host.pickFiles(request({}), new AbortController().signal)
+    expect(response.result).toMatchObject({ ok: false, error: { code: 'file-picker-unavailable', details: { capability: 'browse' } } })
+  })
+
+  it('propagates abort as a cancelled RPC error', async () => {
+    const { api } = await harness(undefined, undefined, {
+      filePicker: { kind: 'native', pickFiles: (_options, signal) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true })
+      }) },
+    })
+    const abort = new AbortController()
+    const pending = api.host.pickFiles(request({}), abort.signal)
+    abort.abort()
+    expect((await pending).result).toMatchObject({ ok: false, error: { code: 'cancelled' } })
+  })
+
+  it('folds a non-abort chooser failure into an internal error', async () => {
+    const { api } = await harness(undefined, undefined, {
+      filePicker: { kind: 'native', pickFiles: async () => { throw new Error('no chooser installed') } },
+    })
+    const response = await api.host.pickFiles(request({}), new AbortController().signal)
+    expect(response.result).toMatchObject({ ok: false, error: { code: 'internal' } })
+  })
+})
+
+describe('host.locateFiles', () => {
+  function staged(name: string): string {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-locate-'))
+    mkdirSync(join(root, 'sub'), { recursive: true })
+    writeFileSync(join(root, 'sub', name), 'x')
+    return join(root, 'sub', name)
+  }
+
+  it('locates against a live session cwd', async () => {
+    const path = staged('live.txt')
+    const cwd = join(path, '..', '..')
+    const { api, ctx } = await harness()
+    await ctx.agents.create({ sessionId: FILE_SESSION, meta: { cwd } })
+    const response = await api.host.locateFiles(request({ sessionId: FILE_SESSION, names: ['live.txt'] }), new AbortController().signal)
+    expect(response.result).toMatchObject({ ok: true, value: { items: [{ name: 'live.txt', paths: [path] }] } })
+  })
+
+  it('falls back to the persisted header cwd when the session is cold', async () => {
+    const path = staged('cold.txt')
+    const cwd = join(path, '..', '..')
+    const { api } = await harness(undefined, undefined, {
+      persisted: [{ id: FILE_SESSION, createdAt: 0, cwd } as SessionHeader],
+    })
+    const response = await api.host.locateFiles(request({ sessionId: FILE_SESSION, names: ['cold.txt'] }), new AbortController().signal)
+    expect(response.result).toMatchObject({ ok: true, value: { items: [{ name: 'cold.txt', paths: [path] }] } })
+  })
+
+  it('returns empty paths for a session with no resolvable cwd', async () => {
+    const { api } = await harness()
+    const response = await api.host.locateFiles(request({ sessionId: FILE_SESSION, names: ['x.txt'] }), new AbortController().signal)
+    expect(response.result).toMatchObject({ ok: true, value: { items: [{ name: 'x.txt', paths: [] }] } })
+  })
+
+  it('rejects an abort as cancelled', async () => {
+    const { api } = await harness()
+    const abort = new AbortController()
+    abort.abort()
+    const response = await api.host.locateFiles(request({ sessionId: FILE_SESSION, names: ['x.txt'] }), abort.signal)
+    expect(response.result).toMatchObject({ ok: false, error: { code: 'cancelled' } })
   })
 })
 

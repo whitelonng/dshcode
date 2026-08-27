@@ -81,6 +81,8 @@
     "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
     "@deepseek-ai/dsh-host-directory-picker-browse": "workspace:^",
     "@deepseek-ai/dsh-host-directory-picker-native": "workspace:^",
+    "@deepseek-ai/dsh-host-file-picker": "workspace:^",
+    "@deepseek-ai/dsh-host-file-picker-native": "workspace:^",
     "@deepseek-ai/dsh-host-plugin-control": "workspace:^",
     "@deepseek-ai/dsh-host-plugin-installer": "workspace:^",
     "@deepseek-ai/dsh-host-plugin-inventory": "workspace:^",

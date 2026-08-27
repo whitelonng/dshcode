@@ -582,6 +582,10 @@ export interface ComposerBarInjected {
   removeImage: ((id: DraftAttachmentId) => void) | undefined
   /** Resolve ordered input ids to browser-owned draft images. */
   draftImages: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
+  /** Open the host's native multi-file picker; resolved absolute paths are empty when the operator cancels. */
+  pickFiles: (() => Promise<{ cancelled: boolean; paths: string[] }>) | undefined
+  /** Resolve dragged file basenames to absolute paths inside this session's workspace (empty when no match). */
+  locateFiles: ((names: string[]) => Promise<Array<{ name: string; paths: string[] }>>) | undefined
   /** Resolve one keyboard submission gesture against the current running state and persisted preference. */
   resolveSubmitMode: (
     running: boolean,

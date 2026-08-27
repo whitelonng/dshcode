@@ -50,6 +50,8 @@
   - img
   - text: Context injection AGENTS.md
 - textbox "Message the agent"
+- button "Add files":
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

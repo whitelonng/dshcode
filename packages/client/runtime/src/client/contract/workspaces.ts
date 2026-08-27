@@ -40,6 +40,19 @@ export interface IWorkspaces {
    */
   pickDirectory(): Promise<string | null>
   /**
+   * Open the Host's native multi-file picker.
+   * @returns cancellation plus the selected absolute paths (empty on cancel).
+   */
+  pickFiles(): Promise<{ cancelled: boolean; paths: string[] }>
+  /**
+   * Resolve dragged file basenames to absolute paths against the target
+   * session's workspace.
+   * @param sessionId - session whose workspace roots the exact-basename walk.
+   * @param names - dragged file basenames (leading directories are dropped).
+   * @returns one item per name, its `paths` empty when no deterministic match.
+   */
+  locateFiles(sessionId: SessionId, names: string[]): Promise<Array<{ name: string; paths: string[] }>>
+  /**
    * List one directory level through the Host's `browse` capability.
    * @param path - absolute directory to list; absent lists the Host home directory.
    * @param signal - aborts the wire request (and the Host's scan) when the caller supersedes it.

@@ -175,6 +175,13 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async openPath(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { opened: true as const } } }
       },
+      async pickFiles(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { cancelled: true, paths: [] } } }
+      },
+      async locateFiles(request) {
+        const items = request.payload.names.map((name: string) => ({ name, paths: [] }))
+        return { rpcId: request.rpcId, result: { ok: true, value: { items } } }
+      },
     },
     workspace: {
       async list(request) {

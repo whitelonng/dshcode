@@ -68,7 +68,7 @@ export interface Config {
  */
 export class ApiProxyService extends Service implements ApiProxy {
   static inject = [
-    'agentDefaultModel', 'agents', 'attachments', 'directoryPicker', 'llm', 'sessions', 'subagents', 'sessionPersistence',
+    'agentDefaultModel', 'agents', 'attachments', 'directoryPicker', 'filePicker', 'llm', 'sessions', 'subagents', 'sessionPersistence',
     'sessionQuery', 'tools', 'userQuestions', 'workspaceRegistry',
   ]
 

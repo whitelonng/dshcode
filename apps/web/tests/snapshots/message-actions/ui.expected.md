@@ -63,6 +63,8 @@
   - img
 - text: 7/25 {{clock}} Ran for {{duration}}
 - textbox "Message the agent"
+- button "Add files":
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

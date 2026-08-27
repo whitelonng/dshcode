@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import type { DirectoryEntry } from './host.ts'
+import { sessionIdSchema } from './sessions.schema.ts'
 import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 
@@ -73,3 +74,30 @@ export const hostOpenPathRequestSchema = z.object({
 export const hostOpenPathValueSchema = z.object({
   opened: z.literal(true),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.openPath'>>>
+
+/** host.pickFiles request payload; absent multiple (single selection) defaults false. */
+export const hostPickFilesRequestSchema = z.object({
+  multiple: z.boolean().optional(),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.pickFiles'>>>
+
+/** host.pickFiles response value; cancellation leaves `paths` empty. */
+export const hostPickFilesValueSchema = z.object({
+  cancelled: z.boolean(),
+  paths: z.array(z.string()),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.pickFiles'>>>
+
+/** host.locateFiles request payload: the session workspace root plus dragged basenames. */
+export const hostLocateFilesRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  // One workspace walk per name is an expensive host-side scan, so the batch
+  // is bounded before any traversal starts.
+  names: z.array(z.string().min(1)).max(20),
+}) satisfies z.ZodType<Wire<RequestPayload<'host.locateFiles'>>>
+
+/** host.locateFiles response value: one item per requested name. */
+export const hostLocateFilesValueSchema = z.object({
+  items: z.array(z.object({
+    name: z.string(),
+    paths: z.array(z.string()),
+  })),
+}) satisfies z.ZodType<Wire<ResponseValue<'host.locateFiles'>>>

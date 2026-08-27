@@ -222,6 +222,8 @@ function mount(
           addImages={() => null}
           removeImage={() => {}}
           draftImages={() => []}
+          pickFiles={() => Promise.resolve({ cancelled: true, paths: [] })}
+          locateFiles={() => Promise.resolve([])}
           resolveSubmitMode={() => 'queue'}
           toggleCommandMenu={vi.fn()}
           useNotices={bindSnapshotSelector(wiring.notices)}

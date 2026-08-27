@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
+  IconPaperclipOutline16, IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
@@ -26,6 +26,7 @@ import { deriveDecorations } from '../input/decorations.ts'
 import type { DraftDecorations } from '../input/decorations.ts'
 import type { EditRange } from '../input/contract.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
+import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
@@ -34,6 +35,21 @@ import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
 const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], hint: null }
+
+/**
+ * Classify one dropped/pasted file as an image (multi-modal intake) versus a
+ * plain file (basename-location intake). The `image/*` MIME family decides:
+ * an image type joins the image rail, where the rail's own admission keeps
+ * its authoritative "only PNG/JPG/WebP/GIF" refusal; everything else — any
+ * non-image MIME or an empty MIME — resolves to a `@path` mention. Routing on
+ * the MIME family keeps one rule that does not drift with a deployment's
+ * narrowed intake list.
+ * @param file - the browser file.
+ * @returns true when the file joins the image rail, false when it is path-located.
+ */
+function isSupportedImage(file: File): boolean {
+  return file.type.startsWith('image/')
+}
 
 /** The selection and edit family a `beforeinput` recorded, with the draft length it applied to. */
 interface PendingEdit {
@@ -78,6 +94,7 @@ export type InputBarProps = ComposerBarProps
 
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
+  pickFiles, locateFiles,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -502,37 +519,96 @@ export function InputBar({
     keyboard.track(keyboard.snapshot.draft, caret)
   }
 
-  // Intake pre-check (DeepSeek Chat semantics): an addition that would break
-  // a projected limit is refused as a whole batch, announced immediately, and
-  // never enters the rail — no more submit-time failure rolling the rail
-  // back. The host enforces the same limits at submit for callers that bypass
-  // this composer.
+  // The asynchronous file-location/native-pick arms write the draft after a
+  // network round trip, so the keyboard access rides a ref; the draft itself
+  // comes from the machine's synchronous snapshot (never the render closure,
+  // which can lag one frame behind the user's latest keystroke).
+  const liveKeyboard = useRef(keyboard)
+  liveKeyboard.current = keyboard
+
+  // Insert `@path` mentions at the caret/selection, normalizing surrounding
+  // whitespace. Reads the live machine snapshot so a pick/location settled
+  // after the user kept typing edits the draft as-is; the editRange is
+  // omittable (mentions are plain text, and the machine diff-scans occurrence
+  // offsets itself), which avoids feeding coordinates measured on a stale draft.
+  const insertFileMentions = (mentions: readonly string[]): void => {
+    const currentKeyboard = liveKeyboard.current
+    if (currentKeyboard === undefined || mentions.length === 0) return
+    const currentDraft = currentKeyboard.snapshot.draft
+    const el = inputRef.current
+    const sel = el === null ? { start: currentDraft.length, end: currentDraft.length } : selectionOf(el)
+    const prefix = currentDraft.slice(0, sel.start)
+    const suffix = currentDraft.slice(sel.end)
+    const inserted = `${prefix !== '' && !/\s$/u.test(prefix) ? ' ' : ''}${mentions.join(' ')}${suffix !== '' && !/^\s/u.test(suffix) ? ' ' : ''}`
+    const next = prefix + inserted + suffix
+    currentKeyboard.setDraft(next)
+    const caret = sel.start + inserted.length
+    if (el !== null) restoreCaret(el, caret)
+    currentKeyboard.track(currentKeyboard.snapshot.draft, caret)
+  }
+
+  // Intake pre-check (DeepSeek Chat semantics for images): an image batch that
+  // would break a projected limit is refused whole and announced immediately.
+  // Non-image files never enter the rail — their basenames resolve to `@path`
+  // mentions against the workspace, never staged bytes.
   const intakeImages = useCallback((files: readonly File[]): void => {
-    if (addImages === undefined || files.length === 0) return
-    const rejected = ((): string | null => {
-      if (imageLimits !== undefined) {
-        // Format precedes limits (DeepSeek Chat's filter order): a batch with
-        // a non-image must announce the format problem, not a count or size
-        // it could never pass anyway — addImages rejects it authoritatively.
-        if (files.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
-          return addImages(files)
+    if (files.length === 0 || addImages === undefined) return
+    const images: File[] = []
+    const others: File[] = []
+    for (const file of files) {
+      (isSupportedImage(file) ? images : others).push(file)
+    }
+    if (images.length > 0) {
+      const rejected = ((): string | null => {
+        if (imageLimits !== undefined) {
+          if (attachments.length + images.length > imageLimits.maxImagesPerMessage) {
+            return t('image.tooMany', { count: imageLimits.maxImagesPerMessage })
+          }
+          if (images.some(file => file.size > imageLimits.maxImageBytes)) {
+            return t('image.fileTooLarge', { size: imageSizeText(imageLimits.maxImageBytes) })
+          }
+          const total = attachments.reduce((sum, attachment) => sum + attachment.file.size, 0)
+            + images.reduce((sum, file) => sum + file.size, 0)
+          if (total > imageLimits.maxMessageImageBytes) {
+            return t('image.totalTooLarge', { size: imageSizeText(imageLimits.maxMessageImageBytes) })
+          }
         }
-        if (attachments.length + files.length > imageLimits.maxImagesPerMessage) {
-          return t('image.tooMany', { count: imageLimits.maxImagesPerMessage })
+        return addImages(images)
+      })()
+      if (rejected !== null) showToast(rejected)
+    }
+    if (others.length > 0 && locateFiles !== undefined) {
+      void locateFiles(others.map(file => file.name)).then((items) => {
+        const mentions: string[] = []
+        const ambiguous: string[] = []
+        for (const item of items) {
+          if (item.paths.length === 1 && item.paths[0] !== undefined) {
+            const mention = formatFileMention({ path: item.paths[0], kind: 'file' }, false)
+            if (mention !== undefined) mentions.push(mention)
+          } else {
+            ambiguous.push(item.name)
+          }
         }
-        if (files.some(file => file.size > imageLimits.maxImageBytes)) {
-          return t('image.fileTooLarge', { size: imageSizeText(imageLimits.maxImageBytes) })
-        }
-        const total = attachments.reduce((sum, attachment) => sum + attachment.file.size, 0)
-          + files.reduce((sum, file) => sum + file.size, 0)
-        if (total > imageLimits.maxMessageImageBytes) {
-          return t('image.totalTooLarge', { size: imageSizeText(imageLimits.maxMessageImageBytes) })
-        }
-      }
-      return addImages(files)
-    })()
-    if (rejected !== null) showToast(rejected)
-  }, [addImages, attachments, imageLimits, showToast, t])
+        if (mentions.length > 0) insertFileMentions(mentions)
+        if (ambiguous.length > 0) showToast(t('file.locateFailed', { names: ambiguous.join(', ') }))
+      }, (error: unknown) => { showToast(error instanceof Error ? error.message : String(error)) })
+    }
+  }, [addImages, attachments, imageLimits, showToast, t, locateFiles])
+
+  // The native multi-file picker: selected paths become `@path` mentions.
+  const onAddFiles = async (): Promise<void> => {
+    if (pickFiles === undefined || locked || machineBusy) return
+    try {
+      const result = await pickFiles()
+      if (result.cancelled || result.paths.length === 0) return
+      const mentions = result.paths
+        .map(path => formatFileMention({ path, kind: 'file' }, false))
+        .filter((mention): mention is string => mention !== undefined)
+      insertFileMentions(mentions)
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : String(error))
+    }
+  }
 
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
 
@@ -769,6 +845,18 @@ export function InputBar({
         </div>
         <div className={css.row}>
           <div className={css.tools}>
+            <Tooltip label={t('input.addFiles')} side="top" delayMs={500}>
+              <button
+                type="button"
+                className={css.add}
+                aria-label={t('input.addFiles')}
+                disabled={locked || machineBusy || pickFiles === undefined}
+                onMouseDown={keepFocus}
+                onClick={() => { void onAddFiles() }}
+              >
+                <IconPaperclipOutline16 size={14} />
+              </button>
+            </Tooltip>
             <Tooltip label={t('input.commands')} side="top" delayMs={500}>
               <button
                 type="button"

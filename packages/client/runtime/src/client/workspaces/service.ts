@@ -215,6 +215,33 @@ export class WorkspaceRuntime implements IWorkspaces {
   }
 
   /**
+   * Open the Host's native multi-file picker.
+   * @returns cancellation plus the selected absolute paths (empty on cancel).
+   */
+  async pickFiles(): Promise<{ cancelled: boolean; paths: string[] }> {
+    const response = await this.api.host.pickFiles({ multiple: true })
+    if (!response.result.ok) {
+      throw new Error(`file picker failed: ${response.result.error.message}`)
+    }
+    return response.result.value
+  }
+
+  /**
+   * Resolve dragged file basenames to absolute paths against the target
+   * session's workspace.
+   * @param sessionId - session whose workspace roots the exact-basename walk.
+   * @param names - dragged file basenames.
+   * @returns one item per name.
+   */
+  async locateFiles(sessionId: SessionId, names: string[]): Promise<Array<{ name: string; paths: string[] }>> {
+    const response = await this.api.host.locateFiles({ sessionId, names })
+    if (!response.result.ok) {
+      throw new Error(`file location failed: ${response.result.error.message}`)
+    }
+    return response.result.value.items
+  }
+
+  /**
    * List one directory level through the Host's `browse` capability.
    * @param path - absolute directory to list; absent lists the Host home directory.
    * @param signal - aborts the wire request (and the Host's scan) when the caller supersedes it.

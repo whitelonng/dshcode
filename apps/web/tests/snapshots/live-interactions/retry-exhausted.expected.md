@@ -26,6 +26,8 @@
   - text: This turn failedupstream 503
   - code: SERVER
 - textbox "Message the agent"
+- button "Add files":
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
