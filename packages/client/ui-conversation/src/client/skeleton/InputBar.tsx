@@ -408,6 +408,13 @@ export function InputBar({
       if (keyboard.arbitrate('escape', composing) === 'consumed') e.preventDefault()
       return
     }
+    if (e.key === 'Tab') {
+      // Tab completes the highlighted slash command as text instead of the
+      // browser's focus walk; the controller consumes it whenever the menu is
+      // open (even while candidates load) and passes only when no menu is up.
+      if (keyboard.arbitrate('tab', composing) !== 'pass') e.preventDefault()
+      return
+    }
     if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y')) {
       // The machine owns the undo/redo log (chip transactions have semantics
       // the browser stack cannot represent); never let the native stack run.
