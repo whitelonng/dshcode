@@ -38,7 +38,13 @@ try {
     timeout: 30_000,
   })
   if (completed.error !== undefined) throw completed.error
-  if (completed.status !== 0) throw new Error(`packaged Win32 picker smoke exited with ${completed.status}`)
+  if (completed.status !== 0) {
+    // Electron on Windows is a GUI-subsystem app, so the fixture's own
+    // console output never reaches the runner log; its result file is the
+    // only channel carrying the real failure.
+    const detail = existsSync(resultPath) ? readFileSync(resultPath, 'utf8').trim() : 'no result file written'
+    throw new Error(`packaged Win32 picker smoke exited with ${completed.status}: ${detail}`)
+  }
   if (!existsSync(resultPath)) throw new Error('packaged Win32 picker smoke exited without a result')
 
   const result = JSON.parse(readFileSync(resultPath, 'utf8'))
