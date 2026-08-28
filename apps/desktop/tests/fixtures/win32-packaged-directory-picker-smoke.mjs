@@ -14,7 +14,12 @@ function finish(ok, error) {
 
 async function runSmoke() {
   const controller = new AbortController()
-  const abortTimer = setTimeout(() => controller.abort(), 800)
+  // The abort must fire while the picker is mid-flight, but a slow CI runner
+  // can take seconds to spawn the worker and load koffi; aborting too early
+  // trips the driver's unresponsive-worker kill instead of the exercised
+  // WM_CLOSE path. A generous window still catches a picker that resolves
+  // without the abort, and the outer smoke timeout (30s) bounds the run.
+  const abortTimer = setTimeout(() => controller.abort(), 4000)
   try {
     await pickNativeDirectory(controller.signal, { platform: 'win32' })
     finish(false, 'directory picker resolved before the smoke abort')
