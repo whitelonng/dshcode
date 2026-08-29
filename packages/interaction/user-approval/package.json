@@ -58,6 +58,5 @@
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

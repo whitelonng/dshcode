@@ -24,4 +24,4 @@ Status: implemented
 
 ## Related
 
-[用户插件安装与更新管线](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.md) 拥有扁平模块回退目录与 bundle 依赖遍历；本记录修复其失败残留。
+[用户插件安装与更新管线](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.zh.md) 拥有扁平模块回退目录与 bundle 依赖遍历；本记录修复其失败残留。

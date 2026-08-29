@@ -38,4 +38,4 @@ Status: implemented
 
 ## 相关
 
-- [用户插件安装与更新](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.md) 拥有安装管线与本恢复流程复用的受管 patch 行格式（用于禁用）；`failures`/`set-safe-mode` 端点扩展了该网关。
+- [用户插件安装与更新](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.zh.md) 拥有安装管线与本恢复流程复用的受管 patch 行格式（用于禁用）；`failures`/`set-safe-mode` 端点扩展了该网关。

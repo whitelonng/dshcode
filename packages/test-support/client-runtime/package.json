@@ -59,6 +59,5 @@
     "lib/index.js",
     "lib/invariant.js",
     "lib/types/**/*.d.ts"
-  ],
-  "optionalDependencies": {}
+  ]
 }

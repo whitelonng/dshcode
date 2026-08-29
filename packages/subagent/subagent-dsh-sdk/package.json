@@ -56,6 +56,5 @@
     "@deepseek-ai/dsh-subagent": "workspace:^",
     "@deepseek-ai/dsh-subprocess": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

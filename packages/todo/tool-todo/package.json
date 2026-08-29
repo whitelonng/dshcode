@@ -63,6 +63,5 @@
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-user-questions": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

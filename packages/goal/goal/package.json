@@ -78,6 +78,5 @@
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

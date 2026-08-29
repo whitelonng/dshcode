@@ -56,7 +56,5 @@
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "@deepseek-ai/dsh-typert-registry": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "dependencies": {},
-  "optionalDependencies": {}
+  }
 }

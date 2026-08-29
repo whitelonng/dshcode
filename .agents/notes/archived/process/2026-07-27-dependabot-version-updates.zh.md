@@ -11,7 +11,7 @@ Archived: 2026-08-19
 
 ## 决策
 
-默认分支包含 [`.github/dependabot.yml`](../../../../.github/dependabot.yml)，其中为包含 `native/landlock-run` 的根 pnpm 工作区、`python/sdk` uv 项目和 GitHub Actions 配置了每周一次的版本更新检查。每个更新项都将 `cooldown.default-days` 设为 `30`，因此某个版本只有在发布至少 30 天后才符合更新条件，并会在下一次每周检查时生成更新提案。[仓库内 Landlock 发布决策](2026-08-06-in-repository-landlock-release.zh.md)负责共享工作区边界。
+默认分支包含 [`.github/dependabot.yml`](../../../../.github/dependabot.yml)，其中为包含 `native/landlock-run` 的根 pnpm 工作区、`python/sdk` uv 项目和 GitHub Actions 配置了每周一次的版本更新检查。每个更新项都将 `cooldown.default-days` 设为 `30`，因此某个版本只有在发布至少 30 天后才符合更新条件，并会在下一次每周检查时生成更新提案。[仓库内 Landlock 发布决策](2026-08-06-in-repository-landlock-release.md)负责共享工作区边界。
 
 根 pnpm 工作区的版本更新扫描排除 `vendor/**`，其中的源码和 manifest（元数据清单）只能通过 [vendoring 流程](../../../../vendor/README.md)变更。GitHub 仅将 `exclude-paths` 用于版本更新；如果安全更新 PR（Pull Request）涉及随源码纳入仓库的 manifest，则改由 vendoring 流程处理，以替代自动生成的 PR，而不会将其原样合并。Dependabot PR 会获得仓库的 `kind/dependency` 类型标签和 `area/infra` 区域标签，运行常规 PR 检查，并且仍须由维护者评审；该自动化不会合并这些 PR。
 

@@ -42,7 +42,5 @@
     "commander": "^15.0.0",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "dependencies": {},
-  "optionalDependencies": {}
+  }
 }

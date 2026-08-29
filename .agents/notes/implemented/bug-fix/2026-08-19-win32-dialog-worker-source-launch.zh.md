@@ -6,7 +6,9 @@ Status: implemented
 
 ## 问题
 
-Windows 上源码面的文件夹对话框 worker 从未启动成功：Web UI 只报出 `win32 folder dialog worker exited before reporting a result`。故障出在启动向量而非 koffi：源码分支运行的是 `node --import tsx/esm <绝对路径 .ts>`。通过 `--import` 注册 loader 后，像 `E:\dsh\packages\host\directory-picker-native\src\win32-dialog-worker.ts` 这样的绝对路径可能被读作 `e:` scheme URL 并以 `ERR_UNSUPPORTED_ESM_URL_SCHEME` 拒绝，此时 worker 还没发出第一条 IPC 消息。与仓库中其他「绝对路径」启动的区别在于注册的入口：它们注册的是完整的 `tsx` 入口（`packages/test-support/loader-smoke/src/index.ts`），在 Windows CI 上是绿的，而这个分支注册的是仅 ESM 的 `tsx/esm` hook。
+Windows 上源码面的文件夹对话框 worker 从未启动成功：Web UI 只报出 `win32 folder dialog worker exited before reporting a result`，且 worker 在 koffi 加载之前就已死亡。源码分支运行的是 `node --import tsx/esm <绝对路径 .ts>`，当时的诊断是：通过 `--import` 注册 loader 后，像 `E:\dsh\packages\host\directory-picker-native\src\win32-dialog-worker.ts` 这样的绝对路径会被解析成 `e:` scheme URL，并在第一条 IPC 消息之前以 `ERR_UNSUPPORTED_ESM_URL_SCHEME` 被拒绝。换掉这个启动方式确实让 Windows 上的对话框恢复了。
+
+但仅凭启动向量无法解释这次故障。`packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts` 只在 win32 上以 `node --import tsx/esm <绝对路径>` 启动，而 `vitest.config.ts` 正是把这套测试当作让 `runner.ts` 免于每文件覆盖率门禁的 Windows 信号；`packages/test-support/loader-smoke/src/index.ts` 也在 Windows 未排除的 spec 中以解析后的 tsx loader 启动绝对路径。本调用点独有的因素是 `ELECTRON_RUN_AS_NODE=1` 叠加打包宿主指向自身二进制的 `process.execPath`；它是否就是把路径变成 `e:` scheme URL 的原因，尚未验证。下面的决策并不依赖于把这一点定论。
 
 决定启动哪个分支的判断此前读的是裸 `import.meta.url`。Vitest 与 Vite 可能给模块 URL 附加查询串，带查询串的 URL 通不过这个后缀判断，于是源码面的测试可能跑到 built 分支上——这属于 bundler 测试环境的风险，而不是 Windows 故障的成因。
 
@@ -26,7 +28,7 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 凡是命名类型的相对导入都必须标注，用 `import type` 或行内 `type` 修饰符。`tsconfig.base.json` 设置了 `verbatimModuleSyntax: false`，未标注的类型导入会在构建时被消除，`typecheck` 与打包都不会报错，而 Node 剥离模式会保留该导入并在加载时以 `does not provide an export named` 失败。因此即使没有任何编译器或 lint 规则强制，这里也必须标注。
 
-`packages/code-runtime/code-runtime-worker-thread/src/index.ts` 已经在同样这两个前提下以这种方式加载它的源码 worker，[测试子进程启动方式](../../../../docs/testing.md#test-subprocess-launch-modes)也允许可擦除的 `.ts` 子进程直接由 Node 运行，不经 tsx 或根路径映射。
+`packages/code-runtime/code-runtime-worker-thread/src/index.ts` 已经在同样这两个前提下以这种方式加载它的源码 worker，[测试子进程启动方式](../../../../docs/testing.zh.md)也允许可擦除的 `.ts` 子进程直接由 Node 运行，不经 tsx 或根路径映射。
 
 打包分支继续由纯 node 启动 `worker.cjs`。两个分支都由 `new URL(import.meta.url).pathname.endsWith('.ts')` 选择，模块 URL 上的查询串无法把源码模块误判为构建产物。
 
@@ -45,9 +47,9 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 ## 相关启动路径
 
-`dsh` CLI 的源码启动保留 tsx ESM hook，因为它的源码图需要 Node 已不再提供的 transform 模式，见[源码启动决策](../architecture/2026-07-29-dsh-source-launch-tsx-esm.md)；那条约束针对的是 CLI 源码图，而不是说 engines 范围内没有原生剥离。
+`dsh` CLI 的源码启动保留 tsx ESM hook，因为它的源码图需要 Node 已不再提供的 transform 模式，见[源码启动决策](../architecture/2026-07-29-dsh-source-launch-tsx-esm.zh.md)；那条约束针对的是 CLI 源码图，而不是说 engines 范围内没有原生剥离。
 
-`packages/sandbox/sandbox-local/src/index.ts` 仍在为 windows-acl runner 的源码分支拼出同一个启动向量——同样是仅 ESM 的 `tsx/esm` hook 加绝对路径，而那个源码图同样包内闭合且可擦除，因此同样的启动方式适用。它属于独立改动：一并要改写 `packages/sandbox/sandbox-local/tests/local.spec.ts` 中钉住 `--import tsx/esm` 前缀的断言。
+`packages/sandbox/sandbox-local/src/index.ts` 为 windows-acl runner 的源码分支拼出同样的 argv，而 `packages/sandbox/sandbox-windows-acl/tests/runner.spec.ts` 正是在 win32 上跑这套 argv，因此这里不把它记作本故障的第二例。它的源码图同样包内闭合且可擦除，所以这套启动方式适合它——作为一次简化，并需一并改写 `packages/sandbox/sandbox-local/tests/local.spec.ts` 中的 `--import tsx/esm` 断言——而不是作为修复。
 
 `packages/workflow/workflow-worker-thread/src/host.ts` 同样从裸 `import.meta.url` 选择源码/构建分支，但它的 worker 从携带正确 `file://` href 的 `data:` URL 启动，`e:` scheme 故障触及不到那条启动路径。它的裸判断确实留下了查询串风险：在已构建的树上，带查询串的 URL 会选中 `worker.cjs`，于是那里的源码面测试可能跑到构建产物上——这影响测试覆盖的是哪个产物，而非生产启动。
 
@@ -61,9 +63,9 @@ spawn(process.execPath, [fileURLToPath(new URL('./win32-dialog-worker.ts', impor
 
 ## 后果
 
-- Windows 源码启动（`pnpm dsh web`）直接由 Node 原生类型剥离运行 worker，不再有任何 loader 链会把 worker 路径读成 `e:` scheme URL。
+- Windows 源码启动（`pnpm dsh web`）直接由 Node 原生类型剥离运行 worker，启动不再取决于 loader 链如何解析 worker 路径。
 - 打包宿主保持不变的 CJS worker 分支，`NODE_OPTIONS` 不被改写。
-- 源码分支依赖 engines 范围、包内闭合且只含可擦除语法的依赖图、标注过的类型导入，以及移除继承的类型剥离禁用 flag；[包 README](../../../../packages/host/directory-picker-native/README.md) 为使用者写明了这些前提。
+- 源码分支依赖 engines 范围、包内闭合且只含可擦除语法的依赖图、标注过的类型导入，以及移除继承的类型剥离禁用 flag；[包 README](../../../../packages/host/directory-picker-native/README.zh.md) 为使用者写明了这些前提。
 - 即使模块运行器给 URL 附加查询串，Win32 冒烟测试也能进入真实的源码启动。
 
 ## 验证

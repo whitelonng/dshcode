@@ -39,7 +39,7 @@
     "@deepseek-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "chokidar": "^4.0.3",
+    "chokidar": "^5.0.0",
     "@deepseek-ai/schemastery": "workspace:^",
     "yaml": "^2.9.0"
   },
@@ -49,6 +49,5 @@
     "@deepseek-ai/dsh-home-paths": "workspace:^",
     "@deepseek-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

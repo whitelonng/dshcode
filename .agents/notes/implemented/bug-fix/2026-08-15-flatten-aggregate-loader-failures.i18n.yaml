@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-15-flatten-aggregate-loader-failures.md
 2026-08-15-flatten-aggregate-loader-failures.md: a635d38f51681c347c63f7037cd3ac9ce7045f6c
-2026-08-15-flatten-aggregate-loader-failures.zh.md: 1e3ba9d03104dde40fa8beaf07afd0a4fa23fe43
+2026-08-15-flatten-aggregate-loader-failures.zh.md: 7dbf9a9623bd38fd723c3d69c2b3b0bd45e85ad4

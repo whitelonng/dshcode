@@ -43,11 +43,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "clsx": "^2.0.0",
-    "@deepseek-ai/dsh-attachment": "workspace:^",
-    "@deepseek-ai/dsh-client-ui-primitives": "workspace:^",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "clsx": "^2.0.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -74,6 +70,5 @@
     "@deepseek-ai/dsh-client-runtime": "workspace:^",
     "@deepseek-ai/dsh-client-ui-conversation": "workspace:^",
     "@deepseek-ai/dsh-attachment": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

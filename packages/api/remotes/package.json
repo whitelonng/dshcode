@@ -98,6 +98,5 @@
     "@deepseek-ai/dsh-typert-registry": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-host-plugin-control": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

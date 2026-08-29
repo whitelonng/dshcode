@@ -33,4 +33,4 @@ Status: implemented
 
 ## 相关
 
-- [Bundle 风格插件安装与 git 身份诊断](../../implemented/architecture/2026-08-15-bundle-style-plugin-installs.md) 拥有本变更以层覆盖行扩展的 bundle 行格式；[用户插件安装与更新](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.md) 拥有本变更所委托的网关。
+- [Bundle 风格插件安装与 git 身份诊断](../../implemented/architecture/2026-08-15-bundle-style-plugin-installs.zh.md) 拥有本变更以层覆盖行扩展的 bundle 行格式；[用户插件安装与更新](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.zh.md) 拥有本变更所委托的网关。

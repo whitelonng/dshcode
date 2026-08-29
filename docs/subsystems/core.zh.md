@@ -121,8 +121,12 @@ interface Agent {
    * Queue an ordinary follow-up turn and wake the driver. The item becomes the
    * sole ordinary message of its own turn.
    * @param message - identified prompt content and the source that supplied it.
+   * @param replace - optional surface rewrite for the first claimed message of
+   * this turn: instead of appending, it replaces the current surface range
+   * [`start`, `end`] with the message (a human edit-and-regenerate), citing
+   * every shadowed node in `sourceEventSeqs`.
    */
-  followup(message: UserMessage): void
+  followup(message: UserMessage, replace?: FollowupReplace): void
 
   /**
    * Submit steering for the nearest step. An idle driver starts a turn;

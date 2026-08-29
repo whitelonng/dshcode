@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-14-user-plugin-install-and-update.md
 2026-08-14-user-plugin-install-and-update.md: 90d26ea9b121ea6662a9b7c055d640ff9bffd069
-2026-08-14-user-plugin-install-and-update.zh.md: 419279a73205ce5435a8cbb0237020ec09826418
+2026-08-14-user-plugin-install-and-update.zh.md: 5aae1b55e01c3fcc93207dd962e773885b88a7ad

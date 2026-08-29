@@ -72,7 +72,5 @@
     "@deepseek-ai/dsh-agent-instructions": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/schemastery": "workspace:^"
-  },
-  "dependencies": {},
-  "optionalDependencies": {}
+  }
 }

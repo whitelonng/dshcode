@@ -53,7 +53,5 @@
     "@deepseek-ai/dsh-session-title": "workspace:^",
     "@deepseek-ai/dsh-session-persistence": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "dependencies": {},
-  "optionalDependencies": {}
+  }
 }

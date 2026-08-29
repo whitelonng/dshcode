@@ -7,7 +7,7 @@ import { CallId } from '@deepseek-ai/dsh-llm'
 import { AttachmentError, AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
-import type { CredentialInfo, CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
+import type { CredentialInfo, CredentialKey, CredentialRecord, CredentialRecordEntry, CredentialRecordInfo, CredentialRef, ResolvedCredential } from '@deepseek-ai/dsh-credentials'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 
@@ -59,6 +59,7 @@ class FakeAttachments extends AttachmentStore {
 /** In-memory credential provider so key resolution through the seam is observable. */
 class FakeCredentials extends CredentialProvider {
   private readonly values: Map<string, string>
+  private readonly records = new Map<string, CredentialRecord>()
   constructor(ctx: Context, seed: Record<string, string> = {}) {
     super(ctx)
     this.values = new Map(Object.entries(seed))
@@ -81,6 +82,33 @@ class FakeCredentials extends CredentialProvider {
 
   unset(ref: CredentialRef): Promise<void> {
     this.values.delete(ref)
+    return Promise.resolve()
+  }
+
+  readRecord(key: CredentialKey): Promise<CredentialRecord | undefined> {
+    return Promise.resolve(this.records.get(key))
+  }
+
+  describeRecord(key: CredentialKey): Promise<CredentialRecordInfo> {
+    const record = this.records.get(key)
+    return Promise.resolve({ configured: record !== undefined, ...record ? { kind: record.kind } : {}, writable: true })
+  }
+
+  listRecords(): Promise<readonly CredentialRecordEntry[]> {
+    return Promise.resolve([...this.records].map(([key, record]) => ({ key: key as CredentialKey, kind: record.kind })))
+  }
+
+  async modifyRecord(
+    key: CredentialKey,
+    mutate: (current: CredentialRecord | undefined) => Promise<CredentialRecord | undefined>,
+  ): Promise<CredentialRecord | undefined> {
+    const next = await mutate(this.records.get(key))
+    if (next !== undefined) this.records.set(key, next)
+    return next ?? this.records.get(key)
+  }
+
+  deleteRecord(key: CredentialKey): Promise<void> {
+    this.records.delete(key)
     return Promise.resolve()
   }
 }

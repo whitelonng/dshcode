@@ -54,6 +54,5 @@
     "@deepseek-ai/dsh-web": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-settings": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

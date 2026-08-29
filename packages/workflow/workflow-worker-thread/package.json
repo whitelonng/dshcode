@@ -65,6 +65,5 @@
     "@deepseek-ai/dsh-workflow": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "tsx": "^4.19.2"
-  },
-  "optionalDependencies": {}
+  }
 }

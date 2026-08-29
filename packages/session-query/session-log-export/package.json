@@ -78,7 +78,5 @@
       ],
       "platform": "web"
     }
-  },
-  "dependencies": {},
-  "optionalDependencies": {}
+  }
 }

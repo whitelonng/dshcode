@@ -74,6 +74,5 @@
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

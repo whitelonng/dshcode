@@ -89,6 +89,5 @@
     "@deepseek-ai/dsh-storage-domain": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
     "@deepseek-ai/dsh-typert-registry": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

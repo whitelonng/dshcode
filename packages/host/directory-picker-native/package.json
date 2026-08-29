@@ -49,6 +49,5 @@
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "tsx": "^4.19.2"
-  },
-  "optionalDependencies": {}
+  }
 }

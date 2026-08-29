@@ -50,6 +50,5 @@
     "@deepseek-ai/dsh-timeout": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-settings": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

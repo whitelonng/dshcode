@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-18-single-sidebar-foot-action-seat.md) | 中文
 
-> 范围：为什么 `ui-sidebar` 不再声明专用的 `'sidebar.remote'` 脚部座位，只在设置旁保留通用 `'sidebar.footer.action'` 列表。遵循[槽位系统标准](2026-07-22-slot-type-chain-implementation.md)；反转了 [Web UI 槽位与 dsh-web-ui 兼容层](2026-08-14-web-ui-slot-seats-and-compat-shim.md) 中的座位部分。
+> 范围：为什么 `ui-sidebar` 不再声明专用的 `'sidebar.remote'` 脚部座位，只在设置旁保留通用 `'sidebar.footer.action'` 列表。遵循[槽位系统标准](2026-07-22-slot-type-chain-implementation.zh.md)；反转了 [Web UI 槽位与 dsh-web-ui 兼容层](2026-08-14-web-ui-slot-seats-and-compat-shim.zh.md) 中的座位部分。
 
 ## 问题
 
@@ -27,7 +27,7 @@ Status: implemented
 - SlotMap 失去 `'sidebar.remote'`；指向它的第三方注册会永远等待，必须改用 `'sidebar.footer.action'`。已发布的 dsh-web-ui 家族已有该回退，因此移动端远程入口在展开侧栏与窄栏中都恰好渲染一次，位于设置正上方。
 - 每个部署的 DOM 里少了一行空的脚部行；它在未占用时本就不渲染内容，因此未安装插件的部署看不到任何视觉变化。
 - 面向模型的客户端槽位目录（`cordis_inspect what:"client"`）重新生成后不再包含该座位。
-- [2026-08-14 槽位笔记](2026-08-14-web-ui-slot-seats-and-compat-shim.md) 已就地更新：shell 现在只声明一个社区座位 `'conversation.input.selector.context'`。
+- [2026-08-14 槽位笔记](2026-08-14-web-ui-slot-seats-and-compat-shim.zh.md) 已就地更新：shell 现在只声明一个社区座位 `'conversation.input.selector.context'`。
 
 ## 测试
 
@@ -38,6 +38,6 @@ Status: implemented
 
 ## 相关
 
-- [Web UI 槽位与 dsh-web-ui 兼容层](2026-08-14-web-ui-slot-seats-and-compat-shim.md)——最初声明本次移除的座位。
-- [内置 webui 精简、安装期产品冲突禁用、归档搜索与多选](2026-08-15-webui-suite-trim-and-archive-selection.md)——早前针对另一处重复入口来源（内置全家桶 + 用户自装）的修复。
-- [槽位系统标准：类型链实现](2026-07-22-slot-type-chain-implementation.md)
+- [Web UI 槽位与 dsh-web-ui 兼容层](2026-08-14-web-ui-slot-seats-and-compat-shim.zh.md)——最初声明本次移除的座位。
+- [内置 webui 精简、安装期产品冲突禁用、归档搜索与多选](2026-08-15-webui-suite-trim-and-archive-selection.zh.md)——早前针对另一处重复入口来源（内置全家桶 + 用户自装）的修复。
+- [槽位系统标准：类型链实现](2026-07-22-slot-type-chain-implementation.zh.md)

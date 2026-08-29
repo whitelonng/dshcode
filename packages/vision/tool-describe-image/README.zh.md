@@ -35,7 +35,7 @@ dsh plugin --profile web add github:whitelonng/dsh-plugin-describe-image
 | `maxOutputTokens` | `1024` | 作为 `max_tokens` 发送的输出 token 上界。 |
 | `timeoutMs` | `60000` | 单次视觉请求超时。 |
 
-API key 每次调用解析一次，先匹配者胜：显式 `apiKey` → [凭据缝](../../credentials/README.md)解析 `apiKeyEnv`（它管环境变量、`.env` 与托管存储各层）→ 仅当未组合凭据缝时才看启动环境。完全没有 key 的调用以 `no API key` 错误失败，而不是装载失败——之后存入的 key 无需重启即对下一次调用生效。端点与边界配置错误在装载时即大声失败。
+API key 每次调用解析一次，先匹配者胜：显式 `apiKey` → [凭据缝](../../credentials/README.zh.md)解析 `apiKeyEnv`（它管环境变量、`.env` 与托管存储各层）→ 仅当未组合凭据缝时才看启动环境。完全没有 key 的调用以 `no API key` 错误失败，而不是装载失败——之后存入的 key 无需重启即对下一次调用生效。端点与边界配置错误在装载时即大声失败。
 
 所有字段也可以在 Web GUI 的「设置 → 插件 → 图像理解」卡片中实时修改：卡片写入 `describe-image` 设置段，提交后下一次调用即生效。卡片的 API Key 控件走凭据缝——明文密钥绝不随设置响应传输。
 
@@ -71,7 +71,7 @@ API key 每次调用解析一次，先匹配者胜：显式 `apiKey` → [凭据
 
 #### What the model sees
 
-生成的 [`describe_image` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-describe-image)。描述中写明支持的媒体类型与 `maxBytes` 上界；部署端点、凭据名与超时不是模型可见面。
+生成的 [`describe_image` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-describe-image)。描述中写明支持的媒体类型与 `maxBytes` 上界；部署端点、凭据名与超时不是模型可见面。
 
 #### Token effect
 

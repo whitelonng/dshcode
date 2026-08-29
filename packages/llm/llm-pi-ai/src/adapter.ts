@@ -57,7 +57,7 @@ import type {
 } from '@deepseek-ai/dsh-llm'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import type { ResolvedPiAiProviderProfile } from './config.ts'
+import type { ModelCapabilityInfo, ResolvedPiAiProviderProfile } from './config.ts'
 import { toPiContext } from './context.ts'
 import { toStreamChunks } from './stream.ts'
 
@@ -209,6 +209,26 @@ function requestHeaders(headers: Readonly<Record<string, string>> | undefined): 
 }
 
 /**
+ * Adapter-visible capability metadata for one model, or nothing when none was
+ * declared. The harness reads output modalities and capabilities as typed
+ * advisory fields; absence means text-only output and no capability claims.
+ * @param profile - the resolved provider profile carrying the side table.
+ * @param modelId - the model to describe.
+ * @returns the capability fields, or an empty object when none declared.
+ */
+function capabilityInfo(
+  profile: ResolvedPiAiProviderProfile,
+  modelId: string,
+): Pick<LlmModelInfo, 'outputModalities' | 'capabilities'> | Record<string, never> {
+  const declared: ModelCapabilityInfo | undefined = profile.modelCapabilities.get(modelId)
+  if (declared === undefined) return {}
+  return {
+    ...declared.output === undefined ? {} : { outputModalities: [...declared.output] },
+    ...declared.imageUnderstanding ? { capabilities: ['image-understanding' as const] } : {},
+  }
+}
+
+/**
  * pi-ai-backed multi-provider adapter. Each operation reads the current
  * profiles, so a configuration change reaches the next request without a
  * restart; model descriptors come from the collection those profiles built.
@@ -268,12 +288,13 @@ export class PiAiAdapter extends LlmAdapter {
   override listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     return Promise.resolve().then(() => {
       const snapshot = this.current()
-      this.profileOf(snapshot, provider)
+      const profile = this.profileOf(snapshot, provider)
       return snapshot.models.getModels(provider).map(model => ({
         provider,
         id: model.id,
         name: model.name,
         inputModalities: [...model.input],
+        ...capabilityInfo(profile, model.id),
       }))
     })
   }
@@ -301,6 +322,7 @@ export class PiAiAdapter extends LlmAdapter {
       id: model,
       name: resolvedModel.name,
       inputModalities: [...resolvedModel.input],
+      ...capabilityInfo(profile, model),
       context: { contextWindow: resolvedModel.contextWindow },
       ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
       ...reasoningInfo(resolvedModel, defaultLevel),

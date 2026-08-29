@@ -8,8 +8,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import type { DshWindow } from '@deepseek-ai/dsh-client-modules/client'
-import { appVersion } from '@deepseek-ai/dsh-client-web/src/app-version.ts'
-import { VersionCaption } from '@deepseek-ai/dsh-client-web/src/VersionCaption.tsx'
+import { appVersion } from '../src/client/app-version.ts'
+import { VersionCaption } from '../src/client/VersionCaption.tsx'
 
 const win = window as unknown as DshWindow & Window
 

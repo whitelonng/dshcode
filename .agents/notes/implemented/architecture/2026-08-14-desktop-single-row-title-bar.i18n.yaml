@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-14-desktop-single-row-title-bar.md
 2026-08-14-desktop-single-row-title-bar.md: c182a4683adfa639afad02e6d18224f448eba355
-2026-08-14-desktop-single-row-title-bar.zh.md: c8192c68814fedf5fd6ad2d7031d4a0997a35fa7
+2026-08-14-desktop-single-row-title-bar.zh.md: 0addac1c1163db83abbcffbe40c56c3044470b22

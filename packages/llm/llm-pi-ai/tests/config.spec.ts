@@ -65,6 +65,20 @@ describe('modality schema boundary', () => {
   })
 })
 
+describe('capability schema boundary', () => {
+  it('accepts declared output modalities and image understanding, and empty declarations', () => {
+    expect(configWith({ output: ['text', 'image'] })).not.toThrow()
+    expect(configWith({ output: [] })).not.toThrow()
+    expect(configWith({ capabilities: { imageUnderstanding: true } })).not.toThrow()
+    expect(configWith({ capabilities: {} })).not.toThrow()
+  })
+
+  it('rejects an unknown output modality and a non-boolean capability value', () => {
+    expect(configWith({ output: ['audio'] })).toThrow(/expected/)
+    expect(configWith({ capabilities: { imageUnderstanding: 'yes' } })).toThrow(/expected/)
+  })
+})
+
 describe('request image policy bounds', () => {
   it.each([
     ['requestImagePixelBudget', 0, /requestImagePixelBudget must be a positive safe integer/],

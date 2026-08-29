@@ -66,6 +66,5 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-sdk-protocol": "workspace:^",
     "@openai/codex": "0.147.0"
-  },
-  "optionalDependencies": {}
+  }
 }

@@ -16,6 +16,7 @@
   },
   "files": [
     "lib/*.js",
+    "lib/types/**/*.d.ts",
     "config"
   ],
   "license": "MIT",
@@ -99,6 +100,11 @@
     "@types/js-yaml": "^4.0.9",
     "execa": "^10.0.0"
   },
-  "peerDependencies": {},
-  "optionalDependencies": {}
+  "exports": {
+    "./profile-boot": {
+      "types": "./lib/types/profile-boot.d.ts",
+      "default": "./lib/profile-boot.js"
+    },
+    "./package.json": "./package.json"
+  }
 }

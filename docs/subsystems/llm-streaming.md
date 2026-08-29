@@ -439,6 +439,27 @@ interface LlmModelInfo {
   description?: string
   /** Accepted request modalities; absent means unknown, while an explicit omission is negative capability. */
   inputModalities?: readonly ModelModality[]
+  /**
+   * Response modalities this model can produce; `image` means image
+   * generation. Absent means text-only output, which is the floor every
+   * chat-completions model carries.
+   */
+  outputModalities?: readonly ModelModality[]
+  /**
+   * Declared capabilities a modality list cannot express, e.g.
+   * `image-understanding` (the model reasons about image content, a stronger
+   * claim than accepting image input). Absent means none declared.
+   */
+  capabilities?: readonly LlmModelCapability[]
+  /**
+   * How the adapter carries image content blocks on this route when the
+   * endpoint does not accept image input natively (see {@link inputModalities}).
+   * `note` — image blocks serialize into copyable text notes, so image-bearing
+   * sessions run; `reject` — image-bearing requests fail. Absent is the
+   * conservative negative: treat as `reject`. A route whose `inputModalities`
+   * includes `image` carries images natively and needs no policy.
+   */
+  imagePolicy?: 'note' | 'reject'
 }
 ```
 

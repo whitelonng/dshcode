@@ -24,4 +24,4 @@ Status: implemented
 
 ## Related
 
-[内置社区插件与按 profile 的控制](../../implemented/architecture/2026-08-14-built-in-community-plugins-and-controls.md) 拥有由部署维护的皮肤树与被打补丁的皮肤中心解析方式，本打包步骤组装的就是它。
+[内置社区插件与按 profile 的控制](../../implemented/architecture/2026-08-14-built-in-community-plugins-and-controls.zh.md) 拥有由部署维护的皮肤树与被打补丁的皮肤中心解析方式，本打包步骤组装的就是它。

@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-14-desktop-tray-and-close-to-tray.md) | 中文
 
-> 范围：仅桌面应用外壳——托盘的常驻与动作、关闭隐藏到托盘的窗口策略，以及 Windows/Linux 上移除 Electron 默认菜单栏。扩展 [DSHCode Electron 桌面外壳](2026-08-13-electron-desktop-loopback-shell.md) 决策。
+> 范围：仅桌面应用外壳——托盘的常驻与动作、关闭隐藏到托盘的窗口策略，以及 Windows/Linux 上移除 Electron 默认菜单栏。扩展 [DSHCode Electron 桌面外壳](2026-08-13-electron-desktop-loopback-shell.zh.md) 决策。
 
 ## 问题
 

@@ -12,7 +12,7 @@ Status: implemented
 
 `packages/host/plugin-installer` 现在为 bundle 风格包（npm 与 git 来源都算）安装完整的支撑面：
 
-- **依赖树**（`src/dependencies.ts`，`installPackageDependencies`）：沿已安装清单的传递 npm `dependencies` 装入扁平 fallback，每个依赖像根包一样按 registry 解析并解压。仅当既有 fallback 副本版本与解析目标不同时才替换——这一条规则同时完成"把应用内置依赖（指向应用闭包的符号链接，见 [profile 插件 bundle](../../implemented/architecture/2026-08-05-profile-plugin-bundles.md) 与 Fix 5）升级到聚合版本"，而版本匹配的副本与应用闭包保持不动。遍历以 visited 集合终止，环与菱形只装一次；递归排除插件自身。进度复用现有 `status` 下载百分比（按 tarball），线协议不变。
+- **依赖树**（`src/dependencies.ts`，`installPackageDependencies`）：沿已安装清单的传递 npm `dependencies` 装入扁平 fallback，每个依赖像根包一样按 registry 解析并解压。仅当既有 fallback 副本版本与解析目标不同时才替换——这一条规则同时完成"把应用内置依赖（指向应用闭包的符号链接，见 [profile 插件 bundle](../../implemented/architecture/2026-08-05-profile-plugin-bundles.zh.md) 与 Fix 5）升级到聚合版本"，而版本匹配的副本与应用闭包保持不动。遍历以 visited 集合终止，环与菱形只装一次；递归排除插件自身。进度复用现有 `status` 下载百分比（按 tarball），线协议不变。
 - **Bundle patch 合并**（`src/bundle.ts`，`mergeBundleRows` / `removeBundleRows` / `setBundleRowsEnabled`，标记 `# dsh-plugin-bundle: <id>`；共享的 patch 文件辅助在 `src/patch-document.ts`）：已安装包的 `dsh.bundle.patch` 条目在文件锁内合并进 profile 用户 patch 层，保留每个非属主节点、注释与 `!!js` 表达式（bundle 节点用克隆而非从 JS 值重建，标签得以保留）。profile patch 已认领 id 的 insert 行——预设产品行（`dsh-plugin-control`）、插件自己的安装器行或先前合并的行——会被跳过，因为用户层按 push 组合，重复 id 会让条目挂载两次；既有行保持唯一权威。裸覆盖行原样追加（按 id 打补丁，后者胜出）。重装或更新先移除该插件先前合并的行，新版 patch 替换旧版。
 - **生命周期集成**（`src/index.ts`）：`uninstall` 移除合并的 bundle 行（已装的依赖包作为未跟踪支持文件留在 fallback，后续安装复用或刷新）；`set-enabled` 把插件开关镜像到合并行上，家族开关控制整组；声明的 bundle patch 缺失时带路径大声失败。
 - **Git URL 规范化**（`src/git-source.ts`，`normalizeGitUrl`）：`github:user/repo` 简写会展开为 `https://github.com/user/repo.git`、`git+` 前缀会被剥掉，然后才交给 `git clone`/`ls-remote`——粘贴的简写克隆不再依赖本机的 insteadOf/ssh 别名。
@@ -33,10 +33,10 @@ CLI 补齐了闭环：`dsh plugin --profile web add <pkg>` 在 profile 里转发
 ## 结果
 
 - 安装聚合包兑现了它的承诺：重启后家族以聚合版本挂载，无需升级预设目录即可换代内置 web-ui 家族，插件列表开关控制整组。
-- 卸载后依赖包会在 fallback 累积——这是有界、已文档化的成本（是文件而非状态）；应用内置闭包从不被删除，只会被同名的真实目录遮蔽，启动时的 [fallback 修复](../../implemented/architecture/2026-08-05-profile-plugin-bundles.md) 会保留这些目录。
+- 卸载后依赖包会在 fallback 累积——这是有界、已文档化的成本（是文件而非状态）；应用内置闭包从不被删除，只会被同名的真实目录遮蔽，启动时的 [fallback 修复](../../implemented/architecture/2026-08-05-profile-plugin-bundles.zh.md) 会保留这些目录。
 - monorepo URL 的 git 安装现在以可操作的错误信息失败，而不是 `ENOENT`；workspace 根误装（聚合包自己的仓库本来会被装成 `dsh-web-ui@0.1.1`）被拒绝。
 - bundle patch 中与预设行冲突的 insert id 仍挂载预设行（带其已保存状态），而非 bundle 的副本——这些条目的用户可见开关仍是预设组。
 
 ## 相关
 
-- [用户插件安装与更新](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.md) 拥有安装管道、fallback 布局与本变更扩展的受管 patch 行格式；[profile 插件 bundle](../../implemented/architecture/2026-08-05-profile-plugin-bundles.md) 拥有本合并所镜像的 bundle 层语义。
+- [用户插件安装与更新](../../implemented/architecture/2026-08-14-user-plugin-install-and-update.zh.md) 拥有安装管道、fallback 布局与本变更扩展的受管 patch 行格式；[profile 插件 bundle](../../implemented/architecture/2026-08-05-profile-plugin-bundles.zh.md) 拥有本合并所镜像的 bundle 层语义。

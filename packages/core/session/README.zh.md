@@ -91,6 +91,7 @@
 - 持久化插件：订阅 `session/event`（延后写入），并在 `session/flush`（受等待）及 fiber dispose（资源释放）时排空。持久后端读取日志并重新加载到实时会话；这类后端会把元数据约定（`SessionHeader`、`session.header`）与日志一同存储。
 - 回放／fork：`create(id, { seed })` 校验并冻结连续的当前格式日志，再重建 surface；请求头必须包含提供方／模型，assistant 消息必须包含提供方／模型溯源信息。持久化层在构造该当前格式 seed 前负责读取兼容性处理。`fork(source, boundary?, childSessionId?)` 选择已完成轮次前缀并记录谱系。
 - 压缩：`dsh-compaction-basic` 为摘要检查点追加一个替换用 `user/message`，而 `dsh-compaction-tool-result-pruner` 追加仅修改内容的 `tool/result` 替换。工具配对边界策略及其缓存归 [`dsh-compaction` seam](../../compaction/compaction/README.zh.md) 所有；此包拥有有序 surface 成员关系、替换校验与 `replaceGeneration`。
+- 消息删除：人类转录编辑追加一条 `message/delete` 事件，携带 `{ op: 'delete', start, end }` 与被删节点的 seq；fold 无替换地把该区间拼接移出 surface。会话不变式拒绝在开启的轮次内删除。语义归 [消息删除决策](../../../.agents/notes/implemented/feature/2026-08-16-message-deletion-and-transcript-removal.zh.md) 所有。
 
 ## 模型体验
 
@@ -102,7 +103,7 @@
 
 #### Token 影响
 
-追加的 surface 条目会在后续步骤中重新发送。`replace` surface 操作会从未来输入中移除被遮蔽条目，但不删除其原始日志记录。
+追加的 surface 条目会在后续步骤中重新发送。`replace` surface 操作会从未来输入中移除被遮蔽条目，但不删除其原始日志记录；`delete` 操作则无替换地移除整个区间。
 
 #### KV Cache 影响
 

@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-15-pnpm-delegation-and-plugin-discovery.md
 2026-08-15-pnpm-delegation-and-plugin-discovery.md: 93077df691ca01d1c09fabbb08c07875a4a3494e
-2026-08-15-pnpm-delegation-and-plugin-discovery.zh.md: bc6c738f15d4bc04ec305ac8c00424dc8822233c
+2026-08-15-pnpm-delegation-and-plugin-discovery.zh.md: bb4d1e3a0d7e7e93c1924dffa6e1a1318084045c

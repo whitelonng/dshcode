@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-16-session-deleted-broadcast-and-archive-first-delete.md) | 中文
 
-> 范围：[归档会话管理](../architecture/2026-08-14-archived-session-management.md)接缝的彻底删除增量——一个新的持久化事件、一个新的 host 流帧、与之配对的客户端驱逐、删除时对网关持有活会话的销毁，以及两行缺失的错误 schema 分支（它曾让所有拒绝响应无法解析）。
+> 范围：[归档会话管理](../architecture/2026-08-14-archived-session-management.zh.md)接缝的彻底删除增量——一个新的持久化事件、一个新的 host 流帧、与之配对的客户端驱逐、删除时对网关持有活会话的销毁，以及两行缺失的错误 schema 分支（它曾让所有拒绝响应无法解析）。
 
 ## 问题
 

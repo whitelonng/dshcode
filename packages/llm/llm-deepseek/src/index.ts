@@ -60,7 +60,12 @@ export {
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   DeepSeekAdapter,
 } from './adapter.ts'
-export type { DeepSeekAdapterOptions, DeepSeekCatalogModel, DeepSeekConnectionOptions } from './adapter.ts'
+export type {
+  DeepSeekAdapterOptions,
+  DeepSeekCatalogModel,
+  DeepSeekConnectionOptions,
+  DeepSeekReasoningLevel,
+} from './adapter.ts'
 export { DeepSeekFileStore, MAX_CHAT_IMAGE_BYTES } from './file-store.ts'
 export type { DeepSeekFileConnection, DeepSeekFilePolicy, DeepSeekFileReference } from './file-store.ts'
 export { DeepSeekFilesClient, MAX_FILE_EXPIRY_SECONDS, MAX_FILE_UPLOAD_BYTES, MAX_STORED_FILE_BYTES, MAX_STORED_FILE_COUNT, MIN_FILE_EXPIRY_SECONDS } from './files-api.ts'
@@ -151,6 +156,16 @@ const catalogModel: z<DeepSeekCatalogModel> = z.object({
   contextWindow: z.number().step(1).min(1),
   maxTokens: z.number().step(1).min(1),
   inputModalities: z.array(z.union(MODEL_MODALITIES)).min(1).default(['text']),
+  // Per-model reasoning override; the wire spellings are fixed by the route
+  // (see DeepSeekCatalogModel.reasoningEfforts), so the schema only restricts
+  // the levels and resolveModels re-judges the spellings. The cast mirrors the
+  // pi-ai reasoningEfforts schema: schemastery's Dict types every literal key
+  // as required, while the runtime value is a partial record, and the meta
+  // default is the non-optional member type.
+  reasoningEfforts: z.union([
+    z.const(false),
+    z.dict(z.union([z.string(), z.const(null)]), z.union(['off', 'high', 'max'])),
+  ]) as unknown as z<Exclude<DeepSeekCatalogModel['reasoningEfforts'], undefined>>,
   imagePixelBudget: z.number().step(1).min(1),
   imageMaxBytes: z.number().step(1).min(1),
   imageDetail: z.union(['auto', 'low']),
@@ -239,6 +254,29 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
     }
     if (seen.has(model.id)) throw new Error(`llm-deepseek: duplicate catalog model "${model.id}"`)
     seen.add(model.id)
+    if (model.reasoningEfforts !== undefined && model.reasoningEfforts !== false) {
+      // This wire route dispatches exactly three levels with fixed spellings:
+      // `off` is the empty spelling (thinking disabled), `high`/`max` are the
+      // `reasoning_effort` literals. Refusing anything else keeps a map that
+      // would be silently ignored from reaching a settings document.
+      for (const [level, spelling] of Object.entries(model.reasoningEfforts)) {
+        if (level !== 'off' && level !== 'high' && level !== 'max') {
+          throw new Error(`llm-deepseek: catalog model "${model.id}" reasoningEfforts names unsupported level "${level}"`)
+        }
+        if (level === 'off') {
+          if (spelling !== null && spelling !== '') {
+            throw new Error(`llm-deepseek: catalog model "${model.id}" reasoningEfforts.off must use the empty spelling`)
+          }
+        } else if (spelling !== level) {
+          throw new Error(`llm-deepseek: catalog model "${model.id}" reasoningEfforts.${level} must spell the`
+            + ` wire literal "${level}"`)
+        }
+      }
+      if (!Object.keys(model.reasoningEfforts).some(level => level !== 'off')) {
+        throw new Error(`llm-deepseek: catalog model "${model.id}" reasoningEfforts offers no level beyond "off";`
+          + ' set reasoningEfforts to false for a non-reasoning model')
+      }
+    }
     return {
       id: model.id,
       ...model.name === undefined ? {} : { name: model.name },
@@ -246,6 +284,7 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
       ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
       ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
       inputModalities: [...inputModalities],
+      ...model.reasoningEfforts === undefined ? {} : { reasoningEfforts: model.reasoningEfforts },
       ...hasImage
         ? {
           imagePixelBudget: model.imagePixelBudget

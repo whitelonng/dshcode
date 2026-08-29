@@ -123,8 +123,7 @@
     "@linxin666/dsh-client-ui-skin-center": "0.1.2",
     "@linxin666/dsh-client-ui-skin-whale-song": "0.1.2",
     "@omdsh-dev/dsh-annotation": "git+https://github.com/omdsh-dev/dsh-annotation.git#a37edb01c3dbb0b19249cab3b93138ad529281ed",
-    "@omdsh-dev/dsh-genui": "github:omdsh-dev/dsh-genui#57b4338222632f8ea81c2665d44e5f9e80b52686",
-    "schemastery": "3.18.0"
+    "@omdsh-dev/dsh-genui": "github:omdsh-dev/dsh-genui#57b4338222632f8ea81c2665d44e5f9e80b52686"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
@@ -139,6 +138,5 @@
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

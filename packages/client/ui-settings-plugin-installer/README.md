@@ -1,6 +1,6 @@
-English | [中文](README.zh.md)
-
 # dsh-client-ui-settings-plugin-installer
+
+English | [中文](README.zh.md)
 
 Merged plugin list tab in Web Plugins settings (`settings.plugins.tab`, id `plugins`). The tab provides:
 

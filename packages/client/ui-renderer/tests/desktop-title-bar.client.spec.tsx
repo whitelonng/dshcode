@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { DesktopTitleBar } from '@deepseek-ai/dsh-client-web/src/DesktopTitleBar.tsx'
+import { DesktopTitleBar } from '../src/client/DesktopTitleBar.tsx'
 
 afterEach(() => {
   cleanup()

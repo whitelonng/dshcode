@@ -96,6 +96,5 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

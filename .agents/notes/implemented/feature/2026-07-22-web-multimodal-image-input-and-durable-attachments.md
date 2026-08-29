@@ -8,7 +8,7 @@ English | [中文](2026-07-22-web-multimodal-image-input-and-durable-attachments
 
 Before this change, the Web composer accepted only text: `InputBar` received a string draft, `ConversationController.send()` created text content, and the host forwarded that content to the agent. Users could not paste an image, inspect it before sending, submit an image-only prompt, or recover sent images from history.
 
-This is not only a composer gap. Core needs a durable image content block, providers need explicit modality handling, and the session log must reconstruct everything visible to a model. [The previous image-block removal](../../archived/simplification/2026-07-04-drop-image-content-block.md) rejected a partial design that could silently lose or flatten images. A browser object URL, local path, provider URL, or base64 payload cannot be canonical session content.
+This is not only a composer gap. Core needs a durable image content block, providers need explicit modality handling, and the session log must reconstruct everything visible to a model. [The previous image-block removal](../../implemented/simplification/2026-07-04-drop-image-content-block.md) rejected a partial design that could silently lose or flatten images. A browser object URL, local path, provider URL, or base64 payload cannot be canonical session content.
 
 The [Web client architecture](../../implemented/architecture/2026-07-19-gui-web-client-architecture.md) keeps components pure and per-session composer state in `ctx.conversation`; the [GUI layering and RPC protocol](../../implemented/architecture/2026-07-19-gui-layering-and-rpc-protocol.md) makes durable events the source of truth for both live rendering and history replay. Image intake, persistence, provider conversion, and rendering therefore need one explicit lifecycle.
 
@@ -142,7 +142,7 @@ Composer thumbnails and each `MessageImage` own ephemeral original-preview state
 
 Version one accepts PNG, JPEG, WebP, and GIF only. SVG and remote URLs are excluded. Source intake defaults are 32 MiB per image, 20 images and 100 MiB aggregate image bytes per message, 100 million decoded pixels per image, and 16384px on either side. The provider-independent master defaults to a 2048px long edge and 4 MiB safety cap. Provider request pixel and encoded-byte limits are separate route policies. These deployment-varying limits are validated backend configuration and enforced before persistence or request transmission. The client connection carrier has an independent configurable `maxRequestBodyBytes` cap, 160 MiB by default, and fails load if it cannot hold the aggregate source limit after base64 and envelope expansion. A body without a declared length is rejected when it crosses the cap rather than drained to its end.
 
-Malformed base64, unsupported or mismatched media, truncated image payloads, excess bytes, excess image count, excess pixels, excess per-side dimensions, missing objects, and integrity mismatches return stable structured failures. Original filenames are reduced to a display basename, control characters are removed, and no local path is logged or returned to the browser.
+Malformed base64, unsupported or mismatched media, truncated image payloads, excess bytes, excess image count, excess pixels, missing objects, and integrity mismatches return stable structured failures. Original filenames are reduced to a display basename, control characters are removed, and no local path is logged or returned to the browser.
 
 ### Package and surface changes
 

@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-15-desktop-plugin-boot-recovery.md
 2026-08-15-desktop-plugin-boot-recovery.md: bc8b23ae0516dc51b19980e281cc1505aa6a3272
-2026-08-15-desktop-plugin-boot-recovery.zh.md: 5c2bce0d5b55ebfffe917ad9bc63bab9ef85f845
+2026-08-15-desktop-plugin-boot-recovery.zh.md: cea2ba896c6ad4a878c2d64a4a9f170664585302

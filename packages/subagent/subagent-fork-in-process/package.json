@@ -54,6 +54,5 @@
     "@deepseek-ai/dsh-subagent-in-process-driver": "workspace:^",
     "@deepseek-ai/dsh-subagent-spawn-in-process": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
-  },
-  "optionalDependencies": {}
+  }
 }

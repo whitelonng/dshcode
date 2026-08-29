@@ -33,4 +33,4 @@ Plugins 设置分区有三个并列标签页——安装与更新、插件开关
 
 ## 结果
 
-Plugins 分区现在只有两个标签页：配置卡片与合并后的插件列表。预装产品与用户插件可开关，用户插件另外支持更新与卸载；内置 Loader 条目只读。开关持久化在下次重启时生效，与既有的 plugin-control 契约一致。[特性所属标签页 note](2026-08-11-plugin-settings-tabs.md) 保留 slot ledger 机制，但其标签页清单在此被取代；[社区产品与 profile 开关 note](2026-08-14-built-in-community-plugins-and-controls.md) 的浏览器开关半部分同样被取代——`plugin-control` Host 行仍为配置了目录的部署保留，其目录现在会为从未挂载的产品创建行。
+Plugins 分区现在只有两个标签页：配置卡片与合并后的插件列表。预装产品与用户插件可开关，用户插件另外支持更新与卸载；内置 Loader 条目只读。开关持久化在下次重启时生效，与既有的 plugin-control 契约一致。[特性所属标签页 note](2026-08-11-plugin-settings-tabs.zh.md) 保留 slot ledger 机制，但其标签页清单在此被取代；[社区产品与 profile 开关 note](2026-08-14-built-in-community-plugins-and-controls.zh.md) 的浏览器开关半部分同样被取代——`plugin-control` Host 行仍为配置了目录的部署保留，其目录现在会为从未挂载的产品创建行。

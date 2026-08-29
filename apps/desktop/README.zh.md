@@ -63,5 +63,5 @@ pnpm --filter @dshcode/desktop run dist:win:x64
 
 - 预览版安装包目前明确保持未签名状态。在后续版本配置平台签名及 macOS 公证前，macOS Gatekeeper 与 Windows SmartScreen 可能会对本地构建发出警告。
 - 尚未配置自动更新。
-- 内嵌 Web UI 保留上游身份标识，但桌面应用与安装器使用独立 DSHCode 图标；详见仓库的[许可证与品牌声明](../../README.md#license-and-branding)。
+- 内嵌 Web UI 保留上游身份标识，但桌面应用与安装器使用独立 DSHCode 图标；详见仓库的[许可证与品牌声明](../../README.zh.md)。
 - 恢复对话框、托盘与自绘标题栏需要在原生 Windows 构建上手动验证。

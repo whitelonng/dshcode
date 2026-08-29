@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-14-desktop-single-row-title-bar.md) | 中文
 
-> 范围：桌面应用外壳——Windows 自绘单行标题栏、沙箱 preload 桥与窗口菜单 IPC。承接 [系统托盘与关闭隐藏](2026-08-14-desktop-tray-and-close-to-tray.md) 决策（已移除默认菜单栏并定义托盘归属）。
+> 范围：桌面应用外壳——Windows 自绘单行标题栏、沙箱 preload 桥与窗口菜单 IPC。承接 [系统托盘与关闭隐藏](2026-08-14-desktop-tray-and-close-to-tray.zh.md) 决策（已移除默认菜单栏并定义托盘归属）。
 
 ## 问题
 
@@ -18,7 +18,7 @@ Status: implemented
 
 ### preload 桥是渲染进程唯一的新表面
 
-新增沙箱 preload（`apps/desktop/src/preload.ts`）通过 `contextBridge` 暴露 `window.dshDesktop`：窗口框架模式（Windows 为 `custom`，其余为 `native`）、产品名、应用版本，以及调用 `desktop:show-menu` IPC 通道的 `showMenu()`。主窗口在所有平台传入产品名与版本启动参数，仅 Windows 额外追加 `--dsh-frame=custom`——原生框架平台绝不能收到 frame 参数，否则渲染层会在系统标题栏上叠画 Windows chrome（版本事实由[产品版本显示注记](../feature/2026-08-17-product-version-display.md)加入），因此桥负载解析放在 `apps/desktop/src/lifecycle.ts`，node 测试套件无需加载 Electron 即可覆盖。沙箱 preload 无法加载 ESM，所以 desktop 的 tsdown 配置把 preload 入口构建为 CommonJS（`lib/preload.cjs`），与不变的 ESM `lib/main.js` 并存（两个入口都构建两种格式；残留两个惰性兄弟产物，已在配置中说明）。
+新增沙箱 preload（`apps/desktop/src/preload.ts`）通过 `contextBridge` 暴露 `window.dshDesktop`：窗口框架模式（Windows 为 `custom`，其余为 `native`）、产品名、应用版本，以及调用 `desktop:show-menu` IPC 通道的 `showMenu()`。主窗口在所有平台传入产品名与版本启动参数，仅 Windows 额外追加 `--dsh-frame=custom`——原生框架平台绝不能收到 frame 参数，否则渲染层会在系统标题栏上叠画 Windows chrome（版本事实由[产品版本显示注记](../feature/2026-08-17-product-version-display.zh.md)加入），因此桥负载解析放在 `apps/desktop/src/lifecycle.ts`，node 测试套件无需加载 Electron 即可覆盖。沙箱 preload 无法加载 ESM，所以 desktop 的 tsdown 配置把 preload 入口构建为 CommonJS（`lib/preload.cjs`），与不变的 ESM `lib/main.js` 并存（两个入口都构建两种格式；残留两个惰性兄弟产物，已在配置中说明）。
 
 `desktop:show-menu` 处理器在弹出由纯模板构建的原生菜单（隐藏到托盘 / 重启应用 / 退出）前，会先校验发送方 frame 是否属于应用精确源（origin）。重启动作在已置位退出路径前先排队 `app.relaunch()`（打包版 Electron 无法热应用宿主插件，因此插件管理表面会原地重启整个应用）；退出动作复用关闭隐藏策略的已置位退出路径。
 

@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-14-built-in-community-plugins-and-controls.md
 2026-08-14-built-in-community-plugins-and-controls.md: 0ea20761f9262d4e5543ca2c67dc86e2b747f5be
-2026-08-14-built-in-community-plugins-and-controls.zh.md: 4bd0d9607ca8b933b3e70b2f1119095f85f83005
+2026-08-14-built-in-community-plugins-and-controls.zh.md: ce8551ade9356d1c47696bcedcf35c9c557839c7

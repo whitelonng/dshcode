@@ -26,6 +26,7 @@ export type SurfaceEventType =
   | 'user/message'
   | 'assistant/message'
   | 'tool/result'
+  | 'message/delete'
 
 /**
  * How a session event entered the ordered surface. Only valid on
@@ -39,10 +40,16 @@ export type SurfaceEventType =
  *   node. The node's {@link SessionEvent.sourceEventSeqs} must include every
  *   shadowed surface node. Used by compaction; any surface-replacing producer
  *   may use it.
+ * - `{ op: 'delete', start, end }`: removes surface nodes from `start`
+ *   (inclusive) through `end` (inclusive) without a replacement. Only
+ *   `message/delete` events carry it — a human-edited transcript removal. Both
+ *   ends must exist as surface nodes in the current surface; the event's
+ *   {@link SessionEvent.sourceEventSeqs} must include every removed node.
  */
 export type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: number; end: number }
+  | { op: 'delete'; start: number; end: number }
 
 /**
  * One immutable entry in the session log.
@@ -92,7 +99,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-来源：[`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:349`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:356`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:391`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:424`](../packages/core/session/src/types.ts)
 
 ## 事件
 
@@ -500,6 +507,26 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
 
+### `message/*`
+
+<a id="messagedelete--surface"></a>
+
+#### `message/delete` — surface
+
+```ts persistence-catalog
+/**
+ * Removes the surface range [`start`, `end`] (inclusive, both existing
+ * surface node seqs) from the model-visible history without replacement.
+ * Log-only: derives no message, but the surface fold must know the range —
+ * its `surfaceOp` carries the same {@link SurfaceOp delete} values and
+ * `sourceEventSeqs` cites every removed node. Appended only outside an open
+ * turn, by a human transcript edit (delete message / discard a turn).
+ */
+'message/delete': { start: number; end: number }
+```
+
+来源：[`packages/core/session/src/types.ts:310`](../packages/core/session/src/types.ts)
+
 ### `permission/*`
 
 <a id="permissionpreset--log-only"></a>
@@ -549,7 +576,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/context': RequestContext
 ```
 
-来源：[`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:322`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -563,7 +590,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/header': { header: EpochHeader; reason: RequestHeaderReason }
 ```
 
-来源：[`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:317`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -638,7 +665,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'session/end-seed': Record<string, never>
 ```
 
-来源：[`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:345`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -784,7 +811,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TodoItem](subsystems/session.zh.md)
 
-来源：[`packages/core/session/src/types.ts:303`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:312`](../packages/core/session/src/types.ts)
 
 ### `tool/*`
 

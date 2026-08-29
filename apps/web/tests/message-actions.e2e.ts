@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
-  launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
+  launchWebScaffold, parseSeedFixture, renderSeedFixture, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
@@ -38,39 +38,42 @@ const EDIT_PROMPT = 'Edit this prompt next.'
  * followed by one ordinary completed response. The first response keeps
  * copy/clock but is not a legal branch point; the second is the real turn tail.
  * @param raw - Recorded seeded-history JSONL.
+ * @param secondPrompt - The second user prompt to seed; distinct seeds isolate
+ * the delete/edit scenarios from the fork scenario through a unique view switch.
  * @returns A contiguous, closed two-turn fixture.
  */
 function completedTailFixture(raw: string, secondPrompt = SECOND_PROMPT): string {
-  const kept: string[] = []
-  for (const line of raw.trimEnd().split('\n')) {
-    const row = JSON.parse(line) as {
-      type: string
-      seq?: number
-      seq0?: number
-      data?: { content?: unknown[] }
-    }
-    const firstSeq = row.seq ?? row.seq0
-    if (firstSeq !== undefined && firstSeq >= 101) break
-    if (row.type === 'assistant/message' && row.seq === 64) {
-      const content = row.data?.content
+  const decoded = parseSeedFixture(raw)
+  const kept = decoded.events.filter(event => event.seq < 101).map((event) => {
+    if (event.type === 'assistant/message' && event.seq === 64) {
+      const data = event.data as unknown as { content?: unknown[] }
+      const content = data.content
       if (!Array.isArray(content)) throw new Error('borrowed step-one assistant message has no content')
-      content.splice(1, 0, { type: 'text', text: MID_TURN_TEXT })
-      kept.push(JSON.stringify(row))
-    } else {
-      kept.push(line)
+      return {
+        ...event,
+        data: { ...data, content: [...content.slice(0, 1), { type: 'text', text: MID_TURN_TEXT }, ...content.slice(1)] },
+      }
     }
-  }
+    return event
+  })
+  let seq = kept.length
+  let time = (kept.at(-1)?.time ?? -1) + 1
+  const at = (event: Record<string, unknown>): { seq: number; time: number } & Record<string, unknown> => ({
+    ...event,
+    seq: seq++,
+    time: time++,
+  })
   const tail = [
-    { type: 'step/end', seq: 101, time: 1784974102749, data: { turn: 1, step: 2 } },
-    { type: 'turn/end', seq: 102, time: 1784974102750, data: { turn: 1, reason: { kind: 'aborted' } } },
-    { type: 'turn/start', seq: 103, time: 1784974103000, data: { turn: 2, trigger: { kind: 'message', source: { kind: 'user', rpcId: '{{rpcId}}' } } } },
-    { type: 'user/message', seq: 104, time: 1784974103001, data: { content: [{ type: 'text', text: secondPrompt }], source: { kind: 'user', rpcId: '{{rpcId}}' } }, surfaceOp: 'append' },
-    { type: 'step/start', seq: 105, time: 1784974103002, data: { turn: 2, step: 1 } },
-    { type: 'assistant/message', seq: 106, time: 1784974103003, data: { turn: 2, step: 1, content: [{ type: 'text', text: 'DONE' }], provenance: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }, sourceEventSeqs: [], surfaceOp: 'append' },
-    { type: 'step/end', seq: 107, time: 1784974103004, data: { turn: 2, step: 1 } },
-    { type: 'turn/end', seq: 108, time: 1784974103005, data: { turn: 2, reason: { kind: 'completed' } } },
+    at({ type: 'step/end', data: { turn: 1, step: 2 } }),
+    at({ type: 'turn/end', data: { turn: 1, reason: { kind: 'aborted' } } }),
+    at({ type: 'turn/start', data: { turn: 2, trigger: { kind: 'message', source: { kind: 'user', rpcId: '{{rpcId}}' } } } }),
+    at({ type: 'user/message', data: { content: [{ type: 'text', text: secondPrompt }], source: { kind: 'user', rpcId: '{{rpcId}}' } }, surfaceOp: 'append' }),
+    at({ type: 'step/start', data: { turn: 2, step: 1 } }),
+    at({ type: 'assistant/message', data: { turn: 2, step: 1, content: [{ type: 'text', text: 'DONE' }], provenance: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } }, sourceEventSeqs: [], surfaceOp: 'append' }),
+    at({ type: 'step/end', data: { turn: 2, step: 1 } }),
+    at({ type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } }),
   ]
-  return `${[...kept, ...tail.map(row => JSON.stringify(row))].join('\n')}\n`
+  return renderSeedFixture(decoded.headerLine, [...kept, ...tail])
 }
 
 describe('web e2e: message IconActions and clocks on settled history', () => {
