@@ -44,7 +44,9 @@ export function spawnDialogWorker(data: Win32DialogWorkerData): ReturnType<typeo
   // A packaged Electron host uses its branded application as process.execPath;
   // child-only Node mode bypasses application startup and its single-instance lock.
   const baseEnv = { ...process.env, DSH_DIALOG_TITLE: data.title, ELECTRON_RUN_AS_NODE: '1' }
-  const stdio: StdioOptions = ['ignore', 'inherit', 'inherit', 'ipc']
+  // stderr is piped (not inherited) so the driver can attach a crash cause
+  // to the silent-exit rejection; stdout stays inherited for host visibility.
+  const stdio: StdioOptions = ['ignore', 'inherit', 'pipe', 'ipc']
   // Use pathname (not the raw URL): bundlers/tests may append query strings,
   // which are not part of the source file extension.
   /* v8 ignore next 3 -- the built-output arm: tests always run unbuilt (src/) */

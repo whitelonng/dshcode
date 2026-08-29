@@ -33,10 +33,12 @@ describe('spawnDialogWorker', () => {
       title: options?.env?.DSH_DIALOG_TITLE,
       runAsNode: options?.env?.ELECTRON_RUN_AS_NODE,
       windowsHide: options?.windowsHide,
+      stdio: options?.stdio,
     }).toEqual({
       title: 'Packaged Electron guard',
       runAsNode: '1',
       windowsHide: true,
+      stdio: ['ignore', 'inherit', 'pipe', 'ipc'],
     })
     expect(process.env.ELECTRON_RUN_AS_NODE).toBe('')
   })

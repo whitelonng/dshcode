@@ -13,6 +13,8 @@ import type { Win32DialogWorkerMessage } from '../src/win32-dialog-worker.ts'
 
 class FakeWorker extends EventEmitter implements Win32DialogWorkerLike {
   kill = vi.fn(() => true)
+  /** The child's stderr surface; tests emit into it before an exit. */
+  readonly stderr = new EventEmitter()
   post(message: Win32DialogWorkerMessage): void {
     this.emit('message', message)
   }
@@ -70,7 +72,37 @@ describe('pickWin32Directory', () => {
     const silent = harness()
     const exiting = pickWin32Directory(live(), silent.internals)
     silent.worker.emit('exit', 0)
-    await expect(exiting).rejects.toThrow('exited before reporting a result')
+    await expect(exiting).rejects.toThrow('exited before reporting a result (code 0)')
+  })
+
+  it('names the cause of a silent exit with the exit code and the captured stderr tail', async () => {
+    const { worker, internals } = harness()
+    const exiting = pickWin32Directory(live(), internals)
+    worker.stderr.emit('data', 'node: internal error: Cannot find module koffi\n')
+    worker.emit('exit', 1)
+    await expect(exiting).rejects.toThrow(
+      'exited before reporting a result (code 1): node: internal error: Cannot find module koffi',
+    )
+  })
+
+  it('reports a signal-only exit and bounds the stderr tail to its end', async () => {
+    const killed = harness()
+    const killedPick = pickWin32Directory(live(), killed.internals)
+    killed.worker.emit('exit', null, 'SIGTERM')
+    await expect(killedPick).rejects.toThrow('exited before reporting a result (signal SIGTERM)')
+
+    const verbose = harness()
+    const verbosePick = pickWin32Directory(live(), verbose.internals)
+    const stderr = `${'a'.repeat(5000)}END`
+    verbose.worker.stderr.emit('data', stderr)
+    verbose.worker.emit('exit', 3)
+    const failure = await verbosePick.then(
+      () => { throw new Error('expected the pick to reject') },
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    )
+    const detail = failure.slice(failure.indexOf(': ') + 2)
+    expect(detail.length).toBe(4096)
+    expect(detail.endsWith('END')).toBe(true)
   })
 
   it('settles once: a late exit after the result is inert', async () => {
