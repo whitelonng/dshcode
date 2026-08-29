@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-10-fork-children-stay-one-shot.md
+2026-08-10-fork-children-stay-one-shot.md: 44b947a3e0580263f1973aaf24534b7b2f01c0b6
+2026-08-10-fork-children-stay-one-shot.zh.md: acb12c54fa37d4462cac1b1035bc74d5a96ea719

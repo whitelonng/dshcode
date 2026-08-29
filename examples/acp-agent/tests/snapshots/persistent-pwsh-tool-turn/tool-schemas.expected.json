@@ -1,0 +1,21 @@
+{
+  "initial": [
+    {
+      "name": "pwsh",
+      "description": "Run commands in a persistent PowerShell shell. State, including the current directory and exported environment variables, persists across calls for this agent.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The PowerShell command to run. Relative path is preferred in the command."
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    }
+  ],
+  "changes": []
+}

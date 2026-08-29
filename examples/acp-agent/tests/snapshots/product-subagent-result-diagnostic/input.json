@@ -1,0 +1,7 @@
+{
+  "steps": [
+    { "op": "initialize" },
+    { "op": "newSession" },
+    { "op": "prompt", "text": "Observe four diagnostic failures with subagent_codex. First call it in the foreground for the Claude Code diagnostic, then in the background for the same Claude Code diagnostic and collect subagent-1 with job_output using wait true. Next call it in the foreground for the Codex diagnostic, then in the background for the same Codex diagnostic and collect subagent-2 with job_output using wait true. After all four failures, reply with exactly PARENT_OBSERVED_DIAGNOSTICS. Do not call any other tools." }
+  ]
+}

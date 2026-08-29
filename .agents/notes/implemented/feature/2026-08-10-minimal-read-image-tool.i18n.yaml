@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-10-minimal-read-image-tool.md
+2026-08-10-minimal-read-image-tool.md: 19306a35fe709a04d94090a62056575b4d51f7bc
+2026-08-10-minimal-read-image-tool.zh.md: c7562c433e909d1f81361c0ced56318795e6469e
