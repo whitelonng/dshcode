@@ -4,6 +4,9 @@
  * onto a promise, and services aborts by posting `WM_CLOSE` to the dialog
  * thread's windows until the child reports back. The real process/window
  * surface is injectable so every driver path is testable on any platform.
+ * A child that exits without a result rejects with its exit code, signal,
+ * and a bounded tail of its captured stderr, so a silent crash still names
+ * its cause on hosts where the child console never reaches a log.
  */
 
 import { closeThreadWindows as hostCloseThreadWindows, spawnDialogWorker } from './win32-dialog-host.ts'
@@ -18,7 +21,14 @@ export interface Win32DialogWorkerLike {
    */
   on(event: 'message', listener: (message: Win32DialogWorkerMessage) => void): unknown
   on(event: 'error', listener: (error: Error) => void): unknown
-  on(event: 'exit', listener: (code: number) => void): unknown
+  on(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown
+  /**
+   * The child's stderr stream (satisfied by `ChildProcess.stderr`); the
+   * driver keeps a bounded tail of it so a silent exit names its cause.
+   * `null` mirrors a child whose stderr channel is closed; absent on
+   * driver-test fakes that exercise no crash path.
+   */
+  stderr?: { on(event: 'data', listener: (chunk: Buffer | string) => void): unknown } | null
   /**
    * Force-stop the child; the abort path's last resort when `WM_CLOSE`
    * never lands (e.g. the dialog window was never created).
@@ -49,6 +59,8 @@ export const DIALOG_TITLE = 'Select Workspace Directory'
 const CLOSE_RETRY_MS = 150
 /** Abort-service attempts before force-terminating the worker. */
 const CLOSE_MAX_ATTEMPTS = 20
+/** Bytes of worker stderr kept (from the end) for the silent-exit rejection. */
+const STDERR_TAIL_BYTES = 4096
 
 /** Fail loudly if the closed worker-to-driver union gains an unhandled member. */
 /* v8 ignore start -- closed-union backstop; unreachable without a TypeScript contract violation */
@@ -76,6 +88,12 @@ export async function pickWin32Directory(
   let dialogThreadId: number | undefined
   let closeTimer: NodeJS.Timeout | undefined
   let settled = false
+  // A crash's cause sits at the end of the output, so keep only the tail.
+  let stderrTail = ''
+  worker.stderr?.on('data', (chunk: Buffer | string) => {
+    stderrTail += String(chunk)
+    if (stderrTail.length > STDERR_TAIL_BYTES) stderrTail = stderrTail.slice(-STDERR_TAIL_BYTES)
+  })
 
   return await new Promise<string | null>((resolve, reject) => {
     const settle = (outcome: () => void): void => {
@@ -150,9 +168,11 @@ export async function pickWin32Directory(
         reject(error)
       })
     })
-    worker.on('exit', () => {
+    worker.on('exit', (code, signal) => {
       settle(() => {
-        reject(new Error('win32 folder dialog worker exited before reporting a result'))
+        const how = code === null ? `signal ${String(signal)}` : `code ${code}`
+        const detail = stderrTail.trim() === '' ? '' : `: ${stderrTail.trim()}`
+        reject(new Error(`win32 folder dialog worker exited before reporting a result (${how})${detail}`))
       })
     })
   })
