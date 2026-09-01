@@ -83,7 +83,6 @@
     "@deepseek-ai/dsh-subagent-fork-in-process": "workspace:^",
     "@deepseek-ai/dsh-subagent-spawn-in-process": "workspace:^",
     "@deepseek-ai/dsh-typert-protocol": "workspace:^",
-    "@deepseek-ai/dsh-brand": "workspace:^",
-    "@deepseek-ai/dsh-session-persistence-sqlite": "workspace:^"
+    "@deepseek-ai/dsh-brand": "workspace:^"
   }
 }

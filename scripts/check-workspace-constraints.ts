@@ -58,13 +58,6 @@ const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|app
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh': ['lib/*.js', 'lib/types/**/*.d.ts', 'config'],
-  // The Web build emits sourcemaps for browser debugging; publishing them is
-  // what the payload policy forbids, so the bundle ships without them.
-  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
-const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
-const localArtifactDirs = new Set(['node_modules'])
-const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
-  '@deepseek-ai/dsh': ['lib/*.js', 'lib/types/**/*.d.ts', 'config'],
   // Sourcemaps stay out by payload policy; the worker-preview surface
   // (dist/preview.html and dist/preview/) backs private experimental
   // packages and is not published.

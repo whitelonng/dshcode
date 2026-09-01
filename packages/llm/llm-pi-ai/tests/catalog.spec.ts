@@ -321,7 +321,7 @@ describe('hand-declared providers', () => {
   it('carries declared output modalities and image understanding to the seam metadata', async () => {
     const dir = await home()
     const ctx = await bootWithSettings(dir, {})
-    await ctx.settings.update(settingsNamespace('llm-pi-ai'), {
+    await ctx.settings.update('llm-pi-ai', {
       providers: {
         'capable-gateway': {
           api: 'openai-completions',

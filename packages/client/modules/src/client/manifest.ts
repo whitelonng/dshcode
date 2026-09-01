@@ -259,7 +259,7 @@ export function parseBootManifest(wire: unknown): BootManifest {
     }
     return { ...row, initialUrl }
   })
-  return { rev: graph.rev, modules, plugins }
+  return { rev: graph.rev, version: graph.version, modules, plugins }
 }
 
 /** One client bundle's factory registration submitted through `window.__ModuleLoader__.load`. */

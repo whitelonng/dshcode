@@ -71,7 +71,19 @@ export function isAppendSurfaceEvent(
 export function isReplacementSurfaceEvent(
   event: SessionEvent,
 ): event is SurfaceEvent & { surfaceOp: Extract<SurfaceOp, { op: 'replace' }> } {
-  return isSurfaceEvent(event) && event.surfaceOp !== 'append'
+  return isSurfaceEvent(event) && event.surfaceOp !== 'append' && event.surfaceOp.op === 'replace'
+}
+
+/**
+ * Narrow an event to a surface deletion: a `message/delete` event that
+ * removed a surface range without a replacement node.
+ * @param event - event to test.
+ * @returns true when the event deleted a surface range.
+ */
+export function isDeleteSurfaceEvent(
+  event: SessionEvent,
+): event is SessionEvent<'message/delete'> & { surfaceOp: Extract<SurfaceOp, { op: 'delete' }> } {
+  return isSurfaceEvent(event) && event.type === 'message/delete' && event.surfaceOp !== 'append' && event.surfaceOp.op === 'delete'
 }
 
 /**
@@ -255,7 +267,7 @@ function assertProvenance(
 /** Locate one replacement range without mutating the current fold state. */
 function replacementRange(
   state: SurfaceFoldState,
-  op: Extract<SurfaceOp, { op: 'replace' }>,
+  op: Extract<SurfaceOp, { op: 'replace' | 'delete' }>,
 ): Pick<SurfaceReplacePlan, 'startIdx' | 'endIdx' | 'shadowedSeqs'> {
   const startIdx = state.nodes.indexOf(op.start)
   if (startIdx === -1) {

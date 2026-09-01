@@ -142,7 +142,6 @@
     "@types/js-yaml": "^4.0.9",
     "@types/ws": "8.18.1",
     "execa": "^10.0.0",
-    "ws": "8.21.0",
-    "@deepseek-ai/dsh-host-apiproxy": "workspace:^"
+    "ws": "8.21.0"
   }
 }

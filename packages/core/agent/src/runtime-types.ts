@@ -127,7 +127,7 @@ declare module './types.ts' {
    * sole ordinary message of its own turn.
    * @param message - identified prompt content and the source that supplied it.
    */
-    followup(message: UserMessage): void
+    followup(message: UserMessage, replace?: FollowupReplace): void
 
     /**
    * Submit steering for the nearest step. An idle driver starts a turn;
@@ -296,4 +296,14 @@ declare module '@deepseek-ai/cordis' {
      */
     'agent/error'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; step: number; error: unknown }): void
   }
+}
+
+/** Replacement shadow for a follow-up turn. */
+export interface FollowupReplace {
+  /** Inclusive start seq of the current surface range to shadow. */
+  start: number
+  /** Inclusive end seq of the current surface range to shadow. */
+  end: number
+  /** Every shadowed surface node in surface order (provenance validation). */
+  sourceEventSeqs: number[]
 }

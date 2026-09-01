@@ -746,7 +746,7 @@ export class ClientModuleRegistry extends Service {
     this.batchResponses = batchResponses
     this.responses = responses
     const batches = artifacts.map(artifact => artifact.descriptor)
-    return { rev: shortHash(JSON.stringify({ entries, batches })), entries, batches }
+    return { rev: shortHash(JSON.stringify({ entries, batches })), version: PRODUCT_VERSION, entries, batches }
   }
 
   private notifyGraphChanged(): void {

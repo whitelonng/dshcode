@@ -151,10 +151,6 @@
           - id: web-ui
             matches: ['dsh-web-ui']
 
-    # The API gateway: the transport-agnostic dispatch face every client shape
-    # shares. The base layer's agent-default-model service owns the default model.
-    - id: api-gateway
-      name: '@deepseek-ai/dsh-host-apiproxy'
     # Session commands, cold reads, and live control over Typert Remote.
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'

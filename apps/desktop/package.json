@@ -78,7 +78,6 @@
     "@deepseek-ai/dsh-fs-local": "workspace:^",
     "@deepseek-ai/dsh-goal": "workspace:^",
     "@deepseek-ai/dsh-home-paths": "workspace:^",
-    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
     "@deepseek-ai/dsh-host-directory-picker-browse": "workspace:^",
     "@deepseek-ai/dsh-host-directory-picker-native": "workspace:^",
     "@deepseek-ai/dsh-host-file-picker": "workspace:^",

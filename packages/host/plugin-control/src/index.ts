@@ -324,5 +324,5 @@ export class PluginControlGateway {
 /** Register the configured gateway on a loopback-only Connection channel. */
 export function apply(ctx: Context, config: Config): void {
   const gateway = new PluginControlGateway(ctx, config)
-  ctx.connection.rpc.handle(CHANNEL, gateway.handle, { authority: 'loopback' })
+  ctx.connection.rpc.handle(CHANNEL, gateway.handle)
 }

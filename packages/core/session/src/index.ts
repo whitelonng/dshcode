@@ -585,6 +585,12 @@ export class Session {
   /** Cached immutable full snapshot of the private append-only log. */
   private eventsSnapshot: readonly SessionEvent[] | undefined
 
+  /** The frozen event log this session has accepted. */
+  get events(): readonly SessionEvent[] {
+    this.eventsSnapshot ??= Object.freeze([...this.log])
+    return this.eventsSnapshot
+  }
+
   /**
    * Return the immutable event stored at one exact sequence number.
    * @param seq - event sequence number.

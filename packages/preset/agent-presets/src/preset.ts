@@ -68,3 +68,17 @@ export interface Config {
    */
   includeUserRoot: boolean
 }
+
+/** A preset exists but its composition cannot be installed. */
+export class PresetMountError extends Error {
+  constructor(
+    /** The preset whose composition failed. */
+    readonly presetId: string,
+    /** Why it failed, without this package's own message prefix. */
+    readonly reason: string,
+    options?: ErrorOptions,
+  ) {
+    super(`agent-presets: preset "${presetId}" failed to mount: ${reason}`, options)
+  }
+}
+

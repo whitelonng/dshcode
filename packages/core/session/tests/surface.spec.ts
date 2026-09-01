@@ -56,7 +56,7 @@ function surfaceSession(): Session {
   return s
 }
 
-function provenanceEvent(seq: SessionSeq, sourceEventSeqs: unknown): SessionEvent {
+function provenanceEvent(seq: number, sourceEventSeqs: unknown): SessionEvent {
   return {
     type: 'user/message',
     seq,

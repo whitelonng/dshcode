@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { AttachmentError, AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { CredentialProvider } from '@deepseek-ai/dsh-credentials'
@@ -147,7 +147,7 @@ async function tempPng(): Promise<string> {
 function callDescribe(ctx: Context, args: unknown, signal?: AbortSignal) {
   return ctx.tools.execute({
     signal: signal ?? new AbortController().signal,
-    callId: CallId('vision-call'),
+    callId: ToolCallId('vision-call'),
     name: 'describe_image',
     arguments: args,
   })

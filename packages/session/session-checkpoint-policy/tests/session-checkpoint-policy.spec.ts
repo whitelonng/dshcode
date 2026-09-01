@@ -19,7 +19,6 @@ class TestPersistence extends SessionPersistence {
   create(_meta: SessionHeader): Promise<void> { return Promise.resolve() }
   append(_id: SessionId, _events: readonly SessionEvent[]): Promise<void> { return Promise.resolve() }
   delete(_id: SessionId): Promise<void> { return Promise.resolve() }
-  load(_id: SessionId): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
   load(_id: SessionId): Promise<SessionInspection> {
     return Promise.reject(new Error('not used'))
   }

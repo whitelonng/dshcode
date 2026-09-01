@@ -144,6 +144,11 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         await expect(persistence.load(m.id)).rejects.toThrow()
         // Deleting an absent session still resolves (idempotent).
         await persistence.delete(m.id)
+      } finally {
+        await dispose()
+      }
+    })
+
     it('requires an explicit inherited cut exactly when the header is seeded', async () => {
       const { persistence, dispose } = await make()
       try {

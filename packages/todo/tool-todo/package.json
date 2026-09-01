@@ -61,7 +61,6 @@
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-user-questions": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-host-apiproxy": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:^"
   }
 }

@@ -20,8 +20,7 @@ import { Include } from '@deepseek-ai/cordis-plugin-include'
 import type { EntryTree } from '@deepseek-ai/cordis-plugin-loader'
 import { formatLoaderFailure } from '@deepseek-ai/dsh-app-boot'
 import { scopeOf, scopeParentOf, type ScopeKey } from '@deepseek-ai/dsh-scope'
-import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
-import type { AgentPreset } from './preset.ts'
+import { PresetMountError, type AgentPreset } from './preset.ts'
 import { classifyRowSpecifier } from './specifier.ts'
 
 /** What one mounted subtree publishes about itself for the audit to read. */

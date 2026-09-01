@@ -112,7 +112,6 @@
     "commander": "^15.0.0",
     "open": "^11.0.0",
     "@deepseek-ai/dsh-client-runtime": "workspace:^",
-    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
     "@deepseek-ai/dsh-host-file-picker": "workspace:^",
     "@deepseek-ai/dsh-host-file-picker-native": "workspace:^",
     "@deepseek-ai/dsh-session-projection-cache": "workspace:^",

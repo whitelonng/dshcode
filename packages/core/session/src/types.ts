@@ -331,8 +331,6 @@ export interface SessionEventMap {
    * turn, by a human transcript edit (delete message / discard a turn).
    */
   'message/delete': { start: number; end: number }
-  /** Whole-list snapshot; latest write wins on replay. Log-only UI state; never derived history. */
-  'todo/write': { todos: TodoItem[] }
   /**
    * Full header for the next request, appended inside its step before dispatch.
    * It is log-only; the latest snapshot reconstructs the request header.
@@ -419,6 +417,7 @@ export type SurfaceEvent = SessionEvent<SurfaceEventType> & { surfaceOp: Surface
 export type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: SessionSeq; end: SessionSeq }
+  | { op: 'delete'; start: SessionSeq; end: SessionSeq }
 
 /**
  * Surface placement and cited source-event seqs for {@link Session.append}. Required on

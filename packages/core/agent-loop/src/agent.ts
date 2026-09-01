@@ -28,8 +28,8 @@ import {
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import type { EpochHeader, RequestContext, Session, SessionId, SessionSeq, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
-import { canonicalHeader, headerEquals } from '@deepseek-ai/dsh-session'
+import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
+import { SessionSeq, canonicalHeader, headerEquals } from '@deepseek-ai/dsh-session'
 import { joinContextSections, renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-session-projection'
@@ -302,8 +302,8 @@ export class ReactLoopAgent implements Agent {
               const edit = this.pendingEditSurface
               this.pendingEditSurface = undefined
               this.session.append('user/message', message, {
-                surfaceOp: { op: 'replace', start: edit.start, end: edit.end },
-                sourceEventSeqs: edit.sourceEventSeqs,
+                surfaceOp: { op: 'replace', start: SessionSeq(edit.start), end: SessionSeq(edit.end) },
+                sourceEventSeqs: edit.sourceEventSeqs.map(seq => SessionSeq(seq)),
               })
             } else {
               this.session.append('user/message', message, { surfaceOp: 'append' })

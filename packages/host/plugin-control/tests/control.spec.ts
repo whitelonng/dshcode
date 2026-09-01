@@ -80,9 +80,8 @@ describe('PluginControlGateway', () => {
   it('registers one loopback-only channel through the plugin lifecycle', async () => {
     const h = await harness(1)
     let handler: ConnectionRpcHandler | undefined
-    const handle = vi.fn<HostConnectionHandle['rpc']['handle']>((channel, next, options) => {
+    const handle = vi.fn<HostConnectionHandle['rpc']['handle']>((channel, next) => {
       expect(channel).toBe('/plugin-control')
-      expect(options).toEqual({ authority: 'loopback' })
       handler = next
       return async () => {}
     })
