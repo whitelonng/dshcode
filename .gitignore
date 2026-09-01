@@ -21,6 +21,8 @@ tmp/
 .claude/commands/
 .claude/launch.json
 .claude/settings.json
+.mancode/local/
+.mancode/runtime/
 .vscode/
 .DS_Store
 .idea
