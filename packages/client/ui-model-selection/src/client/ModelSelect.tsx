@@ -22,8 +22,22 @@ import {
   IconWarningOutline16, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ModelCatalogModel } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { ModelSelectInjected } from './slots.ts'
 import css from './ModelSelect.module.css'
+
+/**
+ * Capability-badge view over one catalog model. The upstream
+ * `ModelCatalogModel` dropped `inputModalities`/`outputModalities`/
+ * `capabilities`; the product badges still key off them, so the three
+ * optional fields are re-declared here at the view edge. Data absent from a
+ * catalog entry simply renders no badge.
+ */
+type ModelEntry = ModelCatalogModel & {
+  readonly inputModalities?: readonly string[]
+  readonly outputModalities?: readonly string[]
+  readonly capabilities?: readonly string[]
+}
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
 type Pane = 'root' | 'model' | 'effort'
@@ -290,6 +304,7 @@ export function ModelSelect(
                     <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
                       <div className={css.groupTitle} id={headingId}>{group.name}</div>
                       {group.models.map((model) => {
+                        const entry = model as ModelEntry
                         const selected = state.current?.provider === group.id && state.current.model === model.id
                         return (
                           <button
@@ -311,16 +326,16 @@ export function ModelSelect(
                               {/* Declared capability badges; the absence of a
                                   field is not a badge, so only declared claims
                                   render. */}
-                              {(model.inputModalities?.includes('image') === true
-                                || model.outputModalities?.includes('image') === true
-                                || model.capabilities?.includes('image-understanding') === true)
+                              {(entry.inputModalities?.includes('image') === true
+                                || entry.outputModalities?.includes('image') === true
+                                || entry.capabilities?.includes('image-understanding') === true)
                                 ? (
                                   <span className={css.badges}>
-                                    {model.inputModalities?.includes('image') === true
+                                    {entry.inputModalities?.includes('image') === true
                                       && <span className={css.badge}>{t('badge.imageInput')}</span>}
-                                    {model.outputModalities?.includes('image') === true
+                                    {entry.outputModalities?.includes('image') === true
                                       && <span className={css.badge}>{t('badge.imageGeneration')}</span>}
-                                    {model.capabilities?.includes('image-understanding') === true
+                                    {entry.capabilities?.includes('image-understanding') === true
                                       && <span className={css.badge}>{t('badge.imageUnderstanding')}</span>}
                                   </span>
                                 )

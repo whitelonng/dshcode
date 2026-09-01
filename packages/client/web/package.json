@@ -36,7 +36,6 @@
     "react-dom": "^18.2.0",
     "typescript": "^6.0.3",
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-client-runtime": "workspace:^",
     "@deepseek-ai/dsh-client-test-runtime": "workspace:^"
   },
   "peerDependencies": {

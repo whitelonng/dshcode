@@ -127,53 +127,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'conversation.input.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
     /**
      * The input selector row's context hole, rendered in every conversation
-     * phase (cold start, blank-session hero, active seat) right above the
-     * composer card — the seat for session-maybe chips that ride beside the
-     * workspace selector (the git branch chip). The
-     * owner supplies nothing; data and verbs arrive through each entry's own
-     * inject face, and the session id is optional for the same reason as
-     * {@link ComposerBarOwnerProps}.
+     * phase right above the composer card — session-maybe chips that ride
+     * beside the workspace selector (the git branch chip).
      */
     'conversation.input.selector.context': { kind: 'list'; scope: 'session-maybe' }
-    /**
-     * The band under the composer card, inside the bar's width column — the
-     * seat for an ambient readout about the conversation (the shipped stats
-     * line lives here). Same {@link InputZone} owner share as the other
-     * regions. Anything the user must click belongs in the tool row instead
-     * (`conversation.input.left` / `.right`); anything needing its own line
-     * above the card belongs in `conversation.input.dock`.
-     */
-    'conversation.composer.dock': { kind: 'list'; scope: 'session'; owner: InputZone }
-    /**
-     * The left end of the tool row INSIDE the composer card, after the
-     * resident chrome (access mode, plan, attach) — the seat for a small
-     * always-visible control. Entries sit beside that chrome, never replace
-     * it. Same {@link InputZone} owner share; use `.right` for a control that
-     * belongs next to the send button, and the docks for anything taller than
-     * one row.
-     */
-    'conversation.input.left': { kind: 'list'; scope: 'session'; owner: InputZone }
-    /**
-     * The right end of the same tool row, before the primary send button —
-     * the seat for a control the user reaches on the way to sending (the
-     * model select sits in its own named seat just left of here). Same
-     * {@link InputZone} owner share and the same one-row height budget as
-     * `conversation.input.left`.
-     */
-    'conversation.input.right': { kind: 'list'; scope: 'session'; owner: InputZone }
-    /**
-     * The default composer body: a single slot rendered as the composer
-     * chain's fallback (a real entry, not a chain rider, so a
-     * takeover election hides rather than unmounts it and the textarea DOM
-     * survives). Session-maybe: the bar stays mounted across the
-     * no-session/session transition — the no-workspace hero renders the SAME
-     * textarea DOM as a read-only Workspace-picker trigger instead of a
-     * parallel inert tree — with the machine hooks absent until a session is
-     * current. InputBar registers
-     * here from this package's apply; its machine state arrives through the
-     * standard provide channel (useInput + inputActions), the keyboard
-     * command face through its own inject.
-     */
     /** Floating entries rendered inside the resident composer card. */
     'conversation.input.overlay': { kind: 'list'; scope: 'session' }
     /** Ambient entries below the composer card. */
@@ -258,128 +215,6 @@ export interface ConvViewOwnerProps {
   completeViewRequest: () => void
 }
 
-/**
- * Optional prose file-mention provider, consumed via `ctx.get('chatFileMentions')`
- * (optional-service convention): the chat view asks it for a closing message's
- * inline-code vocabulary and threads the result into MarkdownText. Absent
- * service — the providing plugin composed out of cordis.yml — turns the
- * surface off; the prose renders inert code.
- */
-export interface ChatFileMentions {
-  /**
-   * Mention vocabulary for the closing message the owner currency names.
-   * @param owner - Turn-tail owner currency (Turn data, closing seq, opener).
-   * @returns The resolver MarkdownText consumes, or undefined when the turn
-   * produced nothing worth linking.
-   */
-  forClosing(owner: TurnTailOwnerProps): MarkdownFileMentions | undefined
-}
-
-
-/**
- * Owner currency of the chat view's turn-tail hole: the engine-owned Turn and
- * the closing assistant's anchor. Registrants read their own typed Turn data
- * and open files through the same opener the tool rows use.
- */
-export interface TurnTailOwnerProps {
-  /** Engine-owned closing Turn boundary. */
-  turn: TurnLocation
-  /** The closing assistant's seq — the anchor the tail renders under. */
-  seq: number
-  /**
-   * Open a filesystem path through the Host (tool-row semantics; the chat
-   * view resolves relative paths against the session cwd).
-   */
-  openFile: (path: string) => void
-}
-
-/**
- * Owner currency of the assistant-message action strip: the durable identity
- * of the one finalized message the contributed actions address. Only finalized
- * messages reach this slot, so the id is always present.
- */
-export interface AssistantActionOwnerProps {
-  /** Stable identity carried from the `assistant/message` event. */
-  messageId: MessageId
-}
-
-/** Hook constrained to business data published on the current Chat Node's Turn. */
-export type UseChatNodeTurnData = <Key extends Extract<keyof ConversationTurnDataMap, string>>(
-  key: Key,
-) => Readonly<ConversationTurnDataMap[Key]> | undefined
-
-/** Slot-level Hook factory used by renderers reading their Node's Turn data. */
-export interface ChatNodeTurnDataInjected {
-  hooks: {
-    turnData: SlotHookFactory<'conversation.chat.node', UseChatNodeTurnData>
-  }
-}
-
-/** Stable owner currency delivered to one keyed Chat business renderer. */
-export interface ChatNodeOwnerProps {
-  /** Selected Tool call, when the shared details store names one. */
-  selectedCallId?: CallId | undefined
-  /** Session workspace root; Tool summaries display paths relative to it. */
-  cwd?: string | undefined
-  openFile: (path: string) => void
-  inspectCall: (callId: CallId) => void
-  forkAt: (seq: number) => void
-  /** Render a historical image group through the attachment slot. */
-  renderMessageImages: RenderMessageImages
-  /**
-   * Delete one user or assistant message from the transcript and the
-   * model-visible history; resolves false when the host refused (running
-   * agent or an already-shadowed seq).
-   */
-  deleteAt: (seq: number) => Promise<boolean>
-  /**
-   * Edit the conversation's last user message and regenerate its turn;
-   * resolves false when the host refused.
-   */
-  editAt?: ((seq: number, text: string) => Promise<boolean>) | undefined
-  /** Resolve a session-authorized historical image for inline display. */
-  loadImage: (attachment: ImageAttachmentRef) => Promise<string>
-  fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
-}
-
-/** Full props of one registered keyed Chat business renderer. */
-export type ChatNodeViewProps<Kind extends ChatNodeKind = ChatNodeKind> =
-  PropsRuntime<'conversation.chat.node', Kind> & PropsLocale<'conversation'>
-
-/** Owner currency of the details panel's Tool output renderer. */
-export interface DetailsToolOwnerProps {
-  /** Frozen selected call slice. */
-  block: ToolCallBlock
-  /** Session workspace root for card cwd and relative-path display. */
-  cwd?: string | undefined
-}
-
-/**
- * Owner share of the per-command row slot: the frozen {@link CommandNode}
- * slice off the snapshot (cache-stable reference — memo premise). The node
- * carries the whole lifecycle (structured name/args, pairing id, and
- * outcome-or-executing). A successful domain command may also carry the
- * explicitly linked projection node needed to fold two log records into one
- * presentation row.
- */
-export interface CommandRowOwnerProps {
-  /** Folded command lifecycle node (run + optional done). */
-  node: CommandNode
-  /** Explicitly linked compaction checkpoint for the settled `/compact` presentation. */
-  compaction?: CompactionSummaryNode
-}
-
-/** Full props of a registered command-row component. */
-export type CommandRowProps = PropsRuntime<'conversation.chat.commandview'>
-
-/**
- * Base props of a conversation view entry: the framework standard kit for the
- * session-scope 'conversation.view' slot (useSession narrowed to the
- * conversation snapshot by the runtime merge, sessionId, useSessions).
- * Entries declaring the shared store or an inject face compose their shares
- * on top (the chat entry's {@link ChatViewSlotProps}); store-less pure
- * readers (ui-trajectory) take this base alone.
- */
 /** Base props of one target-owned Conversation View entry. */
 export type ConvViewProps = PropsRuntime<'conversation.view'>
 
@@ -434,11 +269,6 @@ export interface ComposerBarInjected {
   addImages: ((files: readonly File[]) => string | null) | undefined
   removeImage: ((id: DraftAttachmentId) => void) | undefined
   draftImages: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
-  /** Open the host's native multi-file picker; resolved absolute paths are empty when the operator cancels. */
-  pickFiles: (() => Promise<{ cancelled: boolean; paths: string[] }>) | undefined
-  /** Resolve dragged file basenames to absolute paths inside this session's workspace (empty when no match). */
-  locateFiles: ((names: string[]) => Promise<Array<{ name: string; paths: string[] }>>) | undefined
-  /** Resolve one keyboard submission gesture against the current running state and persisted preference. */
   resolveSubmitMode: (
     running: boolean,
     gesture: ComposerSubmitGesture,
@@ -497,8 +327,8 @@ export type ConversationSlotProps =
     | 'conversation.session' | 'conversation.session.header'
     | 'conversation.composer' | 'conversation.composer.bar'
     | 'conversation.input.dock'
-    | 'conversation.hero.brand.mark'
     | 'conversation.input.selector.context'
+    | 'conversation.hero.brand.mark'
     | 'conversation.hero.workspace'
     | 'conversation.hero.agentPreset'
   >
@@ -527,132 +357,6 @@ export type ConversationSessionHeaderSlotProps =
   & InjectFace<ConversationSessionHeaderInjected>
   & PropsLocale<'conversation'>
 
-/** The pending approval carrier the owner dispatches into the composer chain. */
-export type ApprovalWait = PendingWait<'approval'>
-
-/**
- * Approval domain face over the carrier (the ui-user-questions PendingQuestion
- * pattern): render identity and question material forwarded transparently;
- * answer owns the wire encoding — the ApprovalResponsePayload value shape
- * with the audit correlation the host reconciles — and turns a rejected
- * carrier receipt into a thrown error. Minted per carrier via useMemo.
- */
-export class PendingApproval {
-  /**
-   * @param wait - the runtime carrier for one pending approval question.
-   */
-  constructor(private readonly wait: ApprovalWait) {}
-
-  /** Opaque render identity (React key / one-shot latch remount axis), forwarded from the carrier. */
-  get key(): string {
-    return this.wait.key
-  }
-
-  /** The tool the question is about (headline fallback), forwarded from the carrier payload. */
-  get toolName(): string {
-    return this.wait.payload.toolName
-  }
-
-  /** The asker's human-readable WHY (headline when present), forwarded from the carrier payload. */
-  get reason(): string | undefined {
-    return this.wait.payload.reason
-  }
-
-  /** The paired tool call's id when the ask names one (command-line lookup key), forwarded from the carrier payload. */
-  get callId(): string | undefined {
-    return this.wait.payload.callId
-  }
-
-  /**
-   * Deliver the user's decision; a rejected carrier receipt throws. Panel
-   * removal stays frame-driven: the broadcast `approval/resolved` settles the
-   * wait and drops it from the pending list.
-   * @param outcome - the only two client-answerable outcomes.
-   */
-  async answer(outcome: 'allowed-once' | 'rejected'): Promise<void> {
-    const receipt = await this.wait.respond({
-      ok: true,
-      value: { sessionId: this.wait.sessionId, approvalId: this.wait.payload.approvalId, outcome },
-    })
-    if (!receipt.accepted) {
-      throw new Error(`approval response rejected: ${receipt.reason}`)
-    }
-  }
-}
-
-/**
- * Full approval-composer props: the framework runtime share (chain currency +
- * session/global standard kit) plus the chain `matched` share — the entry's
- * selector result, already narrowed to the approval carrier — plus the
- * standard locale seat. No injected share: the carrier plus the domain face
- * above carry the whole behavior surface; the paired command line derives
- * from useSession in-component.
- */
-export type ApprovalComposerProps =
-  PropsRuntime<'conversation.composer'> & { matched: ApprovalWait } & PropsLocale<'conversation'>
-
-/** In-memory reader position resilient to transcript width reflow. */
-export interface ChatScrollPosition {
-  /** Stable rendered node/call identity nearest the visible reading edge. */
-  readonly anchorKey: string
-  /** Anchor top relative to the transcript scrollport when saved. */
-  readonly anchorTop: number
-  /** Approximate offset used before the semantic anchor is measured. */
-  readonly scrollTop: number
-}
-
-/**
- * Injected share of the chat view entry: the two callbacks whose targets live
- * outside the view (layout orchestration; the session object layer).
- */
-export interface ChatViewInjected {
-  /** Selection write + details panel opening in one gesture (store action + layout orchestration). */
-  openDetails: (target: SelectionTarget) => void
-  /**
-   * Open a tool-arg filesystem path with the host OS default application
-   * (relative paths resolve against the session cwd). Always returns a
-   * promise: fulfills when the Host opens the path, rejects when it cannot
-   * hand the path off (the chat view shows that reason and a retry).
-   */
-  openFile: (path: string) => Promise<void>
-  loadOlder: () => void
-  /** Resolve a session-authorized historical image for inline display. */
-  loadImage: (attachment: ImageAttachmentRef) => Promise<string>
-  /** Hand a call off to the trajectory view: write the one-shot inspect target and switch tabs. */
-  inspectCall: (callId: CallId) => void
-  /**
-   * Per-session scroll memory surviving view switches (in-memory, never
-   * persisted): the view saves on every scroll and restores on remount; a
-   * fresh page load starts empty and keeps the open-jump-to-bottom default.
-   */
-  chatScroll: {
-    /** Record a semantic reader position; null clears it when pinned. */
-    save: (position: ChatScrollPosition | null) => void
-    /** Last reader position, or null when pinned or never recorded. */
-    read: () => ChatScrollPosition | null
-  }
-  /** Fork through the completed turn ending at the eligible message `seq`, then open the child. */
-  forkAt: (seq: number) => void
-  /** Delete the message at `seq` (or the whole turn when `seq` anchors its turn/end); resolves false when the host refused. */
-  deleteAt: (seq: number) => Promise<boolean>
-  /** Edit the last user message at `seq` with `text` and regenerate; resolves false on refusal. */
-  editAt: (seq: number, text: string) => Promise<boolean>
-  /**
-   * Prose file-mention vocabulary for one closing message, from the optional
-   * {@link ChatFileMentions} service (resolved lazily per call, so composing
-   * the provider in or out takes effect live). Undefined when the service is
-   * absent or the turn produced nothing worth linking.
-   */
-  fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
-}
-
-/** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
-export type ChatViewSlotProps =
-  PropsRuntime<'conversation.view'>
-  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
-  & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
-
-/** Full props of the attachment plugin's composer entry. */
 /** Full props of the draft-image attachment renderer. */
 export type ComposerAttachmentsProps =
   PropsRuntime<'conversation.input.attachments'> & PropsLocale<'conversation'>

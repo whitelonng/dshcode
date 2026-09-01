@@ -689,6 +689,7 @@ export function PluginInstallerTab(props: PluginInstallerTabProps) {
         <Modal
           title={t('uninstallConfirmTitle')}
           open
+          closeLabel={t('close')}
           onClose={() => { setUninstallTarget(undefined) }}
         >
           <p className={css.confirmBody}>{t('uninstallConfirmBody', { name: uninstallTarget.name })}</p>

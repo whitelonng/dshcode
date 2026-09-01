@@ -1073,6 +1073,31 @@ Types: [Scoped](scope.zh.md)
 
 Source: [`packages/core/session/src/index.ts`](../../packages/core/session/src/index.ts)
 
+<a id="sessiondeleted--emit"></a>
+
+#### `session/deleted` — emit
+
+One persisted session was permanently deleted: the backend artifact is gone and the next SessionPersistence.list no longer includes the id. Emitted once per successful SessionPersistence.delete, after the backend acknowledges the removal. The host stream converts it into `host/session-deleted` so every connected client evicts its cached list mirror; content-search indexes reconcile on their next list observation. No later listing or reconnect baseline mentions the id.
+
+```ts cordis-catalog
+/**
+ * One persisted session was permanently deleted: the backend artifact is
+ * gone and the next {@link SessionPersistence.list} no longer includes the
+ * id. Emitted once per successful {@link SessionPersistence.delete}, after
+ * the backend acknowledges the removal. The host stream converts it into
+ * `host/session-deleted` so every connected client evicts its cached list
+ * mirror; content-search indexes reconcile on their next list observation.
+ * No later listing or reconnect baseline mentions the id.
+ * @param sessionId - the deleted session id.
+ * @mode emit
+ */
+'session/deleted'(sessionId: SessionId): void
+```
+
+Types: [SessionId](core.zh.md)
+
+Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
+
 <a id="sessiondisposed--emit"></a>
 
 #### `session/disposed` — emit

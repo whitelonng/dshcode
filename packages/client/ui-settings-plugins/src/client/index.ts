@@ -70,10 +70,8 @@ export function apply(ctx: ClientContext): void {
 
   const bash = new BashCardController(ctx.settingsScope.bind({ namespace: SHELL_NS }))
   const agentLoop = new AgentLoopCardController(ctx.settingsScope.bind({ namespace: AGENT_LOOP_NS }))
-  const describeImage = new DescribeImageCardController(ctx.settingsScope.bind({ namespace: DESCRIBE_IMAGE_NS }), api)
-  const webSearch = new WebSearchCardController(ctx.settingsScope.bind({ namespace: WEB_SEARCH_NS }), api)
-  const webSearch = new WebSearchCardController(
-    ctx.settingsScope.bind({ namespace: WEB_SEARCH_NS }), ctx)
+  const describeImage = new DescribeImageCardController(ctx.settingsScope.bind({ namespace: DESCRIBE_IMAGE_NS }), ctx.remote.credentials as never)
+  const webSearch = new WebSearchCardController(ctx.settingsScope.bind({ namespace: WEB_SEARCH_NS }), ctx)
   const subagentModelSelection = new SubagentModelSelectionCardController(
     ctx.settingsScope.bind({ namespace: SUBAGENT_MODEL_SELECTION_NS }),
     ctx,
@@ -191,6 +189,8 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: () => describeImage.inject(),
     }, DescribeImageCard)
+    yield ctx.slots.register({
+      name: 'settings.plugin.item',
       key: SUBAGENT_MODEL_SELECTION_NS,
       locale: NS,
       inject: () => subagentModelSelection.inject(),

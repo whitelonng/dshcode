@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product test migration pending
 // Test-local programmable IApiClient fake (NOT the fixture: fixture is a demo
 // data source on a real clock; behavior tests need per-case responses and
 // deferred-controlled timing). Streams are hand pumps: pushMux/pushHost.

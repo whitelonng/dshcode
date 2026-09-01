@@ -7,7 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import {
   NOTIFICATIONS_SETTINGS_NAMESPACE, NotificationsSettingsSchema,
 } from './notifications-settings.ts'
@@ -26,7 +26,7 @@ export {
 export function apply(ctx: Context): void {
   ctx.inject(['settings'], (settingsCtx) => {
     settingsCtx.settings.register(
-      settingsNamespace(NOTIFICATIONS_SETTINGS_NAMESPACE), NotificationsSettingsSchema,
+      NOTIFICATIONS_SETTINGS_NAMESPACE, NotificationsSettingsSchema,
     )
   })
 }

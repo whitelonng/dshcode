@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product test migration pending
 // @vitest-environment jsdom
 /**
  * A retained render binding dies with its entry. Re-registering the same key

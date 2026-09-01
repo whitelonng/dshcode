@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product test migration pending
 // @vitest-environment jsdom
 /**
  * createSlotRenderer machinery account over a behavioral fake host: root

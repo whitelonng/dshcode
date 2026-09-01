@@ -5,6 +5,9 @@ import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import { PluginInstallerTab, type PluginInstallerTabInjected } from './PluginInstallerTab.tsx'
 import { en, zh, type PluginInstallerLocaleKey } from './locales.ts'
@@ -94,7 +97,7 @@ export function apply(ctx: ClientContext): void {
     if (workspace.title === workspaceTitleOf(workspace.path)) {
       await ctx.workspaces.rename(workspace.workspaceId, 'DSH 插件').catch(() => {})
     }
-    const sessionId = await ctx.workspaces.connectWorkspace(workspace.workspaceId)
+    const sessionId = await ctx.sessions.create({ workspaceId: workspace.workspaceId })
     const binding = ctx.sessions.binding(sessionId)
     if (binding === undefined) throw new Error(`repair session ${sessionId} is unavailable`)
     const result = await binding.session.prompt([{ type: 'text', text: message }], 'queue')

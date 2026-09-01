@@ -57,7 +57,7 @@ interface PendingMatch {
  * @param entries - complete contiguous window in ascending seq order.
  * @returns the visible window in ascending seq order.
  */
-export function foldTranscript(entries: readonly ConversationEventInput[]): ConversationEventInput[] {
+export function foldTranscript(entries: readonly SessionEventLikeEntry[]): SessionEventLikeEntry[] {
   const hidden = new Set<number>()
   for (const { event } of entries) {
     if (event.type === 'message/delete') {

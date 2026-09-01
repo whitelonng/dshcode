@@ -19,6 +19,17 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
+import { applyCapabilityToggle, capabilityChecks, type CapabilityToggle } from './model-capabilities.ts'
+import { ReasoningLevelCheckboxes } from './ReasoningLevelCheckboxes.tsx'
+import {
+  DEFAULT_UNDECLARED_EFFORTS,
+  formatReasoningEfforts,
+  INVALID_EFFORTS,
+  parseReasoningEfforts,
+  suggestedReasoningLevels,
+  THINKING_LEVELS,
+  type ReasoningEffortsValue,
+} from './reasoning-efforts.ts'
 import type { ModelsOperations } from './operations.ts'
 import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
 import type { en } from './locales.ts'

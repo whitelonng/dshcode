@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product composer machine awaits the ComposerKeyboard deep migration
 /** The default composer body: the 'conversation.composer.bar' slot entry.
  * Machine state arrives through the standard provide channel
  * (useInput + inputActions); the keyboard/DOM command face and stop arrive

@@ -183,6 +183,22 @@ Host service backing the generated `ctx.remote.directoryPicker` namespace. The s
 
 Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
 
+<a id="ctxfilepicker--filepicker-abstract-seam"></a>
+
+### `ctx.filePicker` — `FilePicker` (abstract seam)
+
+Abstract file-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.filePicker` (one implementation per context). The capability object must be stable for the service lifetime: consumers may capture it across calls.
+
+```ts cordis-catalog
+/**
+ * The backend's interaction capability.
+ * @returns the discriminated capability consumers switch on.
+ */
+abstract capability(): FilePickerCapability
+```
+
+Source: [`packages/host/file-picker/src/index.ts`](../../packages/host/file-picker/src/index.ts)
+
 <a id="ctxworkspacecontroller--workspacecontroller"></a>
 
 ### `ctx.workspaceController` — `WorkspaceController`
@@ -304,6 +320,24 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
  * @returns resolution after durability.
  */
 archiveSession(sessionId: SessionId): Promise<void>
+
+/**
+ * Unarchive one session: remove it from the registry-global archive set.
+ * The session keeps its workspace accounting slot, so it reappears in its
+ * original position. An id that is not archived resolves without writing.
+ * @param sessionId - The session to restore.
+ * @returns resolution after durability.
+ */
+restoreSession(sessionId: SessionId): Promise<void>
+
+/**
+ * Drop one session from registry accounting entirely after its log was
+ * deleted: detach it from every owning workspace and remove it from the
+ * archive set. Unknown ids are a no-op.
+ * @param sessionId - The deleted session id.
+ * @returns resolution after durability.
+ */
+removeSession(sessionId: SessionId): Promise<void>
 
 /**
  * Resolve by canonical directory path without creating or mutating a

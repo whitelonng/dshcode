@@ -3,6 +3,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   IWorkspaces, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { workspaceSnapshot } from './fixtures.ts'
@@ -16,10 +17,44 @@ type WorkspaceAction = {
   [Key in keyof IWorkspaces]: IWorkspaces[Key] extends (...args: never[]) => unknown ? Key : never
 }[keyof IWorkspaces]
 
-/** Test replacement retaining one Controller command's parameters and result. */
-type WorkspaceStub<Key extends WorkspaceAction> = (
-  ...args: Parameters<IWorkspaces[Key]>
-) => ReturnType<IWorkspaces[Key]>
+/**
+ * Product desktop extensions beyond the upstream Controller face. The upstream
+ * moved these verbs to the host directory-picking seam, but the test double
+ * retains them as extra stubbable methods so feature suites keep driving the
+ * recorded desktop flows without depending on that seam's Host backend.
+ */
+type ProductWorkspaceAction =
+  | 'openPath'
+  | 'pickDirectory'
+  | 'pickFiles'
+  | 'locateFiles'
+  | 'listDirectory'
+  | 'createDirectory'
+  | 'restoreSession'
+  | 'deleteSession'
+
+/** Everything the double records and can stub. */
+type AnyWorkspaceAction = WorkspaceAction | ProductWorkspaceAction
+
+/** Product-extension signatures, used by {@link WorkspaceStub} for the keys outside {@link IWorkspaces}. */
+interface ProductWorkspaceStub {
+  openPath: (path: string) => Promise<void>
+  pickDirectory: () => Promise<string | null>
+  pickFiles: () => Promise<{ cancelled: boolean; paths: string[] }>
+  locateFiles: (sessionId: SessionId, names: string[]) => Promise<Array<{ name: string; paths: string[] }>>
+  listDirectory: (path: string | undefined, signal: AbortSignal | undefined) => Promise<DirectoryListing>
+  createDirectory: (path: string, name: string) => Promise<string>
+  restoreSession: (sessionId: SessionId) => Promise<void>
+  deleteSession: (sessionId: SessionId) => Promise<void>
+}
+
+/** Test replacement retaining one command's parameters and result. */
+type WorkspaceStub<Key extends AnyWorkspaceAction> =
+  Key extends keyof IWorkspaces
+    ? (...args: Parameters<IWorkspaces[Key]>) => ReturnType<IWorkspaces[Key]>
+    : Key extends ProductWorkspaceAction
+      ? ProductWorkspaceStub[Key]
+      : never
 
 /**
  * Workspaces test double. Implements the same IWorkspaces face features
@@ -36,7 +71,7 @@ export class TestWorkspaces implements IWorkspaces {
   readonly calls: { method: string; args: unknown[] }[] = []
 
   /** Replaceable action seat: feature tests may stub richer behavior. */
-  private readonly stubs = new Map<WorkspaceAction, (...args: unknown[]) => unknown>()
+  private readonly stubs = new Map<AnyWorkspaceAction, (...args: unknown[]) => unknown>()
 
   /**
    * @param stabilize - the owning runtime's act wrapper.
@@ -58,7 +93,7 @@ export class TestWorkspaces implements IWorkspaces {
    * @param method - Controller action name (e.g. 'create').
    * @param impl - replacement behavior.
    */
-  stub<Key extends WorkspaceAction>(method: Key, impl: WorkspaceStub<Key>): void {
+  stub<Key extends AnyWorkspaceAction>(method: Key, impl: WorkspaceStub<Key>): void {
     this.stubs.set(method, impl as (...args: unknown[]) => unknown)
   }
 

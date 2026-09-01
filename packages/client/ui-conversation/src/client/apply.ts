@@ -291,8 +291,6 @@ export function apply(ctx: Context): void {
           addImages: undefined,
           removeImage: undefined,
           draftImages: undefined,
-          pickFiles: undefined,
-          locateFiles: undefined,
           resolveSubmitMode: (running, gesture, steeringAvailable) =>
             submissionPolicy.resolve(running, gesture, steeringAvailable),
           toggleCommandMenu: undefined,
@@ -327,8 +325,6 @@ export function apply(ctx: Context): void {
           shell.removeImage(id)
         },
         draftImages: ids => conversation.draftImages(ids),
-        pickFiles: () => workspaces.pickFiles(),
-        locateFiles: names => workspaces.locateFiles(sessionId, names),
         resolveSubmitMode: (running, gesture, steeringAvailable) =>
           submissionPolicy.resolve(running, gesture, steeringAvailable),
         toggleCommandMenu: inputTriggers === undefined
@@ -370,74 +366,6 @@ export function apply(ctx: Context): void {
     yield registerConversationHeader()
     yield registerComposerBar()
   })
-
-  // The chat view: first entry of the ring this package just declared.
-  // ChatView owns only the stable ordered Node list. Business renderers are
-  // independently keyed behind its one Node seat.
-  slots.register({
-    name: 'conversation.view',
-    id: 'chat',
-    order: 0,
-    label: () => t('view.chat'),
-    locale: NS,
-    children: {
-      'conversation.chat.node': { kind: 'keyed', scope: 'session', inject: CHAT_NODE_INJECT },
-      'conversation.message.images': { kind: 'single', scope: 'session' },
-    },
-    store: chatStore,
-    inject: (sessionId: SessionId, actions: BoundActions<typeof chatStore>): ChatViewInjected => {
-      const conversation = concreteConversation(ctx)
-      const scoped = scopedConversation(sessions, sessionId)
-      return {
-        openDetails: (target) => {
-          actions.select(target)
-          layout.openDetails()
-        },
-        fileMentions: owner => ctx.get('chatFileMentions')?.forClosing(owner),
-        openFile: (path) => {
-          const cwd = sessions.list.getSnapshot().byId[sessionId]?.cwd
-          return workspaces.openPath(resolveWorkspacePath(cwd, path))
-        },
-        loadOlder: () => { void scoped.loadOlder() },
-        loadImage: attachment => conversation.resolveImage(sessionId, attachment),
-        // Unregistered 'trajectory' id is safe: the tab ring falls back to
-        // the first view, and the untouched inspect target stays inert.
-        inspectCall: (callId) => {
-          actions.setInspect({ callId })
-          actions.setView('trajectory')
-        },
-        chatScroll: {
-          save: (position) => {
-            if (position === null) chatScrollPositions.delete(sessionId)
-            else chatScrollPositions.set(sessionId, position)
-          },
-          read: () => chatScrollPositions.get(sessionId) ?? null,
-        },
-        forkAt: (seq) => {
-          sessions.fork({ sessionId, atSeq: seq, increaseTitle: true })
-            .then((childId) => { sessions.open(childId) })
-            .catch(() => {
-              // Fork or child-rename failure keeps the source view untouched.
-            })
-        },
-        deleteAt: async (seq) => {
-          const session = sessions.binding(sessionId)?.session
-          if (session === undefined) return false
-          const result = await session.deleteMessage(seq).catch(() => undefined)
-          return result?.ok ?? false
-        },
-        editAt: async (seq, text) => {
-          const session = sessions.binding(sessionId)?.session
-          if (session === undefined) return false
-          const result = await session.editMessage(seq, [{ type: 'text', text }]).catch(() => undefined)
-          return result?.ok ?? false
-        },
-      }
-    },
-  }, ChatView)
-
-  // Session stats stick with the composer (composer.dock = stats-line family).
-  slots.register({ name: 'conversation.composer.dock', id: 'stats', order: 0, locale: NS }, StatsLine)
 
   // Class-plugin mount (packages/AGENTS.md service form): the service
   // registers itself as `conversation` and lives on its own child fiber.

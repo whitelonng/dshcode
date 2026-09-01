@@ -8,6 +8,7 @@ import { bindSnapshotSelector } from './bind.ts'
 import { DesktopTitleBar } from './DesktopTitleBar.tsx'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import { VersionCaption } from './VersionCaption.tsx'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 
 /** Inputs available after the UI renderer's inject set activates. */
 export interface AssemblyDeps {

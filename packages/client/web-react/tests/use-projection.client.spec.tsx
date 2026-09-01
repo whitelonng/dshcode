@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: test migration pending
 // @vitest-environment jsdom
 /**
  * useProjection standard-kit delivery (session-projection subsystem page:

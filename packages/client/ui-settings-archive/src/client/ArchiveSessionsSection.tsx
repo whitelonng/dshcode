@@ -271,6 +271,7 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
         <Modal
           title={t('deleteConfirmTitle')}
           open
+          closeLabel={t('close')}
           onClose={() => { setPending(undefined) }}
         >
           <p className={css.confirmBody}>{t('deleteConfirmBody')}</p>
@@ -293,6 +294,7 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
         <Modal
           title={t('deleteConfirmTitle')}
           open
+          closeLabel={t('close')}
           onClose={() => { setBulkTarget(undefined) }}
         >
           <p className={css.confirmBody}>{t('bulkDeleteConfirmBody', { count: String(bulkTarget.count) })}</p>

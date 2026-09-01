@@ -19,6 +19,7 @@ import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Cross-plugin collaboration goes through the service, never a value import
 // (client bundle purity gate).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import {
   LOCALE_PREFERENCE_FIELD, LOCALE_SETTINGS_NAMESPACE, type LocaleId, type LocaleSettings,
 } from '../locale-settings.ts'
@@ -129,7 +130,7 @@ const DOCUMENT_LANGUAGE: Record<LocaleId, string> = { zh: 'zh-CN', en: 'en' }
 function syncDocumentLanguage(active: LocaleId): void {
   // Non-browser runs (node boots of the client tree) have no document.
   if (typeof document === 'undefined') return
-  document.documentElement.lang = DOCUMENT_LANGUAGE[active]
+  document.documentElement.lang = DOCUMENT_LANGUAGE[active]!
 }
 
 /**

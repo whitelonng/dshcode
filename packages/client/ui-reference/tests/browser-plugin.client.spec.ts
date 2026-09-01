@@ -4,9 +4,10 @@
  * round-trip, and registration lifecycle.
  */
 import { Context, Service } from '@deepseek-ai/cordis'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
   CandidateRequest, ClientSessionContext, InputTriggerCandidate, InputTriggerSource,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
@@ -17,6 +18,19 @@ import { apply as nodeApply } from '../src/index.ts'
 
 const sid = (value: string): SessionId => value as SessionId
 const session: ClientSessionContext = { sessionId: sid('target') }
+/** The target session's own workspace: candidates in it are the `sameWorkspace` rows. */
+const HOME = '/Users/dev'
+const CREATED_AT = 1_700_000_000_000
+/** Three days after every fixture's createdAt, so age copy is one fixed bucket. */
+const NOW = CREATED_AT + 3 * 86_400_000
+/** The Host session list dates a row; only a session missing from it falls back to createdAt. */
+const UPDATED_AT = NOW - 3_600_000
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(NOW)
+})
+afterEach(() => { vi.useRealTimers() })
 
 type RemoteEnvelope<T> =
   | { ok: true; value: T }
@@ -36,6 +50,7 @@ function request(
     query,
     quoted: options.quoted ?? false,
     position: 'inline',
+    drilled: false,
     signal: options.signal ?? new AbortController().signal,
   }
 }
@@ -53,11 +68,13 @@ async function bench(
     value: [{
       sessionId: sid('source'),
       label: 'Research',
-      cwd: '/project',
-      createdAt: 1_700_000_000_000,
+      cwd: `${HOME}/project`,
+      sameWorkspace: false,
+      createdAt: CREATED_AT,
       mention: '@[Research](dsh-session:InNvdXJjZSI)',
     }],
   })),
+  listed: Record<string, { updatedAt: number }> = {},
 ): Promise<{ ctx: Context; fiber: ReturnType<Context['plugin']>; source: InputTriggerSource }> {
   const ctx = new Context()
   let source: InputTriggerSource | undefined
@@ -68,6 +85,8 @@ async function bench(
     },
   })
   class RemoteService extends Service {
+    readonly $host = { home: HOME, isLoopback: true }
+
     constructor(serviceCtx: Context) {
       super(serviceCtx, 'remote')
     }
@@ -76,6 +95,7 @@ async function bench(
   ctx.provide('remote.fileReferences', { list: files })
   ctx.provide('remote.sessionReferenceResolver', { candidates: sessions })
   ctx.provide('locale', new LocaleRuntime(ctx))
+  ctx.provide('sessions', { list: { getSnapshot: () => ({ byId: listed }) } })
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   if (source === undefined) throw new Error('reference source was not registered')
@@ -85,7 +105,8 @@ async function bench(
 describe('apply', () => {
   it('declares its services and releases the @ reference registration on disposal', async () => {
     expect(inject).toEqual([
-      'inputTriggers', 'locale', 'remote', 'remote.fileReferences', 'remote.sessionReferenceResolver',
+      'inputTriggers', 'locale', 'sessions', 'remote', 'remote.fileReferences',
+      'remote.sessionReferenceResolver',
     ])
     const { fiber } = await bench()
     let registered: InputTriggerSource | undefined
@@ -97,6 +118,8 @@ describe('apply', () => {
       },
     })
     class RemoteService extends Service {
+      readonly $host = { home: undefined, isLoopback: false }
+
       constructor(serviceCtx: Context) {
         super(serviceCtx, 'remote')
       }
@@ -105,6 +128,7 @@ describe('apply', () => {
     ctx.provide('remote.fileReferences', { list: () => Promise.resolve({ ok: true, value: [] }) })
     ctx.provide('remote.sessionReferenceResolver', { candidates: () => Promise.resolve({ ok: true, value: [] }) })
     ctx.provide('locale', new LocaleRuntime(ctx))
+    ctx.provide('sessions', { list: { getSnapshot: () => ({ byId: {} }) } })
     const ownFiber = ctx.plugin({ inject: [...inject], apply })
     await ownFiber.await()
     expect(registered).toMatchObject({ trigger: '@', name: 'reference', showGroupTitle: false })
@@ -142,6 +166,7 @@ describe('candidates', () => {
         sessionId: SessionId
         label: string
         cwd: string
+        sameWorkspace: boolean
         createdAt: number
         mention: string
       }[]
@@ -152,34 +177,39 @@ describe('candidates', () => {
           value: [{
             sessionId: sid('source'),
             label: 'Research',
-            cwd: '/project',
-            createdAt: 1_700_000_000_000,
+            cwd: `${HOME}/project`,
+            sameWorkspace: false,
+            createdAt: CREATED_AT,
             mention: '@[Research](dsh-session:InNvdXJjZSI)',
           }],
         })
       }
     }))
-    const { source } = await bench(files, sessions)
+    const { source } = await bench(files, sessions, { source: { updatedAt: UPDATED_AT } })
     const pending = source.candidates(session, request('re'))
     expect(files).toHaveBeenCalledTimes(1)
     expect(sessions).toHaveBeenCalledTimes(1)
     releaseSessions()
     releaseFiles()
     await expect(pending).resolves.toEqual([
+      {
+        name: 'src/',
+        icon: 'folder',
+        section: 'Files & folders',
+        value: JSON.stringify({ kind: 'file', fileKind: 'directory', label: 'src', mention: '@src/' }),
+        drill: true,
+      },
       expect.objectContaining({
-        name: '文件夹 · src/',
-        description: 'src',
-        section: '文件与文件夹',
+        name: 'a b.md',
+        description: 'docs',
+        icon: 'file',
+        section: 'Files & folders',
       }),
       expect.objectContaining({
-        name: '文件 · a b.md',
-        description: 'docs/a b.md',
-        section: '文件与文件夹',
-      }),
-      expect.objectContaining({
-        name: 'Session · Research',
-        description: 'source · /project · 2023-11-14T22:13:20.000Z',
-        section: 'Session 对话',
+        name: 'Research',
+        description: '~/project · 1h',
+        icon: 'session',
+        section: 'Sessions',
       }),
     ])
   })
@@ -190,25 +220,30 @@ describe('candidates', () => {
         ok: true as const,
         value: [{ path: 'README.md', kind: 'file' as const }],
       })
-      .mockRejectedValueOnce(new Error('file scan failed'))
+      .mockResolvedValueOnce({
+        ok: false as const,
+        error: new RemoteError('gateway/internal', 'file scan failed', {}),
+      })
     const sessions = vi.fn(() => Promise.resolve({
       ok: true as const,
       value: [{
         sessionId: sid('source'),
         label: 'Research',
-        cwd: '/project',
-        createdAt: 0,
+        cwd: `${HOME}/project`,
+        sameWorkspace: false,
+        createdAt: CREATED_AT,
         mention: '@[Research](dsh-session:InNvdXJjZSI)',
       }],
     }))
     const { source } = await bench(files, sessions)
     const quoted = await source.candidates(session, request('READ', { quoted: true }))
-    expect(quoted).toEqual([expect.objectContaining({ name: '文件 · README.md' })])
+    expect(quoted).toEqual([expect.objectContaining({ name: 'README.md', icon: 'file' })])
     expect(source.onPick({
       candidate: quoted[0]!,
       session,
       position: 'inline',
       via: 'menu',
+      action: 'pick',
       span: { start: 0, end: 6, draftRev: 1 },
     })).toEqual({
       insert: {
@@ -221,7 +256,7 @@ describe('candidates', () => {
     })
     expect(sessions).not.toHaveBeenCalled()
     await expect(source.candidates(session, request('research'))).resolves.toEqual([
-      expect.objectContaining({ name: 'Session · Research' }),
+      expect.objectContaining({ name: 'Research', icon: 'session' }),
     ])
   })
 
@@ -238,56 +273,200 @@ describe('candidates', () => {
       ok: true as const,
       value: [{ path: 'bad\nname', kind: 'file' as const }],
     }))
-    const sessions = vi.fn()
-      .mockRejectedValueOnce(new Error('session lookup failed'))
-      .mockResolvedValueOnce({
-        ok: false as const,
-        error: { code: 'internal', message: 'session lookup failed', details: {} },
-      })
+    const sessions = vi.fn(() => Promise.resolve({
+      ok: false as const,
+      error: new RemoteError('gateway/internal', 'session lookup failed', {}),
+    }))
     const { source } = await bench(files, sessions)
     await expect(source.candidates(session, request('bad'))).resolves.toEqual([])
 
     files.mockResolvedValueOnce({
       ok: false as const,
-      error: { code: 'internal', message: 'file lookup failed', details: {} },
+      error: new RemoteError('gateway/internal', 'file lookup failed', {}),
     } as never)
     await expect(source.candidates(session, request('bad'))).resolves.toEqual([])
   })
 
-  it('omits redundant session ids and labels sessions without a cwd', async () => {
+  it('labels a session without a cwd and still dates it', async () => {
     const files = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }))
     const sessions = vi.fn(() => Promise.resolve({
       ok: true as const,
       value: [{
         sessionId: sid('same'),
         label: 'same',
-        createdAt: 0,
+        sameWorkspace: false,
+        createdAt: CREATED_AT,
         mention: '@[same](dsh-session:InNhbWUi)',
       }],
     }))
     const { source } = await bench(files, sessions)
     await expect(source.candidates(session, request('same'))).resolves.toEqual([
       expect.objectContaining({
-        name: 'Session · same',
-        description: '（无工作目录） · 1970-01-01T00:00:00.000Z',
+        name: 'same',
+        description: '(no cwd) · 3d',
       }),
+    ])
+  })
+
+  it('falls back to the candidate createdAt for a session the Host list does not carry', async () => {
+    const files = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }))
+    const sessions = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: [{
+        sessionId: sid('unlisted'),
+        label: 'Unlisted run',
+        cwd: `${HOME}/project`,
+        sameWorkspace: true,
+        createdAt: CREATED_AT,
+        mention: '@[Unlisted run](dsh-session:InVubGlzdGVkIg)',
+      }],
+    }))
+    // A row absent from the list has no durable activity time to read.
+    const { source } = await bench(files, sessions, { other: { updatedAt: UPDATED_AT } })
+    await expect(source.candidates(session, request('unlisted'))).resolves.toEqual([
+      expect.objectContaining({ name: 'Unlisted run', description: '3d' }),
+    ])
+  })
+
+  it('reads a session opened moments ago as the present, not a zero distance', async () => {
+    const files = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }))
+    const sessions = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: [{
+        sessionId: sid('just-now'),
+        label: 'Just now',
+        cwd: `${HOME}/project`,
+        sameWorkspace: true,
+        createdAt: NOW - 1_000,
+        mention: '@[Just now](dsh-session:Imp1c3Qtbm93Ig)',
+      }],
+    }))
+    const { source } = await bench(files, sessions, { 'just-now': { updatedAt: NOW - 1_000 } })
+    await expect(source.candidates(session, request('just'))).resolves.toEqual([
+      expect.objectContaining({ name: 'Just now', description: 'now' }),
+    ])
+  })
+
+  it('dates a session in the current workspace without repeating that workspace', async () => {
+    const files = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }))
+    const sessions = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: [{
+        sessionId: sid('sibling'),
+        label: 'Sibling run',
+        cwd: `${HOME}/project`,
+        sameWorkspace: true,
+        createdAt: CREATED_AT,
+        mention: '@[Sibling run](dsh-session:InNpYmxpbmdyIg)',
+      }],
+    }))
+    const { source } = await bench(files, sessions)
+    await expect(source.candidates(session, request('sib'))).resolves.toEqual([
+      expect.objectContaining({ name: 'Sibling run', description: '3d' }),
     ])
   })
 })
 
-describe('pick and codec', () => {
-  const pick = (source: InputTriggerSource, candidate: InputTriggerCandidate) => source.onPick({
-    candidate,
-    session,
+describe('directory header', () => {
+  const drilledRequest = (query: string, quoted = false): CandidateRequest => ({
+    query,
+    quoted,
     position: 'inline',
-    via: 'menu',
-    span: { start: 0, end: 1, draftRev: 1 },
+    drilled: true,
+    signal: new AbortController().signal,
   })
 
-  it('inserts files as atomic icon labels while keeping directory completion open', async () => {
+  it('publishes no header for a query the user typed', async () => {
+    const { source } = await bench()
+    expect(source.header?.(session, { query: 'src/module1/', drilled: false })).toBeUndefined()
+  })
+
+  it('publishes no header until a drilled query names a directory', async () => {
+    const { source } = await bench()
+    expect(source.header?.(session, { query: 'src', drilled: true })).toBeUndefined()
+  })
+
+  it('trails the workspace root down to the directory being listed', async () => {
+    const { source } = await bench()
+    expect(source.header?.(session, { query: 'src/module1/ind', drilled: true })).toEqual([
+      { label: 'Workspace', value: JSON.stringify({ kind: 'file', fileKind: 'directory', label: 'Workspace', mention: '@' }) },
+      { label: 'src', value: JSON.stringify({ kind: 'file', fileKind: 'directory', label: 'src', mention: '@src/' }) },
+      {
+        label: 'module1',
+        value: JSON.stringify({ kind: 'file', fileKind: 'directory', label: 'module1', mention: '@src/module1/' }),
+        current: true,
+      },
+    ])
+  })
+
+  it('keeps an open quote across every crumb of a quoted descent', async () => {
+    const { source } = await bench()
+    const crumbs = source.header?.(session, { query: 'my dir/sub/', quoted: true, drilled: true })
+    expect(crumbs?.map(crumb => JSON.parse(crumb.value) as { mention: string }).map(value => value.mention))
+      .toEqual(['@"', '@"my dir/', '@"my dir/sub/'])
+  })
+
+  it('publishes no header when a segment cannot be written back as mention text', async () => {
+    const { source } = await bench()
+    expect(source.header?.(session, { query: 'ok/we\u0001ird/', drilled: true })).toBeUndefined()
+  })
+
+  it('returns to a crumb through the same drill outcome a folder row uses', async () => {
+    const { source } = await bench()
+    const crumbs = source.header?.(session, { query: 'src/module1/', drilled: true })
+    expect(source.onPick({
+      candidate: { name: 'src', value: crumbs?.[1]?.value ?? '' },
+      session,
+      position: 'inline',
+      via: 'menu',
+      action: 'drill',
+      span: { start: 0, end: 13, draftRev: 1 },
+    })).toEqual({ text: '@src/', continue: true })
+  })
+
+  it('drops the row location a drilled listing already shows in its header', async () => {
+    const files = vi.fn(() => Promise.resolve({
+      ok: true as const,
+      value: [{ path: 'src/module1/index.html', kind: 'file' as const }],
+    }))
+    const sessions = vi.fn(() => Promise.resolve({ ok: true as const, value: [] }))
+    const { source } = await bench(files, sessions)
+    await expect(source.candidates(session, drilledRequest('src/module1/'))).resolves.toEqual([
+      expect.objectContaining({ name: 'index.html', icon: 'file' }),
+    ])
+    const [row] = await source.candidates(session, drilledRequest('src/module1/'))
+    expect(row).not.toHaveProperty('description')
+  })
+})
+
+describe('pick and codec', () => {
+  const pickAs = (action: 'pick' | 'drill') =>
+    (source: InputTriggerSource, candidate: InputTriggerCandidate) => source.onPick({
+      candidate,
+      session,
+      position: 'inline',
+      via: 'menu',
+      action,
+      span: { start: 0, end: 1, draftRev: 1 },
+    })
+  const pick = pickAs('pick')
+  const drill = pickAs('drill')
+
+  it('settles files and directories as atomic icon labels; drill keeps directory completion open', async () => {
     const { source } = await bench()
     const [directory, file] = await source.candidates(session, request(''))
-    expect(pick(source, directory!)).toEqual({ text: '@src/', continue: true })
+    expect(directory?.drill).toBe(true)
+    expect(file?.drill).toBeUndefined()
+    expect(pick(source, directory!)).toEqual({
+      insert: {
+        source: 'reference',
+        ref: '@src/',
+        label: 'src/',
+        appearance: 'folder',
+        clipboardText: '@src/',
+      },
+    })
+    expect(drill(source, directory!)).toEqual({ text: '@src/', continue: true })
     expect(pick(source, file!)).toEqual({
       insert: {
         source: 'reference',
@@ -298,13 +477,13 @@ describe('pick and codec', () => {
       },
     })
     const [quotedDirectory] = await source.candidates(session, request('', { quoted: true }))
-    expect(pick(source, quotedDirectory!)).toEqual({ text: '@"src/', continue: true })
+    expect(drill(source, quotedDirectory!)).toEqual({ text: '@"src/', continue: true })
   })
 
   it('inserts sessions as atomic chips whose clipboard and model forms are canonical mentions', async () => {
     const { source } = await bench()
     const candidates = await source.candidates(session, request(''))
-    const candidate = candidates.find(item => item.name === 'Session · Research')!
+    const candidate = candidates.find(item => item.name === 'Research')!
     const mention = '@[Research](dsh-session:InNvdXJjZSI)'
     expect(pick(source, candidate)).toEqual({
       insert: {
