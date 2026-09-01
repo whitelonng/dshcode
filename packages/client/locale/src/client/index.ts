@@ -10,10 +10,11 @@
  * consumers merge more namespaces in and the intersection keeps them
  * string-typed. The rule fires on the narrow-map view, not real redundancy. */
 import type { Context } from '@deepseek-ai/cordis'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import {
   type BoundActions, type LocaleDictOf, type LocaleNamespaceMap, type Translate, type TranslateNS,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ClientContext, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the ctx.settingsScope Context merge and the settings slot types.
 // Cross-plugin collaboration goes through the service, never a value import
 // (client bundle purity gate).

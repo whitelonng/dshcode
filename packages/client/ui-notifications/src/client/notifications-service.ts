@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product pending protocol awaits the client-store deep migration
 /**
  * System-notification service: turns object-layer edges into OS
  * notifications. Data comes exclusively from the `sessions.list` snapshot

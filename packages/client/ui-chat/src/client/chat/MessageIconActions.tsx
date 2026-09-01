@@ -32,6 +32,12 @@ export interface MessageIconActionsProps {
   onEdit?: (() => void) | undefined
   /** Parent layout class composed onto the actions row. */
   className?: string | undefined
+  /** Total wall-clock runtime of this message's turn, in ms. */
+  runMs?: number | undefined
+  /** Time to first token of this message's turn, in ms. */
+  ttftMs?: number | undefined
+  /** Settled generation throughput of this message's turn, in tokens/second. */
+  tokensPerSecond?: number | undefined
   /**
    * Slot-rendered actions owned by independent plugins, placed between the
    * built-in copy and branch controls.
@@ -52,10 +58,8 @@ export interface MessageIconActionsProps {
  * @returns The actions row element.
  */
 export function MessageIconActions({
-  text, time, runMs, ttftMs, tokensPerSecond, clock, onBranch, branchUnavailable = false, className,
-  onDelete, deleteUnavailable = false, onEdit, extraActions, t,
   text, time, clock, onBranch, branchUnavailable = false, className,
-  extraActions, usageAction, t,
+  onDelete, deleteUnavailable = false, onEdit, extraActions, usageAction, t,
 }: MessageIconActionsProps) {
   const day = useCalendarDay()
   const reasonId = useId()

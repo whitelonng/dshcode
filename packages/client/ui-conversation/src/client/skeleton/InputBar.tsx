@@ -35,6 +35,7 @@ import { registerComposerKeymap } from '../input/editor/keymap.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
+import type { DraftDecorations } from '../input/decorations.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import css from './InputBar.module.css'
@@ -500,10 +501,9 @@ export const InputBar = memo(function InputBar({
     currentKeyboard.track(currentKeyboard.snapshot.draft, caret)
   }
 
-  // Intake pre-check (DeepSeek Chat semantics for images): an image batch that
-  // would break a projected limit is refused whole and announced immediately.
-  // Non-image files never enter the rail — their basenames resolve to `@path`
-  // mentions against the workspace, never staged bytes.
+  // Intake pre-check: an image batch that would break a projected limit is
+  // refused whole and announced immediately. Non-image files never enter the
+  // rail — their basenames resolve to `@path` mentions against the workspace.
   const intakeImages = useCallback((files: readonly File[]): void => {
     if (files.length === 0 || addImages === undefined) return
     const images: File[] = []
@@ -514,6 +514,11 @@ export const InputBar = memo(function InputBar({
     if (images.length > 0) {
       const rejected = ((): string | null => {
         if (imageLimits !== undefined) {
+          // Format precedes limits: a batch with a non-image must announce the
+          // format problem, not a count or size it could never pass anyway.
+          if (images.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
+            return addImages(files)
+          }
           if (attachments.length + images.length > imageLimits.maxImagesPerMessage) {
             return t('image.tooMany', { count: imageLimits.maxImagesPerMessage })
           }
@@ -525,20 +530,6 @@ export const InputBar = memo(function InputBar({
           if (total > imageLimits.maxMessageImageBytes) {
             return t('image.totalTooLarge', { size: imageSizeText(imageLimits.maxMessageImageBytes) })
           }
-  // Intake pre-check: an addition that would break
-  // a projected limit is refused as a whole batch, announced immediately, and
-  // never enters the rail — no more submit-time failure rolling the rail
-  // back. The host enforces the same limits at submit for callers that bypass
-  // this composer.
-  const intakeImages = useCallback((files: readonly File[]): void => {
-    if (addImages === undefined || files.length === 0) return
-    const rejected = ((): string | null => {
-      if (imageLimits !== undefined) {
-        // Format precedes limits: a batch with
-        // a non-image must announce the format problem, not a count or size
-        // it could never pass anyway — addImages rejects it authoritatively.
-        if (files.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
-          return addImages(files)
         }
         return addImages(images)
       })()
@@ -560,7 +551,7 @@ export const InputBar = memo(function InputBar({
         if (ambiguous.length > 0) showToast(t('file.locateFailed', { names: ambiguous.join(', ') }))
       }, (error: unknown) => { showToast(error instanceof Error ? error.message : String(error)) })
     }
-  }, [addImages, attachments, imageLimits, showToast, t, locateFiles])
+  }, [addImages, attachments, imageLimits, showToast, t, locateFiles, insertFileMentions])
 
   // The native multi-file picker: selected paths become `@path` mentions.
   const onAddFiles = async (): Promise<void> => {

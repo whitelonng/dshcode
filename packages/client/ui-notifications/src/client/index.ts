@@ -6,7 +6,7 @@
  * the row mirrors service permission and durable preferences through its
  * store. Export discipline: packages/client/AGENTS.md.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the settings slot declarations plus the ctx.settingsScope
 // Context merge. Cross-plugin collaboration goes through the service, never a

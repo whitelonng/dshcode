@@ -7,16 +7,9 @@
  * never a Cordis context or the mutable Session. RPC and service access go
  * through the provider plugin's own root context captured at registration.
  */
-import type {
-  PickOutcome, TokenSpan,
-} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
-export type {
-  ArbitrateKey, ArbitrateOutcome, BeginCommandRequest, CommandClaim, ConsumeTokenRequest,
-  InsertReferenceRequest, InsertTextRequest, PickOutcome, ReferenceInsert, SubmitImageAttachment,
-  SubmitOutcome, TokenSpan,
-} from '@deepseek-ai/dsh-client-ui-conversation/client'
 
 /**
  * The provider-facing projection of one client session. It carries stable
@@ -290,3 +283,60 @@ declare module '@deepseek-ai/cordis' {
     'slash/input-insert-text'(request: InsertTextRequest): true | undefined
   }
 }
+
+export interface SubmitImageAttachment {
+  /** Declared media type; the host verifies it against the decoded bytes. */
+  readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+  /** Canonical base64 encoding of the image bytes. */
+  readonly data: string
+  /** Optional display name; never interpreted as a path. */
+  readonly name?: string
+}
+
+export interface SubmitOutcome {
+  readonly kind: 'success' | 'error'
+  readonly text?: string
+}
+
+export interface TokenSpan {
+  readonly start: number
+  readonly end: number
+  readonly draftRev: number
+}
+
+export type PickOutcome =
+  | { readonly claim: CommandClaim }
+  | { readonly insert: ReferenceInsert }
+  | { readonly text: string; readonly continue?: boolean }
+  | 'handled'
+  | undefined
+export interface CommandClaim {
+  /** Integrity-watched draft prefix, e.g. `/goal ` — breaking startsWith releases the claim. */
+  readonly token: string
+  /** Ghost-text hint rendered while the claim's args are blank. */
+  readonly hint?: string
+  /**
+   * Whether composer image attachments may accompany this command's submit.
+   * Absent = the composer refuses to submit while images are attached, keeping
+   * the draft and the images in place behind a visible notice.
+   */
+  readonly images?: boolean
+  /**
+   * Enter transaction, supplied by the source as a closure.
+   * @param images - serialized composer images accompanying the submission;
+   *   the composer passes them only when {@link CommandClaim.images} is true.
+   */
+  submit(args: string, actx: ClientContext, images: readonly SubmitImageAttachment[]): Promise<SubmitOutcome>
+}
+
+export interface ReferenceInsert {
+  readonly source: string
+  readonly ref: string
+  /** Inline display label (fallback-cached on the occurrence). */
+  readonly label: string
+  /** Optional domain glyph shown beside the label. */
+  readonly appearance?: 'session' | 'file' | 'folder'
+  /** Clipboard / persistence projection, e.g. `/name` (never the model form). */
+  readonly clipboardText: string
+}
+

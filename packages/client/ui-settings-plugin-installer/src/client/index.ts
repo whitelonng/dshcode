@@ -2,7 +2,8 @@
 
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import { workspaceTitleOf, type ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PluginInventorySnapshot } from '@deepseek-ai/dsh-api-remotes/client'
 import { PluginInstallerTab, type PluginInstallerTabInjected } from './PluginInstallerTab.tsx'

@@ -115,6 +115,17 @@ export const zh = {
   'json.truncated': '… 已截断，共 {total} 字符',
   'clock.md': '{m}月{d}日',
   'clock.ymd': '{y}年{m}月{d}日',
+
+  'message.delete': '删除',
+  'message.deleteFailed': '删除失败，请重试',
+  'message.deleteUnavailable': '智能体运行中，停止后才能删除',
+  'message.edit': '编辑',
+  'message.edit.aria': '编辑消息',
+  'message.edit.cancel': '取消',
+  'message.edit.submit': '重新生成',
+  'message.editFailed': '修改失败，请重试',
+  'message.ttft': '首 token {seconds}秒',
+  'stats.liveTokensPerSecond': '生成中 {throughput} tok/s',
 } satisfies Record<string, string>
 
 /** Chat dictionary key union. */
@@ -232,4 +243,15 @@ export const en = {
   'json.truncated': '… truncated, {total} characters total',
   'clock.md': '{m}/{d}',
   'clock.ymd': '{y}-{m}-{d}',
+
+  'message.delete': 'Delete',
+  'message.deleteFailed': 'Delete failed, please retry',
+  'message.deleteUnavailable': 'Agent is running; stop the turn to delete',
+  'message.edit': 'Edit',
+  'message.edit.aria': 'Edit message',
+  'message.edit.cancel': 'Cancel',
+  'message.edit.submit': 'Regenerate',
+  'message.editFailed': 'Edit failed, please retry',
+  'message.ttft': 'TTFT {seconds}s',
+  'stats.liveTokensPerSecond': 'Generating {throughput} tok/s',
 } satisfies Record<ChatKey, string>

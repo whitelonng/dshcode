@@ -6,7 +6,7 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {
   CandidateRequest, ClientSessionContext, InputTriggerCandidate, InputTriggerSource,
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'

@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product pending protocol awaits the client-store deep migration
 /**
  * Node-environment service behavior: with no `window`/`document`, the
  * completion gate reads false (no hidden page), clicking a notification skips

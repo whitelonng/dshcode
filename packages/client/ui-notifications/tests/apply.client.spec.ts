@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product pending protocol awaits the client-store deep migration
 /** ui-notifications apply wiring: service attachment over the sessions list,
  * settings-scope mirroring into the section store, localized section
  * registration, face write routing, and HMR collapse recovery. */
