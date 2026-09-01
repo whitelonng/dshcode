@@ -30,4 +30,4 @@ Status: implemented
 - **逐条用 `session.prompt(mode: 'steer')` 插话。** 已拒绝：那会铸造新消息而不是转移 pending 行，破坏 dock 的不可变消息契约；`updateQueue({ kind: 'steer' })` 已经原子地转移了确切的那条。
 - **并发触发所有行。** 已拒绝：host 到达顺序无法保证，而插话顺序对模型可见；顺序 await 保证 FIFO。
 - **为 steer-all 新增 host RPC。** 已拒绝：现有逐条操作已足够幂等——每行一次严格 steer，中途关闭静默收敛——协议改动没有收益。
-- **发送按钮 tooltip。** 已拒绝：普通会话运行时，主按钮是 Stop，这也是整队列手势唯一可用的窗口。空草稿时的 placeholder 恰好在该窗口显示，可以直接说明这项键盘操作。
+- **发送按钮 tooltip。** 已拒绝：主按钮在空草稿的运行窗口内是 Stop，而这也正是整队列手势唯一可用的窗口。placeholder 恰好在该窗口显示，可以直接说明这项键盘操作。

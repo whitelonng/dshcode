@@ -34,7 +34,7 @@ A second head-to-head replay on the same ten examples compared this note's shipp
 - **Whole-document re-translation as the update path** (what a naive pipeline does) — rejected on benchmark evidence: preservation collapse, terminology drift, highest cost. The contract's minimal-update rule survives with data behind it.
 - **Batching several pairs per subagent** — rejected: no measured saving (briefings already deduplicate the fixed content), and one stalled or confused pair holds the others hostage.
 - **Per-paragraph translation-memory records in the sidecar** (segment hashes instead of whole-file hashes) — rejected: paragraph boundaries may legitimately differ across the pair, either side can be authored first, and the records would bloat and conflict in merges. Span mapping computed on demand from the existing whole-file hashes recovers the same alignment when it is trustworthy and says so when it is not.
-- **An update mode in the automated prompt pipeline (prompt-v5)** — deferred, not designed here: nothing drives [scripts/translation-prompt.ts](../../../../scripts/translation-prompt.ts) today, and the agent path was the live cost center. The pipeline keeps its whole-document v4 contract until it has a consumer.
+- **An update mode in the automated prompt pipeline (prompt-v5)** — deferred, not designed here: no shipped consumer drives [scripts/translation-prompt.ts](../../../../scripts/translation-prompt.ts), and the agent path was the live cost center. The pipeline keeps its whole-document v4 contract until it has a consumer.
 
 ## Consequences
 

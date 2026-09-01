@@ -14,7 +14,7 @@ Web GUI 以一条真实组装链交付——chromium 页面 → client 插件 bu
 
 ### Scaffold：`apps/web/tests/scaffold.ts`
 
-一个普通的共享 fixture 模块（[测试政策认可的形态](../../../../docs/testing.zh.md)），不是包：值得门禁把守的逻辑——回放推导、会话解析、日志脱敏、持久化——都在已受门禁的包 `dsh-llm-replay`、`dsh-acp-snapshot`、`dsh-session-persistence-jsonl` 中；剩下的只是启动接线和浏览器胶水，而驱动 chromium 的源码在无浏览器的覆盖率 runner 上无法诚实保持逐文件 100% 覆盖率。
+一个普通的共享 fixture 模块（[测试政策认可的形态](../../../../docs/testing.zh.md)），不是包：值得门禁把守的逻辑——回放推导、会话解析、日志脱敏、持久化——都在已受门禁的包 `dsh-llm-replay`、`dsh-session-snapshot`、`dsh-session-persistence-jsonl` 中；剩下的只是启动接线和浏览器胶水，而驱动 chromium 的源码在无浏览器的覆盖率 runner 上无法诚实保持逐文件 100% 覆盖率。
 
 `launchWebScaffold()` 通过 vendored Loader 的 include 机制，从交付的 `apps/cli/config/base.cordis.yml` 与 `apps/cli/config/web.cordis.yml` 启动真实 web 组合——与 `AppCLIEntry` 为 `dsh web` 驱动的是同一棵树、同一套机制。差异全部经 include patch 覆盖在这棵树上，即 ACP `cordis.snapshot.yml` 模式的进程内表达：临时 `persistenceRoot`；每个主机级 `skill-filesystem` 根目录（`dshHome`、`agentsHome` 和 `bundledSkillDir`）都钉在临时工作区下并禁用监听，因为环境 skill（技能）目录是模型可见输入；禁用 `agent-instructions`（录制的 fixture 不得嵌入本仓库的 AGENTS.md）；禁用 `session-title-llm`（其发后不管的标题调用会与循环争抢会话的回放游标）；webserver 行钉到端口 0，并使用已构建的 dist；无密钥模式下禁用 `llm-deepseek`。patch 的 id 一旦不再匹配任何行，boot 扫描会大声失败而不是漂移。boot 在临时工作区 `chdir` 下运行，使 api-gateway 的 `process.cwd()` 会话默认值、工具 cwd 与 fixture 一致；`dsh web` bin 自身的胶水（argv、profile json、AppCLIEntry）仍由 `smoke-real.e2e.ts` 中的无密钥 CLI（命令行界面）冒烟把守。初始化回滚和正常关闭都会先对 Cordis 树执行 dispose（资源释放），再删除 scaffold 持有的两个临时根目录；每项清理都会独立尝试，并会报告清理失败而不掩盖初始化失败。
 
@@ -32,13 +32,13 @@ Web GUI 以一条真实组装链交付——chromium 页面 → client 插件 bu
 
 ### 预期输出
 
-具有稳定所属区域的场景会为每个不同的用户可见状态提交一份规范化的 `ariaSnapshot()`；跨区域的工作区管理状态则使用语义 DOM 断言和权威的 host 状态检查。UUID、cwd、工作区目录名与时长等易变内容会归一为稳定 token；采集过程持续轮询，直到连续两次规范化读取结果相同。Role 与文本锚点继续充当可评审预期输出周围的语义防线，并直接覆盖跨区域状态。世界状态断言使用根上下文的会话事件，而不是第二份提交的日志预期输出，因为 ACP、headless 与 TUI 套件已经通过同一循环和持久化钉住持久化日志表面。`refresh` 是预期输出的唯一写入者；回放模式下缺少预期输出时，测试会连同重新生成命令一起失败。
+具有稳定所属区域的场景会为每个不同的用户可见状态提交一份规范化的 `ariaSnapshot()`；跨区域的工作区管理状态则使用语义 DOM 断言和权威的 host 状态检查。UUID、cwd、工作区目录名与时长等易变内容会归一为稳定 token；采集过程持续轮询，直到连续两次规范化读取结果相同。Role 与文本锚点继续充当可评审预期输出周围的语义防线，并直接覆盖跨区域状态。拥有录制会话的场景默认将规范化后的重新持久化根会话与同一份 `session.jsonl` 比较；借用或派生 fixture 的场景显式关闭该比较。世界状态断言仍使用权威 host 状态或独立、完整的 `workspace.expected/`，因为 transcript 匹配不能证明外部效果。`refresh` 是 ARIA 预期输出的唯一写入者；回放模式下缺少预期输出时，测试会连同重新生成命令一起失败。
 
 类型检查平面切分是结构性的：host scaffold、其支持模块，以及每个启动或检查 host 组合的 web spec 都会从注册在 client 侧的 `apps/web` 工程中排除，并逐文件纳入 `tsconfig.host.json`。一个程序不能同时持有 Cordis `Context` 合并的两侧。
 
 ### 模式与 fixture
 
-`DSH_SNAPSHOT` 选择 replay（默认，无密钥）、record（带密钥）或 refresh（无密钥）。发起提示的 spec 将所有模式共用的驱动步骤与仅供 replay/refresh 使用的断言分开；record 模式驱动真实输入框，采收内存中的会话 header 与事件，脱敏请求头，并 token 化当次运行的会话、cwd 与 RPC 标识。随后一次无密钥 refresh 重新生成 aria 预期输出。每条提示词都会与 fixture 中录制的 `user/message` 核对；每个场景目录都采用封闭清单，其中每个 JSONL 都是脱敏不动点。Web fixture 全部脱敏请求头且不钉任何 header 类别；见「暂缓」。
+`DSH_SNAPSHOT` 选择 replay（默认，无密钥）、record（带密钥）或 refresh（无密钥）。发起提示的 spec 将所有模式共用的驱动步骤与仅供 replay/refresh 使用的断言分开；record 模式驱动真实输入框，采收内存中的会话 header 与事件，脱敏请求头，并 token 化当次运行的会话、cwd 与 RPC 标识。随后一次无密钥 refresh 重新生成 ARIA 预期输出。每条提示词都会与 fixture 中录制的 `user/message` 核对；每个场景目录都采用封闭清单，其中每个 JSONL 都是脱敏不动点。语料 manifest 为每个 Web 组合/header 类分配且仅分配一个 pin，并只在该 pin 的 sidecar 中保留提示词与工具 schema 正文。
 
 ### 覆盖约定
 
@@ -66,7 +66,7 @@ Web GUI 以一条真实组装链交付——chromium 页面 → client 插件 bu
 
 **`packages/test-support/web-snapshot` 包 + `defineWebSnapshotSuite` 工厂。** 已否决：驱动 chromium 的源码在无浏览器的覆盖率 runner 上无法诚实保持逐文件 100%，且除受门禁的包已导出的辅助工具与本地 scaffold 外，这些场景专用交互尚未形成稳定的无浏览器约定。出现第二个 web 形态消费方，或被证实重复的生命周期代码确立该约定后，再重新考虑。
 
-**第二份提交的规范化会话日志预期输出。** 已否决：日志表面已由 ACP/headless/TUI 套件经同一循环与持久化钉住；在此只会翻倍刷新成本并重复测试下层。内联在根上下文事件上的世界状态断言保住了验证世界的义务。
+**单独维护第二份规范化会话日志预期输出。** 已否决：把录制 fixture 再复制成另一个文件会使刷新成本翻倍，却不会增加独立 oracle。语料改为将规范化持久化结果与驱动回放的同一份 `session.jsonl` 比较，同时以 host 状态和完整 workspace 断言保留独立的世界验证义务。
 
 **以 `DSH_SNAPSHOT` 回放分支拉起 `dsh web` bin。** 已否决：它需要在交付的 CLI 中增加测试专用回放分支和环境变量管道。进程内 scaffold 已加载同一份 `apps/cli/config/base.cordis.yml` 与 `apps/cli/config/web.cordis.yml`；只剩 argv、profile JSON 和 `AppCLIEntry` 胶水不在其覆盖范围内，而这些路径已由无密钥 CLI 冒烟覆盖。
 
@@ -84,7 +84,6 @@ Web GUI 以一条真实组装链交付——chromium 页面 → client 插件 bu
 
 ## 暂缓
 
-- **Web 头类别钉住**：web fixture 处处 token 化 `{{system}}`/`{{tools}}`，没有场景钉住 web 组合的提示词/工具 schema（`TODO(web-header-pin)`——scaffold 的 `recordFixture` JSDoc 有标记）。沿用 TUI 处处脱敏先例；当 web 组装的请求头与其镜像的 repl 组合进一步分叉时重审。
 - **恢复后追问场景**：真实 wire 上的历史/实时缝合路径；当该代码变更或回归时作为独立场景补充。
 - **输入框 steering 手势**：输入在运行期间锁定（只能停止或等待），因此 steering 场景从页面走 wire 做 steer；`TODO(web-steer-composer)` 待产品长出真实的输入框手势后，把驱动步骤升级为该手势。
 - **拖拽会话重排**：`workspace.insertSessionBefore` 尚无浏览器场景；它需要在同一个工作区里物化两个会话，并合成 HTML5 拖拽事件。当该表面变更或回归时再补充。无行为的会话 Rename/Fork/Delete 和工作区 Delete 菜单行待获得行为后再补充场景。

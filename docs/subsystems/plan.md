@@ -8,7 +8,7 @@ Source: [`packages/plan/plan-mode/src/index.ts`](../../packages/plan/plan-mode/s
 
 ## Logged state and recovery
 
-`plan/mode` (`{ active: boolean }`) is a log-only, whole-value-replace [session event](session.md): durable and replayable, never in the model transcript. `foldPlanMode(events, end?)` returns the last logged value in the prefix, or `false` when there is none — the state in force is always a pure fold of the session log, so resume, fork, and compaction recover it with no live mirror, and UIs observe committed flips through `session/event`. The complete event declaration is in the [persistence log event catalog](../persistence-catalog.md).
+`plan/mode` (`{ active: boolean }`) is a log-only, whole-value-replace [session event](session.md): durable and replayable, never in the model transcript. The optionally registered `plan` unit folds committed mode, command settlement, and the mode recorded at the latest request header. `ctx.planMode` reads that state through `stateOf()`; the first dependent access fails if the registry, `plan` key, or `turnBoundary` key is absent. Clients receive only `{ active, pending }`; resume, fork, and compaction recover both from the log. The complete event declaration is in the [persistence log event catalog](../persistence-catalog.md).
 
 ## Pending selections and the pre-step append
 
@@ -50,7 +50,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.planMode` — `PlanModeController`
 
-`ctx.planMode`: owns logged plan state, applies and narrates selected state at step start, the `plan:policy` section, the `/plan` command, and the stable exit tool. UIs observe committed flips through `session/event`; there is no live mirror.
+`ctx.planMode`: owns logged plan state, applies and narrates selected state at step start, the `plan:policy` section, the `/plan` command, and the stable exit tool. Client carriers expose the projection's cropped `{ active, pending }` view.
 
 ```ts cordis-catalog
 /**

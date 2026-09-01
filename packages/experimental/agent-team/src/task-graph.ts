@@ -24,10 +24,10 @@ export class TeamTaskGraphError extends Error {
  * @throws {TeamTaskGraphError} when an active dependency is missing, duplicated, self-referential, or cyclic.
  */
 export function assertTaskGraphCandidate(
-  current: ReadonlyMap<TeamTaskId, TeamTaskSnapshot>,
+  current: readonly TeamTaskSnapshot[],
   candidate: TeamTaskSnapshot,
 ): void {
-  const tasks = new Map(current)
+  const tasks = new Map(current.map(task => [task.id, task]))
   tasks.set(candidate.id, candidate)
 
   for (const task of tasks.values()) {

@@ -1,0 +1,37 @@
+- banner:
+  - navigation "Session hierarchy":
+    - 'button "Run two shell commands: wait" [disabled]'
+  - button "Session log":
+    - text: Session log
+    - img
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
+- text: "Run two shell commands: wait for cancellation, then write skipped.txt. {{clock}}"
+- button "Copy":
+  - img
+- button "Context injection @deepseek-ai/dsh-system-prompt":
+  - img
+  - img
+  - text: Context injection @deepseek-ai/dsh-system-prompt
+- 'button "Failed Bash Error: tool call aborted" [expanded]':
+  - img
+  - text: "Failed Bash Error: tool call aborted"
+- text: "IN { \"command\": \"node -e \\\"const fs=require('node:fs'); fs.writeFileSync('started.tmp', 'started'); fs.renameSync('started.tmp', 'started.txt'); setInterval(() => {}, 1000)\\\"\", \"description\": \"Wait until cancellation\" } OUT Error: tool call aborted"
+- button "Inspect"
+- 'button "Failed Bash Error: tool call aborted before dispatch"':
+  - img
+  - text: "Failed Bash Error: tool call aborted before dispatch"
+- textbox "Message or run a task... / commands, @ files or sessions"
+- button "Commands":
+  - img
+- 'button "Access mode, current: Full access"': Full access
+- button "Select model, current DeepSeek-V4-Flash":
+  - text: DeepSeek-V4-Flash
+  - img
+- button "Send message" [disabled]
+- text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 0% Input 10 tok · Output 10 tok

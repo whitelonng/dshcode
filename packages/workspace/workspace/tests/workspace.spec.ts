@@ -23,6 +23,7 @@ const header = (id: string, cwd?: string, createdAt = 0): SessionHeader => ({
   version: 0,
   id: SessionId(id),
   createdAt,
+  isSeeded: false,
   ...(cwd === undefined ? {} : { cwd }),
 })
 

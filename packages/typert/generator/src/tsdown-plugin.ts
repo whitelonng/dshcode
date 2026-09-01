@@ -22,6 +22,11 @@ interface TypertPlugin {
 
 const DECORATOR_SYNTAX = /^\s*@[A-Za-z_$][\w$]*/m
 
+// This plugin consumes tsc-emitted `lib/types` output, so every project it
+// would re-diagnose has already passed the workspace tsc build in the same
+// orchestration; the generator skips its per-package diagnostic pass here.
+const TSC_VERIFIED_INPUT = { checkDiagnostics: false } as const
+
 /** Generation scope selected by a tsdown build phase. */
 export interface TypertPluginOptions {
   /** Package mode emits only the package being bundled; workspace mode emits every explicit contributor once. */
@@ -78,7 +83,7 @@ export function typertPlugin(pluginOptions: TypertPluginOptions = {}): TypertPlu
       if (manifest.name === undefined || !hasTypertExport(manifest.exports)) return
       let artifacts = artifactsByRoot.get(root)
       if (artifacts === undefined) {
-        const generator = new WorkspaceTypertGenerator(root)
+        const generator = new WorkspaceTypertGenerator(root, TSC_VERIFIED_INPUT)
         artifacts = pluginOptions.faces === undefined
           ? generator.generate()
           : generator.generate(undefined, pluginOptions.faces)
@@ -89,7 +94,7 @@ export function typertPlugin(pluginOptions: TypertPluginOptions = {}): TypertPlu
   }
 
   function emitWorkspace(root: string, faces: readonly TypertFace[] | undefined): void {
-    const generator = new WorkspaceTypertGenerator(root)
+    const generator = new WorkspaceTypertGenerator(root, TSC_VERIFIED_INPUT)
     const packages = generator.discover(faces)
       .filter(candidate => hasTypertExport(readManifest(join(root, candidate.root)).exports))
       .map(candidate => candidate.package)

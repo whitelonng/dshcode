@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-15-llm-model-catalog-and-acp-selection.md
-2026-07-15-llm-model-catalog-and-acp-selection.md: 8a7b882c3c6b6e6153a2d3b26d5c56440cb09658
-2026-07-15-llm-model-catalog-and-acp-selection.zh.md: 77c27bf1f2148ecae7ab8857572bf58fbc3086a9
+2026-07-15-llm-model-catalog-and-acp-selection.md: fef23711a9214eae414809833bcd9ee9e26105ae
+2026-07-15-llm-model-catalog-and-acp-selection.zh.md: 85e9fa35ac99b72a7df207fdb4971b57cf6dc525

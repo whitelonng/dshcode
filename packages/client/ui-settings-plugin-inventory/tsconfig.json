@@ -18,19 +18,22 @@
       "path": "../locale"
     },
     {
-      "path": "../runtime"
+      "path": "../ui-settings"
     },
     {
-      "path": "../ui-settings"
+      "path": "../ui-agent-preset"
+    },
+    {
+      "path": "../../preset/agent-presets"
     },
     {
       "path": "../ui-primitives"
     },
     {
-      "path": "../ui-slots"
+      "path": "../ui-renderer"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../ui-slots"
     }
   ]
 }

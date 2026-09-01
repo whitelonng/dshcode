@@ -35,11 +35,11 @@ describe('HTTP bridge abort', () => {
 
   it('aborts a pending native picker request when the browser disconnects', async () => {
     const body = JSON.stringify({
-      type: 'client-request', rpcId: 'picker-1', method: 'host.pickDirectory', payload: {},
+      type: 'client-request', rpcId: 'picker-1', method: 'directoryPicker/pick', payload: { args: {} },
     })
     const request = Readable.from([Buffer.from(body)]) as unknown as IncomingMessage
     Object.assign(request, {
-      url: '/api/host.pickDirectory',
+      url: '/api/directoryPicker/pick',
       method: 'POST',
       headers: { 'content-type': 'application/json' },
     })

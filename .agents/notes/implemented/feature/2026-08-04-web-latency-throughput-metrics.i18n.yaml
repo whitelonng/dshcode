@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-04-web-latency-throughput-metrics.md
-2026-08-04-web-latency-throughput-metrics.md: 4d7627a9a38127259f1ba07121cea7282f794f2e
-2026-08-04-web-latency-throughput-metrics.zh.md: f0089cb45775f2dc9701a7256119f04e4709dd76
+2026-08-04-web-latency-throughput-metrics.md: 14ec765a7aadb8a54609c7d4e0e6af149c3c96ba
+2026-08-04-web-latency-throughput-metrics.zh.md: 52e6c33c52895f5a075f78019c5f353ecc8cc4b4

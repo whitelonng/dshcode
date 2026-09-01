@@ -1,55 +1,99 @@
+---
+description: "The ctx.fs filesystem service contract for deployments choosing or mounting a filesystem backend and developers implementing one."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-fs
 
 English | [中文](README.zh.md)
 
-The **`FileSystem`** (`ctx.fs`) defines the storage primitives in one execution world — resolve paths, expose canonical process paths and file URIs, test containment, read whole or streaming text, read bounded raw bytes, inspect/list metadata, write atomically, and apply a literal edit — without saying HOW. Both mutations take their version guard **optionally**, so `ctx.fs` on its own is a complete, unconstrained storage seam. This package also owns the `fs/*` policy event vocabulary the tool dispatches and the policy plugin listens for.
+## Summary
 
-This package owns the Service Definition and provider contract layer of the four-layer filesystem stack, split so each concern can evolve (and be swapped) independently (see [the capability-seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md), [the filesystem capability-seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-17-filesystem-capability-seam.md), [the split-the-filesystem-seam Agent Note](../../../.agents/notes/implemented/simplification/2026-06-26-fsspec-style-fs-seam.md), and [the file-context event-gate Agent Note](../../../.agents/notes/implemented/architecture/2026-06-26-file-context-as-event-gate.md)):
+`dsh-fs` defines the `ctx.fs` filesystem service: a compact, backend-neutral contract for one execution world that resolves paths to stable identities, maps shared host files when supported, reads text and raw bytes within bounds, lists directories, and applies atomic writes and literal edits. It deliberately leaves storage mechanics to the backends that implement it — `fs-local` for the host filesystem, `fs-sandbox` for policy-enforced confinement, and `fs-e2b` for a remote execution world. Both mutations take an optional version guard, so a backend mounted without the policy plugin still gives complete, unconstrained, atomic file operations. The package also owns the `fs/*` policy-event vocabulary that the tool package dispatches and the policy plugin decides. Choose it when you need a swappable filesystem surface; the model-facing tools themselves live in `dsh-tool-fs`.
 
-| Layer | Package | Role |
-|---|---|---|
-| tool / executor | `@deepseek-ai/dsh-tool-fs` | model-facing `read`/`write`/`edit` schemas + read windowing + text rendering; reads/writes/edits via `ctx.fs`, dispatches the `fs/*` events |
-| policy | `@deepseek-ai/dsh-fs-observation-policy` | observed-state + read-before-edit + version-guarded write/edit, contributed through the `fs/*` event gate (no service) |
-| provider contract | `@deepseek-ai/dsh-fs` (this) | `ctx.fs`: execution-world paths, text IO, and atomic mutation primitives (optional version guard); owns the `fs/*` event vocabulary |
-| provider | `@deepseek-ai/dsh-fs-local` | the host-filesystem implementation |
+## Table of Contents
 
-`fs-sandbox` and `fs-e2b` implement this interface without touching the policy/tool layers.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-## Service API (`ctx.fs`)
+-----
 
-A backend subclasses `FileSystem` and implements twelve primitives.
+<a id="use-this-package"></a>
+## Use this package
 
-| Member | Semantics |
+You rarely load `dsh-fs` directly: you mount a backend that registers as `ctx.fs`, then either call the service from your own plugin or let the `dsh-tool-fs` tools call it for you. This page serves the two audiences that do touch it — deployments choosing a backend, and developers implementing or consuming the contract.
+
+### Choosing and mounting a backend
+
+Pick [`fs-local`](../fs-local/README.md) for ordinary host files, [`fs-sandbox`](../fs-sandbox/README.md) when a session's mutations must be confined to its workspace and temp roots, and [`fs-e2b`](../../e2b/fs-e2b/README.md) when file state must live in a remote execution world. Mounting any backend populates `ctx.fs`; swapping backends changes nothing for the policy plugin, the tools, or the tool schemas. A composition that mounts no backend has no `ctx.fs` at all, and the tools fail at registration.
+
+### What the service lets you do
+
+Through `ctx.fs` you can resolve any path to a stable target identity, read a whole text file or stream it in chunks, read raw bytes up to an explicit cap, list one directory level, atomically create or replace a file, and apply a literal text edit atomically. The version guard on both mutations is optional: omit it for unconditional create-or-overwrite, or supply it to fail when the file changed since you last observed it. Every operation returns data or a typed `FsError` carrying a stable code such as `FS_NOT_FOUND`, `FS_STALE_VERSION`, or `FS_AMBIGUOUS_EDIT`, so callers branch on the code, never on message text.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design decisions behind the contract and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design philosophy
+
+The contract is built on one separation and three commitments:
+
+- **Contract over mechanism.** The service names what a storage layer can do — resolve, stat, read, list, write, edit — and never how it stores bytes. Backends own target identity, execution-world coordinates, decoding, binary rejection, and atomicity.
+- **Policy stays off the base class.** Observed-state, read-before-edit, and version-guarded mutations are a plugin's job (`dsh-fs-observation-policy`), added by supplying the optional guard — so a sandboxed or remote backend inherits no model-facing observation policy.
+- **`editText` stays on the seam.** Version check, literal match, and atomic rewrite share one critical section, so error attribution and one-wins/one-stale concurrency stay correct; a remote backend may implement it as a native compare-and-edit.
+- **Bounds live at this seam.** `readBytes` requires `maxBytes` and fails with `FS_TOO_LARGE` rather than truncating, so no backend ever buffers an unbounded file.
+
+### Source map
+
+| File | Role |
 |---|---|
-| `resolve(path, opts?)` | Resolve a path into a stable `FsTarget` (opaque `targetKey`, `displayPath`). `opts.cwd` is the base a relative `path` resolves against (a caller supplies its session workspace; absolute paths ignore it; omitted ⇒ the backend default), while `opts.signal` aborts a backend round-trip. Async — a remote backend may need I/O. The same file via different paths must yield the same `targetKey`. |
-| `processPath(target)` | Return the canonical absolute path that a subprocess in this provider's execution world can open. This is intentionally distinct from opaque `targetKey`. |
-| `fileUrl(target)` | Return the canonical `file:` URI in the execution world's platform syntax. The backend, not the host process, owns encoding. |
-| `contains(parent, child)` | Test canonical identity/descendant containment without exposing or parsing target keys. Both targets come from this provider. |
-| `stat(target, signal?)` | Return `FsInfo` metadata (`version`, `type`, optional `size`), or `undefined` when the target is absent. Never content. |
-| `lstat(path, opts?, signal?)` | Return `FsPathInfo` metadata without following the final path component when it is a symlink. This is path-shaped so consumers can reject repository-owned symlinks before `resolve` follows them into a target. |
-| `readText(target, signal?)` | Read the whole regular text file as one decoded string. Owns regular-file checks, UTF-8 decoding, binary/NUL rejection (`FS_NOT_TEXT`). |
-| `streamText(target, signal?)` | Stream the same text as decoded chunks for large files (cross-chunk UTF-8 decoding stays here); consumers that need a byte ceiling enforce it while consuming the stream. |
-| `readBytes(target, signal, maxBytes)` | Read a complete regular file as raw bytes with no decoding or binary rejection. `maxBytes` is required and bounds the complete content at this seam: a known or discovered overflow fails with `FS_TOO_LARGE` instead of truncating or buffering without a bound. |
-| `listDir(target, signal?)` | List direct directory children in stable name order. Returns entry names, entry types, resolved child targets, and cheap metadata (`version`/file `size` when available); never reads file contents. Missing targets throw `FS_NOT_FOUND`, non-directories throw `FS_NOT_DIRECTORY`, permission failures throw `FS_PERMISSION_DENIED`, and other backend I/O failures throw `FS_IO_ERROR`. Broken/disappeared children may be returned as `other` without metadata; child permission/IO failures fail the whole listing with the same structured codes. |
-| `writeText(target, content, expected?, signal?)` | Atomic create/replace. `expected` is OPTIONAL: omit ⇒ unconditional create-or-overwrite; supply an `FsWriteIntent` (`createIfAbsent`/`replaceIfVersion`) to guard. `createIfAbsent` must perform a no-replace publication so a creator racing the initial probe is preserved. |
-| `editText(target, edit, expected?, signal?)` | Literal edit. `expected` is OPTIONAL: omit ⇒ unconditional edit of the current content; supply `{ version }` to guard (verified BEFORE matching). A missing target reports `FS_STALE_VERSION` either way. Applies and writes atomically — one mutation critical section. |
+| [`src/index.ts`](src/index.ts) | Service definition: the abstract `FileSystem` class, the `ctx.fs` declaration, and the `fs/*` event vocabulary |
+| [`src/types.ts`](src/types.ts) | Vocabulary: `FsTarget`/`FsTargetKey`, `FsVersion`, `FsObservation`, `FsWriteIntent`, `FsError` and its codes |
 
-The mutation runs inside the backend's per-target lock either way, so an unconditional write/edit is still atomic — "unconditional" drops the *version* precondition, not the atomicity.
+### How a call flows
 
-## The `fs/*` policy events
+Every ordinary operation starts with `resolve(path, { cwd })`, which produces a stable `FsTarget` (an opaque `targetKey` plus a `displayPath` for model/UI output); the same file reached through different paths yields the same key. `processPathFromHostPath(hostPath)` separately maps an absolute host file into this execution world when the backend shares or explicitly maps it, and otherwise returns `undefined`. Reads then go `stat` → `readText`/`streamText`/`readBytes`, listings go `listDir`, and mutations go through one per-target critical section: the optional guard is checked, the new content is applied, and the result is published atomically.
 
-This package declares three events (see the generated region of [filesystem.md](../../../docs/subsystems/filesystem.md#cordis-surface)) so the emitter (`@deepseek-ai/dsh-tool-fs`) and the policy listener (`@deepseek-ai/dsh-fs-observation-policy`) share a vocabulary without the emitter depending on the policy plugin. `fs/write-intent` and `fs/edit-intent` are single-slot decision waterfalls (the listener fully decides, never calling `next()`); `fs/observed` is a fire-and-forget recording event carrying an `FsObservation` discriminated union: present with a version or confirmed absent. They carry only `dsh-fs` vocabulary plus an opaque `object` actor — no model-facing concepts and no agent/session owner structure.
+### The `fs/*` policy events
 
-## A provider contract, not the policy layer
+The package declares three events so the emitter (`dsh-tool-fs`) and the policy listener (`dsh-fs-observation-policy`) share a vocabulary without the emitter depending on the policy plugin. `fs/write-intent` and `fs/edit-intent` are single-slot decision waterfalls: the first listener decides outright and never calls `next()`. `fs/observed` is a fire-and-forget recording event carrying an `FsObservation` — present with a version, or confirmed absent. The events carry only `dsh-fs` vocabulary plus an opaque `object` actor.
 
-`ctx.fs` is deliberately close to fsspec-style storage primitives — half a level above byte-level `cat`/`open`, because it decodes text and rejects binaries so the policy layer never touches raw bytes. It owns UTF-8 decoding, binary rejection, atomic writes, and the literal-edit critical section. It does **not** own line windows, numbered lines, rendered footers, or observed-state. Observed-state, read-before-edit, and version-guarded write/edit are policy a plugin (`@deepseek-ai/dsh-fs-observation-policy`) ADDS by supplying the optional guard — not provider behavior — so a sandboxed/remote backend inherits no model-facing observation policy.
+### Invariants
 
-`editText` stays on this seam (not composed in the policy layer from a read plus a write) because version guard + literal match + atomic rewrite must stay inside one critical section for correct error attribution and one-wins/one-stale concurrency, and a remote backend may implement it as a native compare-and-edit.
+- `targetKey` and `version` are branded opaque ids: consumers must not parse or interpret them; only `displayPath` is for model/UI output.
+- Failures are typed `FsError`s with stable codes, never ad-hoc message strings.
+- The seam arms no I/O deadline; cancellation is an optional per-primitive `AbortSignal`.
 
-## Vocabulary
+</details>
 
-`FsTargetKey` / `FsVersion` are branded opaque ids ([the branded-ids Agent Note](../../../.agents/notes/implemented/architecture/2026-06-20-branded-ids.md)) — consumers must not parse `targetKey` or interpret `version`; only `displayPath` is for model/UI output. `FsObservation` distinguishes `{ kind: 'present', version }` from `{ kind: 'absent' }`, so a policy can separate an unseen target from confirmed absence without performing I/O. `FsWriteIntent` is the explicit GUARDED write intent (`createIfAbsent` creates a missing target and rejects an existing one with `FS_NOT_OBSERVED`; `replaceIfVersion` replaces only at the observed version, else `FS_STALE_VERSION`); omitting it from `writeText` is the third, unconditional state. `FsPathInfo` is the no-follow metadata shape that can report `symlink`, unlike target-level `FsInfo`. Failures throw `FsError` (extends `HarnessError`, [the structured error taxonomy Agent Note](../../../.agents/notes/implemented/architecture/2026-06-11-structured-error-taxonomy.md)) carrying a stable `FsErrorCode` (`FS_NOT_FOUND`, `FS_NOT_DIRECTORY`, `FS_NOT_TEXT`, `FS_NOT_REGULAR_FILE`, `FS_TOO_LARGE`, `FS_PERMISSION_DENIED`, `FS_IO_ERROR`, `FS_STALE_VERSION`, `FS_NOT_OBSERVED`, `FS_AMBIGUOUS_EDIT`, `FS_EDIT_NOT_FOUND`, `FS_ABORTED`); the tool registry exposes `{ name, code }` on `isError` results. See `src/types.ts` for the full contracts.
+-----
 
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the exhaustive contract to the backends and consumers built on it.
+
+- [Filesystem subsystem](../../../docs/subsystems/filesystem.md) — exhaustive provider contract, policy events, and error taxonomy.
+- [fs-local](../fs-local/README.md) — the host-filesystem backend implementing this contract.
+- [fs-sandbox](../fs-sandbox/README.md) — the sandbox-enforcing backend implementing this contract.
+- [tool-fs](../tool-fs/README.md) — the model-facing tools that consume `ctx.fs`.
+- [fs-observation-policy](../fs-observation-policy/README.md) — the policy plugin that guards mutations through the `fs/*` events.
+- [Capability seams note](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md) — why the filesystem stack splits into contract, provider, policy, and tools.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 Indirectly, through `dsh-tool-fs`, which renders provider text and errors as bounded, retained filesystem tool results.
@@ -60,7 +104,22 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **Text-only mutations by contract** — text reads and both mutations reject binary/non-UTF-8 content with `FS_NOT_TEXT`; `readBytes` is the one raw-byte primitive, and binary-safe mutations remain a deliberate deferral of [the tool-schemas Agent Note](../../../.agents/notes/implemented/feature/2026-06-17-filesystem-tool-schemas.md).
-- **Twelve primitives only** — no delete, rename/move, copy, or watch; `listDir` is single-level, with recursion, globbing, pagination, and search out of scope per [the directory-listing Agent Note](../../../.agents/notes/archived/architecture/2026-07-03-filesystem-directory-listing-seam.md).
-- **No IO deadline** — the seam arms no timeout; cancellation is a best-effort optional `AbortSignal` per primitive (the deliberate [fs-family stance](../README.md)).
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the contract is a poor fit or needs special operational care. They are current package constraints, not a general filesystem comparison or a task backlog.
+
+- **Text-only mutations by contract** — text reads and both mutations reject binary or non-UTF-8 content with `FS_NOT_TEXT`; `readBytes` is the single raw-byte primitive, and binary-safe mutations remain deferred ([tool-schemas Agent Note](../../../.agents/notes/implemented/feature/2026-06-17-filesystem-tool-schemas.md)).
+- **Thirteen primitives only** — no delete, rename, copy, or watch; `listDir` lists a single level, with recursion, globbing, pagination, and search out of scope ([directory-listing note](../../../.agents/notes/archived/architecture/2026-07-03-filesystem-directory-listing-seam.md)).
+- **No I/O deadline** — the seam arms no timeout; cancellation is a best-effort optional `AbortSignal` per primitive ([fs family stance](../README.md)).
 - **Resolve-then-operate costs a remote backend two round-trips per tool call** — folding or caching resolution is left to such a backend.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

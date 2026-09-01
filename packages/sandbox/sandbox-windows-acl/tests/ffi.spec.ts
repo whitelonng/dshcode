@@ -1,8 +1,7 @@
 /**
- * FFI helper tests with stub binding tables (the failure-paths.spec.ts
- * pattern): error formatting and temp-path decoding defenses, the
- * last-error throwers' detail fallback, pointer decode NULL handling, and
- * the bounded SID comparison's early exits. Pure stubs — no real Win32
+ * Sandbox-specific FFI tests with stub binding tables: temp-path decoding,
+ * invalid-handle checks, pointer-at-offset decoding, and the bounded SID
+ * comparison's early exits. Pure stubs — no real Win32
  * calls, so these run on every platform; the real-FFI round-trip lives in
  * acl.spec.ts and probe.spec.ts (win32 only).
  */
@@ -10,17 +9,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import koffi from 'koffi'
 
-import { Win32Error } from '../src/errors.ts'
+import { Win32Error } from '@deepseek-ai/dsh-win32-process'
 import {
-  allocBytes, decodePtr, decodePtrAt, errorText, getTempPath,
-  isInvalidHandle, isNullPtr, sameSidAt, throwLastError, throwWin32,
+  allocBytes, decodePtrAt, getTempPath,
+  isInvalidHandle, sameSidAt,
 } from '../src/ffi.ts'
 import type { NativePtr, Win32Bindings } from '../src/ffi.ts'
 import * as abi from '../src/win32-abi.ts'
 
-const PVOID = koffi.pointer('void')
-
-/** A stub whose formatMessageW writes real UTF-16 text (the errorText round-trip). */
+/** A stub whose formatMessageW supplies text to the GetTempPath failure path. */
 function formatApi(): { api: Win32Bindings; formatMessageW: ReturnType<typeof vi.fn> } {
   const formatMessageW = vi.fn((_flags: number, _source: null, _id: number, _lang: number, buffer: Buffer, _size: number, _args: null) => {
     const text = 'access denied'
@@ -48,18 +45,6 @@ function craftSid(revision: number, count: number, authority: number[] = [0, 0, 
   return sid
 }
 
-describe('errorText', () => {
-  it('decodes the formatted UTF-16 message and trims it', () => {
-    const { api } = formatApi()
-    expect(errorText(api, 5)).toBe('access denied')
-  })
-
-  it('returns an empty string when FormatMessageW formats nothing', () => {
-    const api = { formatMessageW: vi.fn(() => 0) } as unknown as Win32Bindings
-    expect(errorText(api, 5)).toBe('')
-  })
-})
-
 describe('getTempPath', () => {
   it('decodes the NUL-terminated temp path GetTempPathW wrote', () => {
     const api = {
@@ -83,55 +68,14 @@ describe('getTempPath', () => {
     expect(caught).toBeInstanceOf(Win32Error)
     expect((caught as Win32Error).api).toBe('GetTempPathW')
   })
-})
 
-describe('throwLastError and throwWin32', () => {
-  it('throwLastError formats the system message when no detail is given', () => {
-    const { api } = formatApi()
-    let caught: unknown
-    try {
-      throwLastError(api, 'Probe')
-    } catch (error) {
-      caught = error
-    }
-    expect(caught).toBeInstanceOf(Win32Error)
-    expect((caught as Win32Error).message).toContain('Probe failed (Win32 5): access denied')
-  })
-
-  it('throwWin32 formats the system message when no detail is given', () => {
-    const { api } = formatApi()
-    let caught: unknown
-    try {
-      throwWin32(api, 'Probe', 5)
-    } catch (error) {
-      caught = error
-    }
-    expect(caught).toBeInstanceOf(Win32Error)
-    expect((caught as Win32Error).message).toContain('Probe failed (Win32 5): access denied')
-  })
-
-  it('Win32Error appends the detail when one is given', () => {
-    const error = new Win32Error('Probe', 5, 'the lock file path')
-    expect(error.name).toBe('Win32Error')
-    expect(error.api).toBe('Probe')
-    expect(error.win32Code).toBe(5)
-    expect(error.message).toBe('Probe failed (Win32 5): the lock file path')
-  })
-
-  it('Win32Error omits the detail suffix when none is given', () => {
-    const error = new Win32Error('Probe', 5)
-    expect(error.message).toBe('Probe failed (Win32 5)')
+  it('rejects a required length larger than the fixed buffer', () => {
+    const api = { getTempPathW: vi.fn(() => 300) } as unknown as Win32Bindings
+    expect(() => getTempPath(api)).toThrow(/GetTempPathW failed \(Win32 122\): required 300/u)
   })
 })
 
-describe('pointer NULL handling', () => {
-  it('isNullPtr accepts null, undefined, and the zero pointer', () => {
-    expect(isNullPtr(null)).toBe(true)
-    expect(isNullPtr(undefined)).toBe(true)
-    expect(isNullPtr(0n as NativePtr)).toBe(true)
-    expect(isNullPtr(42n as NativePtr)).toBe(false)
-  })
-
+describe('sandbox pointer handling', () => {
   it('isInvalidHandle treats NULL as failure', () => {
     expect(isInvalidHandle(null)).toBe(true)
     expect(isInvalidHandle(undefined)).toBe(true)
@@ -149,11 +93,6 @@ describe('pointer NULL handling', () => {
     const buffer = Buffer.alloc(8)
     buffer.writeBigUInt64LE(42n, 0)
     expect(decodePtrAt(buffer, 0)).toBe(42n)
-  })
-
-  it('decodePtr returns null for an unset out-parameter slot', () => {
-    const slot = koffi.alloc(PVOID, 1) as unknown as NativePtr
-    expect(decodePtr(slot)).toBeNull()
   })
 })
 

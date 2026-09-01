@@ -20,7 +20,7 @@ GET and HEAD use the same status and content type for index entries, files, and 
 
 **Use an `Accept: text/html` request header as the fallback rule.** The header expresses representation preference, not whether the pathname is a declared client route. Browser fetches, bots, and monitors may request HTML for an invalid path, so the same false-success behavior remains.
 
-**Add a configurable pathname allowlist now.** No current client route consumes such configuration. A future History API router can add an explicit server rule or configuration field together with the route that requires it, without preserving a speculative public option today.
+**Add a configurable pathname allowlist.** No current client route consumes such configuration. A future History API router can add an explicit server rule or configuration field together with the route that requires it, without preserving a speculative public option.
 
 ## Consequences
 

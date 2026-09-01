@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import sharp from 'sharp'
-import { hasLowColourCount, canPassThroughNormalization, normalizeImage } from '../src/normalization.ts'
+import { canPassThroughNormalization, normalizeImage } from '../src/normalization.ts'
 import type { NormalizationPolicy } from '../src/normalization.ts'
 import { detectImage } from '../src/image.ts'
 
-const POLICY: NormalizationPolicy = { maxDimension: 2048, maxBytes: 4 * 1024 * 1024 }
+const POLICY: NormalizationPolicy = { maxPixels: 2048 * 2048, maxDimension: 8192, maxBytes: 4 * 1024 * 1024 }
 
 /** Deterministic pseudo-random RGB noise; PNG cannot compress it below raw size. */
 function noisePixels(width: number, height: number): Uint8Array {
@@ -34,13 +34,14 @@ async function flatImage(width: number, height: number, format: 'png' | 'jpeg' |
 describe('canPassThroughNormalization', () => {
   it('accepts an in-budget clean PNG/JPEG/WebP and refuses GIF, animation, metadata, oversized edges, and oversized bytes', () => {
     const clean = { animated: false, carriesMetadata: false, depth: 'uchar', space: 'srgb', hasAlpha: false }
-    expect(canPassThroughNormalization({ mediaType: 'image/png', width: 2048, height: 4, ...clean }, 100, POLICY)).toBe(true)
+    expect(canPassThroughNormalization({ mediaType: 'image/png', width: 8192, height: 4, ...clean }, 100, POLICY)).toBe(true)
     expect(canPassThroughNormalization({ mediaType: 'image/gif', width: 4, height: 4, ...clean }, 100, POLICY)).toBe(false)
     expect(canPassThroughNormalization({ mediaType: 'image/webp', width: 4, height: 4, animated: true, carriesMetadata: false, depth: 'uchar', space: 'srgb', hasAlpha: false }, 100, POLICY)).toBe(false)
     expect(canPassThroughNormalization({ mediaType: 'image/jpeg', width: 4, height: 4, animated: false, carriesMetadata: true, depth: 'uchar', space: 'srgb', hasAlpha: false }, 100, POLICY)).toBe(false)
     expect(canPassThroughNormalization({ mediaType: 'image/png', width: 4, height: 4, ...clean, depth: 'ushort' }, 100, POLICY)).toBe(false)
     expect(canPassThroughNormalization({ mediaType: 'image/png', width: 4, height: 4, ...clean, space: 'rgb16' }, 100, POLICY)).toBe(false)
-    expect(canPassThroughNormalization({ mediaType: 'image/jpeg', width: 2049, height: 4, ...clean }, 100, POLICY)).toBe(false)
+    expect(canPassThroughNormalization({ mediaType: 'image/jpeg', width: 2049, height: 2048, ...clean }, 100, POLICY)).toBe(false)
+    expect(canPassThroughNormalization({ mediaType: 'image/jpeg', width: 8193, height: 4, ...clean }, 100, POLICY)).toBe(false)
     expect(canPassThroughNormalization({ mediaType: 'image/webp', width: 4, height: 4, ...clean }, POLICY.maxBytes + 1, POLICY)).toBe(false)
   })
 })
@@ -72,44 +73,48 @@ describe('normalizeImage', () => {
     })
   })
 
-  it('downscales an oversized PNG to the long-edge target and stays PNG', async () => {
+  it('downscales an oversized opaque PNG to the long-edge target as JPEG', async () => {
     const data = await flatImage(10, 6, 'png')
     const detected = await detectImage(data)
 
-    const normalized = await normalizeImage(data, detected, { maxDimension: 5, maxBytes: POLICY.maxBytes })
+    const normalized = await normalizeImage(data, detected, { maxPixels: POLICY.maxPixels, maxDimension: 5, maxBytes: POLICY.maxBytes })
 
-    expect(normalized).toMatchObject({ mediaType: 'image/png', width: 5, height: 3 })
-    await expect(detectImage(normalized.data)).resolves.toMatchObject({ mediaType: 'image/png', width: 5, height: 3, animated: false, carriesMetadata: false, depth: 'uchar', space: 'srgb' })
-    const again = await normalizeImage(data, detected, { maxDimension: 5, maxBytes: POLICY.maxBytes })
+    expect(normalized).toMatchObject({ mediaType: 'image/jpeg', width: 5, height: 3 })
+    await expect(detectImage(normalized.data)).resolves.toMatchObject({ mediaType: 'image/jpeg', width: 5, height: 3, animated: false, carriesMetadata: false, depth: 'uchar', space: 'srgb' })
+    const again = await normalizeImage(data, detected, { maxPixels: POLICY.maxPixels, maxDimension: 5, maxBytes: POLICY.maxBytes })
     expect(again.data).toEqual(normalized.data)
   })
 
   it('re-encodes the normalized output of a resize into itself (idempotence)', async () => {
     const data = await flatImage(10, 6, 'png')
-    const first = await normalizeImage(data, await detectImage(data), { maxDimension: 5, maxBytes: POLICY.maxBytes })
+    const budget = { maxPixels: POLICY.maxPixels, maxDimension: 5, maxBytes: POLICY.maxBytes }
+    const first = await normalizeImage(data, await detectImage(data), budget)
 
-    const second = await normalizeImage(first.data, await detectImage(first.data), { maxDimension: 5, maxBytes: POLICY.maxBytes })
+    const second = await normalizeImage(first.data, await detectImage(first.data), budget)
 
     expect(second.data).toBe(first.data)
   })
 
-  it('always re-encodes GIF to the PNG of its first frame', async () => {
+  it('always re-encodes GIF as a single still frame', async () => {
     const data = await flatImage(6, 4, 'gif')
     const detected = await detectImage(data)
 
     const normalized = await normalizeImage(data, detected, POLICY)
 
-    expect(normalized.mediaType).toBe('image/png')
-    await expect(detectImage(normalized.data)).resolves.toMatchObject({ mediaType: 'image/png', width: 6, height: 4, animated: false, carriesMetadata: false, depth: 'uchar', space: 'srgb' })
+    // gifload always decodes to RGBA, so a GIF re-encodes on the WebP ladder.
+    expect(detected.hasAlpha).toBe(true)
+    expect(normalized.mediaType).toBe('image/webp')
+    await expect(detectImage(normalized.data)).resolves.toMatchObject({ width: 6, height: 4, animated: false, carriesMetadata: false, depth: 'uchar', space: 'srgb' })
   })
 
-  it('keeps a low-colour alpha source on PNG when the budget holds', async () => {
+  it('keeps a transparent source on the WebP ladder', async () => {
     const data = await flatImage(9, 5, 'webp', true)
     const detected = await detectImage(data)
 
-    const normalized = await normalizeImage(data, detected, { maxDimension: 4, maxBytes: POLICY.maxBytes })
+    const normalized = await normalizeImage(data, detected, { maxPixels: POLICY.maxPixels, maxDimension: 4, maxBytes: POLICY.maxBytes })
 
-    expect(normalized).toMatchObject({ mediaType: 'image/png', width: 4, height: 2 })
+    expect(normalized).toMatchObject({ mediaType: 'image/webp', width: 4, height: 2 })
+    await expect(detectImage(normalized.data)).resolves.toMatchObject({ hasAlpha: true })
   })
 
   it('accepts WebP output that omits an all-opaque source alpha plane', async () => {
@@ -129,6 +134,7 @@ describe('normalizeImage', () => {
     await expect(detectImage(data)).resolves.toMatchObject({ hasAlpha: true })
 
     const normalized = await normalizeImage(data, await detectImage(data), {
+      maxPixels: POLICY.maxPixels,
       maxDimension: 32,
       maxBytes: POLICY.maxBytes,
     })
@@ -137,7 +143,7 @@ describe('normalizeImage', () => {
     await expect(detectImage(normalized.data)).resolves.toMatchObject({ hasAlpha: false })
   })
 
-  it('keeps transparency when the byte cap requires another encoding and smaller dimensions', async () => {
+  it('keeps the smallest transparent ladder output above an unreachable byte target without shrinking', async () => {
     const side = 128
     const pixels = new Uint8Array(side * side * 4)
     const noise = noisePixels(side, side)
@@ -151,10 +157,12 @@ describe('normalizeImage', () => {
     }
     const data = new Uint8Array(await sharp(pixels, { raw: { width: side, height: side, channels: 4 } }).png().toBuffer())
 
-    const normalized = await normalizeImage(data, await detectImage(data), { maxDimension: side, maxBytes: 1_024 })
+    const normalized = await normalizeImage(data, await detectImage(data), {
+      maxPixels: POLICY.maxPixels, maxDimension: side, maxBytes: 1_024,
+    })
 
-    expect(normalized.data.byteLength).toBeLessThanOrEqual(1_024)
-    expect(normalized.width).toBeLessThan(side)
+    expect(normalized.data.byteLength).toBeGreaterThan(1_024)
+    expect(normalized).toMatchObject({ mediaType: 'image/webp', width: side, height: side })
     await expect(detectImage(normalized.data)).resolves.toMatchObject({ hasAlpha: true, depth: 'uchar', space: 'srgb' })
   })
 
@@ -162,15 +170,12 @@ describe('normalizeImage', () => {
     const data = await noiseImage(64, 32, 'jpeg')
     const detected = await detectImage(data)
 
-    const normalized = await normalizeImage(data, detected, { maxDimension: 32, maxBytes: POLICY.maxBytes })
+    const normalized = await normalizeImage(data, detected, { maxPixels: POLICY.maxPixels, maxDimension: 32, maxBytes: POLICY.maxBytes })
 
     expect(normalized).toMatchObject({ mediaType: 'image/jpeg', width: 32, height: 16 })
   })
 
-  it('classifies a photographic PNG by pixels and uses an opaque photographic encoding', async () => {
-    // A smooth gradient: palette quantization dithers it into a sizable PNG
-    // while JPEG at quality 85 stays far smaller, so the budget between the
-    // two forces exactly one ladder hop.
+  it('re-encodes an opaque gradient PNG as JPEG within the byte target', async () => {
     const side = 256
     const pixels = new Uint8Array(side * side * 3)
     for (let y = 0; y < side; y += 1) {
@@ -183,7 +188,7 @@ describe('normalizeImage', () => {
     }
     const data = new Uint8Array(await sharp(pixels, { raw: { width: side, height: side, channels: 3 } }).png().toBuffer())
     const detected = await detectImage(data)
-    const budget = { maxDimension: 128, maxBytes: POLICY.maxBytes }
+    const budget = { maxPixels: POLICY.maxPixels, maxDimension: 128, maxBytes: POLICY.maxBytes }
 
     const normalized = await normalizeImage(data, detected, budget)
 
@@ -192,14 +197,15 @@ describe('normalizeImage', () => {
     expect(normalized.data.byteLength).toBeLessThanOrEqual(budget.maxBytes)
   })
 
-  it('shrinks dimensions after the quality floor instead of refusing an oversized encoding', async () => {
+  it('keeps the smallest opaque ladder output above an unreachable byte target', async () => {
     const data = await noiseImage(64, 64, 'png')
 
-    const normalized = await normalizeImage(data, await detectImage(data), { maxDimension: 2048, maxBytes: 512 })
+    const normalized = await normalizeImage(data, await detectImage(data), {
+      maxPixels: POLICY.maxPixels, maxDimension: 2048, maxBytes: 512,
+    })
 
-    expect(normalized.data.byteLength).toBeLessThanOrEqual(512)
-    expect(normalized.width).toBeLessThan(64)
-    expect(normalized.height).toBeLessThan(64)
+    expect(normalized.data.byteLength).toBeGreaterThan(512)
+    expect(normalized).toMatchObject({ mediaType: 'image/jpeg', width: 64, height: 64 })
   })
 
   it('re-encodes an in-budget oriented JPEG, baking rotation and stripping metadata', async () => {
@@ -263,86 +269,27 @@ describe('normalizeImage', () => {
       })
   })
 
-  it('rejects a converted normalized image whose verified alpha metadata disagrees with the source facts', async () => {
-    const data = await flatImage(8, 8, 'png', true)
-    const detected = await detectImage(data)
+  it('downscales by total pixels so an extreme aspect ratio keeps its short edge', async () => {
+    const data = await flatImage(10, 40, 'png')
 
-    await expect(normalizeImage(data, { ...detected, hasAlpha: false }, {
-      maxDimension: 4,
-      maxBytes: POLICY.maxBytes,
-    })).rejects.toMatchObject({
-      code: 'ATTACHMENT_WRITE_FAILED',
-      message: 'Image normalization did not produce a single-frame 8-bit sRGB image with matching metadata.',
-    })
-  })
-})
-
-describe('hasLowColourCount', () => {
-  it('distinguishes photographic rasters from low-colour graphics without averaged sampling', async () => {
-    const side = 512
-    const highFrequency = sharp(noisePixels(side, side), { raw: { width: side, height: side, channels: 3 } })
-    const gradientPixels = new Uint8Array(side * side * 3)
-    for (let y = 0; y < side; y += 1) {
-      for (let x = 0; x < side; x += 1) {
-        const offset = (y * side + x) * 3
-        gradientPixels[offset] = x & 0xff
-        gradientPixels[offset + 1] = y & 0xff
-        gradientPixels[offset + 2] = (x * 3 + y * 5) & 0xff
-      }
-    }
-    const ordinaryPhoto = sharp(gradientPixels, { raw: { width: side, height: side, channels: 3 } })
-    const solid = sharp({
-      create: { width: side, height: side, channels: 3, background: { r: 12, g: 34, b: 56 } },
-    })
-    const text = sharp(Buffer.from(`
-      <svg width="512" height="256" xmlns="http://www.w3.org/2000/svg">
-        <rect width="512" height="256" fill="white"/>
-        <text x="24" y="145" font-size="96" fill="#16324f">DeepSeek 16-bit</text>
-      </svg>
-    `))
-    const transparentData = await sharp({
-      create: { width: side, height: side, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-    }).composite([{ input: Buffer.from(`
-      <svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="256" cy="256" r="180" fill="#0f8" fill-opacity="0.7"/>
-      </svg>
-    `) }]).png().toBuffer()
-    const transparent = sharp(transparentData)
-
-    await expect(hasLowColourCount(highFrequency)).resolves.toBe(false)
-    await expect(hasLowColourCount(ordinaryPhoto)).resolves.toBe(false)
-    await expect(hasLowColourCount(solid)).resolves.toBe(true)
-    await expect(hasLowColourCount(text)).resolves.toBe(true)
-    await expect(hasLowColourCount(transparent)).resolves.toBe(true)
-  })
-
-  it('reads grayscale-alpha samples without treating alpha or the next pixel as RGB', async () => {
-    const symbols: number[] = []
-    for (let first = 0; first < 32; first += 1) {
-      for (let second = 0; second < 32; second += 1) symbols.push(first, second)
-    }
-    const pixels = new Uint8Array(symbols.length * 2)
-    for (const [index, symbol] of symbols.entries()) {
-      pixels[index * 2] = symbol * 8
-      pixels[index * 2 + 1] = symbol * 8
-    }
-    const grayscaleAlpha = sharp(pixels, {
-      raw: { width: 128, height: 16, channels: 2 },
+    const normalized = await normalizeImage(data, await detectImage(data), {
+      maxPixels: 100, maxDimension: 8192, maxBytes: POLICY.maxBytes,
     })
 
-    await expect(hasLowColourCount(grayscaleAlpha)).resolves.toBe(true)
+    expect(normalized).toMatchObject({ mediaType: 'image/jpeg', width: 5, height: 20 })
   })
 
-  it('reads one-channel grayscale samples as equal RGB values', async () => {
-    const pixels = new Uint8Array(128 * 16)
-    for (let index = 0; index < pixels.length; index += 1) pixels[index] = index & 0xff
+  it('caps the long edge after the total-pixel budget', async () => {
+    const data = await flatImage(4, 64, 'png')
 
-    await expect(hasLowColourCount(sharp(pixels, {
-      raw: { width: 128, height: 16, channels: 1 },
-    }))).resolves.toBe(true)
+    const normalized = await normalizeImage(data, await detectImage(data), {
+      maxPixels: 10_000, maxDimension: 16, maxBytes: POLICY.maxBytes,
+    })
+
+    expect(normalized).toMatchObject({ mediaType: 'image/jpeg', width: 1, height: 16 })
   })
 
-  it('keeps an antialiased text screenshot readable on the low-colour PNG path', async () => {
+  it('keeps an antialiased text screenshot readable on the JPEG ladder', async () => {
     const source = new Uint8Array(await sharp(Buffer.from(`
       <svg width="1024" height="512" xmlns="http://www.w3.org/2000/svg">
         <rect width="1024" height="512" fill="white"/>
@@ -351,12 +298,13 @@ describe('hasLowColourCount', () => {
     `)).removeAlpha().png().toBuffer())
 
     const normalized = await normalizeImage(source, await detectImage(source), {
+      maxPixels: POLICY.maxPixels,
       maxDimension: 512,
       maxBytes: POLICY.maxBytes,
     })
     const stats = await sharp(normalized.data).greyscale().stats()
 
-    expect(normalized).toMatchObject({ mediaType: 'image/png', width: 512, height: 256 })
+    expect(normalized).toMatchObject({ mediaType: 'image/jpeg', width: 512, height: 256 })
     expect(stats.channels[0]?.min).toBeLessThan(80)
     expect(stats.channels[0]?.max).toBeGreaterThan(240)
   })

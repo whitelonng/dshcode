@@ -2,9 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import { TestSessions, TestWorkspaces } from '@deepseek-ai/dsh-client-test-runtime'
-import type { Stabilizer } from '@deepseek-ai/dsh-client-test-runtime'
+import { SlotRegistry } from '../src/client/registry.ts'
+import type { SlotScopeAdapter, StandardSourceBinding } from '../src/client/index.ts'
 import { apply as nodeApply } from '@deepseek-ai/dsh-client-ui-renderer'
 import * as UiRenderer from '../src/client/index.ts'
 
@@ -17,16 +16,30 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-const stabilize: Stabilizer = async (fn) => { await act(async () => { await fn() }) }
+const stabilize = async (fn: () => void | Promise<void>): Promise<void> => {
+  await act(async () => { await fn() })
+}
 
 async function bench() {
   const ctx = new Context()
-  await ctx.plugin(SlotRegistry).await()
-  const slots = ctx.get('slots') as SlotRegistry
-  ctx.provide('sessions', new TestSessions(stabilize, ctx))
-  ctx.provide('workspaces', new TestWorkspaces(stabilize))
   const fiber = ctx.plugin({ inject: [...UiRenderer.inject], apply: UiRenderer.apply })
   await fiber.await()
+  const slots = ctx.get('slots') as SlotRegistry
+  const absentBinding: StandardSourceBinding = {
+    key: undefined,
+    hooks: {},
+    keyedHooks: {},
+    props: {},
+  }
+  const current = {
+    getSnapshot: () => absentBinding,
+    subscribe: () => () => {},
+  }
+  const adapter: SlotScopeAdapter = {
+    current,
+    resolve: () => undefined,
+  }
+  slots.installScope('session', adapter)
   return { ctx, slots, fiber }
 }
 

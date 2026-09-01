@@ -1,0 +1,8 @@
+version: 1
+scenario: lsp-definition
+profile: headless
+composition: lsp
+recording: authored
+header:
+  class: lsp
+  pin: true

@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决定
 
-`AgentDefaultModelConfig` 提供 `ctx.agentDefaultModel`，并把 `{provider, model, reasoningEffort?}` 注册为 `agent-default-model` Settings 分节。其 `{provider, model}` 组合条目是 base 层，`settings.yaml` 提供用户层。该服务不偏向特定入口，因此直接创建与 ApiProxy 支撑的创建共享同一个默认值（[headless 直接 core 入口](../architecture/2026-08-09-headless-direct-core-entry-point.zh.md)）。
+`AgentDefaultModelConfig` 提供 `ctx.agentDefaultModel`，并把 `{provider, model, reasoningEffort?}` 注册为 `agent-default-model` Settings 分节。其 `{provider, model}` 组合条目是 base 层，`settings.yaml` 提供用户层。该服务不偏向特定入口，因此直接创建与 Session Controller Remote 创建共享同一个默认值（[headless 直接 core 入口](../architecture/2026-08-09-headless-direct-core-entry-point.zh.md)）。
 
 `reasoningEffort` 属于 Settings 分节，但不属于插件配置。Settings 层按字段合并，因此已配置的强度会在用户选择省略它时继续存在。`saveSelection()` 写入完整的用户分节；因此，缺少该字段会清除已存强度。部署级强度默认值属于适配器 profile，并由它按模型解析。
 
@@ -26,7 +26,7 @@ Status: implemented
 
 ## 影响
 
-`host.describe` 报告当前 Agent 默认值。模型切换成功后，`settings.yaml` 中会存有一个 `agent-default-model:` 分节。网关不通过 Settings 页 allowlist 暴露该 namespace；模型选择器是它的编辑器。
+`session/modelCatalog` 报告当前 Agent 默认值。模型切换成功后，`settings.yaml` 中会存有一个 `agent-default-model:` 分节。Settings 页面不暴露该 namespace；模型选择器是它的编辑器。
 
 ## 无法发送消息的会话
 

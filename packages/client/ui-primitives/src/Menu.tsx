@@ -1,13 +1,3 @@
-// Menu: minimal controlled dropdown (group-by pickers, project selectors).
-// Default: pure CSS positioning relative to the anchor wrapper — no popper.
-// Opt-in `portal` renders the list into document.body, fixed-positioned from
-// the anchor rect, for anchors inside overflow-clipping containers (sidebar).
-// The owner controls `open`; outside-click closing uses one document listener
-// active only while open. Submenus open on hover/focus inside the same root.
-// Entries also cover non-interactive `label` headings and `danger` rows.
-// Lists keep 12px clearance to the viewport's top/bottom edges and scroll
-// internally past that; submenu-bearing menus are exempt (see .scrollable).
-
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { createPortal } from 'react-dom'

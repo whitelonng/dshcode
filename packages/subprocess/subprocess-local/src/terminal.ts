@@ -10,7 +10,7 @@ import type {
   SubprocessTerminalHandle,
   SubprocessTerminalSignal,
 } from '@deepseek-ai/dsh-subprocess'
-import type { ProcessIdentity, ProcessInspector } from './process-inspector.ts'
+import type { ProcessIdentity, ProcessInspector, ProcessSnapshot } from './process-inspector.ts'
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -59,7 +59,7 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
     private readonly platform: NodeJS.Platform = process.platform,
   ) {
     this.pid = terminal.pid
-    this.rootIdentity = inspector.processTree(this.pid).find(member => member.pid === this.pid)
+    this.rootIdentity = inspector.snapshot().tree(this.pid).find(member => member.pid === this.pid)
     this.done = this.outcome.promise
     this.dataDisposable = terminal.onData((data) => { this.output.write(Buffer.from(data, 'utf8')) })
     this.exitDisposable = terminal.onExit(({ exitCode, signal: exitSignal }) => {
@@ -83,12 +83,12 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
   // Local inspection is synchronous; the seam returns a promise for remote transports.
   // oxlint-disable-next-line typescript/require-await -- Preserve promise rejection semantics at the async provider contract.
   async inspectForeground(): Promise<SubprocessTerminalForeground | undefined> {
-    this.descendants()
+    this.descendants(this.inspector.snapshot())
     const processGroupId = this.inspector.foregroundPgid(this.pid)
     if (processGroupId === undefined) return undefined
     return {
       processGroupId,
-      inputWaiting: this.inspector.isStdinWaiting(processGroupId),
+      inputWaiting: this.inspector.isStdinWaiting(processGroupId, this.pid),
     }
   }
 
@@ -152,34 +152,35 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
     }
   }
 
-  private survivors(members: ProcessIdentity[]): ProcessIdentity[] {
-    return members.filter(member => this.inspector.isAlive(member))
+  private survivors(members: ProcessIdentity[], observed: ProcessSnapshot): ProcessIdentity[] {
+    return members.filter(member => observed.alive(member))
   }
 
-  private descendants(): ProcessIdentity[] {
+  private descendants(observed: ProcessSnapshot): ProcessIdentity[] {
     // Adopt newly scanned members only while the numeric root pid provably
     // still carries the spawned shell's start identity: after the shell dies,
     // a recycled pid's tree and session must not donate an unrelated
     // process's children to this session's signalling. Already-adopted
     // members keep their own start identities, which every signal rechecks.
-    const tree = this.inspector.processTree(this.pid)
+    const tree = observed.tree(this.pid)
     const root = tree.find(member => member.pid === this.pid)
     const rootVerified = this.rootIdentity !== undefined
       && root !== undefined
       && root.started === this.rootIdentity.started
     this.trackedDescendants = this.survivors(this.unionMembers(
       this.trackedDescendants,
-      ...rootVerified ? [tree, this.inspector.processSession(this.pid)] : [],
-    ).filter(member => member.pid !== this.pid))
+      ...rootVerified ? [tree, observed.session(this.pid)] : [],
+    ).filter(member => member.pid !== this.pid), observed)
     return this.trackedDescendants
   }
 
   private async waitForMembers(members: ProcessIdentity[]): Promise<ProcessIdentity[]> {
+    if (members.length === 0) return []
     const until = Date.now() + this.graceMs
-    let survivors = this.survivors(members)
+    let survivors = this.survivors(members, this.inspector.snapshot())
     while (survivors.length > 0 && Date.now() < until) {
       await delay(Math.min(25, Math.max(1, until - Date.now())))
-      survivors = this.survivors(members)
+      survivors = this.survivors(members, this.inspector.snapshot())
     }
     return survivors
   }
@@ -187,6 +188,8 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
   private signalMembers(members: ProcessIdentity[], signal: 'SIGTERM' | 'SIGKILL'): void {
     for (const member of members) {
       try {
+        // Each signal reads its own identity fence, inside this try: a failed
+        // read must cost one target, never the rest of a teardown round.
         this.inspector.signalProcess(member, signal)
       } catch (_alreadyExitedDuringSignal) {
         // The exact process identity is rechecked; a same-tick exit is success.
@@ -197,7 +200,7 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
   private forceStopDescendants(): void {
     let members = this.trackedDescendants
     try {
-      members = this.descendants()
+      members = this.descendants(this.inspector.snapshot())
     } catch (_processTableUnavailableDuringHostExit) {
       // Preserve already-captured identities when a final process-table scan fails.
     }
@@ -219,13 +222,14 @@ export class LocalTerminalHandle implements SubprocessTerminalHandle {
   }
 
   private async stopDescendants(): Promise<ProcessIdentity[]> {
-    const captured = this.descendants()
+    const captured = this.descendants(this.inspector.snapshot())
     this.signalMembers(captured, 'SIGTERM')
     const capturedSurvivors = await this.waitForMembers(captured)
-    const members = this.unionMembers(capturedSurvivors, this.descendants())
+    const members = this.unionMembers(capturedSurvivors, this.descendants(this.inspector.snapshot()))
     this.signalMembers(members, 'SIGKILL')
     const survivors = await this.waitForMembers(members)
-    return this.survivors(this.unionMembers(survivors, this.descendants()))
+    const observed = this.inspector.snapshot()
+    return this.survivors(this.unionMembers(survivors, this.descendants(observed)), observed)
   }
 
   private async stopShell(): Promise<void> {

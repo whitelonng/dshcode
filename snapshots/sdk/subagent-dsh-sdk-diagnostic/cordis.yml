@@ -1,0 +1,68 @@
+# TypeScript SDK snapshot patch for foreground and background DSH SDK failures.
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    includeDefaultRoots: false
+
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  config:
+    thinking: enabled
+    reasoningEffort: max
+
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: !!js "process.env.DSH_SNAPSHOT === undefined ? 'zstd' : 'none'"
+
+- id: session-log-deepseek
+  name: '@deepseek-ai/dsh-session-log-deepseek'
+  config:
+    enabled: true
+
+- insert:
+    - id: subagent-dsh-sdk-diagnostic
+      name: '@deepseek-ai/dsh-subagent-dsh-sdk'
+      config:
+        providerName: dsh-sdk-diagnostic
+        profile: sdk
+        patches:
+          - !!js process.env.DSH_TEST_CHILD_PATCH
+        dshHome: !!js dshHomePath('children/foreground')
+        provider: mock
+        model: mock-echo
+        env:
+          DSH_TELEMETRY_DISABLED: '1'
+          DSH_TEST_CHILD_FAILURE: '1'
+    - id: tool-subagent-dsh-sdk-diagnostic
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: dsh-sdk-diagnostic
+        toolName: subagent_dsh_sdk
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+    - id: subagent-dsh-sdk-diagnostic-background
+      name: '@deepseek-ai/dsh-subagent-dsh-sdk'
+      config:
+        providerName: dsh-sdk-diagnostic-background
+        profile: sdk
+        patches:
+          - !!js process.env.DSH_TEST_CHILD_PATCH
+        dshHome: !!js dshHomePath('children/background')
+        provider: mock
+        model: mock-echo
+        env:
+          DSH_TELEMETRY_DISABLED: '1'
+          DSH_TEST_CHILD_FAILURE: '1'
+          FAKE_INIT_GO: .dsh-sdk-background-release
+    - id: tool-subagent-dsh-sdk-diagnostic-background
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: dsh-sdk-diagnostic-background
+        toolName: subagent_dsh_sdk_background
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+    - id: release-dsh-sdk-background-on-job-output
+      name: '../../../apps/cli/tests/profiles/sdk/fixtures/subagent-dsh-sdk-release-on-job-output.ts'

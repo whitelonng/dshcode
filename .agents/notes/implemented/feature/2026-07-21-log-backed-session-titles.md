@@ -12,7 +12,7 @@ Session identity metadata is immutable, and the event log is the replay and fork
 
 ## Decision
 
-The [`session-title` capability family](../../../../packages/session/README.md) owns title state and generation policy. `@deepseek-ai/dsh-session-title` provides `ctx.sessionTitle`, a deterministic first-prompt fallback, and a registry for at most one optional asynchronous provider. `@deepseek-ai/dsh-session-title-llm` owns the common auxiliary-model request policy; separate first-prompt and all-prompts plugins choose input cadence. The shared agent spine mounts only the fallback service. The Web host mounts that service plus the first-prompt model provider with explicit overridable limits, so a fresh Web session gains an immediate fallback and then a non-blocking model summary. Other compositions choose either model provider explicitly.
+The [`session-title` capability family](../../../../packages/session/README.md) owns title state and generation policy. `@deepseek-ai/dsh-session-title` provides `ctx.sessionTitle`, a deterministic first-prompt fallback, and a registry for at most one optional asynchronous provider. `@deepseek-ai/dsh-session-title-llm` owns the common auxiliary-model request policy; separate first-prompt and all-prompts plugins choose input cadence. `dsh-sdk-minimal` mounts only the fallback service. `dsh-base` mounts that service plus the first-prompt model provider with explicit overridable limits, so a fresh base-backed session gains an immediate fallback and then a non-blocking model summary. Other compositions choose either model provider explicitly.
 
 ### Event ownership and folding
 
@@ -58,7 +58,7 @@ A fork inherits seed title events unchanged, like the rest of its source log —
 
 ## Consequences
 
-- Titles survive JSONL and SQLite persistence, replay, and fork inheritance without a separate mutable record.
+- Titles survive JSONL persistence, replay, and fork inheritance without a separate mutable record.
 - Web title delivery stays incremental and log-backed without a title index or persisted-list scan; cold list rows improve after attach.
 - A fallback appears immediately. Each fresh Web session adds one first-prompt auxiliary call; other compositions choose whether better titles justify model cost and whether later prompts should retitle a session.
 - Auxiliary request records and late accepted titles consume event seqs without consuming turn numbers, so persistence exposes both attempted dispatches and accepted updates even though model history and KV-cache identity do not change.

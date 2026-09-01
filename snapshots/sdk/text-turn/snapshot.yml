@@ -1,0 +1,8 @@
+version: 1
+scenario: text-turn
+profile: sdk
+composition: sdk-upload
+recording: live
+header:
+  class: sdk-upload
+  pin: true

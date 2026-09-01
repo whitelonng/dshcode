@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-25-web-input-machine-and-slash-pipeline.md) | 中文
 
-> 范围：输入状态机（occurrence 表 + claim 看护 + 提交事务）、hub/facade 与发送编排、跨插件输入改写的三个 scoped bail 事件、`/` 与 `@` 触发检测与菜单流水线（ui-input-trigger）、composer 周边 slot 体系。依赖[会话作用域 note](2026-07-25-web-client-session-scope-and-provide-channel.zh.md)的 sctx / provide / session-maybe 与 blank 实体模型；命令知识（三型、目录、popup）零涉——那是[命令业务面 note](2026-07-25-web-command-surfaces-and-assembly.zh.md)的领地。
+> 范围：输入状态机（claim 看护 + 提交事务）、hub/facade 与发送编排、跨插件输入改写的三个 scoped bail 事件、`/` 与 `@` 触发检测与菜单流水线（ui-input-trigger）、composer 周边 slot 体系。依赖[会话作用域 note](2026-07-25-web-client-session-scope-and-provide-channel.zh.md)的 sctx / provide / session-maybe 与 blank 实体模型；命令知识（三型、目录、popup）零涉——那是[命令业务面 note](2026-07-25-web-command-surfaces-and-assembly.zh.md)的领地。原决策的编辑面一半——textarea + occurrence 表、自管 undo log、粘贴匹配流水线与 backdrop 装饰——已由 [Lexical composer note](2026-08-20-web-composer-lexical-editor.zh.md) 取代；本 note 仍拥有状态机的提交平面、bail 事件约定、触发流水线与 composer slot。
 
 ## 问题
 
@@ -21,32 +21,17 @@ Status: implemented
 
 ## 决策
 
-### 输入状态机（`InputMachine`）
+### 输入状态机（现为 `SubmitMachine`）
 
 纯状态机，事件进/效果出，注入时钟。四相 phase（plain / adjudicating / claimed / submitting）。命令态**永不从 draft 推导**，由 pick 路径在离散时刻显式建立；claim 由 `draft.startsWith(token)` 看护、退格破坏自动 release；claim 形状 `{token, hint?}`（hint 供 ghost text）。
 
-事件面（`dispatch(ev)` 单写入口，每个事件一个 transaction）：
+机器的编辑面一半——occurrence 表、自管 undo log、粘贴匹配 attempt 流水线与 `set-invalid`——已并入 Lexical 文档树及其 history（文档身份、位置映射与三投影归 [Lexical composer note](2026-08-20-web-composer-lexical-editor.zh.md) 所有）。留在这里的是语义不变的提交平面：
 
-- `draft-changed {draft, editRange?}`——textarea 全量草稿；editRange 缩小 occurrence 平移计算，缺省前后缀共扫。
-- `newline {selection}`——Ctrl+Enter 换行（不经浏览器 execCommand：自管 undo 下浏览器写入会分叉双历史）。
-- `begin-command {claim, span}` / `insert-ref {reference, span}` / `consume-token {guard}`——三个 bail 事件的机器侧；span CAS = draftRev 相等。
-- `set-invalid {invalidIds}`——owner resolution 结果的样式位（非 transaction）。
-- `undo` / `redo`——自管 transaction log（容量为 100 的环形缓冲区；单字符打字按注入时钟窗合并；提交成功清 log）。
-- `paste-begin {text, selection, components?, generation?}`——粘贴 + 热快照同步匹配组件同 transaction（Undo 一次回粘贴前）；打开 PasteMatchAttempt。
-- `paste-upgrade {attemptId, span, reference}`——异步匹配升级为独立 transaction（Undo 两段）；attempt 保持 current，insertedRange 随升级收缩。
-- `invalidate-paste`——DOM 层观察到的 attempt 终结手势（caret/selection 操作等）。
-- `enter {mode}` / `adjudicated` / `adjudication-failed` / `submit-settled` / `release`——提交事务平面：SubmitAttempt（seq + AbortSignal）防回灌，成功 commit 清稿，失败带漂移守卫 rollback（回车时快照仅当 live draft 仍等于它才回填；用户已再输入则只发 notice）。
+- `draft-changed {draft}`——编辑器文档的剪贴板投影，供 claim 看护。
+- `claim {claim}` / `release` 与在编辑器层应用的 span-CAS 改写事件——bail 事件的机器侧；span CAS = draftRev 相等。
+- `enter {draft}` / `adjudicated` / `adjudication-failed` / `submit-settled {draft}` / `send-committed`——提交事务平面：SubmitAttempt（seq + AbortSignal）防回灌，成功 commit 清除草稿前缀，失败带漂移守卫 rollback（回车时快照仅当 live draft 仍等于它才回填；用户已再输入则只发 notice）。
 
-效果面（shell 执行）：`adjudicate`（调 InputTriggerController.adjudicate）、`begin-submit`（claim.submit 事务）、`default-sink`（普通消息，hub 编排）、`notice`。
-
-occurrence 表与 chip 三投影：
-
-- 每颗引用在 draft 中占一个 `U+FFFC`；表项 `{occurrenceId, source, ref, offset, label, clipboardText, invalid?}`；同名 chip 因 occurrenceId 独立。
-- 一切编辑同 transaction 更新 draft 与表：区间平移；与占位符相交的删除/替换作用于整颗。
-- 单字符占位使键盘原子性大半原生成立（caret 无内部位；Backspace/方向键/Shift 扩选原生即整颗）；鼠标点 chip 由 backdrop 命中 → 整颗 setSelectionRange。
-- 视觉投影 = label：backdrop 在占位符 offset 渲染 chip（textarea 字形不可见），invalid 走失效样式。
-- 剪贴板/持久化投影 = clipboardText：copy/cut 把选区内占位符展开；draft 持久化 mirror 写同一投影（chat store 里永远是普通文本，刷新 seed 语义 = 全选复制→重开→粘贴，chip 跨刷新降级为文本）。
-- 模型投影 = submit 时经 source `codec.serialize` 逐颗生成（归 submit attempt 的 signal 与陈旧守卫；owner 缺失/失败/取消则不发送，不降级为 `/name`）。
+效果面（shell 执行）：`adjudicate`（调 InputTriggerController.adjudicate）、`begin-submit`（claim.submit 事务）、`default-sink`（普通消息，hub 编排）、`commit-draft`（前缀删除并保留后缀）、`notice`。
 
 ### 跨插件输入改写：三个 scoped bail 事件
 
@@ -56,21 +41,21 @@ occurrence 表与 chip 三投影：
 - `slash/input-insert-reference` `{reference, span}`——引用 chip 插入（InputTriggerController 派发）。
 - `slash/input-consume-token` `{guard: span | bare-token}`——业务成功后消费命令 token（下游命令面派发）。
 
-不事件化的调用（注册表登记 → 显式调用 → await）：Input 自身的 draft/submit、Enter 异步裁决、reference serializer、异步 paste matcher。`@mode bail` 已入 JSDoc parser 与 cordis catalog 门禁（scripts/jsdoc.ts）。
+不事件化的调用（注册表登记 → 显式调用 → await）：Input 自身的 draft/submit、Enter 异步裁决、reference serializer。`@mode bail` 已入 JSDoc parser 与 cordis catalog 门禁（scripts/jsdoc.ts）。
 
 ### slash 流水线（ui-input-trigger：root `InputTriggerService` + 每会话 `InputTriggerController`）
 
 对「命令」零知识的触发/菜单/pick 流水线：
 
 - 服务只有 source 注册表（`InputTriggerSource{trigger: '/'|'@', name, order?, candidates, onPick, matchSpace?, matchEnter?}`；(trigger,name) 唯一；可选 `order` 对 roster 排序——越小越靠前、默认 0、同值保持注册序——排序后的 roster 同时是组序与轮询序）与 `sessionOf(sctx)`。实现 match 钩子即参与空格/回车裁决的声明；流水线按 roster 序轮询，首个非 undefined 应答胜出，无人认领落 default sink。matchSpace 同步（空格在击键中触发，只许热缓存）；matchEnter 异步（可 await 源自身预热，预热失败即 reject）。
-- controller 持有唯一权威 hit（含 span；菜单关闭后为 Space 保留）、每会话 menu store、候选 fetch generation、键盘仲裁（combobox 模式：焦点始终在 textarea，↑↓/Enter/Escape 拦截且全程过 IME composition 守卫，唯一例外 Shift+Enter 无条件先行），以及 pick 编排（outcome → 自派 bail 事件）。`toggleSource(name, syntheticHit)` 是 chrome launcher 路径：它基于调用方的 textarea selection，只 seed 对应的已注册 source，并发布 `launcher = name` 直至关闭；普通的键入式 tracking 会清除 launcher 并恢复完整的 trigger roster。两条路径渲染同一个 MenuView，并执行同一条 `onPick` 链。`dismiss()` 动词支撑 MenuView 注入的 `onDismiss`（指针落在菜单与所在 composer 卡片之外即关闭菜单；MenuView 还经 `slash.menu` locale 命名空间本地化组标题，并经 ui-primitives 的 `useAnchoredMaxHeight` 把高度收敛到 composer 上方的视口空间）；每个会话作用域出生时对 source roster 做一次 `warm(projection)`，projection 在该 scope 内只有稳定的 sessionId，无 published/能力跃迁；scope disposer 拆除 controller。
+- controller 持有唯一权威 hit（含 span；菜单关闭后为 Space 保留）、每会话 menu store、候选 fetch generation、键盘仲裁（combobox 模式：焦点始终在编辑器表面；↑↓/Enter/Escape 会被拦截；Tab 会选定高亮补全项，候选项可下钻时走 drill 动作，否则走普通 pick，无高亮时保留原生焦点遍历；所有仲裁都经过 IME composition 守卫，唯一例外是 Shift+Enter 无条件先行），以及 pick 编排（outcome → 自派 bail 事件）。`toggleSource(name, syntheticHit)` 是 chrome launcher 路径：它基于调用方的编辑器 selection，只 seed 对应的已注册 source，并发布 `launcher = name` 直至关闭；普通的键入式 tracking 会清除 launcher 并恢复完整的 trigger roster。两条路径渲染同一个 MenuView，并执行同一条 `onPick` 链。`dismiss()` 动词支撑 MenuView 注入的 `onDismiss`（指针落在菜单与所在 composer 卡片之外即关闭菜单；MenuView 还经 `slash.menu` locale 命名空间本地化组标题，并经 ui-primitives 的 `useAnchoredMaxHeight` 把高度收敛到 composer 上方的视口空间）；每个会话作用域出生时对 source roster 做一次 `warm(projection)`，projection 在该 scope 内只有稳定的 sessionId，无 published/能力跃迁；scope disposer 拆除 controller。
 - 触发检测词边界（`user@host`、URL `/` 永不触发）、守卫分档（plain：`/` 到处 + `@` 行内 / claimed：`/` 抑制、`@` 活 / frozen：全无）为冻结纯核。
 
 ### hub / facade：常驻外壳与严格会话输入体
 
 - hub（trigger/decoration 注册表 + 发送编排）对 slash/command 服务是可选 `ctx.get()` 依赖：无 ui-input-trigger/命令面时输入正常收发，优雅降级。
 - 每个实体会话只有一个 `SessionInputShell`（facade），随会话作用域创建和拆除；无会话时不造 input machine。`ConversationRoot` 自身是 `session-maybe` 常驻外壳，持有 HeroShell、Workspace picker、composer stack 与 chain fallback 外框。它始终拥有同一个 scrollport 与 composer seat；会话出现后，彼此独立的严格会话 header 和 body outlet 只填入这些固定区域。
-- composer bar 是一个无条件渲染的 `session-maybe` slot entry：无会话时同一个 InputBar 以惰性态渲染（machine face 缺席、`disabled` owner prop），`connectWorkspace` 返回 blank 会话后同一实例转为 live——textarea DOM 在无会话 → blank 切换及其后每次 phase 翻转中都不重建；`ConversationRoot`、Hero 与布局骨架全程保持。
+- composer bar 是一个无条件渲染的 `session-maybe` slot entry：无会话时同一个 InputBar 以惰性态渲染（machine face 缺席、`disabled` owner prop），`connectWorkspace` 返回 blank 会话后同一实例转为 live——编辑器表面 DOM 在无会话 → blank 切换及其后每次 phase 翻转中都不重建；`ConversationRoot`、Hero 与布局骨架全程保持。memoized InputBar 在 renderer 绑定各 child slot 的标准 props 后自行渲染 overlay、left、right 与 dock；`ConversationRoot` 只传标量数据和回调，因此无关 shell render 不会制造新的 ReactNode owner prop 或使 bar 失效。
 - ConversationRoot 的 Hero 判据是 `sessionId === undefined || (composerPhase === 'blank' && (openState === 'open' || summaryBlank === true))`：summary 已证实为空的会话在任何 open state 下都保持 Hero，未经证实的会话则在 loading 期间进入 settling。首次 submit 同步进入 engaging，失败也保留 composer 与错误上下文，不退回 blank Hero；sidebar 的 blank 位只在提示词成功受理后翻 false。
 - 发送统一在 hub defaultSink：乐观清稿后只走 `session.prompt` 且固定 `mode:'queue'`（Web UI 无 steer 入口；host 线缆上的 `mode:'steer'` 不经此 machine）；失败且 live draft 仍为空才回填，用户已经继续输入则不覆盖。不存在 Draft materialize 或 attach 事务。
 - blank Hero 改选 Workspace 时，外壳调用 `connectWorkspace`；目标会话不同时把非空 draft 从当前 shell 搬到目标 shell，再 open 新 id，旧 blank 会话留存但不再 current。
@@ -82,14 +67,14 @@ skill/@subagent 引用不走占位符 + occurrence 身份链——纯文本引�
 
 - PickOutcome 增 `{text}` arm；新 scoped bail 事件 `slash/input-insert-text` `{text, span}`（与另三个同约定：draftRev CAS、返回 true ⟺ 实际改写）；facade.insertText 走 setDraft 拼接，机器零改动。
 - source 可选 `lexicon?(session)` 钩子：同步热快照名录，`undefined` = 数据未热——零装饰、永不触发 fetch（渲染路径保持同步无副作用）；配对的可选 `subscribeLexicon?(session, listener)` 钩子是名录在 warm 之后仍会变化（目录 settle、子代生灭）时的失效通道。controller 把各名录聚合进自己的 `lexicon` 快照 store（每次 source 通知重拉）；scope 出生后才注册的 source 由服务广播给活 controller，补 warm 并并入名录。
-- `decorations.scanTextRefs`：词边界扫描 draft（行首/空白后的 `/name`、`@name`，`x/name` 永不命中）对照名录，命中即 `.textRef` mark（backdrop 纯 range 高亮，同 hlToken）；编辑破坏匹配形状下次扫描自然消失。
+- `decorations.scanTextRefs`：词边界扫描 draft（行首/空白后的 `/name`、`@name`，`x/name` 永不命中）对照名录，命中即成为 Lexical 树中的 `TextRefNode` 实体（claim 装饰对行首 token 席位有优先权——见 [Lexical composer note](2026-08-20-web-composer-lexical-editor.zh.md)）；编辑破坏匹配形状时实体还原为普通文本。
 - 发送即原文（不再 `<skill>` 序列化）；气泡侧 MessageItem 双形状装饰（legacy `<skill>` 标签 + 纯文本 token）。
-- 旧 occurrence/paste/serialize 链全部保留在盘未删（additive；删除另成将来一刀）。装饰响应性：InputBar 以 uSES 订阅 shell 的 lexicon source，scope 出生预热后才 settle 的名录会直接点亮已有 draft token，无需菜单交互或无关重渲染。
+- 装饰响应性：shell 订阅 controller 的 lexicon store，每次名录变化重扫全文档，scope 出生预热后才 settle 的名录会直接点亮已有 draft token，无需菜单交互或无关重渲染。
 
 ### 每会话供数贡献与键盘私面
 
 - ui-conversation（hub 兼贡献者）经 `sessions.provide` 供 `'input'` hook（机器状态 + queue overlay）+ `inputActions` prop（`setDraft`/`submit`，稳定 void 回调）。
-- 公私分界：公共 provide 只放 React 语汇成员；键盘/DOM 命令面（track/arbitrate/space/undo/redo/paste/dismissPopup/bindMirror——同步返回值、disposer 语义）是 InputBar 独占，走 InputBar entry 自己的 inject 包内私递，不出插件边界。
+- 公私分界：公共 provide 只放 React 语汇成员；键盘/DOM 命令面（`ComposerKeyboard`：shell 所有的 editor，arbitrate/space/paste/dismissPopup/caretSpan——同步返回值、disposer 语义）是 InputBar 独占，走 InputBar entry 自己的 inject 包内私递，不出插件边界。
 
 ### slot 体系
 
@@ -97,7 +82,7 @@ skill/@subagent 引用不走占位符 + occurrence 身份链——纯文本引�
 
 - `conversation.session.header`（single）——常驻 scrollport 上方严格会话的 breadcrumb、view tab 与 header action。
 - `conversation.session`（single）——常驻 scrollport 内严格会话的 view ring 与 draft mirror。header 和 body 共享同一个会话作用域 chat store；会话 id 切换时各自重建。
-- `conversation.composer.bar`（single）——InputBar 本体的 slot：InputBar 是真 slot entry（自有 slot 自注册），composer chain fallback 的内容；不做 chain entry——chain 单选举会在 takeover 时卸载它，破坏 textarea DOM 存活。
+- `conversation.composer.bar`（single）——InputBar 本体的 slot：InputBar 是真 slot entry（自有 slot 自注册），composer chain fallback 的内容；不做 chain entry——chain 单选举会在 takeover 时卸载它，破坏编辑器表面的 DOM 存活。
 - `conversation.input.overlay`——输入卡内浮层锚点；注册者 inject 按 slot sessionId 解析各自每会话 controller。
 - `conversation.input.dock`——输入上方堆叠条（QueueDock 的队列只读列表落此），order 定序。
 - `conversation.composer.dock`——composer 上沿统计带。
@@ -116,10 +101,11 @@ skill/@subagent 引用不走占位符 + occurrence 身份链——纯文本引�
 | ActiveCommand 中间态 / registerMode 模式注册表 / 从 draft 推导命令态 | claim 由 pick 路径显式建立——无表、无推导 |
 | bindTarget/bindDraft 对象直连 | 反向耦合 + root 单例跨会话误配；scoped bail 事件保依赖倒置且路由结构性正确 |
 | 统一 slash/input-apply 或全事件化 | 三个独立 payload 覆盖跨插件改写；异步链路保持基于注册表的显式调用 |
-| contenteditable / 富文本树 | 兼容性差；textarea + U+FFFC + occurrence 表覆盖全部交互约定 |
+| contenteditable / 富文本树 | 兼容性差；textarea + U+FFFC + occurrence 表覆盖全部交互约定——后被 [Lexical composer note](2026-08-20-web-composer-lexical-editor.zh.md) 反转：textarea 栈的样式与身份成本被实测后翻案 |
 | draft 双持久化 {text, occurrences} | mirror 写剪贴板投影零新概念；chip 跨刷新降级可接受 |
-| 原生 textarea undo 栈 | 受控 + 程序化写入下不可靠；粘贴两段 undo 语义只能自管 |
+| 原生 textarea undo 栈 | 受控 + 程序化写入下不可靠；粘贴两段 undo 语义只能自管——两侧都随 textarea 一并退役；undo 现归 Lexical history |
 | InputBar 收 16 员 wiring 回调包 | 消费矩阵实证 11 员 InputBar 独占、1 员死成员；标准件通道让组件自取，键盘面包内私递 |
+| 由 `ConversationRoot` 把 InputBar child slot 渲染为 owner prop | 新 React element 会击穿 bar 的 memo 边界；bar 已收到 `renderSlot`，也拥有这些位置 |
 | 空格裁决也认领即执行型命令 | 误触发防线：空格后整行是普通提示词；不可逆副作用只留显式入口 |
 | 通用 tokenPattern 装饰机制 | 结构化 occurrence 记录取代模式扫描 |
 | 占位 select 常驻工具行 | 具名 slot 在注册前保持为空；占位件与真实现冲突时是两个真源 |
@@ -129,7 +115,7 @@ skill/@subagent 引用不走占位符 + occurrence 身份链——纯文本引�
 
 ## 后果
 
-- 一个常驻 conversation 外壳承接无会话/blank/active：无会话 → blank 保持 ConversationRoot、Hero、root scope Workspace picker、scrollport、composer seat、InputBar 与 textarea；只有严格会话 header 和 body outlet 开始承载内容。同一 blank 会话 → engaging/active 也保持 InputBar 与 textarea。EmptyState 与受控 intent 链（`sessions.updateIntent`/`updatePendingPrompt`/`workspaces.sendSession`）随最后消费方一并删除。
+- 一个常驻 conversation 外壳承接无会话/blank/active：无会话 → blank 保持 ConversationRoot、Hero、root scope Workspace picker、scrollport、composer seat、InputBar 与编辑器表面；只有严格会话 header 和 body outlet 开始承载内容。同一 blank 会话 → engaging/active 也保持 InputBar 与编辑器表面。EmptyState 与受控 intent 链（`sessions.updateIntent`/`updatePendingPrompt`/`workspaces.sendSession`）随最后消费方一并删除。
 - 输入面对命令零知识 + 可选依赖：无命令包时纯输入可用；`@` 引用与 skill 引用免费复用同一菜单/pick 流水线。代价是空格/回车裁决是逐 source 轮询协议，其应答语义（同步/异步、undefined 含义）为冻结约定。
 - 提交事务化（attempt seq + 漂移守卫）使晚到结果回灌、会话切换、concurrent 重放三类缺陷结构性不可能，由矩阵测试钉住。
-- 已知欠账：chip 跨刷新保真（可复用粘贴匹配）未立项；subagent 引用的模型表示待业务立项。
+- 已知欠账：chip 跨刷新保真未立项；subagent 引用的模型表示待业务立项。

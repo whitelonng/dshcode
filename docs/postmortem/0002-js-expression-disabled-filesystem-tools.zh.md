@@ -36,9 +36,9 @@ Cordis Include 将每个 `!!js` 标量解析为一个表达式对象。Loader �
 ## 已添加的防护措施
 
 - 文件系统场景启动 `fs.cordis.yml`：一个显式的固定全权限 overlay，配有对应的回放配置和独立的 request-header 类。
-- [`AGENTS.md`](../../AGENTS.md) 与 [Cordis 入门](../cordis-primer.zh.md#loader-configuration)明确说明 `!!js` 仅在插件 `config` 内有效，条件式组合应使用 overlay。
+- [`AGENTS.md`](../../AGENTS.md) 与 [Cordis 入门](../cordis-primer.zh.md#loader-configuration)明确说明 `!!js` 在插件 `config` 与配置项 `disabled` 内有效；其他配置项元数据保持字面量，因此条件式组合使用 overlay。
 - `verify-cordis-config` 解析仓库中的 Cordis YAML，拒绝 Loader 配置项元数据中的表达式节点（包括 include patch 和插入的配置项）。
-- `dsh-acp-snapshot` 在全新运行和已提交的会话 fixture 中拒绝结构化的 `UNKNOWN_TOOL` 结果，防止其被提交为预期输出。
+- `dsh-session-snapshot` 在全新运行和已提交的会话 fixture 中拒绝结构化的 `UNKNOWN_TOOL` 结果，防止其被提交为预期输出。
 
 ## 教训
 

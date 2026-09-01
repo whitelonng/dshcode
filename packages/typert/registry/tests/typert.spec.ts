@@ -22,6 +22,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 
   interface TypertContextMap {
     registryFixture: TypertContext<string>
+    registryFixtureOther: TypertContext<string>
   }
 }
 
@@ -331,10 +332,12 @@ describe('TypertRegistry', () => {
     const disposeHost = ctx.typert.contexts.registerHost('registryFixture', {
       wire: 'agentId',
       wireTypeSymbol: '@fixture/session#SessionId',
+      identity: candidate => candidate === scoped ? object.id : undefined,
       resolve: id => id === object.id ? scoped : undefined,
     })
     const disposeClient = ctx.typert.contexts.registerClient('registryFixture', {
       identity: candidate => candidate === scoped ? object.id : undefined,
+      resolve: id => id === object.id ? scoped : undefined,
     })
 
     expect(ctx.typert.lookups.get('fixture')?.resolve('agent-1')).toBe(object)
@@ -345,14 +348,41 @@ describe('TypertRegistry', () => {
       hostTypeSymbol: '@fixture/agent#Agent',
       wireTypeSymbol: '@fixture/session#SessionId',
     }])
+    expect(ctx.typert.contexts.getHost('registryFixture')?.identity(scoped)).toBe('agent-1')
     expect(ctx.typert.contexts.getHost('registryFixture')?.resolve('agent-1')).toBe(scoped)
     expect(ctx.typert.contexts.getClient('registryFixture')?.identity(scoped)).toBe('agent-1')
+    expect(ctx.typert.contexts.getClient('registryFixture')?.resolve('agent-1')).toBe(scoped)
+    expect(ctx.typert.contexts.identifyHost(scoped)).toEqual({
+      kind: 'registryFixture',
+      identity: 'agent-1',
+    })
+    expect(ctx.typert.contexts.identifyHost(ctx)).toBeUndefined()
 
     await Promise.all([disposeClient(), disposeHost(), disposeLookup()])
     expect(ctx.typert.lookups.keys()).toEqual([])
     expect(ctx.typert.lookups.definitions()).toHaveLength(1)
     expect(ctx.typert.contexts.getHost('registryFixture')).toBeUndefined()
     expect(ctx.typert.contexts.getClient('registryFixture')).toBeUndefined()
+  })
+
+  it('rejects a Host Context recognized by more than one registered kind', async () => {
+    const ctx = await makeCtx()
+    const scoped = ctx.extend()
+    ctx.typert.contexts.registerHost('registryFixture', {
+      wire: 'agentId',
+      wireTypeSymbol: '@fixture#AgentId',
+      identity: candidate => candidate === scoped ? 'first' : undefined,
+      resolve: () => undefined,
+    })
+    ctx.typert.contexts.registerHost('registryFixtureOther', {
+      wire: 'otherAgentId',
+      wireTypeSymbol: '@fixture#OtherAgentId',
+      identity: candidate => candidate === scoped ? 'second' : undefined,
+      resolve: () => undefined,
+    })
+
+    expect(() => ctx.typert.contexts.identifyHost(scoped))
+      .toThrow('recognized by both "registryFixture" and "registryFixtureOther"')
   })
 
   it('configures an asynchronous lookup resolver independently of provider load order', async () => {
@@ -400,9 +430,11 @@ describe('TypertRegistry', () => {
     const disposeProvider = ctx.typert.contexts.registerHost('registryFixture', {
       wire: 'agentId',
       wireTypeSymbol: '@fixture/session#SessionId',
+      identity: candidate => candidate === fallback ? 'fallback' : undefined,
       resolve: id => id === 'fallback' ? fallback : undefined,
     })
     await expect(ctx.typert.contexts.getHost('registryFixture')?.resolve('configured')).resolves.toBe(configured)
+    expect(ctx.typert.contexts.getHost('registryFixture')?.identity(fallback)).toBe('fallback')
     expect(() => ctx.typert.contexts.configureHost('registryFixture', () => undefined)).toThrow('already configured')
 
     await disposeProvider()
@@ -410,6 +442,7 @@ describe('TypertRegistry', () => {
     const disposeReloadedProvider = ctx.typert.contexts.registerHost('registryFixture', {
       wire: 'agentId',
       wireTypeSymbol: '@fixture/session#SessionId',
+      identity: candidate => candidate === fallback ? 'fallback' : undefined,
       resolve: id => id === 'fallback' ? fallback : undefined,
     })
     await expect(ctx.typert.contexts.getHost('registryFixture')?.resolve('configured')).resolves.toBe(configured)
@@ -438,9 +471,13 @@ describe('TypertRegistry', () => {
     const host = {
       wire: 'agentId',
       wireTypeSymbol: '@fixture#AgentId',
+      identity: (_candidate: Context) => undefined,
       resolve: () => undefined,
     }
-    const client = { identity: () => undefined }
+    const client = {
+      identity: (_candidate: Context) => undefined,
+      resolve: () => undefined,
+    }
     const disposeLookup = ctx.typert.lookups.register('fixture', lookup)
     const disposeHost = ctx.typert.contexts.registerHost('registryFixture', host)
     const disposeClient = ctx.typert.contexts.registerClient('registryFixture', client)

@@ -7,8 +7,9 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { createScope, scopeOf, SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import { createScope, scopeOf } from '@deepseek-ai/dsh-api-session-controller/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { apply, inject, InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { MenuViewInjected } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 
@@ -49,7 +50,7 @@ describe('apply', () => {
     const { ctx, locale } = await bench()
     await ctx.plugin({ inject: [...inject], apply }).await()
     const t = locale.bind('slash.menu')
-    expect(t('command')).toBe('命令')
+    expect(t('command')).toBe('指令')
     locale.setLocale('en')
     expect(t('skill')).toBe('Skills')
     expect(t('subagent')).toBe('Subagents')
@@ -77,11 +78,18 @@ describe('apply', () => {
     const injectEntry = entries[0]!.inject as unknown as (sessionId: SessionId) => MenuViewInjected
     const injected = injectEntry(sid('a'))
     const controller = inputTriggers.sessionOf(
-      (ctx.get('sessions') as { scope(id: SessionId): Context }).scope(sid('a')),
+      ctx.sessions.scope(sid('a'))!,
     )
     expect(injected.menu).toBe(controller.menu)
+    expect(injected.headers).toBe(controller.headers)
     // The pick face routes into the controller pipeline (closed menu → no-op).
     injected.onPick('command', 0)
+    expect(controller.menu.getSnapshot().open).toBe(false)
+    // The crumb face routes into the controller too (closed menu → no-op).
+    injected.onCrumb('command', 0)
+    expect(controller.menu.getSnapshot().open).toBe(false)
+    // The hover face routes into the controller too (closed menu → no-op).
+    injected.onHover('command', 0)
     expect(controller.menu.getSnapshot().open).toBe(false)
     // The dismiss face routes into the controller too (closed menu → no-op).
     injected.onDismiss()

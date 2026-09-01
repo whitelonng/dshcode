@@ -117,13 +117,13 @@ Ownership truth is the record's ordered `sessionIds`, never derived from session
 
 ## The registry: `ctx.workspaceRegistry`
 
-`WorkspaceRegistry` ([signatures](#ctxworkspaceregistry--workspaceregistry)) owns registration and resolution. `create(path, title?)` canonicalizes the path, rejects a nonexistent path (the original `ENOENT`) or a non-directory, returns the existing entity unchanged when the canonical path is already owned, and otherwise creates a record with `title ?? basename(path)` prepended to the durable registry order — a new record cannot duplicate an existing display title (`WorkspaceNameConflictError`). `get(id)` and the ordered `list()` are synchronous cache reads; `resolveByPath(path)` applies the same realpath canon without creating. `delete(id)` removes only the registration, order entry, and session account — the directory, user files, live sessions, and persisted logs are never touched, so those sessions become Ungrouped ([decision](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)); unknown ids return `false`. Create and delete persist a pending-mutation marker before their two writes (record + order) can diverge; startup resolves exactly the marked mutation — by deleting the marked table row, which completes an interrupted delete and rolls back an interrupted create (the registration is re-creatable, so rollback is the safe direction) — and an unmarked order/table mismatch fails loud as corruption.
+`WorkspaceRegistry` ([signatures](#ctxworkspaceregistry--workspaceregistry)) owns registration and resolution. `create(path, title?)` canonicalizes the path, rejects a nonexistent path (the original `ENOENT`) or a non-directory, returns the existing entity unchanged when the canonical path is already owned, and otherwise creates a record with `title ?? basename(path)` prepended to the durable registry order (different canonical paths may share a display title). `get(id)` and the ordered `list()` are synchronous cache reads; `resolveByPath(path)` applies the same realpath canon without creating. `delete(id)` removes only the registration, order entry, and session account — the directory, user files, live sessions, and persisted logs are never touched, so those sessions become Ungrouped ([decision](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.md)); unknown ids return `false`. Create and delete persist a pending-mutation marker before their two writes (record + order) can diverge; startup resolves exactly the marked mutation — by deleting the marked table row, which completes an interrupted delete and rolls back an interrupted create (the registration is re-creatable, so rollback is the safe direction) — and an unmarked order/table mismatch fails loud as corruption.
 
 Sessions get their cwd at create time from whoever creates them, not from this registry — the API gateway resolves a new session's cwd from the chosen workspace's `path` (falling back to an explicit or default cwd), creates the session so the cwd lands in its immutable [`SessionHeader`](persistence.md#sessionheader--metadata-beside-the-log), then calls `attachSession`, which re-validates that stored header cwd against the workspace path. On the first successful start, the registry bootstraps history from persisted headers alone (`id`, `cwd`, `createdAt` — never event bodies), grouping sessions with a valid canonical cwd into per-directory workspaces, newest first; the initialized marker is written last so an interrupted bootstrap resumes safely. The bootstrap is one-time: cwd-less legacy sessions stay Ungrouped, and sessions created afterwards join a workspace only through `attachSession`.
 
 ## Consumers
 
-[dsh-host-apiproxy](../../packages/host/apiproxy) is the product consumer: it serves workspace CRUD to GUI clients over `ctx.workspaceRegistry` and performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
+[`dsh-workspace-controller`](../../packages/api/workspace-controller) serves workspace CRUD to GUI clients over `ctx.workspaceRegistry`, and [`dsh-session-controller`](../../packages/api/session-controller) performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -149,21 +149,98 @@ abstract capability(): DirectoryPickerCapability
 
 Source: [`packages/host/directory-picker/src/index.ts`](../../packages/host/directory-picker/src/index.ts)
 
-<a id="ctxfilepicker--filepicker-abstract-seam"></a>
+<a id="ctxdirectorypickercontroller--directorypickercontroller"></a>
 
-### `ctx.filePicker` — `FilePicker` (abstract seam)
+### `ctx.directoryPickerController` — `DirectoryPickerController`
 
-Abstract file-picking service. Subclass, implement `capability()`, and load the subclass as a plugin — it registers as `ctx.filePicker` (one implementation per context). The capability object must be stable for the service lifetime: consumers may capture it across calls.
+Host service backing the generated `ctx.remote.directoryPicker` namespace. The seam it exports is abstract and therefore never a Loader entry of its own, so this controller carries the wire verbs: one composed backend serves either the native chooser or the browse primitives, and a verb the composition cannot serve is refused rather than approximated.
 
 ```ts cordis-catalog
 /**
- * The backend's interaction capability.
- * @returns the discriminated capability consumers switch on.
+ * Open the host's OS chooser for a Remote caller.
+ * @param signal - caller lifetime; abort terminates the chooser.
+ * @returns the chosen absolute path, or null when the operator cancels.
  */
-abstract capability(): FilePickerCapability
+@Remote('pick') async pick(signal: AbortSignal): Promise<string | null>
+
+/**
+ * List one directory level for a Remote caller's in-app browser.
+ * @param path - absolute directory to list; absent lists the home directory.
+ * @param signal - caller lifetime; abort stops the backend's scan instead of
+ *   letting it outlive a disconnected caller.
+ * @returns the level's listing with its ancestry.
+ */
+@Remote('list') async list(path: string | undefined, signal: AbortSignal): Promise<DirectoryListing>
+
+/**
+ * Create one child directory for a Remote caller's in-app browser.
+ * @param path - absolute existing parent directory.
+ * @param name - single non-blank path segment.
+ * @returns the created directory's absolute path.
+ */
+@Remote('createDirectory') async createDirectory(path: string, name: string): Promise<string>
 ```
 
-Source: [`packages/host/file-picker/src/index.ts`](../../packages/host/file-picker/src/index.ts)
+Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
+
+<a id="ctxworkspacecontroller--workspacecontroller"></a>
+
+### `ctx.workspaceController` — `WorkspaceController`
+
+Host service backing the generated `ctx.remote.workspace` namespace.
+
+```ts cordis-catalog
+/**
+ * Create or idempotently resolve one Workspace over an existing directory.
+ * @param request - directory path to register.
+ * @returns the Workspace and whether this call created it.
+ */
+@Remote('create') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
+
+/**
+ * Rename one Workspace to a unique non-blank title.
+ * @param request - Workspace identity and proposed title.
+ * @returns the updated Workspace projection.
+ */
+@Remote('rename') rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue>
+
+/**
+ * Remove one Workspace registration while retaining files and Sessions.
+ * @param request - Workspace identity to remove.
+ * @returns deletion confirmation.
+ */
+@Remote('delete') delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue>
+
+/**
+ * Move one Workspace within the registry display order.
+ * @param request - moved Workspace and optional anchor.
+ * @returns the complete resulting Workspace order.
+ */
+@Remote('insertBefore') insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue>
+
+/**
+ * Move one accounted Session within a Workspace.
+ * @param request - Workspace, Session, and optional anchor identities.
+ * @returns the updated Workspace projection.
+ */
+@Remote('insertSessionBefore') insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<WorkspaceValue>
+
+/**
+ * Hide one known Session from Workspace grouping surfaces.
+ * @param request - Session identity to archive.
+ * @returns the complete resulting archive set.
+ */
+@Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
+
+/**
+ * Stream a complete Workspace baseline followed by ordered increments.
+ * @param signal - generation cancellation.
+ * @returns baseline followed by ordered Workspace increments.
+ */
+@Remote({ mode: 'stream' }) follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>
+```
+
+Source: [`packages/api/workspace-controller/src/index.ts`](../../packages/api/workspace-controller/src/index.ts)
 
 <a id="ctxworkspaceregistry--workspaceregistry"></a>
 
@@ -227,24 +304,6 @@ insertBefore(id: WorkspaceId, beforeId?: WorkspaceId): Promise<readonly Workspac
  * @returns resolution after durability.
  */
 archiveSession(sessionId: SessionId): Promise<void>
-
-/**
- * Unarchive one session: remove it from the registry-global archive set.
- * The session keeps its workspace accounting slot, so it reappears in its
- * original position. An id that is not archived resolves without writing.
- * @param sessionId - The session to restore.
- * @returns resolution after durability.
- */
-restoreSession(sessionId: SessionId): Promise<void>
-
-/**
- * Drop one session from registry accounting entirely after its log was
- * deleted: detach it from every owning workspace and remove it from the
- * archive set. Unknown ids are a no-op.
- * @param sessionId - The deleted session id.
- * @returns resolution after durability.
- */
-removeSession(sessionId: SessionId): Promise<void>
 
 /**
  * Resolve by canonical directory path without creating or mutating a

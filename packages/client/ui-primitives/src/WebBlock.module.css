@@ -1,9 +1,3 @@
-/* Geometry mirrors CodeBlock/TerminalBlock (12px radius, code-block surface,
-   16px vertical margin) so a web card, a terminal card, and a fenced code block
-   read as one family. A source list is prose, not aligned output, so each row
-   wraps horizontally rather than scrolling sideways like a terminal card; the
-   list as a whole scrolls vertically within a capped height (see .sources). */
-
 .block {
   --dsl-web-radius: 12px;
 

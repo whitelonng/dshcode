@@ -21,6 +21,9 @@
       "path": "../../util/brand"
     },
     {
+      "path": "../../util/values"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

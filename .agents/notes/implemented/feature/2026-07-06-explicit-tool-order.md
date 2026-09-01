@@ -23,7 +23,7 @@ The system-prompt assembly owns the canonical model-facing tool order, exactly w
 
 Scope is deliberately narrow: this fixes the REGISTRATION-ORDER race, not plugin behavior. A `system-prompt/assemble` listener may still add, remove, or rearrange tools — same as it may edit sections after their sort — and owns the determinism of what it emits; the waterfall contract already demands deterministic listeners (the reconstructability invariant would catch a listener that diverges between build and replay).
 
-Config plumbing follows the `persona` precedent, and `toolOrder` sits beside it: the TUI, Headless, and ACP app configs accept the key and forward it through `dsh-agent-spine-demo` (whose schema is the intersection of the owners' schemas) to the `SystemPrompt` child. One schemastery footnote is load-bearing: a schemastery array defaults to `[]`, but an omitted `toolOrder` must stay ABSENT (= lexicographic) rather than become an explicitly-configured empty list (invalid — it lacks the rest entry), so every schema on the chain forces the default to `undefined`.
+Config plumbing follows the `persona` precedent, and `toolOrder` sits beside it on each composition's `dsh-system-prompt` row. One schemastery footnote is load-bearing: a schemastery array defaults to `[]`, but an omitted `toolOrder` must stay ABSENT (= lexicographic) rather than become an explicitly configured empty list (invalid — it lacks the rest entry), so every schema that accepts the field forces the default to `undefined`.
 
 ## Alternatives considered
 

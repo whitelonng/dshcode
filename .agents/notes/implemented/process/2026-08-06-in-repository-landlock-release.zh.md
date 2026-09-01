@@ -22,7 +22,7 @@ Status: implemented
 
 主仓库同时负责原生 CI 和发布。`Landlock Run` 会为相关 PR 和 `master` 推送运行，并在各自匹配的原生 runner 上构建每个平台包。手动触发的 `Landlock Run Release` 工作流会构建两个平台的二进制文件，将其作为工作流产物传递，组装并验证完整的包家族，打包出内容不可变的 npm tarball，安装并实际运行这些 tarball，之后才允许受保护的发布作业执行。发布顺序是平台 tarball 在前，最后发布将它们列为可选依赖的入口 tarball。发布使用 `landlock-run-vX.Y.Z` tag，避免启动器版本与 monorepo 中其他发布家族发生冲突；预发布版本使用 npm 的 `next` dist-tag。
 
-沙箱打包安装演练不再允许 npm 注册表提供启动器。它会将当前 checkout 的入口包、匹配的原生包和 harness 依赖闭包一起打包，把这些本地 tarball 安装到仓库外部的纯 Node 消费方中，并在测试约束效果或失败闭合行为之前，证明所安装的启动器可执行、与原生构建产物字节完全一致，且具有正确的 ELF 架构。
+沙箱打包安装演练不允许 npm 注册表提供启动器。它会根据当前 workspace 的 `dependencies`、`optionalDependencies` 与必需 `peerDependencies` 递归推导 harness 闭包；原生包家族保持独立，因为保留文件模式的打包脚本会提供入口包和匹配平台包。演练把这些本地 tarball 安装到仓库外部的纯 Node 消费方中，并在测试约束效果或失败闭合行为之前，证明所安装的启动器可执行、与原生构建产物字节完全一致，且具有正确的 ELF 架构。
 
 ## 曾考虑的替代方案
 

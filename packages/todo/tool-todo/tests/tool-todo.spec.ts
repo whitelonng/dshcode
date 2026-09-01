@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import type { TodoItem } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { Session, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import type { TodoItem } from '@deepseek-ai/dsh-tool-todo'
 import { type Agent } from '@deepseek-ai/dsh-agent'
 
 import * as tool from '../src/index.ts'
@@ -30,6 +31,7 @@ async function setup(allowParallelInProgress: boolean): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(tool, { allowParallelInProgress })
   return ctx
 }
@@ -39,7 +41,7 @@ function callTodo(ctx: Context, args: unknown, over: { agent?: Agent | undefined
   const agent = 'agent' in over ? over.agent : agentWithSession()
   return ctx.tools.execute({
     signal: testToolSignal,
-    callId: CallId(`call-${++callCounter}`),
+    callId: ToolCallId(`call-${++callCounter}`),
     name: 'todo_write',
     arguments: args,
     ...agent ? { agent } : {},
@@ -80,7 +82,7 @@ describe('dsh-tool-todo', () => {
     })
     expect(text(result)).toContain('1 pending, 1 in progress, 0 completed')
 
-    const event = agent.session.events.findLast(e => e.type === 'todo/write')!
+    const event = agent.session.snapshotEvents().findLast(e => e.type === 'todo/write')!
     expect(event.data.todos).toEqual(todos)
   })
 
@@ -90,7 +92,7 @@ describe('dsh-tool-todo', () => {
     const result = await callTodo(ctx, { todos: [{ content: '  plan the work  ', status: 'pending' }] }, { agent })
     expect(result.isError).toBe(false)
 
-    const event = agent.session.events.findLast(e => e.type === 'todo/write')!
+    const event = agent.session.snapshotEvents().findLast(e => e.type === 'todo/write')!
     expect(event.data.todos).toEqual([{ content: 'plan the work', status: 'pending' }])
   })
 
@@ -103,7 +105,7 @@ describe('dsh-tool-todo', () => {
       { content: 'b', status: 'in_progress' },
     ] }, { agent })
 
-    const current = agent.session.events.findLast(e => e.type === 'todo/write')!.data.todos
+    const current = agent.session.snapshotEvents().findLast(e => e.type === 'todo/write')!.data.todos
     expect(current).toEqual([
       { content: 'a', status: 'completed' },
       { content: 'b', status: 'in_progress' },
@@ -137,7 +139,7 @@ describe('dsh-tool-todo', () => {
       todos,
       counts: { pending: 1, inProgress: 2, completed: 0 },
     })
-    expect(agent.session.events.findLast(e => e.type === 'todo/write')!.data.todos).toEqual(todos)
+    expect(agent.session.snapshotEvents().findLast(e => e.type === 'todo/write')!.data.todos).toEqual(todos)
   })
 
   describe('allowParallelInProgress', () => {
@@ -153,7 +155,7 @@ describe('dsh-tool-todo', () => {
       expect(result.isError).toBe(true)
       expect(text(result)).toContain('at most one task may be in_progress')
       // A rejected call must not reach the durable log.
-      expect(agent.session.events.some(e => e.type === 'todo/write')).toBe(false)
+      expect(agent.session.snapshotEvents().some(e => e.type === 'todo/write')).toBe(false)
     })
 
     it('false still accepts one active item', async () => {
@@ -213,6 +215,7 @@ describe('dsh-tool-todo', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
     const fiber = await ctx.plugin(tool, { allowParallelInProgress: true })
     expect(ctx.tools.schemas().some(s => s.name === 'todo_write')).toBe(true)
     await fiber.dispose()
@@ -223,13 +226,78 @@ describe('dsh-tool-todo', () => {
     // A default export would make Loader unwrap only apply and drop `inject`.
     expect('default' in tool).toBe(false)
     expect(tool.name).toBe('tool-todo')
-    expect(tool.inject).toEqual(['tools'])
+    expect(tool.inject).toEqual(['tools', 'sessionProjections'])
 
     const loader = Object.create(Loader.prototype) as Loader
     const unwrapped = loader.unwrapExports(tool) as Record<string, unknown>
     expect(unwrapped).toBe(tool)
     expect(unwrapped.name).toBe('tool-todo')
-    expect(unwrapped.inject).toEqual(['tools'])
+    expect(unwrapped.inject).toEqual(['tools', 'sessionProjections'])
     expect(typeof unwrapped.apply).toBe('function')
+  })
+})
+
+describe('todo/write event', () => {
+  it('appends the whole-list snapshot and isolates the log from later mutation', () => {
+    const session = Session.create(SessionId('t1'))
+    session.append('turn/start', { turn: 1 })
+    const todos: TodoItem[] = [
+      { content: 'plan the work', status: 'in_progress' },
+      { content: 'write the code', status: 'pending' },
+    ]
+    session.append('todo/write', { todos })
+
+    const event = session.snapshotEvents().findLast(e => e.type === 'todo/write')!
+    expect(event.type).toBe('todo/write')
+    expect(event.data.todos).toEqual(todos)
+
+    todos.push({ content: 'sneak in', status: 'pending' })
+    todos[0]!.status = 'completed'
+    expect(event.data.todos).toEqual([
+      { content: 'plan the work', status: 'in_progress' },
+      { content: 'write the code', status: 'pending' },
+    ])
+  })
+
+  it('is last-write-wins: the current list is the most recent todo/write', () => {
+    const session = Session.create(SessionId('t2'))
+    session.append('turn/start', { turn: 1 })
+    session.append('todo/write', { todos: [{ content: 'first', status: 'pending' }] })
+    session.append('todo/write', { todos: [
+      { content: 'first', status: 'completed' },
+      { content: 'second', status: 'in_progress' },
+    ] })
+
+    const current = session.snapshotEvents().findLast(e => e.type === 'todo/write')!.data.todos
+    expect(current).toEqual([
+      { content: 'first', status: 'completed' },
+      { content: 'second', status: 'in_progress' },
+    ])
+  })
+
+  it('does not add a derived message or surface node', () => {
+    const session = Session.create(SessionId('t3'))
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'q' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const before = session.deriveMessages().length
+    session.append('todo/write', { todos: [{ content: 'a task', status: 'pending' }] })
+
+    expect(session.deriveMessages()).toHaveLength(before)
+    expect(session.surface.nodes).not.toContain(session.seq - 1)
+  })
+
+  it('round-trips through a seeded replay identically without surface metadata', () => {
+    const original = Session.create(SessionId('t4'))
+    original.append('turn/start', { turn: 1 })
+    original.append('todo/write', { todos: [{ content: 'only', status: 'completed' }] })
+    original.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    const replayed = Session.create(SessionId('t4-replay'), original.snapshotEvents())
+
+    expect(replayed.snapshotEvents().findLast(e => e.type === 'todo/write')!.data.todos)
+      .toEqual([{ content: 'only', status: 'completed' }])
+    expect(replayed.snapshotEvents(SessionLogOffset(0), original.seq)).toEqual(original.snapshotEvents())
+    expect(replayed.firstLiveSeq).toBe(original.seq)
   })
 })

@@ -51,19 +51,19 @@ one-shot 行始终会用文案替代输入框，说明执行记录为只读。�
 
 ## 宿主适配器与协议约定
 
-`@deepseek-ai/dsh-host-apiproxy` 拥有浏览器安全的 `subagents` 域：
+`@deepseek-ai/dsh-subagent` 拥有浏览器安全的生成 `subagent` Remote 命名空间：
 
 - `subagent.list` 接受 `parentSessionId`，调用 `ctx.subagents.listChildren(parentSessionId, signal)`，返回完整有序的条目以及每个健康行的布尔 `hasChildren` 快照，把每个健康行的语料活动状态替换为其确切 Agent driver 是否正在运行，并说明当前能否从 `ctx.agents` 解析出确切 parent。
 - `subagent.history` 接受包含 mode 的完整地址与普通页参数。它对照直接目录校验 child 与 mode，通过 `ctx.sessionQuery.readSession()` 读取，再次检查直接谱系，并在不发布 agent 的情况下返回普通原始事件、渲染意图、分页与由 Host 计算的会话投影基线。
-- `subagent.prompt` 只接受 `mode: 'continuable'` 地址与 `ContentBlock[]`。它要求确切的存活 parent，重新校验目录地址，调用 `ctx.subagents.followup(parent, childId, content, { source, signal })`，并返回已接受的 `MessageId`。
+- `subagent.prompt` 只接受 `mode: 'continuable'` 地址与上传形态的 `PromptContentPart[]`；Host 在投递前把图片部分准入并持久化为持久引用（[图片投递](../bug-fix/2026-08-27-steer-followup-image-delivery.zh.md)）。它要求确切的存活 parent，重新校验目录地址，调用 `ctx.subagents.followup(parent, childId, content, { source, signal })`，并返回已接受的 `MessageId`。
 
-网关会将 parent 缺失、目录条目缺失或为 diagnostic、child 不可恢复或未授权、请求取消以及继续执行准入暂时不可用等失败映射为类型化 RPC 错误。它不会公开描述符或提供方细节。list／prompt 竞态属于正常情况：权威依据是提示词操作的结果，而不是更早的可用性或活动快照。
+网关会将 parent 缺失、目录条目缺失或为 diagnostic、child 不可恢复或未授权、请求取消、图片准入或图片能力拒绝（`subagent/attachment-invalid`）以及继续执行准入暂时不可用等失败映射为类型化 RPC 错误。它不会公开描述符或提供方细节。list／prompt 竞态属于正常情况：权威依据是提示词操作的结果，而不是更早的可用性或活动快照。
 
 查看持久化历史本身不会创建 mux 订阅。当后续消息物化冷态 child Activation 时，现有 Host 与 mux 流会发布其生命周期与事件。重新连接时，系统通过 `subagent.history` 重建已寻址窗口。
 
 普通 `session.history` 路由对于普通会话和 subagent 会话同样只执行观察，但它既不携带目录地址，也不授予继续执行权限。每条需要 Agent 的普通路由都会在恢复冷会话前经过共享所有权栅栏；`session.cancel` 与 `session.updateQueue` 会直接执行同一检查，因为它们有意只查询已附加的 Agent。
 
-适配器仍位于 `dsh-host-apiproxy`；`dsh-host-webserver` 仍作为载体。浏览器代码通过现有连接包导入约定，绝不直接访问宿主 `ctx`，从而保持 [GUI RPC 分层](../../implemented/architecture/2026-07-19-gui-layering-and-rpc-protocol.zh.md)。
+适配器仍位于生成的 Remote 命名空间之后；`dsh-host-webserver` 仍作为载体。浏览器代码通过现有连接包导入约定，绝不直接访问宿主 `ctx`，从而保持[已归档的 GUI RPC 分层决策](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)。
 
 ## 客户端对象层与呈现
 

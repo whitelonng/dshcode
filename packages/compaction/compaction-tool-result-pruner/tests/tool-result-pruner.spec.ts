@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import SessionStore, {
   Session,
@@ -9,6 +9,7 @@ import SessionStore, {
 import type { SurfaceEvent } from '@deepseek-ai/dsh-session'
 import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import ToolResultPruner, {
   codePointLength,
@@ -29,12 +30,15 @@ function service(config: ToolResultPruneConfig = SMALL): ToolResultPruner {
   const ctx = new Context()
   // Service constructors self-register, so `ctx.tokenMeter` resolves for the
   // shadow-price pricing without a full plugin boot.
+  new SessionProjectionRegistry(ctx)
   void new TokenMeter(ctx)
   return new ToolResultPruner(ctx, config)
 }
 
 /** Pricing oracle mirroring the service's estimator for expectations. */
-const METER = new TokenMeter(new Context())
+const METER_CTX = new Context()
+new SessionProjectionRegistry(METER_CTX)
+const METER = new TokenMeter(METER_CTX)
 
 function appendToolStep(
   session: Session,
@@ -43,7 +47,7 @@ function appendToolStep(
   content: ContentBlock[],
   extra: Record<string, unknown> = {},
 ): number {
-  const callId = CallId(call)
+  const callId = ToolCallId(call)
   session.append('turn/start', {
     turn,
   })
@@ -126,7 +130,7 @@ describe('ToolResultPruner content transform', () => {
     const reasoning: ContentBlock = { type: 'reasoning', text: 'private-rich-block' }
     const call: ContentBlock = {
       type: 'tool-call',
-      id: CallId('nested'),
+      id: ToolCallId('nested'),
       name: 'nested',
       arguments: '{}',
     }
@@ -178,11 +182,11 @@ describe('ToolResultPruner session transaction', () => {
     expect(result.pruned).toHaveLength(1)
     expect(result.charsRemoved).toBeGreaterThan(0)
     const entry = result.pruned[0]!
-    expect(entry).toMatchObject({ originalSeq, callId: CallId('one'), charsBefore: 100 })
+    expect(entry).toMatchObject({ originalSeq, callId: ToolCallId('one'), charsBefore: 100 })
     expect(entry.charsAfter).toBeLessThanOrEqual(50)
 
-    const original = session.events[originalSeq]!
-    const replacement = session.events[entry.replacementSeq]! as SurfaceEvent
+    const original = session.snapshotEvents()[originalSeq]!
+    const replacement = session.snapshotEvents()[entry.replacementSeq]! as SurfaceEvent
     expect(original).toMatchObject({
       type: 'tool/result',
       data: {
@@ -201,7 +205,7 @@ describe('ToolResultPruner session transaction', () => {
         step: 1,
         isError: true,
         message: {
-          source: { kind: 'tool', callId: CallId('one') },
+          source: { kind: 'tool', callId: ToolCallId('one') },
         },
         error: { name: 'ExitError', code: 'EXIT_1' },
         meta: { diff: ['a', 'b'] },
@@ -215,7 +219,7 @@ describe('ToolResultPruner session transaction', () => {
     // Shadow-price protocol: the metering event sits directly before the
     // replacement and prices the shadowed node with the shared estimator.
     if (original.type !== 'tool/result') throw new Error('original is not a tool/result')
-    expect(session.events[entry.replacementSeq - 1]).toMatchObject({
+    expect(session.snapshotEvents()[entry.replacementSeq - 1]).toMatchObject({
       type: 'compaction/prune',
       data: {
         shadowedRange: { start: originalSeq, end: originalSeq },
@@ -236,7 +240,7 @@ describe('ToolResultPruner session transaction', () => {
     const prune = service()
     const first = prune.pruneSession(session)
     const second = prune.pruneSession(session)
-    expect(first.pruned.map(entry => entry.callId)).toEqual([CallId('a'), CallId('c')])
+    expect(first.pruned.map(entry => entry.callId)).toEqual([ToolCallId('a'), ToolCallId('c')])
     expect(first.charsRemoved).toBe(
       first.pruned.reduce((sum, entry) => sum + entry.charsBefore - entry.charsAfter, 0),
     )
@@ -250,7 +254,7 @@ describe('ToolResultPruner session transaction', () => {
       turn: 2,
     })
     service().pruneSession(session)
-    const replay = Session.create(session.id, [...session.events])
+    const replay = Session.create(session.id, session.snapshotEvents())
     expect(replay.deriveMessages()).toEqual(session.deriveMessages())
     expect(replay.surface.replaceGeneration).toBe(session.surface.replaceGeneration)
   })
@@ -258,6 +262,7 @@ describe('ToolResultPruner session transaction', () => {
   it('runs under real invariants between closed steps but not outside a turn', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(InvariantRegistry)
     await ctx.plugin(SessionInvariant)
     await ctx.plugin(TokenMeter)

@@ -42,9 +42,9 @@
 
 import { existsSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { Win32Error } from '@deepseek-ai/dsh-win32-process'
 
 import { grantWrite, revokeWrite } from './acl.ts'
-import { Win32Error } from './errors.ts'
 import { allocPtrSlot, decodePtr, isNullPtr, throwLastError, win32 } from './ffi.ts'
 import type { NativePtr, Win32Bindings } from './ffi.ts'
 import { assertPrivateTempDisjoint } from './path-boundary.ts'
@@ -52,12 +52,9 @@ import { drainPipe, spawnSandboxed, spawnSandboxedInherited, waitForExit } from 
 import { createRestrictedToken, findLogonSid, makeWellKnownSid, openCurrentProcessToken, setTokenDefaultDaclGrant } from './token.ts'
 import * as abi from './win32-abi.ts'
 
-export { quoteArg } from './spawn.ts'
 export { AclWriteGrant } from './grant.ts'
 export { assertTempRootOutsideWorkspace } from './path-boundary.ts'
 export { tempWriteSid, workspaceWriteSid } from './workspace-sid.ts'
-export { Win32Error } from './errors.ts'
-
 /** Construction options: the workspace/temp allowlists and their distinct SID identities. */
 export interface AclSandboxOptions {
   /** Directories the confined child may write into (must exist and be caller-owned). */

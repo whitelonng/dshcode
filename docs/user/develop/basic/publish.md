@@ -53,7 +53,7 @@ export function apply() {
 }
 ```
 
-Create `hello-plugin/cordis.patch.yml`. The patch is a YAML array like the `--patch` overlays you have been writing, except plugin rows reference the package by name instead of a relative source path so Node resolution finds the installed code:
+Create `hello-plugin/cordis.patch.yml`. The patch is a YAML array like the `--patch` overlays you wrote, except plugin rows reference the package by name instead of a relative source path so Node resolution finds the installed code:
 
 ```yaml
 - insert:
@@ -170,7 +170,7 @@ But a git install fetches **sources, not built artifacts**: nothing runs your `b
 
   and re-run the `add`.
 
-Treat that allowance as what it is: **permission to execute the package's code on your machine at install time**, outside any sandbox the agent runs under. Only allow packages whose source you trust, and pin a commit (`github:you/hello-plugin#<sha>`) so a later push cannot silently change what runs.
+Treat that allowance as **permission to execute the package's code on your machine at install time**, outside any sandbox the agent runs under. Only allow packages whose source you trust, and pin a commit (`github:you/hello-plugin#<sha>`) so a later push cannot silently change what runs.
 
 If you would rather not ask users for the allowance, distribute built artifacts instead — neither form needs any build permission:
 

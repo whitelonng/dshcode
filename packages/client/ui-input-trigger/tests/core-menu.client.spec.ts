@@ -1,5 +1,3 @@
-// menuReduce generation gating, auto-close, silent group removal, cyclic
-// highlight movement, stale/no-op reference identity; exactMatch lookup.
 import { describe, expect, it } from 'vitest'
 import type { MenuState, TriggerHit } from '../src/core/contract.ts'
 import { exactMatch, MENU_CLOSED, menuReduce, seedGroups } from '../src/core/menu.ts'
@@ -12,12 +10,19 @@ const hit = (query = ''): TriggerHit => ({
   span: { start: 0, end: 1 + query.length, draftRev: 1 },
 })
 
-/** Seed sources onto the closed state and open a first generation. */
 function open(sources: readonly string[], h: TriggerHit = hit()): MenuState {
   return menuReduce(seedGroups(MENU_CLOSED, sources.map(name => ({ name }))), { type: 'hit', hit: h })
 }
 
 const item = (name: string) => ({ name })
+
+/** Two ready groups: command [goal, model], skill [commit]. */
+function ready(): MenuState {
+  let s = open(['command', 'skill'])
+  s = menuReduce(s, { type: 'source-settled', generation: 1, source: 'command', items: [item('goal'), item('model')] })
+  s = menuReduce(s, { type: 'source-settled', generation: 1, source: 'skill', items: [item('commit')] })
+  return s
+}
 
 describe('menuReduce hit', () => {
   it('opens a new generation with all groups pending', () => {
@@ -31,13 +36,19 @@ describe('menuReduce hit', () => {
     expect(s.highlight).toBeNull()
   })
 
-  it('re-hit resets ready groups to pending under a bumped generation', () => {
+  it('re-hit resets ready groups to pending under a bumped generation, keeping items and highlight', () => {
     let s = open(['command'])
     s = menuReduce(s, { type: 'source-settled', generation: 1, source: 'command', items: [item('goal')] })
     s = menuReduce(s, { type: 'hit', hit: hit('g') })
     expect(s.generation).toBe(2)
-    expect(s.groups).toEqual([{ source: 'command', status: 'pending', items: [] }])
-    expect(s.highlight).toBeNull()
+    // Stale-while-revalidate: the previous query's items stay until the new
+    // generation settles and replaces them, and the highlight stays parked
+    // instead of blinking off between keystrokes.
+    expect(s.groups).toEqual([{ source: 'command', status: 'pending', items: [item('goal')] }])
+    expect(s.highlight).toEqual({ source: 'command', index: 0 })
+    s = menuReduce(s, { type: 'source-settled', generation: 2, source: 'command', items: [item('grep')] })
+    expect(s.groups).toEqual([{ source: 'command', status: 'ready', items: [item('grep')] }])
+    expect(s.highlight).toEqual({ source: 'command', index: 0 })
   })
 
   it('preserves a hidden group title through re-hit and settlement', () => {
@@ -150,14 +161,6 @@ describe('menuReduce source-failed', () => {
 })
 
 describe('menuReduce move', () => {
-  /** Two ready groups: command [goal, model], skill [commit]. */
-  function ready(): MenuState {
-    let s = open(['command', 'skill'])
-    s = menuReduce(s, { type: 'source-settled', generation: 1, source: 'command', items: [item('goal'), item('model')] })
-    s = menuReduce(s, { type: 'source-settled', generation: 1, source: 'skill', items: [item('commit')] })
-    return s
-  }
-
   it('cycles forward across groups and wraps', () => {
     let s = ready()
     s = menuReduce(s, { type: 'move', dir: 1 })
@@ -195,6 +198,28 @@ describe('menuReduce move', () => {
     let single = open(['command'])
     single = menuReduce(single, { type: 'source-settled', generation: 1, source: 'command', items: [item('goal')] })
     expect(menuReduce(single, { type: 'move', dir: 1 })).toBe(single)
+  })
+})
+
+describe('menuReduce hover', () => {
+  it('parks the highlight on the hovered ready item', () => {
+    const s = menuReduce(ready(), { type: 'hover', source: 'skill', index: 0 })
+    expect(s.highlight).toEqual({ source: 'skill', index: 0 })
+  })
+
+  it('is a no-op reference when closed, on invalid targets, and on the current highlight', () => {
+    const closed = menuReduce(ready(), { type: 'close' })
+    expect(menuReduce(closed, { type: 'hover', source: 'command', index: 0 })).toBe(closed)
+    const s = ready()
+    expect(menuReduce(s, { type: 'hover', source: 'ghost', index: 0 })).toBe(s)
+    expect(menuReduce(s, { type: 'hover', source: 'command', index: 5 })).toBe(s)
+    expect(menuReduce(s, { type: 'hover', source: 'command', index: 0 })).toBe(s)
+  })
+
+  it('ignores a hover into a still-pending group', () => {
+    let s = open(['command', 'skill'])
+    s = menuReduce(s, { type: 'source-settled', generation: 1, source: 'command', items: [item('goal')] })
+    expect(menuReduce(s, { type: 'hover', source: 'skill', index: 0 })).toBe(s)
   })
 })
 

@@ -54,9 +54,8 @@ export interface PromptSection {
   /** Unique name — a duplicate registration throws (see {@link SystemPrompt.section}). */
   readonly name: string
   /**
-   * Sections are concatenated in ascending order. Convention: `-100` is the
-   * harness identity, `0` the deployment persona, tool guidance uses 100–199;
-   * other negative orders also render before the persona.
+   * Sections are concatenated in ascending order. Equal orders use code-unit
+   * name order.
    */
   readonly order: number
   /**
@@ -119,16 +118,58 @@ export interface PromptAssembly {
   variables: Record<string, string | undefined>
 }
 
+const SECTION_ORDERS = {
+  HARNESS_IDENTITY: -1000,
+  HARNESS_SOURCE: -900,
+  WEB_SURFACE: -800,
+  DEPLOYMENT_PERSONA: 0,
+  PLAN_POLICY: 500,
+  TEAM_POLICY: 600,
+  PTC_ONLY: 800,
+  FILE_REFERENCE: 900,
+  TOOL_BASH: 1000,
+  TOOL_PWSH: 1010,
+  TOOL_READ: 1100,
+  TOOL_WRITE: 1200,
+  TOOL_EDIT: 1300,
+  TOOL_GLOB: 1400,
+  TOOL_GREP: 1500,
+  TOOL_JOBS: 1600,
+  TOOL_PTY: 1700,
+  TOOL_WEB_SEARCH: 2000,
+  TOOL_WEB_FETCH: 2100,
+  TOOL_LSP: 2200,
+  TOOL_SESSION_QUERY: 2300,
+  TOOL_GOAL: 2400,
+  TOOL_CORDIS: 2500,
+  TOOL_WORKFLOW: 2600,
+  TOOL_RALPH: 2700,
+  TOOL_SUBAGENT: 2800,
+  TOOL_REPORT: 2900,
+  TOOLS_SDK: 5000,
+  DELIVERABLE_FILE_REFERENCES: 9000,
+  STRUCTURED_OUTPUT: 9900,
+} as const
+
+/** Name of a centrally allocated prompt-section position. */
+export type PromptSectionOrderName = keyof typeof SECTION_ORDERS
+
+const CONTEXT_ORDERS = {
+  SANDBOX_POLICY: 110,
+  APPROVAL_POLICY: 115,
+  SUBAGENT_DELEGATION: 120,
+} as const
+
+/** Name of a centrally allocated runtime-context position. */
+export type PromptContextOrderName = keyof typeof CONTEXT_ORDERS
+
 /**
- * The deployment persona's section name and order. Exported because a
+ * The deployment persona's section name. Exported because a
  * composition can replace this slot — an agent preset shadows the
  * deployment's persona with its own — and both sides naming the same section
  * is what makes the replacement work rather than duplicate.
  */
 export const PERSONA_SECTION = 'deployment:persona'
-
-/** Prompt order of the persona slot; the first section a model reads. */
-export const PERSONA_ORDER = 0
 
 /** Valid variable names: how they are written between the braces. */
 const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/
@@ -177,9 +218,19 @@ function orderTools(tools: ToolSchema[], toolOrder: string[] | undefined, knownN
     name === TOOL_ORDER_REST ? rest : tools.filter(tool => tool.name === name))
 }
 
-/** Lexicographic (code-unit) name comparison — locale-independent, so the order is identical on every machine. */
+/** Code-unit name comparison — locale-independent, so the order is identical on every machine. */
+function compareNames(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/** Order prompt sections by their explicit placement, then deterministically by name. */
+function comparePromptSections(a: PromptSection, b: PromptSection): number {
+  return a.order - b.order || compareNames(a.name, b.name)
+}
+
+/** Order tool schemas lexicographically by name. */
 function compareToolNames(a: ToolSchema, b: ToolSchema): number {
-  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+  return compareNames(a.name, b.name)
 }
 
 /** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.persona} for its contract). */
@@ -357,13 +408,13 @@ export class SystemPrompt extends Service {
     if (config.includeHarnessIdentity ?? true) {
       this.section({
         name: 'harness:identity',
-        order: -100,
+        order: this.getSectionOrder('HARNESS_IDENTITY'),
         text: 'You are an AI agent powered by DeepSeek Harness.',
       })
     }
     this.section({
       name: PERSONA_SECTION,
-      order: PERSONA_ORDER,
+      order: this.getSectionOrder('DEPLOYMENT_PERSONA'),
       // The fallback narrows the optional input type; the schema already defaults it.
       text: config.persona ?? '',
     })
@@ -387,6 +438,24 @@ export class SystemPrompt extends Service {
       layer => layer.sections.insert(section.name, section),
       { label: 'systemPrompt.section()' },
     )
+  }
+
+  /**
+   * Resolve the centrally owned placement of a repository prompt section.
+   * @param name - stable section placement name.
+   * @returns the section's numeric sort order.
+   */
+  getSectionOrder(name: PromptSectionOrderName): number {
+    return SECTION_ORDERS[name]
+  }
+
+  /**
+   * Resolve the centrally owned placement of a repository runtime context.
+   * @param name - stable context placement name.
+   * @returns the context's numeric sort order.
+   */
+  getContextOrder(name: PromptContextOrderName): number {
+    return CONTEXT_ORDERS[name]
   }
 
   /**
@@ -480,7 +549,7 @@ export class SystemPrompt extends Service {
         variables[name] = provider(context)
       }
     }
-    // Scoped sections shadow globals before the stable order sort.
+    // Scoped sections shadow globals before the deterministic order sort.
     const sectionByName = this.layers.merge(scope, layer => layer.sections)
     const contextByName = this.layers.merge(scope, layer => layer.contexts)
     // Validate order against pre-restriction names while collecting visible schemas.
@@ -501,7 +570,7 @@ export class SystemPrompt extends Service {
       collected.push(...schemas)
       for (const name of acceptedKnownNames) knownNames.add(name)
     }
-    const sectionDefinitions = [...sectionByName.values()].sort((a, b) => a.order - b.order)
+    const sectionDefinitions = [...sectionByName.values()].sort(comparePromptSections)
     const completeSections = sectionDefinitions.filter(section => section.complete === true)
     if (completeSections.length > 1) {
       throw new Error(`multiple complete prompt sections are active: ${completeSections.map(section => JSON.stringify(section.name)).join(', ')}`)

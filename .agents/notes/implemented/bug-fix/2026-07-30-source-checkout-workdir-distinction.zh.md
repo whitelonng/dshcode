@@ -14,7 +14,7 @@ Status: implemented
 
 该提示词段将路径标识为「DeepSeek Harness implementation checkout」。它说明 checkout 位置与当前工作目录是两个可能不同的值，禁止从 checkout 路径推断工作目录，指示模型使用 `pwd`，并限定该 checkout 只用于检查或扩展 DSH 自身。
 
-路径推导方式、全局 `harness:source` 所有权和 `-99` 顺序均保持不变。将两者描述为概念上独立、而不是始终不相等，使这条指令在普通项目会话和 `dsh meta` 中都准确。
+路径推导方式与全局 `harness:source` 所有权保持不变。该段使用 first-party 顺序 −900，紧随 `harness:identity`。将两者描述为概念上独立、而不是始终不相等，使这条指令在普通项目会话和 `dsh meta` 中都准确。
 
 ## 验证
 

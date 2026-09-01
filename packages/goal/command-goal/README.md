@@ -1,29 +1,56 @@
+---
+description: "The human-facing /goal slash command for users and maintainers choosing, composing, or debugging goal control in UI command planes."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-command-goal
 
 English | [中文](README.zh.md)
 
-Human-facing `/goal` control over [`ctx.goals`](../goal/README.md). The plugin registers one global command through [`ctx.commands`](../../interaction/commands/README.md), so every composed command adapter discovers and executes it without a model turn. The [human goal-command Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-human-goal-command.md) owns the UX and composition decisions.
+## Summary
 
-## Command contract
+`dsh-command-goal` gives the human `/goal` command over the persisted goal service: a user can create, edit, pause, resume, clear, and inspect the current goal directly from the UI, without involving the model. The command registers in its Cordis scope, so command adapters reading that scope discover and execute it, while command text and output stay in the UI — they never enter model requests. Every accepted mutation persists through the goal service's durable `goal/change` event. Image attachments may accompany a create or edit and are submitted as one ordinary user message so later goal rounds see them. Choose it for interactive deployments with a command adapter; headless and automation apps without one do not need it.
+
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Use `dsh-command-goal` in interactive deployments that mount a command adapter — the shipped Web client is the reference. It gives users direct control over the goal lifecycle without a model turn: commands execute in the UI command plane and the adapter renders their results directly.
+
+### Command reference
+
+Every sub-command runs against the current goal of the invoking agent; a bare `/goal` shows usage when no goal exists.
 
 | Input | Result |
 |---|---|
-| `/goal` | Show the current objective, durable phase, round count/cap, process-local activation, and valid next commands; a blocked goal also shows its policy code and explanation, while no goal shows usage. |
-| `/goal <objective>` | Create and arm a goal, or replace a completed goal with a fresh identity. An unfinished goal is never replaced without an explicit clear. |
-| `/goal edit <objective>` | Edit the current objective without changing its phase or activation. Editing a completed goal creates a fresh active goal. |
-| `/goal pause` | Pause an active goal and disarm continuation. |
-| `/goal resume` | Resume a stopped goal or rearm an active goal after session resume/fork, subject to its remaining round cap. |
-| `/goal clear` | Clear the current pointer while retaining its durable history and tombstone. |
+| `/goal` | Shows the current objective, durable phase, round count and cap, process-local activation, and valid next commands; a blocked goal also shows its policy code and explanation |
+| `/goal <objective>` | Creates and arms a goal, or replaces a completed goal with a fresh identity |
+| `/goal edit <objective>` | Edits the current objective without changing its phase or activation |
+| `/goal pause` | Pauses an active goal and disarms continuation |
+| `/goal resume` | Resumes a stopped goal, or rearms an active goal after session resume or fork, subject to its remaining round cap |
+| `/goal clear` | Clears the current goal while retaining its durable history |
 
-Control words are case-insensitive only when they occupy the complete input. Every other non-empty suffix is an objective, so `/goal pause after verification` creates that literal objective. The goal domain trims and validates objectives. Because the generic command plane has no modal editor or confirmation primitive, `edit` takes its replacement inline and an unfinished replacement returns a direct error instructing the user to edit or clear.
+### Input grammar
 
-The command declares `input.images`, so composer image attachments may accompany an invocation. Attachments only accompany an objective: on a successful create or edit the producer submits one user followup carrying the admitted image blocks plus the fixed text `Reference images for the goal objective.`, so later goal rounds read them from ordinary session history without the goal domain storing attachment state. Every other sub-command, and any refused create or edit, returns a direct error and submits nothing, so the dispatching composer keeps the images.
+Control words (`clear`, `pause`, `resume`, `edit`) are recognized only when they occupy the complete input; any other non-empty suffix is an objective, so `/goal pause after verification` creates that literal objective. `edit` takes its replacement inline and refuses to replace an unfinished goal directly. Expected domain rejections become stable, direct command errors without exposing branded ids or revisions; unexpected implementation failures still fail dispatch so adapters can report them as command failures.
 
-Expected domain rejections become stable direct command errors without exposing branded ids or revisions. Unexpected implementation failures still reject dispatch so adapters can report them as command failures. Generic command text and output remain live UI state; `dsh-goal` persists every accepted mutation through its own durable `goal/change` event.
+### Image attachments
 
-## Composition
+`/goal` declares image support, so a composer may attach images to an invocation. Attachments only accompany an objective: on a successful create or edit the command submits one user followup carrying the admitted image blocks plus the fixed text `Reference images for the goal objective.`, so later goal rounds read them from ordinary session history without the goal domain storing attachment state. Every other sub-command, and any refused create or edit, returns a direct error and submits nothing, so the dispatching composer keeps the images.
 
-The producer injects `commands` and `goals`. A custom app mounts their owners plus this plugin; automatic continuation remains an independent choice:
+### Compose it
+
+The command injects the commands registry and the goal service. A custom app mounts their owners plus this plugin; automatic continuation remains an independent choice:
 
 ```yaml
 - id: commands
@@ -34,8 +61,47 @@ The producer injects `commands` and `goals`. A custom app mounts their owners pl
   name: '@deepseek-ai/dsh-command-goal'
 ```
 
-The shipped `dsh` base enables the persisted-goal stack and this command; the Web client provides its interactive adapter. The ACP automation app enables the domain and model tools without a command adapter; `goals: false` removes that stack. The UI-less `agent-spine-demo` requires an explicit `goals: {}` so headless one-shot callers do not silently change from one physical turn to a multi-round operation.
+The shipped `dsh` base enables the persisted-goal stack and this command. The Web bundle keeps the goal service and driver on the Host, disables the base command producer, and mounts the producer in the `standard`, `code`, and `cordis` agent presets; `minimal` omits it. The ACP automation app enables the domain and model tools without a command adapter. The standalone `sdk-minimal` profile omits the complete goal stack so its result API still settles one correlated physical turn.
 
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the command parses input and renders output; the observable contract is covered in [Use this package](#use-this-package).
+
+### Design
+
+- **Grammar, not free text.** The parser recognizes only the exact control words (`clear`, `pause`, `resume`, `edit`) when they fill the whole input; every other non-empty suffix is an objective. `edit` alone is invalid, and `edit` refuses to replace an unfinished goal directly.
+- **Domain rejections become stable errors.** `GoalError` outcomes are converted into direct command errors with a fixed message; unexpected failures rethrow so adapters report a command failure rather than a domain result. Rendered output never exposes branded ids or revisions.
+- **Attachments ride the objective.** On a successful create or edit the command submits one user followup carrying the admitted image blocks plus the fixed text `Reference images for the goal objective.`; every other path submits nothing, so the dispatching composer keeps the images.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: command grammar, status rendering, attachment submission |
+| — | No runtime invariant companion is published; this command adapter owns no event stream or state projection; accepted mutations are checked by the goal domain and command dispatch behavior is covered by package tests. |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+The command is a thin adapter over the goal domain; read these pages for the state it mutates and the registry it plugs into.
+
+- [Goal service](../goal/README.md) — the state and lifecycle the command mutates.
+- [Commands service](../../interaction/commands/README.md) — the command registry contract and dispatch.
+- [Human goal-command Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-human-goal-command.md) — the UX and composition decisions.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Human `/goal` control
@@ -54,7 +120,22 @@ Command discovery, mutations, and direct output do not affect the cache. Later c
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the command is a poor fit or needs special care. They are current package constraints, not a task backlog.
+
 - **Plain-text interaction only** — the generic command registry has no modal edit form or replacement-confirmation callback; inline edit and explicit clear keep destructive intent deterministic across adapters.
 - **No per-command round-cap argument** — `defaultMaxGoalRounds` remains deployment config, while a direct human request may ask the model to edit `max_goal_rounds` through the separately authorized goal tool.
-- **No continuous status widget** — bare `/goal` is the portable observation API; adapter-specific badges and reconnectable command output remain future UI work.
+- **No continuous status widget** — bare `/goal` is the portable observation API; no adapter-specific badges or reconnectable command output are provided.
 - **Web command adapter only in the shipped apps** — headless, ACP automation, and JSON-RPC adapters do not consume `ctx.commands`. Ordinary prompts can still authorize model-facing goal tools when those are composed.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers; it is explicitly non-authoritative. Open, undecided: a continuous status widget and per-command round-cap input; both are deferred UI and configuration work.
+
+</details>

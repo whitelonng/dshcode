@@ -32,4 +32,4 @@ Web 命令条目由一对落库的[命令生命周期事件](../../proposed/arch
 
 ## 后果
 
-每一条命令条目都变短了，而且这条规则可扩展：新命令的作者写结果时无需知道由哪个界面渲染，任何界面也都不必再去重。代价是分派参数离开了折叠行——命令仍在执行时，行上只有名字和 `执行中…`——以及「不加题头」这条规则是靠评审执行的约定，而非门禁。`/permission` 的文案由 permission 包的命令测试钉住，装配后的行文案由 [seeded-history](../../../../apps/web/tests/snapshots/seeded-history/command-row.expected.md) web 预期输出钉住：由于 `/permission` 完全在 host 上执行，该预期输出无需密钥即可覆盖一条真实的已落定命令条目。
+每一条命令条目都变短了，而且这条规则可扩展：新命令的作者写结果时无需知道由哪个界面渲染，任何界面也都不必再去重。代价是分派参数离开了折叠行——命令仍在执行时，行上只有名字和 `执行中…`——以及「不加题头」这条规则是靠评审执行的约定，而非门禁。`/permission` 的文案由 permission 包的命令测试钉住，装配后的行文案由 [seeded-history](../../../../snapshots/web/seeded-history/command-row.expected.md) web 预期输出钉住：由于 `/permission` 完全在 host 上执行，该预期输出无需密钥即可覆盖一条真实的已落定命令条目。

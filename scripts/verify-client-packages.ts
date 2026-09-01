@@ -1,6 +1,5 @@
 /**
- * Verify client package modes, npm dependency sections, and the synchronous
- * browser module-request graph.
+ * Verify client package modes and the synchronous browser module-request graph.
  */
 
 import { globSync, readFileSync, writeFileSync } from 'node:fs'
@@ -17,62 +16,43 @@ const PLATFORM_SOURCE = 'packages/client/web/src/platform.ts'
 const PARSER_PRELOAD_SOURCE = 'packages/client/modules/src/index.ts'
 const STATIC_PRESET_SOURCE = 'packages/client/tsdown.client.ts'
 const CORDIS = '@deepseek-ai/cordis'
-const DSH_PREFIX = '@deepseek-ai/dsh-'
-const CLIENT_WEB = '@deepseek-ai/dsh-client-web'
 
 /** One workspace package's browser-module declaration. */
 export interface ClientDeclaration {
-  /** npm package name. */
   readonly name: string
-  /** Repository-relative package manifest. */
   readonly manifest: string
-  /** Whether the manifest declares a dynamic dsh.client row. */
   readonly dynamic: boolean
-  /** Exact module-table specifiers requested by the row. */
   readonly external: readonly string[]
+  readonly runtimeSourceUses: Readonly<Record<string, readonly string[]>>
+  /** Exact runtime specifiers used to validate `dsh.client.external` declarations. */
+  readonly runtimeSourceSpecifiers: Readonly<Record<string, readonly string[]>>
   /** Informational package dependencies declared by the row. */
   readonly inject: readonly string[]
 }
 
 /** One package directly under packages/client. */
 export interface ClientPackage extends ClientDeclaration {
-  /** Whether its build config uses the staticLinked preset. */
   readonly staticLinked: boolean
-  /** Production source locations grouped by imported package name. */
   readonly sourceUses: Readonly<Record<string, readonly string[]>>
-  /** Production source locations grouped by runtime-imported package name. */
-  readonly runtimeSourceUses: Readonly<Record<string, readonly string[]>>
-  /** Installed implementation dependencies. */
   readonly dependencies: Readonly<Record<string, string>>
-  /** Consumer-supplied dependencies. */
   readonly peerDependencies: Readonly<Record<string, string>>
-  /** Dependencies available while developing the package. */
   readonly devDependencies: Readonly<Record<string, string>>
 }
 
 /** Complete source-plane input to the client package verifier. */
 export interface ClientPackageFacts {
-  /** Packages directly under packages/client. */
   readonly packages: readonly ClientPackage[]
-  /** Every workspace package, including packages without a browser row. */
   readonly declarations: readonly ClientDeclaration[]
-  /** Packages whose build config uses the staticLinked preset. */
   readonly staticLinkedPackages: ReadonlySet<string>
-  /** Specifiers the web shell seeds into the module table. */
   readonly platformModules: readonly string[]
-  /** Dynamic factories the HTML parser loads before shell boot. */
   readonly preloadedExternals: readonly string[]
-  /** Package rows whose bundles the HTML parser executes before shell boot. */
   readonly parserPreloadIds: readonly string[]
-  /** Manifest field errors found while reading declarations. */
   readonly malformed: readonly string[]
 }
 
 /** Result of reading every workspace browser-module declaration. */
 export interface ClientDeclarations {
-  /** One declaration record per named workspace manifest. */
   readonly declarations: ClientDeclaration[]
-  /** Manifest field errors that prevent a reliable declaration. */
   readonly malformed: string[]
 }
 
@@ -84,7 +64,7 @@ export interface ClientDeclarations {
  */
 export function collectSourcePackageUses(path: string, source: string): Set<string> {
   const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
-  return collectSourceFilePackageUses(sourceFile, false)
+  return collectSourceFileUses(sourceFile, false, 'package')
 }
 
 /**
@@ -95,7 +75,40 @@ export function collectSourcePackageUses(path: string, source: string): Set<stri
  */
 export function collectRuntimeSourcePackageUses(path: string, source: string): Set<string> {
   const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
-  return collectSourceFilePackageUses(sourceFile, true)
+  return collectSourceFileUses(sourceFile, true, 'package')
+}
+
+/**
+ * Collect exact bare specifiers retained by one production source file.
+ * @param path - File path used to select TypeScript's parser mode.
+ * @param source - Source text to inspect.
+ * @returns Exact specifiers retained by runtime imports, exports, requires, or JSX.
+ */
+export function collectRuntimeSourceSpecifiers(path: string, source: string): Set<string> {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
+  return collectSourceFileUses(sourceFile, true, 'specifier')
+}
+
+/**
+ * Collect relative module specifiers used to follow one source entry's local closure.
+ * @param path - File path used to select TypeScript's parser mode.
+ * @param source - Source text to inspect.
+ * @returns Relative imports, exports, requires, and import types.
+ */
+export function collectLocalSourceSpecifiers(path: string, source: string): Set<string> {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
+  return collectSourceFileUses(sourceFile, false, 'local')
+}
+
+/**
+ * Collect relative module specifiers retained by one production source file.
+ * @param path - File path used to select TypeScript's parser mode.
+ * @param source - Source text to inspect.
+ * @returns Relative imports, exports, and requires that survive compilation.
+ */
+export function collectRuntimeLocalSourceSpecifiers(path: string, source: string): Set<string> {
+  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
+  return collectSourceFileUses(sourceFile, true, 'local')
 }
 
 function importCarriesRuntimeValue(node: ts.ImportDeclaration): boolean {
@@ -117,12 +130,21 @@ function exportCarriesRuntimeValue(node: ts.ExportDeclaration): boolean {
   return clause.elements.length === 0 || clause.elements.some(element => !element.isTypeOnly)
 }
 
-function collectSourceFilePackageUses(sourceFile: ts.SourceFile, runtimeOnly: boolean): Set<string> {
+function collectSourceFileUses(
+  sourceFile: ts.SourceFile,
+  runtimeOnly: boolean,
+  key: 'local' | 'package' | 'specifier',
+): Set<string> {
   const uses = new Set<string>()
 
   const add = (specifier: ts.Expression | undefined): void => {
-    if (specifier === undefined || !ts.isStringLiteral(specifier) || !isBareSpecifier(specifier.text)) return
-    uses.add(packageNameOf(specifier.text))
+    if (specifier === undefined || !ts.isStringLiteralLike(specifier)) return
+    if (key === 'local') {
+      if (specifier.text.startsWith('.')) uses.add(specifier.text)
+      return
+    }
+    if (!isBareSpecifier(specifier.text)) return
+    uses.add(key === 'package' ? packageNameOf(specifier.text) : specifier.text)
   }
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node)) {
@@ -137,9 +159,10 @@ function collectSourceFilePackageUses(sourceFile: ts.SourceFile, runtimeOnly: bo
       && (node.expression.kind === ts.SyntaxKind.ImportKeyword
         || ts.isIdentifier(node.expression) && node.expression.text === 'require')) {
       add(node.arguments[0])
-    } else if (!runtimeOnly && ts.isModuleDeclaration(node) && ts.isStringLiteral(node.name)) {
+    } else if (!runtimeOnly && key !== 'local' && ts.isModuleDeclaration(node) && ts.isStringLiteral(node.name)) {
       add(node.name)
-    } else if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) {
+    } else if (key !== 'local'
+      && (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node))) {
       uses.add('react')
     }
     ts.forEachChild(node, visit)
@@ -172,7 +195,6 @@ export function collectClientPackageViolations(facts: ClientPackageFacts): strin
   return [
     ...facts.malformed,
     ...collectModeViolations(facts),
-    ...collectDependencyViolations(facts),
     ...collectModuleViolations(facts),
   ].sort((left, right) => left.localeCompare(right))
 }
@@ -183,10 +205,8 @@ interface ManifestDocument {
   changed: boolean
 }
 
-type DependencySection = 'dependencies' | 'peerDependencies' | 'devDependencies'
-
 /**
- * Repair manifest declarations whose intended result follows uniquely from the policy.
+ * Repair malformed or redundant `dsh.client` declaration entries.
  * @param root - Absolute repository root.
  * @param facts - Facts used by the verification pass.
  * @returns Repository-relative manifests written by the fixer.
@@ -219,53 +239,6 @@ export function fixClientPackageManifests(root: string, facts: ClientPackageFact
     ) || target.changed
   }
 
-  const staticInputs = new Set([
-    ...facts.staticLinkedPackages,
-    ...facts.platformModules.map(packageNameOf),
-  ])
-  staticInputs.delete(CORDIS)
-  const inferredRanges = dependencyRangeCandidates(root)
-  for (const pkg of facts.packages) {
-    const target = document(pkg.manifest)
-    const expected = expectedSections(pkg, staticInputs)
-    for (const [name, rule] of expected) {
-      const range = preferredRange(target.manifest, name, rule.kind, inferredRanges)
-      if (range === undefined) continue
-      target.changed = rule.kind === 'dependency'
-        ? ensureDependencyOnly(target.manifest, name, range) || target.changed
-        : rule.kind === 'dev'
-          ? ensureDevOnly(target.manifest, name, range) || target.changed
-          : ensurePeerDev(target.manifest, name, range) || target.changed
-    }
-
-    if (pkg.dynamic) {
-      const productionNames = new Set([
-        ...Object.keys(section(target.manifest, 'dependencies')),
-        ...Object.keys(section(target.manifest, 'peerDependencies')),
-      ])
-      for (const name of productionNames) {
-        if (expected.has(name)) continue
-        const range = preferredRange(
-          target.manifest,
-          name,
-          staticInputs.has(name) ? 'dev' : 'peer-dev',
-          inferredRanges,
-        )
-        if (range === undefined) continue
-        if (staticInputs.has(name)) {
-          target.changed = ensureDevOnly(target.manifest, name, range) || target.changed
-        } else if (section(target.manifest, 'dependencies')[name] !== undefined && isInternalDsh(name)) {
-          target.changed = ensurePeerDev(target.manifest, name, range) || target.changed
-        }
-      }
-    }
-
-    for (const [name, range] of Object.entries(section(target.manifest, 'peerDependencies'))) {
-      target.changed = setDependency(target.manifest, 'devDependencies', name, range) || target.changed
-    }
-    target.changed = deleteEmptySections(target.manifest) || target.changed
-  }
-
   const changed = [...documents.values()].filter(target => target.changed).sort((left, right) =>
     left.path.localeCompare(right.path))
   for (const target of changed) {
@@ -295,102 +268,6 @@ function normalizeClientArray(
     client[field] = normalized
   }
   return true
-}
-
-function ensureDevOnly(manifest: Manifest, name: string, range: string): boolean {
-  let changed = deleteDependency(manifest, 'dependencies', name)
-  changed = deleteDependency(manifest, 'peerDependencies', name) || changed
-  return setDependency(manifest, 'devDependencies', name, range) || changed
-}
-
-function ensureDependencyOnly(manifest: Manifest, name: string, range: string): boolean {
-  let changed = deleteDependency(manifest, 'peerDependencies', name)
-  changed = deleteDependency(manifest, 'devDependencies', name) || changed
-  return setDependency(manifest, 'dependencies', name, range) || changed
-}
-
-function ensurePeerDev(manifest: Manifest, name: string, range: string): boolean {
-  let changed = deleteDependency(manifest, 'dependencies', name)
-  changed = setDependency(manifest, 'peerDependencies', name, range) || changed
-  return setDependency(manifest, 'devDependencies', name, range) || changed
-}
-
-function setDependency(manifest: Manifest, field: DependencySection, name: string, range: string): boolean {
-  const dependencies = mutableSection(manifest, field)
-  if (dependencies[name] === range) return false
-  dependencies[name] = range
-  return true
-}
-
-function deleteDependency(manifest: Manifest, field: DependencySection, name: string): boolean {
-  const dependencies = section(manifest, field)
-  if (dependencies[name] === undefined) return false
-  manifest[field] = Object.fromEntries(Object.entries(dependencies).filter(([key]) => key !== name))
-  return true
-}
-
-function deleteEmptySections(manifest: Manifest): boolean {
-  let changed = false
-  for (const field of ['dependencies', 'peerDependencies', 'devDependencies'] as const) {
-    if (manifest[field] === undefined || Object.keys(section(manifest, field)).length > 0) continue
-    if (field === 'dependencies') delete manifest.dependencies
-    else if (field === 'peerDependencies') delete manifest.peerDependencies
-    else delete manifest.devDependencies
-    changed = true
-  }
-  return changed
-}
-
-function preferredRange(
-  manifest: Manifest,
-  name: string,
-  kind: ExpectedRule['kind'],
-  inferred: ReadonlyMap<string, ReadonlySet<string>>,
-): string | undefined {
-  const order: readonly DependencySection[] = kind === 'dependency'
-    ? ['dependencies', 'devDependencies', 'peerDependencies']
-    : kind === 'dev'
-      ? ['devDependencies', 'peerDependencies', 'dependencies']
-      : ['peerDependencies', 'devDependencies', 'dependencies']
-  for (const field of order) {
-    const range = section(manifest, field)[name]
-    if (range !== undefined) return range
-  }
-  if (isInternalDsh(name)) return 'workspace:^'
-  const candidates = inferred.get(name)
-  return candidates?.size === 1 ? [...candidates][0] : undefined
-}
-
-function dependencyRangeCandidates(root: string): Map<string, Set<string>> {
-  const candidates = new Map<string, Set<string>>()
-  const paths = globSync([
-    'package.json',
-    ...MANIFEST_GLOBS,
-    'website/package.json',
-  ], { cwd: root }).map(normalizePath)
-  for (const path of new Set(paths)) {
-    const manifest = JSON.parse(readFileSync(resolve(root, path), 'utf8')) as Manifest
-    for (const field of ['dependencies', 'peerDependencies', 'devDependencies'] as const) {
-      for (const [name, range] of Object.entries(section(manifest, field))) {
-        const ranges = candidates.get(name) ?? new Set<string>()
-        ranges.add(range)
-        candidates.set(name, ranges)
-      }
-    }
-  }
-  return candidates
-}
-
-function section(manifest: Manifest, field: DependencySection): Record<string, string> {
-  return manifest[field] ?? {}
-}
-
-function mutableSection(manifest: Manifest, field: DependencySection): Record<string, string> {
-  const value = manifest[field]
-  if (value !== undefined) return value
-  const created: Record<string, string> = {}
-  manifest[field] = created
-  return created
 }
 
 function collectModeViolations(facts: ClientPackageFacts): string[] {
@@ -437,114 +314,6 @@ function collectModeViolations(facts: ClientPackageFacts): string[] {
   return violations
 }
 
-interface ExpectedRule {
-  readonly kind: 'dependency' | 'dev' | 'peer-dev'
-  readonly origins: Set<string>
-}
-
-function collectDependencyViolations(facts: ClientPackageFacts): string[] {
-  const violations: string[] = []
-  const staticInputs = new Set([
-    ...facts.staticLinkedPackages,
-    ...facts.platformModules.map(packageNameOf),
-  ])
-  staticInputs.delete(CORDIS)
-
-  for (const pkg of [...facts.packages].sort((left, right) => left.manifest.localeCompare(right.manifest))) {
-    const expected = expectedSections(pkg, staticInputs)
-    for (const [name, rule] of [...expected].sort(([left], [right]) => left.localeCompare(right))) {
-      const actual = declaredSections(pkg, name)
-      if (rule.kind === 'dependency') {
-        if (actual.length === 1 && actual[0] === 'dependencies') continue
-        violations.push(
-          pkg.manifest + ': ' + name + ' (' + describeOrigins(rule.origins) + ') is a runtime import'
-          + ' retained by a statically linked artifact; declare it only in dependencies, found '
-          + describeSections(actual),
-        )
-        continue
-      }
-      if (rule.kind === 'dev') {
-        if (actual.length === 1 && actual[0] === 'devDependencies') continue
-        violations.push(
-          pkg.manifest + ': ' + name + ' (' + describeOrigins(rule.origins) + ') is a static client input;'
-          + ' declare it only in devDependencies, found ' + describeSections(actual),
-        )
-        continue
-      }
-
-      const peerRange = pkg.peerDependencies[name]
-      const devRange = pkg.devDependencies[name]
-      if (actual.length === 2
-        && actual.includes('peerDependencies')
-        && actual.includes('devDependencies')
-        && peerRange === devRange) continue
-      violations.push(
-        pkg.manifest + ': ' + name + ' (' + describeOrigins(rule.origins) + ')'
-        + ' is a peer-installed DSH relationship; declare it in peerDependencies and devDependencies'
-        + ' with matching ranges, not dependencies; found ' + describeSections(actual)
-        + describeRangeMismatch(peerRange, devRange),
-      )
-    }
-
-    for (const [name, peerRange] of Object.entries(pkg.peerDependencies).sort(([left], [right]) => left.localeCompare(right))) {
-      if (expected.has(name)) continue
-      const devRange = pkg.devDependencies[name]
-      if (devRange === peerRange) continue
-      violations.push(
-        pkg.manifest + ': peerDependencies.' + name + ' is ' + peerRange + ', so devDependencies.' + name
-        + ' must use the same range; found ' + (devRange ?? 'no declaration'),
-      )
-    }
-
-    if (!pkg.dynamic) continue
-    for (const section of ['dependencies', 'peerDependencies'] as const) {
-      for (const name of Object.keys(pkg[section]).sort()) {
-        if (expected.has(name)) continue
-        if (staticInputs.has(name)) {
-          violations.push(
-            pkg.manifest + ': dynamic package declares static input ' + name + ' in ' + section + ';'
-            + ' move it to devDependencies or delete the stale declaration',
-          )
-        } else if (section === 'dependencies' && isInternalDsh(name)) {
-          violations.push(
-            pkg.manifest + ': dynamic package declares ' + name + ' in dependencies;'
-            + ' dynamic DSH relationships are peer plus dev, and static client inputs are dev-only',
-          )
-        }
-      }
-    }
-  }
-  return violations
-}
-
-function expectedSections(pkg: ClientPackage, staticInputs: ReadonlySet<string>): Map<string, ExpectedRule> {
-  const expected = new Map<string, ExpectedRule>([
-    [CORDIS, { kind: 'peer-dev', origins: new Set(['client package baseline']) }],
-  ])
-  if (!pkg.dynamic) {
-    if (pkg.name === CLIENT_WEB) return expected
-    for (const [name, locations] of Object.entries(pkg.runtimeSourceUses)) {
-      if (name === pkg.name || name === CORDIS || isInternalDsh(name)) continue
-      expected.set(name, { kind: 'dependency', origins: new Set(locations) })
-    }
-    return expected
-  }
-
-  const add = (name: string, origin: string): void => {
-    if (name === pkg.name) return
-    const kind = staticInputs.has(name) ? 'dev' : isInternalDsh(name) ? 'peer-dev' : undefined
-    if (kind === undefined) return
-    const current = expected.get(name)
-    if (current !== undefined) current.origins.add(origin)
-    else expected.set(name, { kind, origins: new Set([origin]) })
-  }
-  for (const [name, locations] of Object.entries(pkg.sourceUses)) {
-    for (const location of locations) add(name, location)
-  }
-  for (const name of pkg.inject) add(name, 'dsh.client.inject')
-  return expected
-}
-
 interface ModuleEdge {
   readonly from: string
   readonly to: string
@@ -583,6 +352,20 @@ function collectModuleViolations(facts: ClientPackageFacts): string[] {
       if (supplier === pkg.name) {
         violations.push(pkg.manifest + ': dsh.client.external names its own row ' + JSON.stringify(specifier))
       } else if (supplier !== undefined) {
+        if (pkg.manifest.startsWith('packages/client/')) {
+          violations.push(
+            pkg.manifest + ': client feature package requests runtime external ' + JSON.stringify(specifier)
+            + '; import shared types only or call an injected Cordis service',
+          )
+          continue
+        }
+        if (pkg.runtimeSourceSpecifiers[specifier] === undefined) {
+          violations.push(
+            pkg.manifest + ': dsh.client.external ' + JSON.stringify(specifier)
+            + ' has no runtime import or re-export in production source; remove the stale declaration',
+          )
+          continue
+        }
         edges.push({ from: pkg.name, to: supplier, specifier })
       } else {
         const owner = stripClientSuffix(specifier)
@@ -673,11 +456,17 @@ function readDeclaration(
   const dsh = isRecord(manifest.dsh) ? manifest.dsh : undefined
   const rawClient = dsh?.client
   if (rawClient === undefined) {
-    return { name: manifest.name, manifest: manifestPath, dynamic: false, external: [], inject: [] }
+    return {
+      name: manifest.name, manifest: manifestPath, dynamic: false, external: [], inject: [],
+      runtimeSourceUses: {}, runtimeSourceSpecifiers: {},
+    }
   }
   if (!isRecord(rawClient)) {
     malformed.push(manifestPath + ': ' + manifest.name + ' dsh.client must be an object')
-    return { name: manifest.name, manifest: manifestPath, dynamic: false, external: [], inject: [] }
+    return {
+      name: manifest.name, manifest: manifestPath, dynamic: false, external: [], inject: [],
+      runtimeSourceUses: {}, runtimeSourceSpecifiers: {},
+    }
   }
   return {
     name: manifest.name,
@@ -685,6 +474,8 @@ function readDeclaration(
     dynamic: true,
     external: stringArray(rawClient.external, manifest.name, manifestPath, 'external', malformed),
     inject: stringArray(rawClient.inject, manifest.name, manifestPath, 'inject', malformed),
+    runtimeSourceUses: {},
+    runtimeSourceSpecifiers: {},
   }
 }
 
@@ -766,10 +557,42 @@ function readStringLiteralArray(root: string, sourcePath: string, name: string):
 }
 
 async function readFacts(root: string): Promise<ClientPackageFacts> {
-  const { declarations, malformed } = readClientDeclarations(root)
-  const byManifest = new Map(declarations.map(entry => [entry.manifest, entry]))
+  const { declarations: bareDeclarations, malformed } = readClientDeclarations(root)
   const staticLinkedPackages = await readStaticLinkedRoster(root)
   const project = new TypeScriptProject(root, 'client')
+  const sourceFiles = project.sourceFiles()
+  const declarations = bareDeclarations.map((declaration): ClientDeclaration => {
+    const runtimeSourceUses = new Map<string, Set<string>>()
+    const runtimeSourceSpecifiers = new Map<string, Set<string>>()
+    const sourcePrefix = dirname(declaration.manifest) + '/src/'
+    for (const sourceFile of sourceFiles) {
+      if (sourceFile.isDeclarationFile) continue
+      const file = project.relativePath(sourceFile)
+      if (!file.startsWith(sourcePrefix)) continue
+      for (const name of collectSourceFileUses(sourceFile, true, 'package')) {
+        const locations = runtimeSourceUses.get(name) ?? new Set<string>()
+        locations.add(file)
+        runtimeSourceUses.set(name, locations)
+      }
+      for (const specifier of collectSourceFileUses(sourceFile, true, 'specifier')) {
+        const locations = runtimeSourceSpecifiers.get(specifier) ?? new Set<string>()
+        locations.add(file)
+        runtimeSourceSpecifiers.set(specifier, locations)
+      }
+    }
+    return {
+      ...declaration,
+      runtimeSourceUses: Object.fromEntries(
+        [...runtimeSourceUses].sort(([left], [right]) => left.localeCompare(right))
+          .map(([name, locations]) => [name, [...locations].sort()]),
+      ),
+      runtimeSourceSpecifiers: Object.fromEntries(
+        [...runtimeSourceSpecifiers].sort(([left], [right]) => left.localeCompare(right))
+          .map(([specifier, locations]) => [specifier, [...locations].sort()]),
+      ),
+    }
+  })
+  const byManifest = new Map(declarations.map(entry => [entry.manifest, entry]))
   const packages: ClientPackage[] = []
 
   for (const manifestPath of globSync(CLIENT_MANIFEST_GLOB, { cwd: root }).map(normalizePath).sort()) {
@@ -781,16 +604,16 @@ async function readFacts(root: string): Promise<ClientPackageFacts> {
     const runtimeSourceUses = new Map<string, Set<string>>()
     const packageDirectory = dirname(manifestPath)
     const sourcePrefix = packageDirectory + '/src/'
-    for (const sourceFile of project.sourceFiles()) {
+    for (const sourceFile of sourceFiles) {
       if (sourceFile.isDeclarationFile) continue
       const file = project.relativePath(sourceFile)
       if (!file.startsWith(sourcePrefix)) continue
-      for (const name of collectSourceFilePackageUses(sourceFile, false)) {
+      for (const name of collectSourceFileUses(sourceFile, false, 'package')) {
         const locations = sourceUses.get(name) ?? new Set<string>()
         locations.add(file)
         sourceUses.set(name, locations)
       }
-      for (const name of collectSourceFilePackageUses(sourceFile, true)) {
+      for (const name of collectSourceFileUses(sourceFile, true, 'package')) {
         const locations = runtimeSourceUses.get(name) ?? new Set<string>()
         locations.add(file)
         runtimeSourceUses.set(name, locations)
@@ -843,32 +666,6 @@ function rowPackageOf(specifier: string, rows: ReadonlySet<string>): string | un
   return rows.has(stripped) ? stripped : undefined
 }
 
-function declaredSections(pkg: ClientPackage, name: string): string[] {
-  return (['dependencies', 'peerDependencies', 'devDependencies'] as const)
-    .filter(section => pkg[section][name] !== undefined)
-}
-
-function describeSections(sections: readonly string[]): string {
-  return sections.length === 0 ? 'no dependency declaration' : sections.join(' + ')
-}
-
-function describeRangeMismatch(peer: string | undefined, dev: string | undefined): string {
-  if (peer === undefined || dev === undefined || peer === dev) return ''
-  return ' (peer ' + peer + ', dev ' + dev + ')'
-}
-
-function describeOrigins(origins: ReadonlySet<string>): string {
-  const sorted = [...origins].sort()
-  const [first, second, ...rest] = sorted
-  if (first === undefined) return 'production use'
-  if (second === undefined) return first
-  return rest.length === 0 ? first + ', ' + second : first + ', ' + second + ', and ' + String(rest.length) + ' more'
-}
-
-function isInternalDsh(name: string): boolean {
-  return name === CORDIS || name.startsWith(DSH_PREFIX)
-}
-
 function isBareSpecifier(specifier: string): boolean {
   return !specifier.startsWith('.') && !specifier.startsWith('/') && !specifier.startsWith('#')
 }
@@ -904,7 +701,7 @@ async function main(): Promise<void> {
   const requests = facts.declarations.reduce((total, pkg) => total + pkg.external.length, 0)
   console.log(
     GATE + ': ' + String(facts.packages.length) + ' client packages (' + String(dynamic) + ' dynamic, '
-    + String(facts.packages.length - dynamic) + ' statically linked) satisfy dependency and module-request rules; '
+    + String(facts.packages.length - dynamic) + ' statically linked) satisfy package-mode and module-request rules; '
     + String(requests) + ' explicit external request(s).',
   )
 }

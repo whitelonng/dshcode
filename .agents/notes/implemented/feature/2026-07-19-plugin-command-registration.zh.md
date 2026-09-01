@@ -12,7 +12,7 @@ TUI 拥有斜杠命令。如果命令名、帮助文本、自动补全、分派�
 
 ## 决策
 
-位于 `packages/interaction/commands/` 的 `@deepseek-ai/dsh-commands` 是产品命令注册表。TUI 应用组合包把它挂载在消费该服务的前端旁；[仅面向自动化的 ACP（Agent Client Protocol）应用](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)和无执行器、无 UI 的 agent spine 都省略该服务。TUI 注入该服务，命令生产者只依赖注册表及其操作的领域。
+位于 `packages/interaction/commands/` 的 `@deepseek-ai/dsh-commands` 是产品命令注册表。`dsh-base` 为消费该服务的前端挂载它；[仅面向自动化的 ACP（Agent Client Protocol）应用](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)和独立的 `sdk-minimal` 配置树都省略该服务。UI 界面注入该服务，命令生产者只依赖注册表及其操作的领域。
 
 ### 注册表约定
 
@@ -50,7 +50,7 @@ TUI 测试覆盖全部迁移后的内置命令、实时插件发现、帮助与�
 
 - **保留适配器本地 switch**——不予采纳，因为可选插件无法贡献发现与行为，除非修改 TUI。
 - **把人类命令表示为模型工具**——不予采纳，因为发现与直接调用属于人类 UI 行为；经由模型路由会增加延迟、token 成本和重新解释。
-- **把注册表放入核心 agent spine**——不予采纳，因为无 UI 运行入口不消费它，而 TUI 可以显式组合它。
+- **把注册表放入必需 agent 核心**——不予采纳，因为无 UI 运行入口不消费它，而 UI profile 可以显式组合它。
 - **让 `dsh-agent-loop` 注入 commands**——不予采纳，因为循环不执行也不发现人类命令。agent 作用域生产者改为在子插件中声明 UI 依赖。
 - **为每个定义附加适配器掩码**——不予采纳，因为支持能力是组合事实，而不是命令领域状态。每个已组合适配器都暴露已注册命令；不兼容插件不会在该部署中注册。
 - **把未知斜杠输入发送给模型**——不予采纳，因为输入错误或不可用的直接操作必须可预测地失败，而不能改变执行平面。

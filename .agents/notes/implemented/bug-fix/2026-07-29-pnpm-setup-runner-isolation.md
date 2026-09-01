@@ -10,9 +10,9 @@ English | [中文](2026-07-29-pnpm-setup-runner-isolation.zh.md)
 
 ## Decision
 
-Every `pnpm/action-setup` step in [the primary CI workflow](../../../../.github/workflows/ci.yml) and [the master workflow](../../../../.github/workflows/ci-master.yml) sets `dest: ${{ runner.temp }}/setup-pnpm`. Each runner service owns its temporary directory, so one setup cannot replace another runner's install directory. Persistent store reuse remains separate through `PNPM_CONFIG_STORE_DIR`, as established by the [pnpm provisioning decision](../process/2026-07-26-pnpm-action-setup-for-symmetric-ci-caching.md).
+Every non-Windows `pnpm/action-setup` step in [the primary CI workflow](../../../../.github/workflows/ci.yml) and [the master workflow](../../../../.github/workflows/ci-master.yml) sets `dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}`. Each runner service owns its temporary directory, so one setup cannot replace another runner's install directory, and the run/attempt suffix also protects sequential jobs on the same runner from a stale locked `pnpm.exe`. The Windows native jobs and the [python SDK exe build](../../../../.github/workflows/build-exe-for-python-sdk.yml) use a separate pnpm executable under `setup-pnpm-js-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}` (not `standalone: true`; the destination keeps that executable apart): the run/attempt/job suffix gives every job a fresh directory even when sequential jobs land on the same self-hosted runner and a previous job leaves a locked @reflink native module. Persistent store reuse remains separate through `PNPM_CONFIG_STORE_DIR`, as established by the [pnpm provisioning decision](../process/2026-07-26-pnpm-action-setup-for-symmetric-ci-caching.md).
 
-[The workflow regression test](../../../../scripts/ci-workflow.spec.ts) discovers every `pnpm/action-setup` step in `ci.yml` and `ci-master.yml` and rejects one without the runner-private destination. This keeps newly added jobs inside the same isolation boundary.
+[The workflow regression test](../../../../scripts/ci-workflow.spec.ts) discovers every `pnpm/action-setup` step in `ci.yml`, `ci-master.yml`, and `build-exe-for-python-sdk.yml` and rejects one without the runner-private destination. This keeps newly added jobs inside the same isolation boundary.
 
 ## Alternatives considered
 

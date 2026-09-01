@@ -74,7 +74,7 @@ The receiver is a small carrier rather than a transparent proxy for the domain o
 
 Scope-aware registries use `ScopedLayers` to own one eager global aggregate and lazily created identity-keyed aggregates. A read resolves the global layer and at most one exact local layer; it never creates state or traverses parentage. Registration visibility and Cordis effect ownership derive from the same context, and reclamation waits until the concrete layer's complete aggregate is empty ([decision](2026-07-12-scoped-layers-store.md)).
 
-Each service retains its domain rule. Named command and prompt views use the shared insertion-ordered shadow merge; tools keep a richer resolver because restrictions filter globals before local tools are added and the reserved Code Mode transport is inserted separately. Prompt variables and tool guards retain live iteration, while tool-provider membership is materialized per assembly. Scope supplies storage lifecycle and named shadowing, not a universal registry view.
+Each service retains its domain rule. Named command and prompt views use the shared insertion-ordered shadow merge; tools keep a richer resolver because restrictions filter globals before local tools are added and the reserved PTC mode transport is inserted separately. Prompt variables and tool guards retain live iteration, while tool-provider membership is materialized per assembly. Scope supplies storage lifecycle and named shadowing, not a universal registry view.
 
 ### Fused dispatch helpers prevent subject drift
 
@@ -206,7 +206,7 @@ Tool presentation and execution share one private resolver. Prompt assembly rema
 
 ### One resolver defines the tool view
 
-The private resolver applies the current presentation mode, live global restrictions, exact local overlay, and local shadowing. Schemas, lookup, execution, Code Mode SDK generation, and restriction validation all use that resolver or its pre-restriction global-name view.
+The private resolver applies the current presentation mode, live global restrictions, exact local overlay, and local shadowing. Schemas, lookup, execution, PTC mode SDK generation, and restriction validation all use that resolver or its pre-restriction global-name view.
 
 The [subagent composition-controls Agent Note](../feature/2026-07-12-subagent-persona-tool-filter-and-depth.md#tool-filtering-is-one-live-global-view-rule) owns the user-visible allow/deny semantics. The implementation requirement is agreement: a filtered-away global cannot remain executable through a different lookup path, and a locally shadowed definition is the same definition presented and executed.
 
@@ -214,11 +214,11 @@ The [subagent composition-controls Agent Note](../feature/2026-07-12-subagent-pe
 
 ### Tool execution owns identity and boundary materialization
 
-The registry assigns every execution a fresh branded `Symbol` token. Nested Code Mode calls carry the outer token as `parent`, so structured output can correlate an inner capture with its enclosing `run_code` result by identity.
+The registry assigns every execution a fresh branded `Symbol` token. Nested PTC mode calls carry the outer token as `parent`, so structured output can correlate an inner capture with its enclosing `run_code` result by identity.
 
 A fresh registry-assigned Symbol provides collision-free execution identity without a WeakSet membership registry. Callers cannot supply the execution's own token through `ToolExecutionInput`; they only receive the pipeline-owned `ToolExecution` after the registry creates it. This is a trusted typed contract, not a runtime defense against arbitrary casts or JavaScript callers.
 
-Arguments are materialized once where model/tool JSON enters the pipeline. Pre-, around-, and post-execute listeners operate on the typed execution and decisions. Call ID correlation, approval, monotonic guards, and Code Mode nesting remain explicit relational checks.
+Arguments are materialized once where model/tool JSON enters the pipeline. Pre-, around-, and post-execute listeners operate on the typed execution and decisions. Call ID correlation, approval, monotonic guards, and PTC mode nesting remain explicit relational checks.
 
 After post-execute or outer pipeline normalization, the registry losslessly snapshots the candidate result, converting a snapshot failure into an ordinary error, invokes the call's snapshotted optional `ToolDefinition.finalizeContent` callback, then materializes and freezes the accepted final result once. The callback may replace only content, so structured error identity, contexts, and metadata remain registry-owned even when a tool enforces a last-mile result bound. Every synchronous `tools/result` observer receives that exact committed object, and observer failures are contained individually. An outer pipeline or candidate-snapshot failure is normalized before final content, so observers can discard staged work against the same authoritative boundary.
 
@@ -226,9 +226,9 @@ After post-execute or outer pipeline normalization, the registry losslessly snap
 
 SystemPrompt first resolves the global-plus-agent sections, variables, and tool providers into a deterministic registry contribution. The scope-filtered `system-prompt/assemble` waterfall may then reorder, replace, add, or remove any section, variable, or schema. Its returned assembly is authoritative; there is no later restoration pass and no finality metadata on ordinary prompt sections, tool definitions, or provider results.
 
-This is a trusted same-process extension point, not an authority boundary. A listener that changes Code Mode's `run_code` schema or `tools:sdk` instructions, or a structured child's capture schema or instruction, owns preserving a coherent protocol in the assembly it returns. ToolRuntime still reserves `run_code` against ordinary tool registration and restriction because those are registry invariants, but assembly middleware remains free to transform the final model-visible surface.
+This is a trusted same-process extension point, not an authority boundary. A listener that changes PTC mode's `run_code` schema or `tools:sdk` instructions, or a structured child's capture schema or instruction, owns preserving a coherent protocol in the assembly it returns. ToolRuntime still reserves `run_code` against ordinary tool registration and restriction because those are registry invariants, but assembly middleware remains free to transform the final model-visible surface.
 
-Scope solves the real isolation problem directly. Structured-output contributions register in the child's exact scope, while Code Mode derives its transport and SDK from the same resolved tool view. A second named-protection system would need another ownership and collision rule across arbitrary schema providers—including providers that intentionally contribute duplicate names—without creating a new trust boundary.
+Scope solves the real isolation problem directly. Structured-output contributions register in the child's exact scope, while PTC mode derives its transport and SDK from the same resolved tool view. A second named-protection system would need another ownership and collision rule across arbitrary schema providers—including providers that intentionally contribute duplicate names—without creating a new trust boundary.
 
 ### Structured output commits only authoritative outcomes
 
@@ -236,11 +236,11 @@ Structured output combines child-scoped composition with a two-phase execution c
 
 For a native call, the observer deletes the stage and commits its value only when that exact execution's final result succeeds. A post-execute block or outer pipeline failure therefore cannot leave a captured value behind.
 
-For a Code Mode SDK call, the inner successful result records `{ parentToken, value }` rather than committing. The observer waits for the `run_code` execution whose token matches `parentToken` and commits only if that outer final result also succeeds. Program failure, runtime abort, or outer post-policy denial discards the pending value.
+For a PTC mode SDK call, the inner successful result records `{ parentToken, value }` rather than committing. The observer waits for the `run_code` execution whose token matches `parentToken` and commits only if that outer final result also succeeds. Program failure, runtime abort, or outer post-policy denial discards the pending value.
 
 Once a value is pending or committed, a scoped monotonic guard denies later tool calls. The successful structured-output execution calls `exec.concludeTurn()`, so its own immutable result carries `concludesTurn: true` and the loop ends the tool loop at that step. A schema-validation failure remains an ordinary `INVALID_ARGS` tool error and leaves the child able to retry within the same turn.
 
-Pure Code Mode's registry contribution omits `structured_output` from native wire schemas and exposes it through the generated SDK. The assembly waterfall may deliberately change that presentation; execution still validates against the child-scoped definition, and the listener owns the consistency of any alternate model-visible route it creates.
+Pure PTC mode's registry contribution omits `structured_output` from native wire schemas and exposes it through the generated SDK. The assembly waterfall may deliberately change that presentation; execution still validates against the child-scoped definition, and the listener owns the consistency of any alternate model-visible route it creates.
 
 ### Three execution boundaries are deliberately one-way
 
@@ -332,7 +332,7 @@ The plugin does not police trusted setup by scanning registries or reject prompt
 
 The event catalog, service catalog, producer/consumer matrix, configuration catalog, module graph, tool catalog, type-equivalence blocks, and scoped-event resolver map are generated or freshness-gated from source. The [TypeScript semantic-gates Agent Note](../process/2026-07-14-typescript-program-backed-semantic-gates.md) owns Program construction, semantic event discovery, and resolver-generation rules.
 
-Behavioral tests pin scoped routing and disposal, final-entry collision cleanup, publication rollback, ordered quiescence, durable pre/post-commit behavior, live tool filtering across presentation and execution, cooperative prompt assembly, structured-output commit in native and Code Mode, async subagent startup and signal cancellation, worker terminal arbitration, ACP settlement, and process teardown.
+Behavioral tests pin scoped routing and disposal, final-entry collision cleanup, publication rollback, ordered quiescence, durable pre/post-commit behavior, live tool filtering across presentation and execution, cooperative prompt assembly, structured-output commit in native and PTC mode, async subagent startup and signal cancellation, worker terminal arbitration, ACP settlement, and process teardown.
 
 ## Alternatives considered
 
@@ -385,7 +385,7 @@ The implementation is smaller and its proof follows the same shape as its owners
 
 Scope-aware services still maintain global and identity-keyed maps, and operations must carry their real agent explicitly. Async create/resume and subagent start require callers to await ownership transfer and dispose returned handles.
 
-A trusted `system-prompt/assemble` listener can remove or replace Code Mode and structured-output protocol pieces. This is deliberate: the listener owns final composition and must preserve any protocol the deployment expects to remain usable.
+A trusted `system-prompt/assemble` listener can remove or replace PTC mode and structured-output protocol pieces. This is deliberate: the listener owns final composition and must preserve any protocol the deployment expects to remain usable.
 
 The design trusts typed plugins in the same process. It does not defend against arbitrary casts, stateful getters, mutation that violates readonly contracts, or a plugin deliberately using ambient service access outside the supported composition API.
 

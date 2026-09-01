@@ -29,7 +29,7 @@ describe.skipIf(MODE === 'record')('web e2e: remote welcome notice', () => {
       locale: ZH_BROWSER_LOCALE,
     })
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('#root', { timeout: 30_000 })
   }, 120_000)
 

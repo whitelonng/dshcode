@@ -21,7 +21,7 @@ per-file 100% 覆盖率门禁失败时，vitest 只输出文件级错误行（`E
 - 隐式分支臂（如缺少 else 的情况）可能不带位置，reporter 会回退到分支自身的 span，保证记录仍可点击；分支记录标注类型与 `path k/n`。
 - 同文件内记录按行、列排序；不设条数上限。
 
-配套两处：根 `package.json` 增补 devDependency `istanbul-lib-report`（pnpm 严格布局下 `scripts/` 摸不到嵌套依赖）；`knip.json` 根 workspace 的 entry/project 通配增加 `scripts/**/*.cjs`，使该文件及其依赖对 hygiene 门禁可见。
+根 `package.json` 将 `istanbul-lib-report` 声明为 devDependency，因为 pnpm 的严格布局使 `scripts/` 无法访问嵌套依赖。
 
 CJS 是被迫的形态，也是 ESM-everywhere 纪律的一个有据例外：istanbul 在 tsx/Vite 流水线之外用裸 `require()` 装载自定义 reporter，TypeScript 无法参与；`require(esm)` 返回的命名空间对象也过不了它的 `new Cons(cfg)` 构造，CommonJS 是唯一可靠形态。
 

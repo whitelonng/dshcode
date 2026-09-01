@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-工具行路径点击已经通过聊天视图注入的 `openFile` 调用 `host.openPath`。inject 吞掉了每一次 Host 或操作系统拒绝，因此缺少桌面打开器、远程或非回环载体、或 Host 无法交接的路径，都会让该行看起来像成功。读者看不到原因，也无法再试一次。
+工具行路径点击已经通过聊天视图注入的 `openFile` 调用 `session/openWorkspacePath`。inject 吞掉了每一次 Host 或操作系统拒绝，因此缺少桌面打开器、远程或非回环载体、或 Host 无法交接的路径，都会让该行看起来像成功。读者看不到原因，也无法再试一次。
 
 [用系统应用打开文件的决策](../feature/2026-07-28-tool-call-file-open-in-os.zh.md) 仍然拥有链接手势和 Host 交接。本 Agent Note 只拥有拒绝路径。
 
@@ -16,7 +16,7 @@ inject 返回 `workspaces.openPath` 的 promise。聊天视图包装该打开器
 
 对话框位于 chat 视图（拥有 Host 调用），而不是每个工具行。产物文件标签和收尾消息中的提及已经共用该打开器，因此走同一包装。产物文件的文件夹操作打开 `.`，该拒绝使用文件夹标题和未知打开回退文案。
 
-Host 消息按抛出内容展示。`WorkspaceRuntime.openPath` 会在 wire 错误前加上 `path open failed: ` 前缀；对话框不拆掉该前缀。
+Host 消息按抛出内容展示。聊天视图的 `openFile` adapter 会在 Remote 错误前加上 `path open failed: ` 前缀；对话框不拆掉该前缀。
 
 ## 考虑过的替代方案
 
@@ -30,4 +30,4 @@ Host 消息按抛出内容展示。`WorkspaceRuntime.openPath` 会在 wire 错�
 
 ## 测试
 
-包测试覆盖 inject 拒绝、对话框文案（Error、非 Error、空文本、工作区文件夹）、同一路径重试、取消，以及关闭之后才落到的结果。`apps/web/tests/seeded-history.e2e.ts` 在冷恢复的 read 行上把 `host.openPath` stub 为失败，用 `file-open-failure.expected.md` 钉住组装后的对话框，并断言英文原因以及对同一 payload 的第二次调用。
+包测试覆盖 inject 拒绝、对话框文案（Error、非 Error、空文本、工作区文件夹）、同一路径重试、取消，以及关闭之后才落到的结果。`apps/web/tests/seeded-history.e2e.ts` 在冷恢复的 read 行上把 `session/openWorkspacePath` stub 为失败，用 `file-open-failure.expected.md` 钉住组装后的对话框，并断言英文原因以及对同一 payload 的第二次调用。

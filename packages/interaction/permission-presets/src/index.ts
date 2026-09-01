@@ -5,7 +5,7 @@
  * and replay keep reading their knob folds. The preset event preserves user
  * intent when two presets share a bundle. The read side ships as the
  * `permissions` session projection; the write side ships as the
- * `/permission` command — both optional children over the same service.
+ * `/permission` command.
  *
  * @module dsh-permission-presets
  */
@@ -15,22 +15,18 @@ import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import { SANDBOX_MODES, effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import { SANDBOX_MODES, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 // Side-effect type import: declaration-merges `ctx.shell` (the capability fact
 // `sandboxMode` this service reads), without a value dependency on the seam.
 import type {} from '@deepseek-ai/dsh-shell'
 import type { ApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
-import { APPROVAL_POLICIES, effectiveApprovalPolicy, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
-// Type-only: resolves ctx.sessionProjections / ctx.commands for the optional children.
+import { APPROVAL_POLICIES, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
+import type {} from '@deepseek-ai/dsh-settings'
+// Type-only: resolves the optional projection and command children.
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-commands'
 import type { PermissionSelect, PresetOption } from './types.ts'
 
-// The `permissions` projection-key declaration lives in src/types.ts (its one
-// home); this re-export projects the type face onto the package root AND
-// keeps the module edge in the emitted index.d.ts, so aggregate programs
-// consuming the declarations still receive the SessionProjectionMap merge.
 export type * from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -39,12 +35,19 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** Latest logged permission overrides and constructor-seed provenance. */
+    permissions: PermissionProjectionState
+  }
+}
+
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
      * Records the selected preset as durable, log-only user intent. The knob
      * events follow in the same turn and control execution; this event stays
-     * out of the model transcript and lets {@link effectivePermissionPreset}
+     * out of the model transcript and lets the permission projection unit
      * preserve a selection when bundles match.
      */
     'permission/preset': { preset: string }
@@ -70,26 +73,11 @@ export interface PresetSpec {
 export const CUSTOM_PRESET = 'custom'
 
 /** Settings namespace carrying the default for future sessions. */
-export const PERMISSION_SETTINGS_NAMESPACE = settingsNamespace('permission')
+export const PERMISSION_SETTINGS_NAMESPACE = 'permission'
 
 /**
- * Fold the last selected preset from the durable log; replay needs no catch-up
- * state.
- * @param events - session events in log order; other event types are ignored.
- * @returns the last selected preset, or undefined when none was recorded.
- */
-export function effectivePermissionPreset(events: readonly SessionEvent[]): string | undefined {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index] as SessionEvent
-    if (event.type === 'permission/preset') return event.data.preset
-  }
-  return undefined
-}
-
-/**
- * The projection unit's state: the last seen value of each knob event, null
- * before an override (composition defaults apply at view time). Plain JSON
- * (persisted-cache precondition).
+ * The projection unit's knob state: the last seen value of each knob event,
+ * null before an override (composition defaults apply at view time).
  */
 export interface KnobState {
   /** Last `permission/preset` payload, or null. */
@@ -100,13 +88,13 @@ export interface KnobState {
   approval: ApprovalPolicy | null
 }
 
-declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionStateMap {
-    permissions: KnobState
-  }
+/** Projection state for permission overrides and constructor-seed provenance. */
+interface PermissionProjectionState extends KnobState {
+  /** Whether the log contains a constructor-seed boundary. */
+  seeded: boolean
 }
 
-const knobStateSchema: zod.ZodType<KnobState> = zod.object({
+const permissionStateSchema: zod.ZodType<PermissionProjectionState> = zod.object({
   preset: zod.string().nullable(),
   sandbox: zod.union([
     zod.literal('read-only'),
@@ -114,19 +102,23 @@ const knobStateSchema: zod.ZodType<KnobState> = zod.object({
     zod.literal('danger-full-access'),
   ]).nullable(),
   approval: zod.union([zod.literal('ask'), zod.literal('never')]).nullable(),
+  seeded: zod.boolean(),
 }).strict()
 
 /** State for the empty log: every knob at its composition default. */
 const EMPTY_KNOBS: KnobState = { preset: null, sandbox: null, approval: null }
 
 /**
- * One-event knob transition (the projection unit's `apply`). Uninterested
+ * One-event permission-state transition (the projection unit's `apply`). Unrelated
  * events return the same reference — the registry's change gate.
  * @param state - the folded knob state before `event`.
  * @param event - one committed session event.
- * @returns the next state; the same reference when the event is not a knob.
+ * @returns the next state; the same reference when the event is unrelated.
  */
-export function applyKnobEvent(state: KnobState, event: SessionEvent): KnobState {
+function applyPermissionEvent(
+  state: PermissionProjectionState,
+  event: SessionEvent,
+): PermissionProjectionState {
   switch (event.type) {
     case 'permission/preset':
       return { ...state, preset: event.data.preset }
@@ -134,16 +126,11 @@ export function applyKnobEvent(state: KnobState, event: SessionEvent): KnobState
       return { ...state, sandbox: event.data.mode }
     case 'approval/policy':
       return { ...state, approval: event.data.policy }
+    case 'session/end-seed':
+      return { ...state, seeded: true }
     default:
       return state
   }
-}
-
-/** Whole-log knob fold (the cold-read parallel of {@link applyKnobEvent}). */
-function foldKnobs(events: readonly SessionEvent[]): KnobState {
-  let state = EMPTY_KNOBS
-  for (const event of events) state = applyKnobEvent(state, event)
-  return state
 }
 
 /** User setting resolved when a new session receives its initial permission. */
@@ -193,7 +180,7 @@ export class PermissionPresetService extends Service {
     defaultPreset: z.string(),
   })
 
-  static inject = ['shell', 'approval', 'sessions']
+  static inject = ['shell', 'approval', 'sessions', 'sessionProjections']
 
   private readonly presets: Record<string, PresetSpec>
   private defaultSettings: () => PermissionSettings
@@ -224,26 +211,17 @@ export class PermissionPresetService extends Service {
     const settingsSchema: z<PermissionSettings> = z.object({
       defaultPreset: z.union(presetChoices).required(),
     })
-    installSettingsSection(ctx, PERMISSION_SETTINGS_NAMESPACE, settingsSchema, baseSettings, {
-      setSource: (current) => {
-        this.defaultSettings = current
-      },
-      // The source thunk reads the latest scope snapshot at session creation;
-      // no process-level registration needs replacement on change.
-      onChange: () => {},
+    ctx.inject(['settings'], (settingsCtx) => {
+      settingsCtx.settings.installSection(ctx, PERMISSION_SETTINGS_NAMESPACE, settingsSchema, baseSettings, {
+        setSource: (current) => {
+          this.defaultSettings = current
+        },
+        // The source thunk reads the latest scope snapshot at session creation;
+        // no process-level registration needs replacement on change.
+        onChange: () => {},
+      })
     })
 
-    ctx.on('session/created', (session) => {
-      this.pinInitialPermission(session)
-    })
-    for (const session of ctx.sessions.list()) {
-      this.pinInitialPermission(session)
-    }
-
-    // The permissions projection unit: fold the three whole-value knob
-    // events; view derives the select over the composition defaults this
-    // service already owns. The unit child activates only when a projection
-    // registry is composed (headless assemblies stay unaffected).
     // zod `.optional()` types the key `string | undefined` while the domain
     // says `description?: string`; on the JSON wire the two serialize
     // identically (absent), so the cast records exactly that
@@ -256,16 +234,20 @@ export class PermissionPresetService extends Service {
       })),
       currentValue: zod.string().min(1),
     }) as unknown as zod.ZodType<PermissionSelect>
-    ctx.inject(['sessionProjections'], (projectionCtx) => {
-      projectionCtx.sessionProjections.register<'permissions', KnobState>({
-        key: 'permissions',
-        stateSchema: knobStateSchema,
-        init: () => EMPTY_KNOBS,
-        apply: applyKnobEvent,
-        wire: { viewSchema: selectSchema, view: state => this.selectFor(state) },
-        stateVersion: 1,
-      })
+    ctx.sessionProjections.register({
+      key: 'permissions',
+      stateVersion: 2,
+      stateSchema: permissionStateSchema,
+      init: () => ({ ...EMPTY_KNOBS, seeded: false }),
+      apply: applyPermissionEvent,
+      wire: { viewSchema: selectSchema, view: state => this.selectFor(state) },
     })
+    ctx.on('session/created', (session) => {
+      this.pinInitialPermission(session)
+    })
+    for (const session of ctx.sessions.list()) {
+      this.pinInitialPermission(session)
+    }
 
     // The /permission command: the one write path a web client uses (the
     // popup contribution submits the picked preset as this line). The child
@@ -281,7 +263,7 @@ export class PermissionPresetService extends Service {
         handler: ({ agent, rawInput }) => {
           const name = rawInput.trim()
           if (name === '') {
-            return { kind: 'success', text: `current preset ${this.current(agent.session.events)} (available: ${this.names.join(', ')})` }
+            return { kind: 'success', text: `current preset ${this.current(agent.session)} (available: ${this.names.join(', ')})` }
           }
           if (!this.names.includes(name)) {
             return { kind: 'error', text: `unknown preset "${name}" (available: ${this.names.join(', ')})` }
@@ -310,15 +292,21 @@ export class PermissionPresetService extends Service {
     return this.defaultSettings().defaultPreset
   }
 
+  private permissionState(session: Session): PermissionProjectionState {
+    const state = this.ctx.sessionProjections.stateOf(session, 'permissions')
+    if (state === undefined) throw new Error('permission: permissions session projection is not registered')
+    return state
+  }
+
   /**
    * Resolve the preset matching the effective knob values. A still-matching
    * last selection wins shared-bundle ties; otherwise the first table match
    * wins, or {@link CUSTOM_PRESET} when no entry matches.
-   * @param events - the session's events in log order.
+   * @param session - the session whose knob state is read.
    * @returns the effective preset name, or `custom` when nothing matches.
    */
-  current(events: readonly SessionEvent[]): string {
-    return this.derive(foldKnobs(events))
+  current(session: Session): string {
+    return this.derive(this.permissionState(session))
   }
 
   /** Resolve the preset for one folded knob state (the shared mathematics of `current` and the projection unit). */
@@ -395,14 +383,14 @@ export class PermissionPresetService extends Service {
   /** Apply one preset with the caller-selected live or initialization policy writer. */
   private apply(session: Session, name: string, setApproval: (policy: ApprovalPolicy) => void): void {
     const spec = this.resolve(name)
-    if (this.current(session.events) !== name) {
+    if (this.current(session) !== name) {
       session.append('permission/preset', { preset: name })
     }
-    const events = session.events
-    if (spec.sandbox !== (effectiveSandboxMode(events) ?? this.ctx.shell.sandboxMode)) {
+    const knobs = this.permissionState(session)
+    if (spec.sandbox !== (knobs.sandbox ?? this.ctx.shell.sandboxMode)) {
       setSandboxMode(session, spec.sandbox)
     }
-    if (spec.approval !== (effectiveApprovalPolicy(events) ?? this.ctx.approval.config.policy ?? 'ask')) {
+    if (spec.approval !== (knobs.approval ?? this.ctx.approval.config.policy ?? 'ask')) {
       setApproval(spec.approval)
     }
   }
@@ -414,12 +402,12 @@ export class PermissionPresetService extends Service {
    * the missing durable facts.
    */
   private pinInitialPermission(session: Session): void {
-    const events = session.events
-    const selected = effectivePermissionPreset(events)
-    const sandbox = effectiveSandboxMode(events)
-    const approval = effectiveApprovalPolicy(events)
-    const seeded = events.some(event => event.type === 'session/end-seed')
-    if (selected === undefined && sandbox === undefined && approval === undefined && !seeded) {
+    const state = this.permissionState(session)
+    const selected = state.preset
+    const sandbox = state.sandbox
+    const approval = state.approval
+    const seeded = state.seeded
+    if (selected === null && sandbox === null && approval === null && !seeded) {
       const name = this.defaultPreset
       const spec = this.resolve(name)
       session.append('permission/preset', { preset: name })
@@ -428,19 +416,14 @@ export class PermissionPresetService extends Service {
       return
     }
 
-    const state: KnobState = {
-      preset: selected ?? null,
-      sandbox: sandbox ?? null,
-      approval: approval ?? null,
-    }
     const effective = this.derive(state)
-    if (selected === undefined && effective !== CUSTOM_PRESET) {
+    if (selected === null && effective !== CUSTOM_PRESET) {
       session.append('permission/preset', { preset: effective })
     }
-    if (sandbox === undefined) {
+    if (sandbox === null) {
       setSandboxMode(session, this.ctx.shell.sandboxMode as SandboxMode)
     }
-    if (approval === undefined) {
+    if (approval === null) {
       setApprovalPolicy(session, this.ctx.approval.config.policy ?? 'ask')
     }
   }

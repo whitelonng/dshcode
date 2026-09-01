@@ -48,7 +48,7 @@ Each started call appends `tool/call` immediately before its pre-execute gate. C
 
 An abort before a group starts records no calls from that group. An abort during a group stops replenishment, waits for already-started calls, commits their results in order, drains accepted batch context after those results, and then ends the step through the existing abort path. Calls that never start have no audit event. An unexpected scheduler failure stops new dispatches, waits for every already-started dispatch to settle, and rethrows the first failure. Because that failure is terminal internal state rather than a tool outcome, the loop does not invent tool results for rejected or uncommitted calls.
 
-Code Mode remains outside this scheduler because the model emits one native `run_code` call. `run_code` and its internal dispatch queue remain serial; native sibling calls in `mode: 'both'` use the normal scheduler.
+PTC mode remains outside this scheduler because the model emits one native `run_code` call. `run_code` and its internal dispatch queue remain serial; native sibling calls in `mode: 'both'` use the normal scheduler.
 
 ## Safety contract
 
@@ -60,7 +60,7 @@ Any shared state touched during execution must be concurrency-safe. This include
 
 `maxParallelToolCalls` is a positive AgentLoop deployment cap shared by every agent the factory creates. It defaults to `10`; `1` preserves serial execution. Exact fields and defaults live in the generated [configuration catalog](../../../../docs/config-catalog.md).
 
-The shipped declarations are conservative. Web search, web fetch, filesystem read, the session-query trace/read tools, and subagent delegation opt in — delegation because a child works in its own session and its run never mutates the parent session, with sibling workspace coordination owned by the model ([parallel subagent Agent Note](2026-08-09-parallel-subagent-delegations.md)). Filesystem writes and edits, bash tools, the session-query search tools, workflow, user interaction, todo mutation, Code Mode, and Cordis mutation tools remain exclusive. Bash has no proven input-sensitive classifier and remains exclusive.
+The shipped declarations are conservative. Web search, web fetch, filesystem read, the session-query trace/read tools, and subagent delegation opt in — delegation because a child works in its own session and its run never mutates the parent session, with sibling workspace coordination owned by the model ([parallel subagent Agent Note](2026-08-09-parallel-subagent-delegations.md)). Filesystem writes and edits, bash tools, the session-query search tools, workflow, user interaction, todo mutation, PTC mode, and Cordis mutation tools remain exclusive. Bash has no proven input-sensitive classifier and remains exclusive.
 
 Filesystem read relies on a narrow recorder exception: its synchronous observation updates may settle out of order, but write and edit re-check the observed version before mutation, so stale state only produces `FS_STALE_VERSION`.
 
@@ -68,7 +68,7 @@ Filesystem read relies on a narrow recorder exception: its synchronous observati
 
 Unit coverage pins fail-closed classification, typed argument validation, grouping, barriers, live reclassification after registry replacement, the rolling cap, distinct execution objects, middleware order, ordered results and context, abort draining, and scheduler-failure quiescence. First-party tests pin each parallel declaration.
 
-Snapshot coverage pins the visible multi-call transcript: pending calls may overlap while completed results remain model-ordered. Code Mode coverage pins its serial boundary. No provider-backed e2e is required because scheduling is deterministic loop behavior.
+Snapshot coverage pins the visible multi-call transcript: pending calls may overlap while completed results remain model-ordered. PTC mode coverage pins its serial boundary. No provider-backed e2e is required because scheduling is deterministic loop behavior.
 
 ## Alternatives considered
 

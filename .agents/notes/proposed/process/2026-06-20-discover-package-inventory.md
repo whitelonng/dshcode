@@ -6,9 +6,9 @@ English | [中文](2026-06-20-discover-package-inventory.zh.md)
 
 ## Problem
 
-Package and gate inventories are repeated across TypeScript project references, package docs, CI prose, and Knip overrides. Most restate package layout, manifest data, or aggregate command contents. Each new package therefore creates avoidable synchronization points.
+Package and gate inventories are repeated across TypeScript project references, package docs, and CI prose. Most restate package layout, manifest data, or aggregate command contents. Each new package therefore creates avoidable synchronization points.
 
-The [package hierarchy](../../archived/architecture/2026-06-20-package-hierarchy.md) already removed several of these by hand: `scripts/publint-all.ts` now derives its list from the `packages/<group>/<pkg>` layout, and the two `tsconfig` `paths` maps collapsed to one `@deepseek-ai/dsh-*` wildcard. What remains is the inventory that cannot be globbed away — chiefly the aggregate configs' (`tsconfig.host.json`, `tsconfig.client.json`) project `references`, which TypeScript requires as explicit arrays (no wildcard form).
+The [package hierarchy](../../archived/architecture/2026-06-20-package-hierarchy.md) already removed several of these by hand: `scripts/publint-all.ts` now derives its list from the `packages/<group>/<pkg>` layout, and the two `tsconfig` `paths` maps collapsed to one `@deepseek-ai/dsh-*` wildcard — since reverted to one explicit alias per package, generated and gated, because resolving a wildcard's candidates in order dominated source-launch boot ([explicit workspace path aliases](../../implemented/process/2026-08-27-explicit-workspace-path-aliases.md)). What remains is the inventory that cannot be globbed away — chiefly the aggregate configs' (`tsconfig.host.json`, `tsconfig.client.json`) project `references`, which TypeScript requires as explicit arrays (no wildcard form).
 
 Static lists are appropriate when they encode policy; they are needless friction when they duplicate manifest data or layout facts that already exist in `package.json`, workspace globs, or the package hierarchy.
 
@@ -18,15 +18,12 @@ Make the remaining package/gate inventories discoverable. A single canonical sou
 
 The hierarchy does not need to encode every fact about a package, but it should encode the broad maintenance policy: core/product packages, integrations, capability seams, and support/test/example packages should not all require a hand-maintained exception list before scripts can tell them apart.
 
-One cataloged item needs no generator at all: folding the e2e entry glob into knip's default stanza deletes the per-package restatements outright.
-
 ## Acceptance criteria
 
 - Aggregate-config project `references` are generated from the hierarchy (a generator emits them; a `--check` gate fails when the committed copy is stale), rather than hand-maintained.
 - Adding a package does not require editing a static package list for any gate.
 - Docs describe the source of truth rather than repeating generated inventories.
 - CI invokes the aggregate commands and lets those commands own their sub-gate lists.
-- `knip.json` carries a per-package override only where it encodes real information (an extra entry file, an ignored dependency), never a restatement of the default stanza.
 
 ## Risks
 

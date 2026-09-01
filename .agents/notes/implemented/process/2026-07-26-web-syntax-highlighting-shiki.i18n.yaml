@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-07-26-web-syntax-highlighting-shiki.md
-2026-07-26-web-syntax-highlighting-shiki.md: 967df645db3df0a33f9cd1f34e22e912a348c30e
-2026-07-26-web-syntax-highlighting-shiki.zh.md: 3ac1d6bc17954418566b683c2a1d64dfb79f3434
+2026-07-26-web-syntax-highlighting-shiki.md: ba50318d306426d886af25f01eba616ab919d237
+2026-07-26-web-syntax-highlighting-shiki.zh.md: 5533bcb5348db152a8f9466eae7d3d8d9a726162

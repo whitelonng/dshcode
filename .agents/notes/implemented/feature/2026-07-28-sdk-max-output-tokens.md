@@ -14,7 +14,7 @@ The high-level SDKs expose one optional process-wide output cap: Python names it
 
 Each SDK-created root Agent receives the cap through `AgentOptions.maxTokens`. Agent Loop places that value in the initial `LlmCallConfig`; final call preparation preserves the explicit value or materializes an exact-model adapter default, logs the effective cap in the request header, and reconstructs every dispatched conversation request from that durable header. Omitting the SDK option therefore allows the selected adapter or provider route default to apply.
 
-In-process subagents inherit the parent's provider, model, and output cap. An explicit `SubagentStartRequest.agentOptions.maxTokens`, including one configured by `dsh-tool-subagent`, overrides the inherited value for that child and its descendants. Out-of-process providers own the configuration of their separate runtime; `subagent-dsh-sdk` therefore exposes its own optional `maxTokens` and forwards it through that child runtime's SDK handshake.
+In-process subagents inherit the parent's provider, model, and output cap. An explicit `SubagentStartRequest.agentOptions.maxTokens`, including one configured by `dsh-tool-subagent`, overrides the inherited value for that child and its descendants. `subagent-dsh-sdk` owns a separate runtime per run: request `maxTokens` overrides its optional instance default, and the resolved cap crosses that child runtime's SDK handshake.
 
 Compaction, session-title generation, web search, and other auxiliary calls keep their independently owned output limits. `maxTokensAsSuccess` remains outcome mapping only: it does not set or alter the cap.
 
@@ -30,4 +30,4 @@ Compaction, session-title generation, web search, and other auxiliary calls keep
 
 SDK callers can bound model output without editing Cordis composition, and direct Agent creation uses the same validated `AgentOptions` contract. The cap is visible in durable request headers and reaches provider adapters as `GenerateOptions.maxTokens`; DeepSeek serialization maps it to `max_tokens`.
 
-One SDK runtime has one default cap. A caller needing different caps runs separate runtime instances or explicitly overrides an in-process child through its agent options. Reaching the cap still produces the existing `max-tokens` stop reason, whose `ok` or `error` mapping remains deployment policy.
+One SDK runtime has one default cap. A caller needing different caps runs separate runtime instances or uses a subagent provider that advertises `agentOptions`; DSH SDK naturally creates one such runtime per child run. Reaching the cap still produces the existing `max-tokens` stop reason, whose `ok` or `error` mapping remains deployment policy.

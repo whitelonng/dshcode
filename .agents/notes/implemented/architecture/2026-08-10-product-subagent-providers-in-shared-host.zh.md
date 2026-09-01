@@ -14,9 +14,9 @@ Status: implemented
 
 产品提供方仍是进程级的 host plane（宿主平面）注册。[生产安装排除决策](../simplification/2026-08-12-production-dsh-excludes-product-subagent-providers.zh.md)只取代本说明原先由 base bundle 安装提供方的选择：生产 `dsh-base` 既不依赖也不挂载它们。选择产品集成的 Profile 会安装目标提供方 Bundle；其 patch 挂载默认实例，而 Profile 可以在 host plane 挂载更多命名实例。[命名实例决策](../feature/2026-08-18-product-subagent-named-instances.zh.md)负责每个配置项的注册身份：两个产品都接受多个唯一的 `providerName`，同时保留 `codex` 与 `claude-code` 作为默认值。加载任一插件只会注册一个休眠后端；对应的 Codex 或 Claude 进程直到第一次实际委派调用时才启动。Agent Preset 通过普通 `dsh-tool-subagent` 配置项的 `provider` 与 `toolName` 准确公开单个 agent 所需的已配置实例，而无需更改 Host 注册表。
 
-每个提供方包都拥有可直接安装的 Bundle patch 与私有产品运行时。本说明继续负责每个已安装提供方的进程级 Host 放置。提供方约定说明继续负责每个产品的协议、结果映射、取消、进程树生命周期与证据层级。[Agent Preset 架构](2026-08-03-per-session-agent-presets.zh.md)继续负责宿主与 agent 的划分、preset 创作，以及改动只影响新组装会话的规则。
+每个提供方包都拥有可直接安装的 Bundle patch 与私有产品运行时。本说明继续负责每个已安装提供方的进程级 Host 放置。提供方约定说明继续负责每个产品的协议、结果映射、取消、进程树生命周期与证据层级。[命名实例决策](../feature/2026-08-18-product-subagent-named-instances.zh.md)负责两个可选产品模型及其他逐实例配置。[Agent Preset 架构](2026-08-03-per-session-agent-presets.zh.md)继续负责宿主与 agent 的划分、preset 创作，以及改动只影响新组装会话的规则。
 
-每个 Bundle 都把可执行文件选择交给包自有的产品运行时：Codex 包运行自身声明的 wrapper，Claude Code 包则让锁定的 Agent SDK 选择私有原生可执行文件。两个提供方都不会查询或回退宿主产品命令。加载 Profile 不会创建产品状态、探测版本或测试身份验证；它可以提供每个已挂载 Provider 实例的部署配置，包括由[非交互权限决策](../feature/2026-08-15-product-subagent-noninteractive-permissions.zh.md)负责的产品专属 `permissionMode` 值，但不会把这些选择移入 Agent Preset 或面向模型的工具。平台载荷缺失和产品故障仍局限于发生问题的那次委派。
+每个 Bundle 都把可执行文件选择交给包自有的产品运行时：Codex 包运行自身声明的 wrapper，Claude Code 包则让锁定的 Agent SDK 选择私有原生可执行文件。两个提供方都不会查询或回退宿主产品命令。加载 Profile 不会创建产品状态、探测版本或测试身份验证；它可以提供每个已挂载 Provider 实例的部署配置，包括可选的不透明模型，以及由[非交互权限决策](../feature/2026-08-15-product-subagent-noninteractive-permissions.zh.md)负责的产品专属 `permissionMode` 值，但不会把这些选择移入 Agent Preset 或面向模型的工具。平台载荷缺失和产品故障仍局限于发生问题的那次委派。
 
 ## 验证
 

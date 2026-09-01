@@ -18,15 +18,15 @@ The summary was designed for a future session picker (recency ordering via `upda
 
 ## Decision
 
-Delete the mutable session summary entirely. `SessionSummary` and the `SessionMeta` name are removed; the metadata a backend stores and returns is just `SessionHeader`. `SessionPersistence.update()` is removed from the abstract service and every backend. JSONL loses the whole sidecar machinery (`writeSidecar`/`readSidecar`/`touchSummary`/`removeSidecars`/`sidecarPath` and the load/list overlays); SQLite drops the `updated_at`/`title`/`first_prompt` columns and the per-append `updated_at` bump, and its `SCHEMA_VERSION` goes `1 → 2`.
+Delete the mutable session summary entirely. `SessionSummary` and the `SessionMeta` name are absent; the metadata a backend stores and returns is just `SessionHeader`. `SessionPersistence.update()` is absent from the abstract service. The shipped JSONL provider has no summary sidecar machinery (`writeSidecar`/`readSidecar`/`touchSummary`/`removeSidecars`/`sidecarPath` or load/list overlays), and an out-of-tree provider implements the same summary-free service contract.
 
 Anything the summary was meant to provide is **derivable from the append-only log** when a consumer actually needs it (`firstPrompt` = first `user/message`; recency = the last event's `time` or the file mtime) or already lives in the immutable header (`createdAt`, `cwd`). The one thing *not* derivable — a user-*edited* title — had no implementation and is pure YAGNI; it can return as its own log event or header field if a real feature ever needs it.
 
-The removal narrows a public service contract and an on-disk format across two backends; the summary was a deliberate forward-looking design, not an accident; and `SessionHeader` now stands where the original Agent Note described `SessionMeta`, which is why the summary vanished. It also unblocks the [shared persistence write coordinator](../architecture/2026-06-18-shared-persistence-write-coordinator.md): with no mutable summary, the coordinator's hook interface needs no `updateSummary` hook and the JSONL-sidecar-vs-SQLite-column durability divergence disappears, so the two backends' write paths converge.
+The removal narrows the public service contract and JSONL on-disk format; the summary was a deliberate forward-looking design, not an accident; and `SessionHeader` stands where the original Agent Note described `SessionMeta`, which is why the summary vanished. It also simplifies the [shared persistence write coordinator](../architecture/2026-06-18-shared-persistence-write-coordinator.md): with no mutable summary, the coordinator needs no `updateSummary` hook, and an out-of-tree provider can reuse the same summary-free orchestration.
 
 ## No migration
 
-This is unreleased software (see [root AGENTS.md](../../../../AGENTS.md) § "Pre-release stance: foundation over blast radius"), so there are no on-disk databases or logs to preserve. SQLite does not migrate a v1 database: the `openDatabase` guard now rejects any non-current on-disk `user_version` (`onDisk !== 0 && onDisk !== SCHEMA_VERSION`) — older *or* newer — so a stale v1 DB is cleanly rejected rather than half-read against the new column set. A fresh database stamps the current version; that is the only path that needs to work.
+The shipped JSONL provider has no mutable summary format or migration path: it reads and writes only `SessionHeader` plus the append-only log. The repository has no first-party SQLite Session provider. The [JSONL-only persistence decision](2026-08-30-jsonl-only-session-persistence.md) owns the compatibility cut for databases written by the removed provider and directs operators to export them with an older build before upgrading.
 
 ## Consequences
 

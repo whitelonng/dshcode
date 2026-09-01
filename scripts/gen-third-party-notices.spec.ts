@@ -118,6 +118,24 @@ describe('virtualManifest', () => {
     }
   })
 
+  it('selects the requested version when the store retains historical copies', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-notices-version-'))
+    try {
+      const name = '@scope/pkg'
+      const store = join(root, 'store')
+      for (const version of ['1.0.0', '2.0.0']) {
+        const manifestDir = join(store, `${name.replace('/', '+')}@${version}`, 'node_modules', name)
+        mkdirSync(manifestDir, { recursive: true })
+        writeFileSync(join(manifestDir, 'package.json'), JSON.stringify({ name, version, license: 'MIT' }))
+      }
+
+      expect(virtualManifest(store, name, '2.0.0')).toMatchObject({ name, version: '2.0.0' })
+      expect(virtualManifest(store, name, '3.0.0')).toBeUndefined()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('returns undefined when neither the prefix nor the content scan finds the package', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-notices-miss-'))
     try {
@@ -343,7 +361,6 @@ describe('manifestPatterns', () => {
       'tools/*/package.json',
       'native/landlock-run/package.json',
       'native/landlock-run/packages/*/package.json',
-      'examples/*/package.json',
     ])
   })
 })

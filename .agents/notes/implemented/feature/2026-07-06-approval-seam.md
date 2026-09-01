@@ -25,7 +25,7 @@ One `cordis.yml` entry mounts the seam. Not loading it is the fail-closed opt-ou
   #   policy: never   # deployment default for sessions without an override; 'ask' when omitted
 ```
 
-The entry alone provides mechanism, not a channel: with no answerer composed, every ask resolves `unavailable` and the asking tool call denies — fail-closed needs no configuration. Composing the ACP app (`@deepseek-ai/dsh-acp-demo`, as in [the acp-agent example's default tree](../../../../examples/acp-agent/README.md)) completes the loop: its [automation-only bridge](../simplification/2026-07-23-acp-automation-only-protocol.md) registers an answerer that sends `session/request_permission` to the owning client with the exact tool-call id and one-shot allow/reject options. `policy: never` is the unattended stance — every ask auto-rejects deterministically, and the current value joins the runtime-context snapshot. `policy` is validated against the closed list at plugin load; anything else throws.
+The entry alone provides mechanism, not a channel: with no answerer composed, every ask resolves `unavailable` and the asking tool call denies — fail-closed needs no configuration. Composing the [ACP profile app](../../../../packages/bundle/acp-app/README.md) completes the loop: its [automation-only bridge](../simplification/2026-07-23-acp-automation-only-protocol.md) registers an answerer that sends `session/request_permission` to the owning client with the exact tool-call id and one-shot allow/reject options. `policy: never` is the unattended stance — every ask auto-rejects deterministically, and the current value joins the runtime-context snapshot. `policy` is validated against the closed list at plugin load; anything else throws.
 
 What a composed deployment observes: `allowed-once` lets exactly that call proceed; rejection, dismissal, and channel absence deny with three distinct reasons the model can tell apart; a successful in-turn request lands a durable `approval/asked`/`approval/decided` pair on the asking agent's session log; nothing about a grant persists past the call that asked. An idle request or audit append failure rejects instead of returning an unaudited decision.
 
@@ -55,7 +55,7 @@ After validation and a successful `approval/asked` append, the service resolves 
 
 Answerers are `approval/request` waterfall listeners. Zero listeners fall through to `unavailable`; a recognizing listener occupies the first-wins decision slot, while an unrecognized agent must delegate with `next()`. Listeners dispose with their fibers, so an unloaded channel fails closed. Because sibling registration order is not deterministic, a deployment composes one terminal answerer and reserves `prepend` for decide-or-delegate gates.
 
-`ApprovalRequest` carries the asking `agent`, `toolName`, optional exact `callId`, human-readable `reason`, and optional `signal`. It uses the `CallId` brand without importing `dsh-tools`, which depends on this seam. Channel adapters correlate any richer call state by `callId`; the approval request does not duplicate tool arguments.
+`ApprovalRequest` carries the asking `agent`, `toolName`, optional exact `callId`, human-readable `reason`, and optional `signal`. It uses the `ToolCallId` brand without importing `dsh-tools`, which depends on this seam. Channel adapters correlate any richer call state by `callId`; the approval request does not duplicate tool arguments.
 
 #### Ask routing in dsh-tools
 

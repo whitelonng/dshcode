@@ -35,6 +35,17 @@ describe('reasoning schema boundary', () => {
   it('rejects a thinking format outside the offered set', () => {
     expect(configWith({ compat: { thinkingFormat: 'quantum' } })).toThrow(/expected/)
   })
+
+  it('accepts Baseten template arguments and completion controls', () => {
+    expect(configWith({
+      compat: {
+        supportsFinishReason: false,
+        thinkingFormat: 'baseten',
+        chatTemplateArgs: { enable_thinking: { $var: 'thinking.enabled' } },
+        supportsThinkingTokenBudget: true,
+      },
+    })).not.toThrow()
+  })
 })
 
 describe('modality schema boundary', () => {

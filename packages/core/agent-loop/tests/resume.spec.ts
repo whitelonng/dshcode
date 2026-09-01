@@ -5,14 +5,15 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import SessionStore, { SESSION_FORMAT_VERSION, Session, SessionId, SessionPreparation } from '@deepseek-ai/dsh-session'
-import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
+import SessionStore, { SESSION_FORMAT_VERSION, Session, SessionId, SessionLogOffset, SessionPreparation, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionHeader, SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { MockAdapter, textResponse } from './mock-adapter.ts'
 
 const dirs: string[] = []
@@ -28,6 +29,7 @@ async function mountPersistentHarness(root: string, adapter: MockAdapter): Promi
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -43,8 +45,8 @@ async function persistSession(sessionId: SessionId): Promise<string> {
   // balanced completed turn is the smallest resumable log and avoids running
   // the model merely to construct this lifecycle fixture.
   const seed: SessionEvent[] = [
-    { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
-    { type: 'turn/end', seq: 1, time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
+    { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
+    { type: 'turn/end', seq: SessionSeq(1), time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
   ]
   const session = ctx.sessions.create(sessionId, { seed })
   await ctx.sessions.flush(session)
@@ -55,11 +57,16 @@ async function persistSession(sessionId: SessionId): Promise<string> {
 /** Build a detached preparation for lifecycle-race test doubles. */
 function preparationFromSnapshot(
   ctx: Context,
-  snapshot: { meta: SessionHeader; events: readonly SessionEvent[] },
+  snapshot: {
+    meta: SessionHeader
+    inheritedEventCount: SessionLogOffsetType
+    events: readonly SessionEvent[]
+  },
 ): SessionPreparation {
   return SessionPreparation.create(ctx.sessions.prepare(snapshot.meta.id, {
     seed: structuredClone(snapshot.events) as SessionEvent[],
     meta: structuredClone(snapshot.meta),
+    inheritedEventCount: snapshot.inheritedEventCount,
     seedSource: 'persistence',
   }))
 }
@@ -96,6 +103,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
       version: SESSION_FORMAT_VERSION,
       id: sessionId,
       createdAt: 1,
+      isSeeded: false,
     })
     await first.ctx.sessionPersistence.append(sessionId, [
       {
@@ -157,7 +165,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     }))
     await waitForIdle(ctx, handle.agent)
     expect(handle.agent.session.deriveMessages()).toHaveLength(5)
-    expect(handle.agent.session.events.at(-1)).toMatchObject({
+    expect(handle.agent.session.snapshotEvents().at(-1)).toMatchObject({
       type: 'turn/end',
       data: { reason: { kind: 'completed' } },
     })
@@ -244,6 +252,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const ctx2 = new Context()
     await ctx2.plugin(LlmRuntime)
     await ctx2.plugin(SessionStore)
+    await ctx2.plugin(SessionProjectionRegistry)
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
@@ -272,6 +281,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const ctx2 = new Context()
     await ctx2.plugin(LlmRuntime)
     await ctx2.plugin(SessionStore)
+    await ctx2.plugin(SessionProjectionRegistry)
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
@@ -313,7 +323,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
       setup: async (agentCtx) => {
         expect(agentCtx.agent?.id).toBe(sessionId)
         // The two persisted events plus the end-seed marker.
-        expect(agentCtx.agent?.session.events).toHaveLength(3)
+        expect(agentCtx.agent?.session.snapshotEvents()).toHaveLength(3)
         agentCtx.on('session/created', () => void order.push('setup-listener:session/created'))
         agentCtx.on('agent/created', () => void order.push('setup-listener:agent/created'))
         order.push('setup:start')
@@ -522,6 +532,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -560,31 +571,31 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
   })
 
   it('resume of a forked session preserves the lineage, seed boundary, and delegation depth in the header', async () => {
-    // Lifecycle 1: persist a FORKED session (carries parentSession + seedLength
-    // in its header) by creating it with a complete-turn seed — the write path
+    // Lifecycle 1: persist a FORKED session (carries parentSession + isSeeded
+    // in its header and an exact Session-owned cut) with a complete-turn seed — the write path
     // materializes the fork (header + seed) on disk.
     const seed: SessionEvent[] = [
-      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
-      { type: 'turn/end', seq: 1, time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
+      { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
+      { type: 'turn/end', seq: SessionSeq(1), time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
     ]
     const adapter1 = new MockAdapter([textResponse('a')])
     const { ctx: ctx1, root } = await persistentHarness(adapter1)
     const forked = ctx1.sessions.create(SessionId('forked-sess'), {
       seed,
-      meta: { cwd: '/w', parentSession: SessionId('parent-sess'), seedLength: seed.length, delegationDepth: 1 },
+      inheritedEventCount: SessionLogOffset(seed.length),
+      meta: { cwd: '/w', parentSession: SessionId('parent-sess'), isSeeded: true, delegationDepth: 1 },
     })
     await ctx1.sessions.flush(forked)
     await ctx1.fiber.dispose()
 
-    // Lifecycle 2: resume it; the parentSession + seedLength header survives the
-    // round-trip (exercises resume's parentSession- and seedLength-present
-    // branches). seedLength must come from the PERSISTED header, not from the
-    // resume seed length (which is the whole stored log, not the original
-    // boundary).
+    // Lifecycle 2: resume it; parentSession, isSeeded, and the exact cut survive
+    // the round-trip. The inherited count must come from persisted storage,
+    // not the resume seed length (the whole stored log).
     const adapter2 = new MockAdapter([textResponse('b')])
     const ctx2 = new Context()
     await ctx2.plugin(LlmRuntime)
     await ctx2.plugin(SessionStore)
+    await ctx2.plugin(SessionProjectionRegistry)
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
@@ -594,7 +605,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const a2 = (await ctx2.agents.resume({ resumeSessionId: SessionId('forked-sess') })).agent
     expect(a2.session.header.parentSession).toBe('parent-sess')
     expect(a2.session.header.cwd).toBe('/w')
-    expect(a2.session.header.seedLength).toBe(seed.length)
+    expect(a2.session.header.isSeeded).toBe(true)
+    expect(a2.session.inheritedEventCount).toBe(seed.length)
     // The recursion budget survives resume — a dropped depth would let a
     // resumed child delegate as if it were top-level.
     expect(a2.session.header.delegationDepth).toBe(1)
@@ -617,6 +629,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const ctx2 = new Context()
     await ctx2.plugin(LlmRuntime)
     await ctx2.plugin(SessionStore)
+    await ctx2.plugin(SessionProjectionRegistry)
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
@@ -643,7 +656,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const a1 = (await ctx1.agents.create({ sessionId: SessionId('sess-resume'), meta: { cwd: '/w' } })).agent
     a1.followup(createUserMessage({ content: [{ type: 'text', text: 'first question' }], source: { kind: 'user' } }))
     await waitForIdle(ctx1, a1)
-    const events1 = [...a1.session.events]
+    const events1 = a1.session.snapshotEvents()
     const seqs1 = events1.map(e => e.seq)
     expect(seqs1).toEqual([...seqs1].sort((x, y) => x - y)) // contiguous
     await ctx1.fiber.dispose()
@@ -653,6 +666,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const ctx2 = new Context()
     await ctx2.plugin(LlmRuntime)
     await ctx2.plugin(SessionStore)
+    await ctx2.plugin(SessionProjectionRegistry)
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
@@ -664,18 +678,18 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     // The resumed session carries the prior history…
     expect(a2.session.id).toBe('sess-resume')
     // …followed by one end-seed event marking the constructor seed.
-    expect(a2.session.events.length).toBe(events1.length + 1)
+    expect(a2.session.snapshotEvents().length).toBe(events1.length + 1)
     expect(a2.session.firstLiveSeq).toBe(events1.length)
-    expect(a2.session.events.at(-1)?.type).toBe('session/end-seed')
+    expect(a2.session.snapshotEvents().at(-1)?.type).toBe('session/end-seed')
     const replay = Session.create(SessionId('replay'), events1)
     expect(a2.session.deriveMessages()).toEqual(replay.deriveMessages())
 
     // …and a new turn continues numbering (turn 2) with contiguous seqs.
     a2.followup(createUserMessage({ content: [{ type: 'text', text: 'second question' }], source: { kind: 'user' } }))
     await waitForIdle(ctx2, a2)
-    const allSeqs = a2.session.events.map(e => e.seq)
+    const allSeqs = a2.session.snapshotEvents().map(e => e.seq)
     expect(allSeqs).toEqual(allSeqs.map((_, i) => i)) // 0..N contiguous, no duplicates
-    const turnStarts = a2.session.events.filter(e => e.type === 'turn/start')
+    const turnStarts = a2.session.snapshotEvents().filter(e => e.type === 'turn/start')
     expect(turnStarts.map(e => e.type === 'turn/start' && e.data.turn)).toEqual([1, 2])
     await ctx2.fiber.dispose()
   })
@@ -686,6 +700,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -875,6 +890,7 @@ describe('configured-start failure edges', () => {
     const configured = new Context()
     await configured.plugin(LlmRuntime)
     await configured.plugin(SessionStore)
+    await configured.plugin(SessionProjectionRegistry)
     await configured.plugin(SystemPrompt)
     await configured.plugin(ToolRuntime)
     await configured.plugin(AgentRegistry)
@@ -920,6 +936,7 @@ describe('configured-start failure edges', () => {
     const configured = new Context()
     await configured.plugin(LlmRuntime)
     await configured.plugin(SessionStore)
+    await configured.plugin(SessionProjectionRegistry)
     await configured.plugin(SystemPrompt)
     await configured.plugin(ToolRuntime)
     await configured.plugin(AgentRegistry)

@@ -6,15 +6,15 @@ English | [中文](2026-07-22-web-bind-address.zh.md)
 
 ## Problem
 
-`dsh web` binds every network interface even when its browser runs on the same machine. Local use therefore exposes an unauthenticated development server without an explicit operator choice, while remote-container and LAN-browser use still needs a supported way to accept non-loopback connections.
+The Web application can run commands with the Host user's authority. Same-machine use needs only loopback reachability, while an all-interface CLI mode would imply a supported network deployment without TLS or a defined proxy contract.
 
 The HTTP carrier also hides the bind address inside `startWebServer()`, so alternate shells cannot state their own network policy at the package boundary.
 
 ## Decision
 
-`dsh web` binds `127.0.0.1` by default. The CLI accepts `--host 0.0.0.0` as the explicit all-interface mode and rejects other values so its network modes remain a small, deliberate contract. All-interface mode keeps printing the loopback URL and, when available, the first external IPv4 URL.
+`dsh web` binds `127.0.0.1` and rejects `--host 0.0.0.0`; the CLI exposes no network mode. The process-token and browser-cookie authentication does not broaden that deployment contract ([decision](../architecture/2026-08-24-browser-token-authentication.md)).
 
-`WebServerOptions.host` is required. The HTTP carrier passes that value to `node:http` without supplying a fallback, leaving each shell responsible for its bind policy. Programmatic carrier consumers may select another hostname or address directly.
+`WebServer` still requires `host: '127.0.0.1' | '0.0.0.0'` and passes it to `node:http` without a fallback. The generic carrier leaves custom composition policy visible at its package interface; the product CLI owns the stricter loopback choice.
 
 ## Alternatives considered
 
@@ -22,8 +22,10 @@ The HTTP carrier also hides the bind address inside `startWebServer()`, so alter
 
 **Use a boolean exposure flag.** Rejected because `--host 0.0.0.0` names the resulting socket behavior directly and matches the underlying server option without introducing a second term.
 
+**Keep an explicit `--host 0.0.0.0` mode.** Rejected because authentication alone does not supply TLS, forwarding semantics, or a supported remote-deployment contract for the tool-capable Host.
+
 **Default inside `startWebServer()`.** Rejected because the carrier has multiple possible shells and no basis for choosing their deployment policy. Requiring `host` makes the choice visible at every assembly call.
 
 ## Consequences
 
-Local `dsh web` starts remain reachable at `http://127.0.0.1:3080`; a browser on another machine must opt in with `dsh web --host 0.0.0.0`. The CLI does not yet expose custom interface addresses or IPv6 modes, while programmatic carrier consumers retain that flexibility. Server tests pin both loopback and all-interface forwarding into the Node listen boundary, and the web smoke continues to exercise the default CLI path.
+Local `dsh web` starts remain reachable at `http://127.0.0.1:3080`. The CLI exposes no custom interface, all-interface, or IPv6 mode; custom WebServer compositions retain the carrier's two-address choice and own every consequence. Server tests pin both carrier values into Node listen, while CLI tests pin rejection of the all-interface flag.

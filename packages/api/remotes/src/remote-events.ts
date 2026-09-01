@@ -6,24 +6,30 @@
  * type-only.
  */
 
+import type {} from '@deepseek-ai/dsh-api-session-controller/remote-events'
+import type { TypertForwardableEventEntry } from '@deepseek-ai/dsh-typert-protocol'
+
 /**
- * Host events this application forwards to consumers verbatim: no projection,
- * no redaction, no renaming. The wire name is the Host cordis event name and
- * the payload is its argument list, so this array is simultaneously the whole
- * control point over what a consumer can receive and the legal key set of
- * `ctx.remote.$on`. Forwarding one more event is an entry here and nothing
- * else.
+ * Host events this application forwards without renaming. The explicit mode is
+ * both the Host dispatch strategy and the legal key set of `ctx.remote.$on`.
  */
 export const API_REMOTE_FORWARDED_EVENTS = [
-  'agent-preset/selected',
-  'commands/change',
-  'credentials/reference-updated',
-  'cordis/request-run',
-  'cordis/request-run-resolved',
-  'cordis/dynamic-package',
-  'cordis/dynamic-retract',
-  'cordis/inspect-query',
-  'cordis/inspect-query-resolved',
-  'llm/adapters-updated',
-  'settings/document-updated',
-] as const
+  { event: 'agent-preset/selected', mode: 'emit' },
+  { event: 'approval/request', mode: 'waterfall' },
+  { event: 'api-session/activity', mode: 'emit' },
+  { event: 'api-session/added', mode: 'emit' },
+  { event: 'api-session/error', mode: 'emit' },
+  { event: 'api-session/removed', mode: 'emit' },
+  { event: 'api-session/status', mode: 'emit' },
+  { event: 'commands/change', mode: 'emit' },
+  { event: 'credentials/reference-updated', mode: 'emit' },
+  { event: 'cordis/request-run', mode: 'emit' },
+  { event: 'cordis/request-run-resolved', mode: 'emit' },
+  { event: 'cordis/dynamic-package', mode: 'emit' },
+  { event: 'cordis/dynamic-retract', mode: 'emit' },
+  { event: 'cordis/inspect-query', mode: 'emit' },
+  { event: 'cordis/inspect-query-resolved', mode: 'emit' },
+  { event: 'llm/adapters-updated', mode: 'emit' },
+  { event: 'settings/document-updated', mode: 'emit' },
+  { event: 'user-questions/request', mode: 'waterfall' },
+] as const satisfies readonly TypertForwardableEventEntry[]

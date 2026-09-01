@@ -2,7 +2,7 @@
 
 Status: implemented
 
-> 路径更新（2026-07-22，插件体系重构）：本文三层理念与黄金路径方法仍为现行；家搬了——对象层 spec 现居 `packages/client/runtime/tests/`（原 web-runtime）、wire spec 现居 `packages/client/connection/tests/`，`web-ui` 覆盖豁免随包消亡（组件 spec 为各 `packages/client/*/tests/` 的 jsdom 套件）。组件 spec 形态遵循 [slot 体系标准](../architecture/2026-07-22-slot-type-chain-implementation.zh.md)：props 直喂——store 份额来自 `createXXXStore().create()`（真引擎，获认可的无额外机制路径），框架钩子用普通桩；无渲染机制、不挂载提供方。slot 归属/注册表语义归 2 层地界（`runtime` + `ui-slots` 套件），不归组件 spec。
+> 路径更新（2026-08-27，Remote 迁移）：本文三层理念与黄金路径方法仍为现行；对象层 spec 分布于 `packages/api/session-controller/tests/` 和 `packages/test-support/client-runtime/tests/`，Remote 与承载 spec 分布于 `packages/api/gateway/tests/` 和 `packages/client/connection/tests/`。组件 spec 是各 `packages/client/*/tests/` 下的插件级 jsdom 套件。组件 spec 形态遵循 [slot 体系标准](../architecture/2026-07-22-slot-type-chain-implementation.zh.md)：props 直喂——store 份额来自 `createXXXStore().create()`（真引擎，获认可的无额外机制路径），框架钩子用普通桩；无渲染机制、不挂载提供方。slot 归属和注册表语义归 2 层地界（`ui-renderer` + `ui-slots` 套件），不归组件 spec。
 
 [English](2026-07-20-gui-testing-system.md) | 中文
 
@@ -18,7 +18,7 @@ GUI 栈需要考虑多种应用形态，同应用形态内的不同运行环境�
 
 | 层 | 被测物 | 关键手段 | 文件落点 |
 |---|---|---|---|
-| 1 协议同构层 | `AbstractApiClient` + `toFetchHandler`（双向数据/rpcId/ZOD 类型/SSE（Server-Sent Events）流/合批/超时） | **同构点全链**：`InProcessApiClient(toFetchHandler(脚本化 impl))` 不过网络但真跑 wire 序列化——零浏览器、纯 node env | `packages/host/apiproxy/tests/client-handler.spec.ts` |
+| 1 协议同构层 | 生成的 Typert Remote 描述符 + `ApiGateway` + Connection RPC 承载（参数/结果/错误/流/取消） | **同构点全链**：gateway host/client 套件在进程内验证描述符 codec 与 Remote 分派；Connection host 套件不经浏览器即可运行相同的 `/api` 承载帧与信任检查 | `packages/api/gateway/tests/`、`packages/client/connection/tests/` |
 | 2 对象层编排 | `Session`/`SessionManager`/`ConnectionController`（状态机与时序：缝合/去重/翻页/乐观清稿/pendingBuffers/重连/退避） | **「事件序列进→快照出」黄金路径**：可编程假体 + deferred 控时序 + fake timers 控退避 | `packages/client/{runtime,connection}/tests/` |
 | 3 组装呈现层 | 构建产物 × 真实 client loader 与插件组合 | 归应用所有的语义快照会在 jsdom 下启动全部 8 个已构建的 client 插件，以确定性方式驱动跨插件状态变化；另有最简 Playwright 冒烟测试负责验证真实浏览器/承载层边界，真 host 用例在无密钥时自行跳过；无密钥浏览器 e2e 车道会禁用交付配置中的模型适配器行，并通过 `dsh-llm-replay` 在真实进程内 web 组装中回放录制的会话 fixture（测试前置数据），与会话区 aria 预期输出比对（[web e2e 车道](../testing/2026-07-24-web-gui-browser-e2e-lane.zh.md)、[必需 CI 门禁](../testing/2026-07-30-web-browser-snapshot-ci-gate.zh.md)） | `apps/web/tests/*.snapshot.ts`、`apps/web/tests/smoke-{fixture,real}.e2e.ts`、`apps/web/tests/{replay-round-trip,seeded-history}.e2e.ts` |
 

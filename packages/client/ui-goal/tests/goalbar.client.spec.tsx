@@ -1,18 +1,14 @@
 // @vitest-environment jsdom
-// GoalBar behavior: the docked strip above the composer — phase labels,
-// inline edit form, and resume/clear icon actions — driven purely through
-// props, no wire. Loading, absent, and complete goals render nothing.
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GoalSnapshot } from '@deepseek-ai/dsh-goal/client'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { makeTranslate, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { GoalBar } from '../src/client/GoalBar.tsx'
 import type { GoalActionResult, GoalBarActions } from '../src/client/slots.ts'
 import { zh } from '../src/client/locales.ts'
 
-// The framework-injected t seat, stubbed over the zh dictionaries (the default locale).
 const t: Parameters<typeof GoalBar>[0]['t'] = makeTranslate(zh, commonZh)
 
 afterEach(cleanup)
@@ -178,28 +174,32 @@ describe('GoalBar', () => {
 
   it('keeps the edit draft open and reports a failed save', async () => {
     const actions = makeActions()
-    actions.onEdit.mockResolvedValue({ ok: false, error: { code: 'agent-busy', message: 'stale revision', details: {} } })
+    actions.onEdit.mockResolvedValue({
+      ok: false, error: new RemoteError('session/agent-busy', 'stale revision', { reason: 'stale revision' }),
+    })
     render(<GoalBar goal={makeGoal()} {...actions} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: '编辑目标' }))
     const box = screen.getByRole('textbox', { name: '目标内容' })
     fireEvent.change(box, { target: { value: 'retry this draft' } })
     fireEvent.click(screen.getByRole('button', { name: '保存目标' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe('stale revision (agent-busy)')
+    expect((await screen.findByRole('alert')).textContent).toBe('stale revision (session/agent-busy)')
     expect(screen.getByRole('textbox', { name: '目标内容' })).toHaveProperty('value', 'retry this draft')
   })
 
   it('reports resume and clear failures without hiding the goal', async () => {
     const actions = makeActions()
-    actions.onResume.mockResolvedValue({ ok: false, error: { code: 'internal', message: 'resume failed', details: {} } })
+    actions.onResume.mockResolvedValue({ ok: false, error: new RemoteError('gateway/internal', 'resume failed', {}) })
     const { rerender } = render(<GoalBar goal={makeGoal({ phase: 'paused' })} {...actions} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: '恢复目标' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('resume failed (internal)')
+    expect((await screen.findByRole('alert')).textContent).toBe('resume failed (gateway/internal)')
 
-    actions.onClear.mockResolvedValue({ ok: false, error: { code: 'agent-busy', message: 'clear failed', details: {} } })
+    actions.onClear.mockResolvedValue({
+      ok: false, error: new RemoteError('session/agent-busy', 'clear failed', { reason: 'clear failed' }),
+    })
     rerender(<GoalBar goal={makeGoal()} {...actions} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: '清除目标' }))
-    expect((await screen.findByRole('alert')).textContent).toBe('clear failed (agent-busy)')
+    expect((await screen.findByRole('alert')).textContent).toBe('clear failed (session/agent-busy)')
     expect(screen.getByText('Ship the redesign')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '清除目标' }))
     await waitFor(() => { expect(actions.onClear).toHaveBeenCalledTimes(2) })

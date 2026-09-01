@@ -16,7 +16,7 @@ Status: implemented
 
 ## 验证
 
-包测试会固定两个 Bundle 的 manifest、发布 patch、准确的自身提供方行与产品运行时依赖。Claude 覆盖会固定 Agent SDK 0.3.220、Claude Code 2.1.220、八个平台包、SDK 所选执行路径，以及载荷缺失时不回退宿主命令的失败。Codex 覆盖会固定 wrapper 0.147.0、六个平台 alias、包声明的执行路径、原生后代进程停稳，以及同样的载荷缺失行为。工作区验证会从 Bundle 声明派生每份发布 patch，而非维护包目录。包与 base 断言加上实际 pnpm 生产证据会证明默认与所选产品的依赖边界；真实 Bundle patch 与 Agent Preset 组装则覆盖未安装、任一单包、双包、工具授权交集、后续 Session 采纳以及零启动进程。
+包测试会固定两个 Bundle 的 manifest、发布 patch、准确的自身提供方行与产品运行时依赖。Claude 覆盖会固定 Agent SDK 0.3.241、Claude Code 2.1.241、八个平台包、SDK 所选执行路径，以及载荷缺失时不回退宿主命令的失败。Codex 覆盖会固定 wrapper 0.149.1、六个平台 alias、包声明的执行路径、原生后代进程停稳，以及同样的载荷缺失行为。工作区验证会从 Bundle 声明派生每份发布 patch，而非维护包目录。包与 base 断言加上实际 pnpm 生产证据会证明默认与所选产品的依赖边界；真实 Bundle patch 与 Agent Preset 组装则覆盖未安装、任一单包、双包、工具授权交集、后续 Session 采纳以及零启动进程。
 
 ## 考虑过的替代方案
 

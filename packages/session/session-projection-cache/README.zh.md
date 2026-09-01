@@ -1,42 +1,41 @@
+---
+description: "面向部署方与维护者的持久会话投影缓存说明，用于选择、配置或排查持久检查点、零 I/O 列表读取与加速的冷投影折叠。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-session-projection-cache
 
 [English](README.md) | 中文
 
-持久投影缓存（`ctx.sessionProjectionCache`）：把每个投影单元的状态保存为检查点，基于域数据形态（domain data form）每会话一条记录（`session_projcache` 域——出厂 JSON 后端将其落在配置的存储根目录下、`workspace.json` 旁边）。设计权威：[session-projection RFC](../../../.agents/notes/proposed/architecture/2026-07-27-session-projection-and-command-log.zh.md)（persisted projection cache 一节）。
+## 概述
 
-一条存储行 `(key → {ver, seq, val})` 是折叠捷径，绝不是权威：可能陈旧（`seq` 精确说明陈旧到哪），但绝不会错。实现据此承诺：
+`dsh-session-projection-cache` 将每个已注册投影单元的状态检查点（`ctx.sessionProjectionCache`）存为 `session_projcache` 存储域 `per-record` 布局下的逐会话版本化文档。随附 JSON 后端将每条记录存于 `<root>/session_projcache/sessions/<id>.json`，缓存绝不读取会话持久化层。存储行是折叠捷径，绝不是权威：它可能陈旧——`seq` 精确说明陈旧到哪——但绝不会错。三个必写点（会话创建、`turn/end` 与会话释放）加上可配置的条数与间隔节流让缓存保持新鲜。当列表视图需要同步缓存值，或冷投影折叠应跳过已检查点化的前缀时，选择本包。
 
-- **每次后台写入都 fail-soft。** 持久写失败只记一条警告并保持缓存陈旧；下一次写入或冷读自愈。两次写之间崩溃的代价是更长的尾部回放，绝不是错误的值。
-- **`ver` 与当前运行单元的 `stateVersion` 不匹配即丢弃，绝不迁移。** 单元递增版本会在读取时使其行失效；该 key 从日志重新折叠。
-- **存储行必须通过当前单元的 `stateSchema`。** 畸形行从零 I/O view 中省略，并被 restore 拒绝，使冷读阶梯从日志重新折叠。
-- **整记录写入。** 每次写入替换该会话的完整检查点（注册表切面始终是完整的），并经无损 JSON 边界快照——违反纯 JSON 约定的单元状态会显式失败并报错。
-- **记录绑定到日志生命周期，而不只是 id。** 每条记录存储其折叠来源的 header 身份（`createdAt`、`cwd`）；每次读取先以活 header 或存储 header 为证验证它，再接受任何行——被删后重建的 id、或缓存幸存而持久化存储被换掉时，无关记录被整体丢弃，绝不播种幻影值。
-- **日志领先，缓存跟随。** 活会话检查点先把缓冲事件持久 flush，缓存行才落地，因此崩溃只会让缓存落后于日志（更长的尾部回放），绝不领先于它。
+## 目录
 
-## 写策略
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
-两个必写点，其间节流：
+-----
 
-| 触发 | 性质 |
-|---|---|
-| `turn/end` | 必写——冷读要的正是轮次终值。 |
-| 会话释放（detach） | 必写——live 转 cold 的时刻；此后冷读阶梯接管该会话。 |
-| 累计 `writeEveryEvents` 个已提交事件 | 配置节流（条数）。 |
-| 距首个脏事件 `writeIntervalMs` 毫秒 | 配置节流（间隔）。 |
+<a id="use-this-package"></a>
+## 使用本包
 
-两个 `Config` 字段均必填（无默认值）：写入节奏是部署选择，没有普适正确值，由 cordis.yml 明示。
+当客户端应在不加载日志的情况下列出冷会话投影值时，把本包与投影注册表及存储栈一起挂载。没有它时，消费方必须先取得日志，才能重建冷投影值。
 
-## 列表读（`cachedSnapshot(meta)`）
+### 何时选择
 
-零 I/O 一档：从身份匹配的存储记录直接 view 客户端值（仅版本与 state schema 均匹配的 key），以 `{asOfSeq, values}` 切面返回——`asOfSeq` 取所服务行的最低水位，客户端在 higher-seq-wins 规则下播种值存储时，陈旧列表块永远压不过更新的推送帧。host-only 行永不返回。无可用客户端行（未知 id、无关生命周期、无可用行）时返回 `undefined`；api-proxy 列表载体将其转为列缺席。
+当部署会重启会话，并需要为历史列表、统计信息或 goal 快照提供持久投影值时，选择本包。当投影只服务实时会话，或额外存储写入的成本高于所节省的投影工作时，跳过本包。
 
-## 冷读（`coldSnapshot(id, signal?)`）
+### 最小配置
 
-读取阶梯，正常路径无需加载全量日志：缓存行 → `sessionProjections.restoreFloor`（锚定在最低可用水位之前一个事件的位置）→ 持久化 `readFrom(id, floor)` → `sessionProjections.restore` → 刷新行的 fail-soft 写回。这个锚使缩短的日志（崩溃修复截断）可被证明：越界的行恰好触发一次从 seq 0 的全量重读，而不是把幽灵值当现值服务。无已注册单元时直接服务 `{asOfSeq: -1, values: {}}`，不触碰持久化；无持久日志的会话以 seam 的 `not found` 拒绝。
+两个节流字段均必填——写入节奏是部署选择，没有普适正确值：
 
-`write(session)` 是两个必写点共用的同步切面检查点；载体可以直接调用（非 fail-soft——由 fail-soft 包装层负责遏制）。
-
-## 组合
+缓存通过存储栈打开自己的域，因此 base 先挂 `storage`、`storage-json`（根 `dshHomePath('storages')`）与 `storage-domain`（`backend: json`）：
 
 ```yaml
 - id: session-projection-cache
@@ -46,18 +45,94 @@
     writeIntervalMs: 5000
 ```
 
-注入 `storageDomain`、`sessionProjections`、`sessionPersistence`、`sessions`。没有这一行时，投影系统只跑 live（水位缓存；冷读在实现了它的载体处退回全量日志加载）。
+| 字段 | 默认值 | 含义 |
+|---|---|---|
+| `writeEveryEvents` | 必填 | 在各必写点之间强制一次持久检查点写入的每会话已提交事件数 |
+| `writeIntervalMs` | 必填 | 各必写点之间脏检查点最长可保持未写入的时间 |
 
+本插件注入 `storageDomain`、`sessionProjections` 与 `sessions`。生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-session-projection-cache)是每个受支持字段及其 JSDoc 的穷尽式真源。
+
+### 检查点如何写入
+
+三个必写点总是写入：会话创建保存由种子派生的切面，`turn/end` 保存列表读取所需的轮次终值，会话释放保存最终实时切面。其间，配置的条数与间隔节流随事件累积写入。每次写入通过领域写入链以原子方式替换该会话的完整记录；失败会记录警告并让缓存保持陈旧，后续写入会自行修复。
+
+### 读取缓存值
+
+`cachedSnapshot(meta, inheritedEventCount)` 以零 I/O 从存储域的内存表同步提供客户端值。它只接受身份匹配的记录以及版本和 schema 均匹配的 key，再按所服务行的最低水位返回 `{ asOfSeq, values }` 切面。未 seeded 的列表知道切点为零；仅 header 的 seeded 列表不知道数字切点，必须跳过该快速路径，直到权威正文读取提供它。`coldSnapshot(meta, inheritedEventCount, events)` 接受精确切点与完整有序日志，在折叠时跳过已检查点化的前缀，并在自身不读取持久化层的情况下刷新记录。
+
+### 缓存保证什么
+
+日志领先，缓存跟随：实时检查点先把会话的缓冲事件持久化，然后才保存缓存记录。因此崩溃可能让缓存落后于日志，但绝不会让缓存领先。读取和写入共享存储域内一致的内存状态；逐单元写入链只在持久化成功后修改内存。每个带版本戳的记录必须匹配实时单元 schema 与完整生命周期身份（`createdAt`、`cwd`、`isSeeded` 和 `inheritedEventCount`），因此在一个 fork 切点下初始化的行不能播种另一个切点。JSON 后端把每条记录存于仅所有者可访问的 `<root>/session_projcache/sessions/<id>.json` 目录树中。
+
+-----
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>实现细节——点击展开</summary>
+
+本节说明缓存的持久性与存储所有权；可观察行为已在[使用本包](#use-this-package)中说明。
+
+### 设计理念
+
+缓存是投影注册表检查点接口上的折叠捷径，存于 `per-record` 领域数据表中。它带来六项后果：读取绝不绕过领域写入链；每次后台写入都 fail-soft；`ver` 不匹配时丢弃而不迁移记录；记录必须通过实时单元的 `stateSchema`；写入通过无损 JSON 边界替换一份完整会话记录；日志领先，缓存跟随。
+
+### 读写所有权
+
+缓存在 `session_projcache` 领域中为每个会话保存一份带版本戳的文档。它不依赖会话持久化后端，不调用 `locate`，也不检查逐会话目录。畸形或陈旧的记录读作不存在；需要冷值的消费方负责提供日志以重新折叠。
+
+### 源码地图
+
+| 文件 | 职责 |
+|---|---|
+| [`src/index.ts`](src/index.ts) | 插件入口：`SessionProjectionCache` 服务、写后监听器、缓存读取 |
+| [`src/spec.ts`](src/spec.ts) | `session_projcache` 域 spec 与记录身份类型 |
+| — | 不发布运行时不变式伴生入口；正确性在写入与读取路径强制。 |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 进一步探索
+
+当包级约定不够用时阅读以下页面。它们从缓存逐步进入它检查点化的注册表与保存其记录的存储域。
+
+- [会话投影子系统](../../../docs/subsystems/session-projection.zh.md)——本缓存检查点化的投影单元约定与驱动语义。
+- [会话投影注册表](../session-projection/README.zh.md)——本缓存持久化其检查点的 `ctx.sessionProjections` 服务。
+- [存储子系统](../../../docs/subsystems/storage.zh.md)——保存缓存记录的领域路由与后端行为。
+- [会话包映射](../README.zh.md)——相邻的持久化、标题与遥测包。
+- [会话投影 RFC](../../../.agents/notes/proposed/architecture/2026-07-27-session-projection-and-command-log.zh.md)——持久投影缓存的设计理由。
+
+-----
+
+<a id="model-experience"></a>
 ## 模型体验
 
-无，因为缓存只持久化并恢复 host 侧的、由已写入日志的会话状态派生的读模型，不触碰任何提示词、消息、schema、流或工具结果。
+无，因为持久缓存只加速主机侧的投影状态读取，不注册任何模型可见内容。
 
 #### KV Cache 影响
 
 无；缓存从不组装或发送提供方请求。
 
-## 已知局限与延后工作
+## 已知限制与延期工作
 
-- **不提供淘汰或保留接口**：记录会按会话持续累积；清理已存储的检查点属于带外维护，与会话持久化采用相同策略。
-- **间隔节流采用按会话的粗粒度控制**：一次无脏数据的写入完成后，计时器会在首个脏事件到达时启动；对于持续但未达到条数阈值的事件流，系统每个间隔写入一次，而不采用滑动窗口。
-- **`coldSnapshot` 读取不去重**——同一会话的两个并发冷读各跑一遍阶梯；写回最后者胜（行等价），对列表级调用频率可接受。
+<a id="known-limitations-and-deferred-work"></a>
+
+
+这些限制说明缓存何时需要运维注意。它们是当前包约束，不是任务积压。
+
+- **无淘汰或保留接口**——记录按会话持续累积；清理已存储检查点属于带外维护，与会话持久化采用相同策略。
+- **间隔节流采用按会话的粗粒度控制**——一次无脏数据的写入完成后，计时器在首个脏事件到达时启动；持续但低于条数阈值的事件流每间隔写入一次，而非滑动窗口。
+- **缓存侧不做冷重折叠**——缓存只服务并刷新自己的记录，从不读取会话日志，因为它不依赖持久化层；需要保证冷快照的消费方自行从日志重新折叠。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+无。
+
+</details>

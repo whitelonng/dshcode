@@ -10,6 +10,7 @@ import AgentRegistry, { agentEvents, assembleContextFor } from '@deepseek-ai/dsh
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { MockAdapter, textResponse } from './mock-adapter.ts'
 
@@ -17,6 +18,7 @@ async function harnessWithLoop(adapter: MockAdapter = new MockAdapter([textRespo
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, { persona: 'You are the deployment.' })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -779,7 +781,7 @@ describe('agent scope lifecycle', () => {
     expect(statuses).toEqual([])
     expect(observerSawLive).toBe(true)
     expect(scopeDisposed).toBe(true)
-    expect(announced.session.events).toEqual([])
+    expect(announced.session.snapshotEvents()).toEqual([])
     expect(ctx.agents.get(SessionId('session-start-dispose-s'))).toBeUndefined()
     expect(ctx.sessions.get(SessionId('session-start-dispose-s'))).toBeUndefined()
     await ctx.fiber.dispose()
@@ -1084,9 +1086,9 @@ describe('agent scope lifecycle', () => {
     // are empty and nothing still drives the detached session.
     expect(ctx.agents.get(agent.id)).toBeUndefined()
     expect(ctx.sessions.get(agent.id)).toBeUndefined()
-    const eventsAfter = agent.session.events.length
+    const eventsAfter = agent.session.snapshotEvents().length
     await new Promise(resolve => setTimeout(resolve, 30))
-    expect(agent.session.events.length).toBe(eventsAfter)
+    expect(agent.session.snapshotEvents().length).toBe(eventsAfter)
     await ctx.fiber.dispose()
   })
 

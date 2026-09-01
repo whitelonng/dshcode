@@ -10,7 +10,7 @@ Source: [`packages/attachment/attachment/src/types.ts`](../../packages/attachmen
 
 ## Identity and verified metadata
 
-`AttachmentId` is a branded opaque string. The local backend currently emits `sha256:<digest>`, but consumers must neither parse that representation nor derive a filesystem path from it.
+`AttachmentId` is a branded opaque string. The local backend currently emits `sha256:<digest>`, but consumers must neither parse that representation nor derive a filesystem path from it. A consumer may ask the attachment provider for its object location through `imageHostPath()`, then must use the current execution filesystem to decide whether model tools can read that host path.
 
 ```ts type-equiv
 /** Raster image formats accepted by the version-one attachment path. */
@@ -98,7 +98,7 @@ interface StoredImageAttachment {
 interface ImageRequestPolicy {
   /** Maximum width multiplied by height after aspect-preserving projection. */
   maxPixels: number
-  /** Encoded-byte cap before base64 expansion or Files API upload. */
+  /** Encoded-byte target before base64 expansion or Files API upload; the smallest quality-ladder output is kept when no quality fits. */
   maxBytes: number
 }
 ```
@@ -125,7 +125,7 @@ interface RequestImageAttachment {
 }
 ```
 
-`saveImage()` prepares and atomically commits a provider-independent normalized attachment before returning its `ImageAttachmentRef`. `saveImages()` prepares every validated attachment once before publishing the batch, so validation rejection leaves no partial objects and publication does not repeat decoding or quality selection. `admitEncodedImages()` is the wire entry for base64 uploads and delegates count, aggregate-byte, and ordered batch admission to `saveImages()`. `readImage()` verifies a normalized attachment from an authorized session path. `readImageRequest()` derives and caches one request version under an exact route pixel and byte budget; new entries are fully decoded before publication, while cache hits use a bounded metadata probe. Callers use `Promise.all` over the singular method when they need an ordered batch. The local implementation lazily encodes preferred candidates, singleflights equal request identities, lets each waiter cancel independently, stops shared work when no waiter remains, and bounds all transforms with its instance-level limiter, which defaults to two simultaneous transformations. The service is retention-neutral: resumed and forked sessions may share objects, so reference-aware garbage collection is deferred rather than tied to one session's deletion.
+`saveImage()` prepares and atomically commits a provider-independent normalized attachment before returning its `ImageAttachmentRef`. `saveImages()` prepares every validated attachment once before publishing the batch, so validation rejection leaves no partial objects and publication does not repeat decoding or quality selection. `admitEncodedImages()` is the wire entry for base64 uploads and delegates count, aggregate-byte, and ordered batch admission to `saveImages()`. `readImage()` verifies a normalized attachment from an authorized session path. `imageHostPath()` exposes only the provider-owned host object location; it does not decide whether the current tool execution world can read it. `readImageRequest()` derives and caches one deterministic request version under an exact route pixel and byte budget. That version contains encoded bytes and metadata but no execution-world path. New entries are fully decoded before publication, while cache hits use a bounded metadata probe. Callers use `Promise.all` over the singular method when they need an ordered batch. The local implementation lazily encodes preferred candidates, singleflights equal request identities, lets each waiter cancel independently, stops shared work when no waiter remains, and bounds all transforms with its instance-level limiter, which defaults to two simultaneous transformations. The service is retention-neutral: resumed and forked sessions may share objects, so reference-aware garbage collection is deferred rather than tied to one session's deletion.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -177,9 +177,17 @@ abstract saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef>
 abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>
 
 /**
+ * Locate the provider-owned normalized object in the harness host filesystem.
+ * @param ref - durable normalized attachment reference.
+ * @returns an absolute host path, or undefined when this backend is not host-file-backed.
+ * @throws an AttachmentError when the durable reference is invalid.
+ */
+imageHostPath(ref: ImageAttachmentRef): string | undefined
+
+/**
  * Generate or read one deterministic model-request version from the stored normalized image.
  * @param ref - durable provider-independent normalized attachment reference.
- * @param policy - exact route pixel and encoded-byte budget.
+ * @param policy - exact route pixel budget and encoded-byte target; a target no ladder quality meets yields the smallest ladder output.
  * @param signal - optional cancellation.
  * @returns request bytes and the cache/upload identity covering every transform input.
  */

@@ -1,4 +1,4 @@
-# The dsh-base bundle patch: the shared core of every dsh profile, applied as
+# The dsh-base bundle patch: the shared core of each base-backed profile, applied as
 # ONE insert over the empty profile root. Later bundle patches and the user's
 # profile cordis.patch.yml address these rows by id, with the last write
 # winning per row.
@@ -16,16 +16,25 @@
     - id: timer
       name: '@deepseek-ai/cordis-plugin-timer'
 
+    # Module reload is opt-in per profile. `patchReload: live` config watching
+    # uses the launcher's watch-only fallback and does not require this row.
     - id: hmr
       name: '@deepseek-ai/cordis-plugin-hmr'
+      disabled: true
       config:
         root: ['.']
 
     - id: llm
       name: '@deepseek-ai/dsh-llm'
 
+    - id: deepseek-llm-api-extensions
+      name: '@deepseek-ai/dsh-deepseek-llm-api-extensions'
+
     - id: session
       name: '@deepseek-ai/dsh-session'
+
+    - id: session-log-deepseek
+      name: '@deepseek-ai/dsh-session-log-deepseek'
 
     - id: typert
       name: '@deepseek-ai/dsh-typert-registry'
@@ -57,6 +66,9 @@
 
     - id: agent
       name: '@deepseek-ai/dsh-agent'
+
+    - id: plugin-package-inventory-deepseek
+      name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
 
     # The transport-independent default for Agents created by entry points.
     # Settings may supply a saved selection; consumers read it at creation time.
@@ -126,11 +138,41 @@
     - id: session-projection
       name: '@deepseek-ai/dsh-session-projection'
 
-    # Session telemetry is mounted but disabled by default. DSH_TELEMETRY_MODE
-    # explicitly opts into FULL or FEEDBACK_ONLY reporting; uploading mirrors
-    # session-log records onto OTLP/HTTP logs with no session-telemetry/record redaction
-    # rule, so exports are the raw captured copy. The deployment stance, env
-    # seams, and follow-ups are pinned in the default-off Agent Note.
+    # Durable KV storage: the storage hub, the json backend, and the
+    # schema-validated domain form over them. Session-layer persistence (the
+    # projection cache below; workspace and message-feedback in web layers)
+    # routes through this stack, so it belongs to the shared base.
+    - id: storage
+      name: '@deepseek-ai/dsh-storage'
+
+    - id: storage-json
+      name: '@deepseek-ai/dsh-storage-json'
+      config:
+        root: !!js dshHomePath('storages')
+
+    - id: storage-domain
+      name: '@deepseek-ai/dsh-storage-domain'
+      config:
+        backend: json
+
+    # Persisted projection cache: throttled write-behind over the
+    # session_projcache domain (per-record layout — one version-stamped
+    # checkpoint document per session), serving the session listing's
+    # projection column.
+    - id: session-projection-cache
+      name: '@deepseek-ai/dsh-session-projection-cache'
+      config:
+        writeEveryEvents: 200
+        writeIntervalMs: 5000
+
+    # Session telemetry defaults to feedback-gated sharing: FEEDBACK_ONLY
+    # uploads only when the user records /feedback, releasing the session
+    # records since the last handoff through that event (a resumed session
+    # shares only its current lifecycle). DSH_TELEMETRY_MODE overrides to
+    # FULL or DISABLED; uploading mirrors session-log records onto OTLP/HTTP
+    # logs with no session-telemetry/record redaction rule, so exports are
+    # the raw captured copy. The deployment stance, env seams, and follow-ups
+    # are pinned in the feedback-gated-default Agent Note.
     # DSH_TELEMETRY_OTLP_URL overrides the production endpoint. A non-empty
     # DSH_TELEMETRY_DISABLED — any value, including '0'/'false' — opts the
     # process out (the launchers patch the row disabled; config cannot disable
@@ -148,7 +190,7 @@
     - id: session-telemetry-otel
       name: '@deepseek-ai/dsh-session-telemetry-otel'
       config:
-        mode: !!js process.env.DSH_TELEMETRY_MODE || 'DISABLED'
+        mode: !!js process.env.DSH_TELEMETRY_MODE || 'FEEDBACK_ONLY'
         shutdownTimeoutMillis: 3000
         exporter:
           url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://harness-telemetry.deepseeksvc.com/v1/logs'
@@ -317,20 +359,18 @@
         toolName: subagent
         backgroundMode: continuable
 
-    # Fork stays one-shot: a continuable child's `report` tool and prompt
-    # section precede the inherited history a fork exists to reuse; one-shot
-    # fork children install neither, keeping the parent's request prefix.
-    # See .agents/notes/implemented/architecture/2026-08-10-fork-children-stay-one-shot.md.
+    # Fork omits model selection so provider/model stay equal to the parent and
+    # the inherited history remains eligible for KV Cache reuse. This base row
+    # stays one-shot; preset layers may select continuable mode without adding a
+    # child-only system-prompt section or tool schema ahead of that history.
+    # See .agents/notes/implemented/feature/2026-08-18-model-selected-subagent-routes.md
+    # and .agents/notes/implemented/architecture/2026-08-10-fork-children-stay-one-shot.md.
     - id: tool-subagent-fork
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
         provider: fork
         toolName: subagent_fork
         backgroundMode: one-shot
-
-    # Optional direct-child return channel; absent from roots and one-shot agents.
-    - id: tool-subagent-report
-      name: '@deepseek-ai/dsh-tool-subagent-report'
 
     - id: workflow-worker-thread
       name: '@deepseek-ai/dsh-workflow-worker-thread'
@@ -393,28 +433,35 @@
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
 
-    # Every mode enables the stable model-facing web_search tool. DeepSeek search
-    # resolves the same DEEPSEEK_API_KEY credential the Models page manages for
-    # chat, at each search; its Messages endpoint is separate from the
-    # chat-completions endpoint, so it takes its own base-URL override. Fetch stays
-    # disabled and no fetch provider is mounted: that provider defers SSRF
-    # protection and the model would choose the request target. Search is a full
-    # auxiliary model request with server-side retrieval, so this shipped DeepSeek
-    # route gets 60s while the provider-neutral tool default remains 30s.
+    # The shared base enables the stable model-facing web_search and web_fetch
+    # tools. The Web app disables this host row and composes both tools per agent
+    # preset; products with a stricter network policy override tool-web. DeepSeek
+    # search resolves the same DEEPSEEK_API_KEY
+    # credential the Models page manages for chat, at each search; its Messages
+    # endpoint is separate from the chat-completions endpoint, so it takes its own
+    # base-URL override. Anonymous fetch accepts only public HTTP(S) destinations,
+    # resolves and validates every destination, and pins every actual connection.
+    # Search is a full auxiliary model request with server-side retrieval, so this
+    # shipped DeepSeek route gets 60s while the provider-neutral tool default
+    # remains 30s.
     - id: web
       name: '@deepseek-ai/dsh-web'
       config:
         searchProvider: deepseek-official
+        fetchProvider: http
 
     - id: web-search-deepseek
       name: '@deepseek-ai/dsh-web-search-deepseek'
       config:
         apiKeyEnv: DEEPSEEK_API_KEY
 
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+
     - id: tool-web
       name: '@deepseek-ai/dsh-tool-web'
       config:
-        fetch: false
+        fetch: true
         searchTimeoutMs: 60000
 
     # ── rows every mode mounts, whose values each overlay may state ──────────────

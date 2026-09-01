@@ -6,37 +6,58 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { BlockAssembler, deepFreeze } from '@deepseek-ai/dsh-llm'
-import type { Message, TokenUsage } from '@deepseek-ai/dsh-llm'
-import type { EpochHeader, Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import { canonicalHeader, headerEquals, isSurfaceEvent } from '@deepseek-ai/dsh-session'
-// Type-only: resolves the optional projection registry Context declaration.
+import { BlockAssembler } from '@deepseek-ai/dsh-llm'
+import type { LlmImageRequestPricing, Message, TokenUsage } from '@deepseek-ai/dsh-llm'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
+import type {
+  EpochHeader,
+  Session,
+  SessionEvent,
+  SessionLogOffset as SessionLogOffsetType,
+  SessionSeq as SessionSeqType,
+} from '@deepseek-ai/dsh-session'
+import { canonicalHeader, headerEquals, isSurfaceEvent, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+// Type-only: activates the `ctx.sessionProjections` Context declaration.
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {
   TokenMeasurement,
   TokenMeasurementBaseline,
   TokenMeterConfig,
-  TokenSurfaceNode,
 } from './types.ts'
 import { contextBreakdownProjectionDefinition } from './breakdown-projection.ts'
 import { contextPressureProjectionDefinition, tokenUsageProjectionDefinition } from './usage-projection.ts'
 import { estimateContent, estimateHeader, estimateMessage, ROLE_OVERHEAD } from './estimate.ts'
-import { foldSurfaceTokens } from './surface-fold.ts'
+import { commitSurfaceTokens, planSurfaceTokens } from './surface-fold.ts'
+import type { MeterSurfaceNode } from './surface-fold.ts'
+import { priceSurface } from './route-pricing.ts'
 
 export type * from './types.ts'
+// Module-edge re-export: forces the emitted index.d.ts to import the
+// projection-unit modules, so their SessionProjectionStateMap augmentations load
+// in aggregate programs that only import the package root.
+export type * from './usage-projection.ts'
+export type * from './breakdown-projection.ts'
 
+/**
+ * Raw anchor facts captured at the latest successful call; the baseline is
+ * derived per measurement so the anchored surface reprices under the same
+ * route pricing as the current surface it is compared with.
+ */
 interface MeasurementAnchor {
   readonly header: EpochHeader | undefined
-  readonly surfaceTokens: number
-  readonly baseline: Exclude<TokenMeasurementBaseline, { kind: 'none' }>
+  /** Surface snapshot the anchored request was derived from. */
+  readonly nodes: readonly MeterSurfaceNode[]
+  /** Fixed-heuristic price of the call's provider output. */
+  readonly assistantTokens: number
+  /** Provider usage of the call, when it reported one under a known header. */
+  readonly usage: TokenUsage | undefined
 }
 
 interface ReplayState {
-  consumedEvents: number
+  consumedEvents: SessionLogOffsetType
   header: EpochHeader | undefined
-  surface: TokenSurfaceNode[]
-  surfaceTokens: number
-  stepStart: { turn: number; step: number; surfaceTokens: number } | undefined
+  surface: MeterSurfaceNode[]
+  stepStart: { turn: number; step: number; nodes: readonly MeterSurfaceNode[] } | undefined
   anchor: MeasurementAnchor | undefined
 }
 
@@ -76,19 +97,17 @@ export class TokenMeter extends Service {
   // the public type excludes settings while validateConfigKeys rejects them.
   static Config: z<TokenMeterConfig> = z.object({}) as unknown as z<TokenMeterConfig>
 
+  static inject = ['sessionProjections']
+
   private readonly states = new WeakMap<Session, ReplayState>()
 
   constructor(ctx: Context, config: TokenMeterConfig = {}) {
     super(ctx, 'tokenMeter')
     validateConfigKeys(config)
 
-    // Projection registration is an optional child: compositions without the
-    // generic registry keep the meter's standalone read shape.
-    ctx.inject(['sessionProjections'], (projectionCtx) => {
-      projectionCtx.sessionProjections.register(tokenUsageProjectionDefinition)
-      projectionCtx.sessionProjections.register(contextPressureProjectionDefinition)
-      projectionCtx.sessionProjections.register(contextBreakdownProjectionDefinition)
-    })
+    ctx.sessionProjections.register(tokenUsageProjectionDefinition)
+    ctx.sessionProjections.register(contextPressureProjectionDefinition)
+    ctx.sessionProjections.register(contextBreakdownProjectionDefinition)
 
     // Readers catch up independently, while eager observation bounds ordinary
     // read latency without creating state for sessions no consumer has read.
@@ -100,14 +119,18 @@ export class TokenMeter extends Service {
   /**
    * Measure current request pressure and surface through the durable tail.
    *
-   * Provider usage is reused only when the latest successful call's canonical
-   * request envelope matches `requestHeader` and its total is no lower than
-   * that call's full heuristic anchor; otherwise the complete envelope and
-   * surface are heuristically repriced.
+   * The effective envelope's routed provider/model selects the request-image
+   * pricing every node is priced under: a route whose adapter declares image
+   * pricing charges each retained image its visual tokens plus its
+   * model-visible text, while other routes keep the fixed heuristic. Provider
+   * usage is reused only when the latest successful call's canonical request
+   * envelope matches `requestHeader` and its total is no lower than that
+   * call's full route-priced anchor; otherwise the complete envelope and
+   * surface are repriced.
    *
-   * `requestHeader` affects request pressure only; surface fields always
-   * describe the current session surface. Every call clones those positional
-   * nodes, so measurement is O(surface).
+   * `requestHeader` replaces the latest logged envelope for pressure and node
+   * pricing; the node set always describes the current session surface. Every
+   * call clones those positional nodes, so measurement is O(surface).
    *
    * @param session - session to replay through its current durable tail.
    * @param requestHeader - optional effective request envelope replacing the latest logged header.
@@ -118,20 +141,33 @@ export class TokenMeter extends Service {
     const header = requestHeader === undefined
       ? state.header
       : canonicalHeader(requestHeader)
+    const pricing = this._routeImagePricing(header)
+    const surface = priceSurface(state.surface, pricing)
     const anchor = state.anchor
 
     let baseline: TokenMeasurementBaseline
     let surfaceDeltaTokens: number
     if (anchor !== undefined && optionalHeaderEquals(anchor.header, header)) {
-      baseline = anchor.baseline
-      surfaceDeltaTokens = state.surfaceTokens - anchor.surfaceTokens
-    } else if (header === undefined && state.surfaceTokens === 0) {
+      // Matching headers share one route, so the anchored snapshot reprices
+      // under the same pricing as the current surface and the signed delta
+      // compares like with like.
+      const anchorSurfaceTokens = priceSurface(anchor.nodes, pricing).surfaceTokens
+        + anchor.assistantTokens
+      const estimatedAnchorTokens = estimateHeader(header) + anchorSurfaceTokens
+      const usage = anchor.usage
+      // Signed heuristic deltas remain conservative only from an anchor
+      // that is at least as large as the matching full heuristic price.
+      baseline = usage !== undefined && usageTokens(usage) >= estimatedAnchorTokens
+        ? { kind: 'usage', tokens: usageTokens(usage), usage }
+        : { kind: 'estimated', tokens: estimatedAnchorTokens }
+      surfaceDeltaTokens = surface.surfaceTokens - anchorSurfaceTokens
+    } else if (header === undefined && surface.surfaceTokens === 0) {
       baseline = { kind: 'none', tokens: 0 }
       surfaceDeltaTokens = 0
     } else {
       baseline = {
         kind: 'estimated',
-        tokens: estimateHeader(header) + state.surfaceTokens,
+        tokens: estimateHeader(header) + surface.surfaceTokens,
       }
       surfaceDeltaTokens = 0
     }
@@ -141,9 +177,16 @@ export class TokenMeter extends Service {
       baseline,
       surfaceDeltaTokens,
       totalTokens: Math.max(0, baseline.tokens + surfaceDeltaTokens),
-      surfaceTokens: state.surfaceTokens,
-      nodes: state.surface,
+      surfaceTokens: surface.surfaceTokens,
+      nodes: surface.nodes,
     }))
+  }
+
+  /** Resolve the routed model's image pricing, when the llm service and route declare one. */
+  private _routeImagePricing(header: EpochHeader | undefined): LlmImageRequestPricing | undefined {
+    const config = header?.config
+    if (config === undefined) return undefined
+    return this.ctx.get('llm')?.imageRequestPricing(config.provider, config.model)
   }
 
   /**
@@ -161,29 +204,28 @@ export class TokenMeter extends Service {
     let state = this.states.get(session)
     if (state === undefined) {
       state = {
-        consumedEvents: 0,
+        consumedEvents: SessionLogOffset(0),
         header: undefined,
         surface: [],
-        surfaceTokens: 0,
         stepStart: undefined,
         anchor: undefined,
       }
       this.states.set(session, state)
     }
 
-    while (state.consumedEvents < session.events.length) {
+    while (state.consumedEvents < session.seq) {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- contiguous session seqs index the durable log
-      const event = session.events[state.consumedEvents]!
+      const event = session.eventAt(SessionSeq(state.consumedEvents))!
       this._foldEvent(session, state, event)
-      state.consumedEvents += 1
+      state.consumedEvents = SessionLogOffset(state.consumedEvents + 1)
     }
     return state
   }
 
   /**
-   * Validate and prepare every fallible part before mutating replay state.
-   * A malformed event remains unread on every retry instead of partially
-   * applying the same mutation more than once.
+   * Run every fallible step — surface plan and anchor validation — before
+   * mutating replay state, so a malformed event remains unread on every
+   * retry instead of half-applying.
    */
   private _foldEvent(session: Session, state: ReplayState, event: SessionEvent): void {
     let nextHeader = state.header
@@ -200,7 +242,7 @@ export class TokenMeter extends Service {
             `token meter: step/start at seq ${event.seq} arrived before turn ${state.stepStart.turn}/step ${state.stepStart.step} ended`,
           )
         }
-        nextStepStart = { ...event.data, surfaceTokens: state.surfaceTokens }
+        nextStepStart = { ...event.data, nodes: [...state.surface] }
         break
       case 'step/end':
         if (state.stepStart === undefined
@@ -214,8 +256,8 @@ export class TokenMeter extends Service {
         break
     }
 
-    const surface = isSurfaceEvent(event)
-      ? foldSurfaceTokens(state.surface, event)
+    const plan = isSurfaceEvent(event)
+      ? planSurfaceTokens(state.surface, event)
       : undefined
 
     if (event.type === 'assistant/message') {
@@ -228,43 +270,28 @@ export class TokenMeter extends Service {
 
       // assistant/message is surface-mandatory at every append/seed boundary.
       // oxlint-disable-next-line typescript/no-non-null-assertion
-      const eventTokens = surface!.tokens
+      const eventTokens = plan!.tokens
       if (event.data.usage !== undefined && nextHeader !== undefined) {
-        const providerAssistantTokens = this._estimateProviderAssistant(
-          session,
-          event,
-          eventTokens,
-        )
-        const anchorSurfaceTokens = stepStart.surfaceTokens + providerAssistantTokens
-        const providerTokens = usageTokens(event.data.usage)
-        const estimatedAnchorTokens = estimateHeader(nextHeader) + anchorSurfaceTokens
         nextAnchor = {
           header: nextHeader,
-          surfaceTokens: anchorSurfaceTokens,
-          // Signed heuristic deltas remain conservative only from an anchor
-          // that is at least as large as the matching full heuristic price.
-          baseline: providerTokens >= estimatedAnchorTokens
-            ? { kind: 'usage', tokens: providerTokens, usage: event.data.usage }
-            : { kind: 'estimated', tokens: estimatedAnchorTokens },
+          nodes: stepStart.nodes,
+          assistantTokens: this._estimateProviderAssistant(session, event, eventTokens),
+          usage: event.data.usage,
         }
       } else {
-        const anchorSurfaceTokens = stepStart.surfaceTokens + eventTokens
         nextAnchor = {
           header: nextHeader,
-          surfaceTokens: anchorSurfaceTokens,
-          baseline: {
-            kind: 'estimated',
-            tokens: estimateHeader(nextHeader) + anchorSurfaceTokens,
-          },
+          nodes: stepStart.nodes,
+          assistantTokens: eventTokens,
+          usage: undefined,
         }
       }
     }
 
     state.header = nextHeader
     state.stepStart = nextStepStart
-    if (surface !== undefined) {
-      state.surface = surface.nodes
-      state.surfaceTokens += surface.deltaTokens
+    if (plan !== undefined) {
+      commitSurfaceTokens(state.surface, plan)
     }
     state.anchor = nextAnchor
   }
@@ -283,7 +310,7 @@ export class TokenMeter extends Service {
     if (sourceSeqs === undefined) return durableEventTokens
 
     const assembler = new BlockAssembler()
-    const seen = new Set<number>()
+    const seen = new Set<SessionSeqType>()
     for (const seq of sourceSeqs) {
       if (seq >= event.seq) {
         throw new Error(`token meter: assistant/message at seq ${event.seq} source seq ${seq} is not earlier`)
@@ -294,7 +321,7 @@ export class TokenMeter extends Service {
       seen.add(seq)
       // Session construction validates contiguous seqs, and the explicit
       // earlier-than-assistant check above therefore guarantees existence.
-      const source = session.events[seq]
+      const source = session.eventAt(seq)
       // oxlint-disable-next-line typescript/no-non-null-assertion
       const sourceEvent = source!
       if (sourceEvent.type !== 'assistant/chunk') {

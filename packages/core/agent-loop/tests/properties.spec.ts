@@ -20,6 +20,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import fc from 'fast-check'
 
 /** A never-exhausting adapter: every model call returns the same short reply. */
@@ -39,6 +40,7 @@ async function harness() {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -70,26 +72,26 @@ function recordStatus(ctx: Context, agent: Agent): { seen: string[]; dispose: ()
 }
 
 function userMessageTexts(agent: Agent): string[] {
-  return agent.session.events
+  return agent.session.snapshotEvents()
     .filter(e => e.type === 'user/message')
     .map(e => (e.data as { content: { type: string; text?: string }[] }).content.map(b => b.text ?? '').join(''))
 }
 
 function turnNumbers(agent: Agent): number[] {
-  return agent.session.events
+  return agent.session.snapshotEvents()
     .filter(e => e.type === 'turn/start')
     .map(e => e.data.turn)
 }
 
 function turnEndNumbers(agent: Agent): number[] {
-  return agent.session.events
+  return agent.session.snapshotEvents()
     .filter(e => e.type === 'turn/end')
     .map(e => (e.data as { turn: number }).turn)
 }
 
 function userMessageCountsByTurn(agent: Agent): number[] {
   const counts: number[] = []
-  for (const event of agent.session.events) {
+  for (const event of agent.session.snapshotEvents()) {
     if (event.type === 'turn/start') counts.push(0)
     if (event.type === 'user/message') counts[counts.length - 1]! += 1
   }

@@ -18,7 +18,7 @@ Every mechanically checkable AGENTS.md promise gets a command that exits non-zer
 - [Oxlint](2026-07-29-oxlint-linter.md) with type-aware TypeScript rules plus the @stylistic and SonarJS compatibility plugins, enforcing the house style and file-local duplicated-logic checks; vendored code excluded.
 - jscpd detects cross-file clones in package production TypeScript and repository scripts; narrow source-range exceptions document deliberately parallel implementations.
 - Per-file 100% coverage on `packages/*/*/src` (v8); unreachable defensive guards carry `/* v8 ignore */ ` with stated reasons instead of deletion.
-- knip (dead code/deps), publint (package correctness), workspace constraints (workspace rules: private, cordis peer+dev, uniform version, ESM), and a NodeNext consumer typecheck for built package declarations.
+- publint (package correctness), workspace constraints (workspace rules: private, cordis peer+dev, uniform version, ESM), and a NodeNext consumer typecheck for built package declarations. [The unused-code gate removal](2026-08-19-remove-knip.md) records why static dead-code scanning is outside this suite.
 - lefthook pre-commit applies project-free Oxlint validation and [safe fixes with a bounded retry](2026-08-09-oxlint-only-fix-workflow.md), rejects staged whitespace, and checks the vendor manifest; pre-push runs incremental typecheck. CI runs the full matrix on node 22.19/24/26 plus built application smokes for the Headless, TUI, ACP, JSON-RPC, workflow, and code-runtime entry paths.
 
 ## Consequences

@@ -1,13 +1,3 @@
-// HoverCard: delayed hover-preview card portaled to document.body.
-// Same portal mechanics as Menu: the wrapper span supplies the anchor rect,
-// the card is fixed-positioned at its right edge and repositions on
-// scroll/resize while open. The card is reachable: it takes pointer events,
-// and leaving the anchor only arms a grace-delayed close, so the pointer can
-// cross the 8px gap and settle on the card to read a clipped path or title.
-// The portaled card is a React child of the wrapper, so React's enter/leave
-// traversal already treats it as inside — one pair of wrapper handlers covers
-// anchor and card alike.
-
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -24,21 +14,21 @@ import css from './HoverCard.module.css'
  * @param props.disabled - suppress opening; turning true closes an open card.
  * @param props.copyText - optional primary value copied by activation and
  * included in the card's accessible name.
- * @param props.copyLabel - accessible activation-label prefix (default "复制").
- * @param props.copiedLabel - visible success label (default "复制成功").
+ * @param props.copyLabel - localized accessible activation-label prefix.
+ * @param props.copiedLabel - localized visible success label.
  * @returns anchor wrapper with the conditional portaled card.
  */
 export function HoverCard({
   anchor, content, openDelayMs = 500, disabled = false,
-  copyText, copyLabel = '复制', copiedLabel = '复制成功',
+  copyText, copyLabel, copiedLabel,
 }: {
   anchor: ReactNode
   content: ReactNode
   openDelayMs?: number
   disabled?: boolean
   copyText?: string | undefined
-  copyLabel?: string | undefined
-  copiedLabel?: string | undefined
+  copyLabel: string
+  copiedLabel: string
 }) {
   const rootRef = useRef<HTMLSpanElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)

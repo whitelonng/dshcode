@@ -1,14 +1,7 @@
-/**
- * Pure derivation of the diff-card props from a frozen call slice: the
- * `card:'diff'` render intent the write/edit tools declare arrives on the
- * snapshot as `callView`/`resultView`, and this is the one place that turns
- * that pair into what {@link DiffBlock} draws. Both conversation render sites
- * (the chat tool row's expanded body and the details panel's Output section)
- * call this, so the hunks they show are derived once.
- * @module
- */
+/** Pure diff-card derivation from raw file-mutation calls and result metadata. @module */
 import type { DiffBlockProps, DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from './tool-call-model.ts'
+import { parsedToolCall, validEscalationFields } from './raw-tool-call.ts'
 
 /**
  * Diff-body lines the chat row shows before collapsing the middle — half the
@@ -36,13 +29,8 @@ export interface DiffCardModel {
 }
 
 /**
- * Narrow a wire `card:'diff'` view's `diffs` to well-formed hunks. The event
- * view crosses the wire and `toolEventViewSchema` validates only the `card`
- * string, so a version mismatch or an anomalous plugin can deliver a `diff` card
- * whose `diffs` is absent, not an array, or carries malformed hunks. Returning
- * null for any of those routes the block to the generic path instead of letting
- * DiffBlock's `for...of`/`split` throw and crash the row or the details panel.
- * @param diffs - the view's `diffs` field, unverified.
+ * Narrow opaque result metadata's `diffs` to well-formed hunks.
+ * @param diffs - the metadata field to validate.
  * @returns the validated hunks, or null when the payload is not usable.
  */
 function narrowDiffs(diffs: unknown): DiffHunk[] | null {
@@ -59,39 +47,74 @@ function narrowDiffs(diffs: unknown): DiffHunk[] | null {
   return out
 }
 
+type IntendedDiff = { tool: 'write' | 'edit' | 'str_replace_editor'; diff: DiffHunk }
+
+function intendedDiff(block: ToolCallBlock): IntendedDiff | null {
+  const parsed = parsedToolCall(block)
+  if (parsed === null) return null
+  if (parsed.name === 'str_replace_editor') {
+    const { command, path, file_text: fileText, old_str: oldText, new_str: newText } = parsed.args
+    if (typeof path !== 'string' || path.trim() === '') return null
+    if (command === 'create') {
+      if (fileText !== undefined && typeof fileText !== 'string') return null
+      return {
+        tool: 'str_replace_editor',
+        diff: { path, oldText: null, newText: fileText ?? '' },
+      }
+    }
+    if (command === 'str_replace') {
+      if (oldText !== undefined && typeof oldText !== 'string') return null
+      if (newText !== undefined && typeof newText !== 'string') return null
+      return {
+        tool: 'str_replace_editor',
+        diff: { path, oldText: oldText ?? null, newText: newText ?? '' },
+      }
+    }
+    return null
+  }
+  const { file_path: path } = parsed.args
+  if (typeof path !== 'string' || path.trim() === '') return null
+  if (!validEscalationFields(parsed.args)) return null
+  if (parsed.name === 'write') {
+    const { content } = parsed.args
+    return typeof content === 'string'
+      ? { tool: 'write', diff: { path, oldText: null, newText: content } }
+      : null
+  }
+  if (parsed.name !== 'edit') return null
+  const { old_string: oldText, new_string: newText, replace_all: replaceAll } = parsed.args
+  if (typeof oldText !== 'string' || typeof newText !== 'string') return null
+  if (replaceAll !== undefined && typeof replaceAll !== 'boolean') return null
+  return { tool: 'edit', diff: { path, oldText: oldText || null, newText } }
+}
+
+function appliedDiffs(meta: unknown): DiffHunk[] | 'empty' | null {
+  if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) return null
+  const diffs = (meta as Record<string, unknown>).diffs
+  if (!Array.isArray(diffs)) return null
+  if (diffs.length === 0) return 'empty'
+  return narrowDiffs(diffs)
+}
+
 /**
- * Derive the diff-card props for a tool call, or null when this call is not a
- * diff card and belongs on the generic path.
- *
- * The result side is authoritative once the call settles: the write/edit tools
- * return the applied contextual hunks there (an edit's real before/after, a
- * create's whole-file diff), which replace the call-time diff derived from the
- * arguments alone. While the call is still running only the call side exists,
- * so a running write/edit shows its intended change. Null is the documented
- * generic-card default and covers every non-diff card — including a `card`
- * value this UI version does not know, which arrives over the wire and cannot
- * be trusted to be one of the compiled variants — and a settled call whose
- * result view is generic (how write/edit keep their execution errors on the
- * generic path).
- *
- * This derivation consumes only `diffs`; the render intent's `title` field is
- * deliberately dropped. The row supplies its own title (`Edit`/`Write · path`
- * from the args), which outranks the view's `title`. A tool that names its own
- * diff header therefore does not surface that text on the Web row.
- * @param block - RunningToolCall or ToolResultNode off the snapshot caches.
+ * Derive running diffs for root write/edit and `str_replace_editor`
+ * create/replace calls, plus applied settled diffs for root write/edit calls.
+ * A successful write with valid empty metadata uses its argument-derived
+ * whole-file diff, matching create and identical-overwrite presentation;
+ * `str_replace_editor` settles through Generic because it has no result view.
+ * @param block - running or settled Tool block.
  * @returns the diff-card props, or null for the generic path.
  */
 export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
-  if (!('kind' in block)) {
-    // Running: the call view may carry the intended diff; the result is absent.
-    const call = block.callView?.card === 'diff' ? block.callView : null
-    const diffs = call === null ? null : narrowDiffs(call.diffs)
-    return diffs === null ? null : { card: { diffs } }
+  if (block.parentCallId !== undefined) return null
+  const intended = intendedDiff(block)
+  if (intended === null) return null
+  if (!('kind' in block)) return { card: { diffs: [intended.diff] } }
+  if (intended.tool === 'str_replace_editor') return null
+  if (block.isError) return null
+  const applied = appliedDiffs(block.meta)
+  if (applied === null || applied === 'empty') {
+    return intended.tool === 'write' ? { card: { diffs: [intended.diff] } } : null
   }
-  // Settled: the result view's applied hunks replace the call-time diff. A
-  // window that dropped the call head leaves only the result, which still
-  // renders — the result view carries the whole change.
-  const result = block.resultView?.card === 'diff' ? block.resultView : null
-  const diffs = result === null ? null : narrowDiffs(result.diffs)
-  return diffs === null ? null : { card: { diffs } }
+  return { card: { diffs: applied } }
 }

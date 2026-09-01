@@ -19,8 +19,8 @@ DeepSeek Harness 在 TUI 和 Headless coding agent 之外，还提供了两个�
 保留的应用角色均有明确归属：
 
 - `@deepseek-ai/dsh-tui` 负责终端交互式执行。它会在 Loader 启动前拒绝非 TTY 流；`apps/cli/config/base.cordis.yml` 与 `tui.cordis.yml` overlay 拥有完整 coding 组装，PTY 与终端快照覆盖则位于 `apps/cli/tests/`。
-- [`dsh --profile headless`](../../../../apps/cli/README.zh.md) 负责非交互式执行。其 `headless` profile 是产品组装；`examples/headless-agent` 负责回放快照、通用真实 agent 测试套件和未导出的无密钥 Loader driver。
-- [`@deepseek-ai/dsh-acp-demo`](../../../../packages/examples/acp-demo/README.zh.md) 和 `@deepseek-ai/dsh-sdk-jsonrpc-server` 负责各自的分帧协议集成。
+- [`dsh --profile headless`](../../../../apps/cli/README.zh.md)负责非交互式执行。其 `headless` profile 是产品组装；录制会话位于 `snapshots/session/`，profile 集成测试位于 `apps/cli/tests/profiles/headless/`，共享 Loader driver 位于 `packages/test-support/loader-smoke/tests/fixtures/`。
+- [`dsh --profile acp`](../../../../apps/cli/README.zh.md) 和 `@deepseek-ai/dsh-sdk-jsonrpc-server` 负责各自的分帧协议集成。
 
 承载 `stdio` 运行接口选项的 SDK 项目模型已由 [SDK 项目工具链移除决策](2026-08-11-remove-sdk-project-toolchain.zh.md)删除。仓库中的演示文档要求 DeepSeek API key，并优先引导到当前可运行的产品。
 
@@ -30,7 +30,7 @@ DeepSeek Harness 在 TUI 和 Headless coding agent 之外，还提供了两个�
 
 TUI 与 Headless 的 Loader 覆盖以源码和构建产物两种模式运行真实 app 包。由 PTY 驱动的子进程覆盖仅用于 TUI 生命周期；其他入口冒烟测试使用单次管道协议。Headless 验证任务/结果约定和工具调用约定。生成图谱与仓库搜索会拒绝陈旧的包、命令、叶节点、SDK 接口、`createStdioChat` 和 `StdioRuntime` 引用。
 
-构建后的 `dsh` 可执行文件会在 Loader 启动前拒绝通过管道启动 TUI，并指向 `dsh --profile headless`；`apps/cli/tests/built-bin.e2e.ts` 在普通 Node 下固定产品的一次性入口，包括输出和无效参数。`examples/headless-agent/tests/headless.snapshot.ts` 固定产品持久化，`apps/cli/tests/headless-shutdown.e2e.ts` 则负责有界信号升级。headless 示例仅供测试的 JSONL driver 保留组装后的规范事件快照，而不会创建第二套 CLI（命令行界面）约定。Code Mode 由程序化 TUI 快照与 ACP overlay demo 覆盖。时间上下文集成通过显式的 Headless 测试组装执行两个有序轮次，而更细粒度的耗时行为由时间上下文的包级测试负责。
+构建后的 `dsh` 可执行文件会在 Loader 启动前拒绝通过管道启动 TUI，并指向 `dsh --profile headless`；`apps/cli/tests/built-bin.e2e.ts` 在普通 Node 下固定产品的一次性入口，包括输出和无效参数。`apps/cli/tests/profiles/headless/tests/headless.expected.e2e.ts` 固定产品持久化，`apps/cli/tests/headless-shutdown.e2e.ts` 则负责有界信号升级。headless 预期输出测试保留组装后的规范事件，而不会创建第二套 CLI（命令行界面）约定。PTC mode 通过 headless profile 的 `DSH_TOOLS_MODE=ptc` 组合运行。时间上下文集成通过包自有 Loader 组合执行两个有序轮次，而更细粒度的耗时行为由时间上下文的包级测试负责。
 
 ## 曾考虑的替代方案
 

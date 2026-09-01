@@ -13,9 +13,11 @@
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { foldConsumedWork } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { SessionId, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
+import { SessionLogOffset } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionId, SessionLogOffset as SessionLogOffsetType, TurnEndReason } from '@deepseek-ai/dsh-session'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import {
   appendDelegatedPolicyOverrides,
@@ -67,7 +69,7 @@ function toStopReason(reason: TurnEndReason | undefined): SubagentStopReason {
 /** Extra inputs the spawn and fork providers supply to the shared driver. */
 export interface InProcessRunOptions {
   /** Completed-turn seed for fork, or undefined for a fresh spawn. */
-  readonly seed?: SessionEvent[]
+  readonly seed?: readonly SessionEvent[]
 }
 
 /** Error used when cancellation wins before the child publication boundary. */
@@ -108,9 +110,9 @@ export async function startInProcessRun(
   const parent = request.parent
   const childDepth = resolveChildDepth(parent, request.maxDepth)
 
-  const childId = SessionId(randomUUID())
+  const childId = brandString<SessionId>(randomUUID())
   const seed = options.seed
-  const activationBoundary = seed?.length ?? 0
+  const activationBoundary = SessionLogOffset(seed?.length ?? 0)
 
   // Capture before the first await: a later parent switch belongs to the
   // parent's future.
@@ -131,8 +133,9 @@ export async function startInProcessRun(
 
   const handle = await parent.ctx.agents.create({
     sessionId: childId,
-    meta: childSessionMeta(parent, childDepth, activationBoundary),
+    meta: childSessionMeta(parent, childDepth, seed !== undefined),
     ...seed !== undefined ? { seed } : {},
+    ...seed === undefined ? {} : { inheritedEventCount: activationBoundary },
     agentOptions: resolveChildAgentOptions(parent, request.agentOptions, childDepth),
     signal: request.signal,
     setup,
@@ -156,7 +159,7 @@ function drivePublishedRun(
   signal: AbortSignal,
   prompt: ContentBlock[],
   childId: SessionId,
-  boundary: number,
+  boundary: SessionLogOffsetType,
   structured: StructuredAttachment | undefined,
 ): SubagentRun {
   const child = handle.agent
@@ -207,11 +210,11 @@ function drivePublishedRun(
 /** Read one settled child's result from events after its activation boundary. */
 function readResult(
   child: Agent,
-  boundary: number,
+  boundary: SessionLogOffsetType,
   cancelled: boolean,
   structured?: { captured?: { value: unknown } | undefined },
 ): SubagentResult {
-  const own = child.session.events.slice(boundary)
+  const own = child.session.snapshotEvents(boundary)
   // `droppedUnrun` is deliberately unread: a one-shot prompt is claimed by its
   // awaited first turn almost immediately, and the owner's own teardown is the
   // `cancelled` flag below. A cancellation with no accounting turn resolves

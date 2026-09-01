@@ -2,7 +2,7 @@
 // call/result slice.
 
 import { describe, expect, it } from 'vitest'
-import type { RunningToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { RunningToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { cordisActionCard, cordisDefineCard } from '../src/client/card-model.ts'
 
 const ARGS = '{"name":"clock","purpose":"顶栏时钟","code":{"client":"return {}","host":"harness.handle(\'now\', () => Date.now())"}}'
@@ -10,7 +10,7 @@ const ARGS = '{"name":"clock","purpose":"顶栏时钟","code":{"client":"return 
 function running(over: Partial<RunningToolCall> = {}): RunningToolCall {
   return {
     callId: 'call-1', name: 'cordis_define', argsRaw: ARGS, turn: 1, step: 1, time: 1_000,
-    callView: null, subCalls: [], ...over,
+    subCalls: [], ...over,
   }
 }
 
@@ -19,7 +19,7 @@ function settled(over: Partial<ToolResultNode> = {}): ToolResultNode {
     kind: 'tool-result', seq: 2, time: 2_000, callId: 'call-1',
     call: { name: 'cordis_define', argsRaw: ARGS }, callTime: 1_000,
     content: [{ type: 'text', text: 'defined dyn-1' }], isError: false,
-    meta: { pluginId: 'dyn-1', packageId: 'pkg-1' }, callView: null, resultView: null, subCalls: [], ...over,
+    meta: { pluginId: 'dyn-1', packageId: 'pkg-1' }, subCalls: [], ...over,
   }
 }
 

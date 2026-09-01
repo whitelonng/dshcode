@@ -4,7 +4,7 @@ Status: implemented
 
 English | [中文](2026-07-19-gui-web-client-architecture.zh.md)
 
-> Division of labor: the channel-independent layering model and RPC protocol (message model / type system / contract face / client base class) are in the [layering and RPC protocol note](2026-07-19-gui-layering-and-rpc-protocol.md); this document = the browser side: how the client cordis tree loads, how UI plugins compose through slots and services, and how the React-free object layer feeds React through immutable snapshots.
+> Division of labor: the historical channel-independent layering model and RPC protocol are recorded in the [archived layering and RPC protocol note](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md); this document = the browser side: how the client cordis tree loads, how UI plugins compose through slots and services, and how the React-free object layer feeds React through immutable snapshots.
 
 ## Problem
 
@@ -17,7 +17,7 @@ Both ends run cordis. The host is a cordis plugin tree; the browser runs a secon
 ```
 ┌─ Host ─────────────────────────┐   ┌─ Browser ─────────────────────────────────────────┐
 │ sessions/agents/SessionLog     │   │ client cordis root ctx                             │
-│ apiproxy: RPC + mux/host 双流  │◀─▶│  ├ vendored Loader + ctx.modules（内核，壳静态持有）│
+│ Connection + Gateway: RPC/events│◀─▶│  ├ vendored Loader + ctx.modules（内核，壳静态持有）│
 │ webserver:                     │   │  ├ immediately entries: connection/runtime/        │
 │  ├ GET /plugins/<id>/client.js │   │  │   ui-theme/i18n（fetch bundle，boot 预拉）       │
 │  └ GET / 注入 __DSH_BOOT__ 图  │   │  ├ lazy entries: layout/sidebar/                   │
@@ -42,18 +42,18 @@ Implementation homes: registry core and the props-share types live in `packages/
 
 ## Services and scope addressing
 
-A service is a plugin's only API toward other plugins (UI components and injection faces are not APIs; a plugin nobody calls mounts no service — ui-trajectory is the minimal-plugin exemplar: no ctx service, only view-slot registrations). The roster: `ctx.connection` (api client + stream handles), `ctx.slots` (registry wrapper emitting `slots/changed`, render entry, renderer installation contract), `ctx.sessions` (list store, current-session state, scope tree), `ctx.loader`, `ctx.theme`, `ctx.i18n`, `ctx.layout` (cross-plugin view navigation), `ctx.conversation` (send/cancel/startSession). Viewing state that used to live in service stores (panel widths, selection, drafts) now lives in entry-declared stores per the [slot system standard](2026-07-22-slot-type-chain-implementation.md).
+A service is a plugin's only API toward other plugins (UI components and injection faces are not APIs; a plugin nobody calls mounts no service — ui-trajectory is the minimal-plugin exemplar: no ctx service, only view-slot registrations). The roster: `ctx.connection` (RPC transport + generation state), `ctx.slots` (registry wrapper emitting `slots/changed`, render entry, renderer installation contract), `ctx.sessions` (list store, current-session state, scope tree), `ctx.loader`, `ctx.theme`, `ctx.i18n`, `ctx.layout` (cross-plugin view navigation), `ctx.conversation` (send/cancel/startSession). Viewing state that used to live in service stores (panel widths, selection, drafts) now lives in entry-declared stores per the [slot system standard](2026-07-22-slot-type-chain-implementation.md).
 
 There is no component registration model besides slots — the former view and tool rings both dissolved into it. Conversation views are entries of the `'conversation.view'` list slot ui-conversation declares, tab metadata rides the registration options (`id`/`order`/`label`), and per-view chrome lives inside the view components themselves. Final Chat business Nodes dispatch through the keyed/session `'conversation.chat.node'` slot; ui-tool owns its `tool-call` entry, recursively renders the supplied `subCalls`, and declares the keyed/session `'tool.call.toolview'` child slot. The key space stays runtime-open (SlotMap declares slots, never keys), and roots and descendants dispatch by `entryKey: toolName` with `GenericToolCard` as the fallback. Business packages register atomic views through `ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({ name: 'tool.call.toolview', key: '<tool>' }, Row))`; the declaration is the load and reload dependency ([decision](2026-08-05-slot-declaration-injection.md)). ui-conversation separately delegates the selected call's details body through `'conversation.details.tool'`, so ui-tool's card models remain the single presentation owner without making conversation import Tool components. The target-neutral event and view registries are data assembly seams rather than parallel component registries ([decision](2026-08-09-client-conversation-node-assembly.md)).
 
 **Scope addressing** mirrors the host's agent-scope idiom: services are root singletons whose methods take no sessionId — they read the caller's scope mark (`scopeOf(ctx)`). Inside a session scope, `ctx.conversation.send('hi', 'queue')` targets that session; cross-session calls re-target by switching ctx (`ctx.sessions.scope(id)!.conversation.send(...)`); calling a scoped method from root ctx throws. Client session scopes are minted like host agent scopes (a no-op plugin fiber + a scope-key extend), built lazily on first viewing and torn down only when the session is removed and unwatched — host-session death alone does not tear a scope (it freezes into a read-only viewport).
 
-## The data object layer (`packages/client/runtime/src/client/sessions/`)
+## The data object layer (`packages/api/session-controller/src/client/`)
 
 Frames enter, snapshots exit, the Conversation assembler sits between — React-free (zero React imports, grep-assertable):
 
 ```
-mux/host frames (ConnectionController pump, injected sinks)
+$events frames (ConnectionController pump, injected sinks)
         │
         ▼
 SessionManager.handleMuxEnvelope / handleHostEnvelope
@@ -73,7 +73,7 @@ Notifier 微任务合批 ──► ConversationSnapshot 缓存 ──uSES──�
 - **SessionManager** (manager.ts): instance cluster + frame entry + the session list. sessionId-bearing frames go only to existing instances (a mux broadcast must not instantiate every session); approval/question `requested` frames are the exception — they never land in history, so they buffer in `pendingBuffers` and replay on instantiation.
 - **Notifier** (notifier.ts): two channels chosen by change source. `markDirty()` (default; frame-driven changes always) batches per microtask — N changes, one notification, one re-render; the flush rebuilds the snapshot cache before notifying. `notifyNow()` (only direct echoes of user gestures) rebuilds and notifies in the same tick — controlled inputs roll the DOM back and jump the caret if their echo defers to a microtask. Frame-driven code using notifyNow collapses batching back to per-frame renders; banned.
 - **ConversationNodeAssembler** (`runtime/src/client/conversation/`): the Session-owned incremental engine runs independently registered Definitions over raw events. `match(event)` selects `(kind, id)` without Context scans; start/update build Definition state; engine-computed Locations carry Turn/Step closure; backward Context reads record dependencies repaired by later prepends; `buildViewNode(target)` materializes only dirty Contexts. The Chat builder preserves structural order and per-key value identity, `useSession` selectors isolate consumption, and Assistant token publication coalesces to one animation frame. The [Conversation Node decision](2026-08-09-client-conversation-node-assembly.md) owns assembly, while [Tool presentation ownership](2026-08-08-client-tool-presentation-ownership.md) owns recursive Tool rendering.
-- **ConnectionController** (in `packages/client/connection`): opens the mux/host streams, pumps with for-await, reconnects with exponential backoff (500ms doubling to 10s, jitter, unlimited) behind a generation fence; sinks are injected one-way (the Controller does not know Session). Reconnect = rebuild: `onConnected` → list refresh + per-open-session resync. The object layer faces only `IApiClient`; Web carriage uses HTTP POST for the two client→server quadrants and [one WebSocket per logical stream](2026-08-04-websocket-downlink-carrier.md) for the two server→client quadrants, while the client class family remains the layering note's territory.
+- **ConnectionController** (in `packages/client/connection`): opens the `$events` Remote stream, pumps with for-await, and reconnects with exponential backoff (500ms doubling to 10s, jitter, unlimited) behind a generation fence; sinks are injected one-way (the Controller does not know Session). Reconnect = rebuild: `onConnected` → list refresh + per-open-session resync. The object layer calls generated namespaces through `ctx.remote`; Web carriage uses HTTP POST for unary Remote calls and API Gateway's WebSocket mux for logical streams, while Connection owns request transport and generations.
 
 ## The React face (`packages/client/ui-renderer`)
 

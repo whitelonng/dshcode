@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-24-alpha-routed-image-quality-ladders.md
+2026-08-24-alpha-routed-image-quality-ladders.md: cdf5e7bd908782781e66a4f6494428f0f174e258
+2026-08-24-alpha-routed-image-quality-ladders.zh.md: fbe8215b0ca1c606cd66d60fe1109d2f9aa1cbad

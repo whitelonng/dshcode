@@ -16,7 +16,7 @@ The mechanism completes the platform-layer fold: the base bundle's `cordis.patch
 
 ## Alternatives considered
 
-**A declarative `platform` field on the row.** Static and gate-checkable, but a second composition mechanism beside `!!js`, and platform is only today's condition.
+**A declarative `platform` field on the row.** Static and gate-checkable, but a second composition mechanism beside `!!js`, while platform is only one deployment condition.
 
 **Preset-level platform overlays.** Rejected: the condition belongs on the row it governs — the same principle folds the launcher's separate Windows platform layer into the base rows.
 

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`standard`、`code` 和 `cordis` preset 配置挂载 `dsh-tool-fs` 与 `dsh-tool-fs-search`，但不挂载 `dsh-tool-str-replace-editor`。因此 Code Mode 的注册表和生成的 SDK 均不包含 `str_replace_editor`。`minimal` preset 继续挂载 `dsh-tool-str-replace-editor`，部署配置或用户自定义 preset 仍可显式挂载该插件。
+`standard`、`code` 和 `cordis` preset 配置挂载 `dsh-tool-fs` 与 `dsh-tool-fs-search`，但不挂载 `dsh-tool-str-replace-editor`。因此 PTC mode 的注册表和生成的 SDK 均不包含 `str_replace_editor`。`minimal` preset 继续挂载 `dsh-tool-str-replace-editor`，部署配置或用户自定义 preset 仍可显式挂载该插件。
 
 此决策收窄 preset 工具清单，不移除工具包及其 Python 运行时支持。较早的[共享清单决策](../feature/2026-07-31-even-out-shipped-tool-rosters.zh.md)继续说明与 surface 无关的工具为何归 preset 组合所有；本记录说明编辑器例外。
 
@@ -22,4 +22,4 @@ Status: implemented
 
 ## 后果
 
-通用 agent 使用 `read`、`write` 和 `edit` 完成文件系统修改，minimal agent 保留 `str_replace_editor`。preset 组合测试固定其不会出现在 standard 清单、Cordis 清单及 Code Mode SDK 中，同时 minimal 断言继续固定其存在。
+通用 agent 使用 `read`、`write` 和 `edit` 完成文件系统修改，minimal agent 保留 `str_replace_editor`。preset 组合测试固定其不会出现在 standard 清单、Cordis 清单及 PTC mode SDK 中，同时 minimal 断言继续固定其存在。

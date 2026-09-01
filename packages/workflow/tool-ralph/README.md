@@ -1,38 +1,107 @@
+---
+description: "The model-facing ralph tool: a fixed foreground fresh-agent loop toward one immutable objective, for users and maintainers choosing or configuring fresh-agent iteration."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-tool-ralph
 
 English | [中文](README.zh.md)
 
-The model-facing `ralph` tool runs a fixed foreground workflow that gives one immutable objective to a sequence of fresh child agents. It demonstrates a specialized orchestration policy as an ordinary plugin over [`ctx.workflowEngine`](../workflow/README.md) and [`ctx.subagents`](../../subagent/subagent/README.md): no Ralph mode or fresh-agent loop is added to `agent-loop`, and the same-session [goal domain](../../goal/goal/README.md) remains independent. The [Ralph Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-fresh-agent-ralph-workflow-tool.md) owns the policy and deferred work.
+## Summary
 
-## Contract
+`dsh-tool-ralph` gives the model the `ralph` tool: a fixed foreground workflow that hands one immutable objective to a sequence of fresh child agents, each starting with no conversation seed and carrying only the previous bounded report. It is a specialized orchestration policy built on the workflow and subagent capabilities — no Ralph mode is added to the agent loop, and the same-session goal domain stays independent. The call returns when a worker reports completion or a concrete blocker, or at the round limit; completion and blockers are worker reports, not independent certification. Use it only when the direct human explicitly asks for a Ralph loop or fresh-agent iterative execution; ordinary long-running objectives belong to goal tools, and bounded delegation belongs to subagents or workflows.
 
-`ralph({ objective, maxRounds? })` waits for the entire run. The deployment config's `maxRounds` is both the default and a ceiling on a call override. Every Ralph round starts one child through `subagentProvider`; that provider must exist, support structured output, and report `inheritsParentContext: false`. The configured provider is carried as `WorkflowStartRequest.subagentProvider`, so the fixed script cannot inspect or change routing and the ordinary model-written `workflow` tool gains no provider selector. The resolved round cap is also carried as `WorkflowStartRequest.maxTotalAgents`, coordinating the fixed loop with the engine's total-child backstop; the engine rejects a Ralph cap above its deployment ceiling before publishing a run.
+## Table of Contents
 
-Each child receives only the immutable objective, its current Ralph round and cap, a shared-workspace-as-authority instruction, and the previous structured handoff. The workspace is long-term memory; parent conversation and prior child sessions are not seeded. Reports have `status: continue | complete | blocked`, a non-empty summary, evidence, next steps, and blocker text. Status-specific semantics and the serialized `maxHandoffChars` ceiling are validated inside the fixed workflow and again at the consumer boundary. Invalid, missing, or oversized reports fail the workflow instead of being truncated or mistaken for cap exhaustion.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-The successful terminal tool result is `complete`, `blocked`, or `budget-limited`, with the last bounded report and number of rounds started. The canonical envelope is `{ runId, agentsStarted, result }`; completion and blocker labels in its Native renderer explicitly say that a worker reported the outcome, not independent certification. `maxResultChars` bounds only that rendered text including its truncation marker, without altering the validated report in the canonical value or the cross-round handoff.
+-----
 
-An ordinary child failure produces an error naming the failed round and retaining the last successful handoff when one exists. Ralph does not retry that round. Fatal provider-start, transport, worker, or workflow failures remain workflow errors and may settle before the fixed script can return a handoff. Cancellation is also an error; partial output is never success.
+<a id="use-this-package"></a>
+## Use this package
 
-## Lifecycle and cancellation
+The `ralph` tool runs a fixed foreground loop: one fresh child per round works on the immutable objective in the shared workspace, and only a bounded structured report crosses rounds. Use it only when the direct human explicitly asks for a Ralph loop or fresh-agent iterative execution. For ordinary long-running same-session work, use goal tools; for bounded delegation and fan-out, use plain subagents or the `workflow` tool.
 
-The caller's agent is the parent of every fresh child, preserving cwd and lineage without copying its conversation. `exec.signal` enters the workflow engine and is also bridged to `run.cancel()` for implementation independence. The tool awaits `run.result` and calls `run.dispose()` in `finally`, so a cancelled parent step waits for the engine's bounded termination and child quiescence before returning.
+### Calling the tool
 
-## Render intent
+The model submits `{ objective, maxRounds? }` and the call blocks until the whole run settles. The deployment config's `maxRounds` is both the default and a ceiling on a call override. The terminal result is `complete`, `blocked`, or `budget-limited`, carrying the last bounded report and the number of rounds started; an ordinary child failure returns an error naming the failed round and retaining the last successful handoff when one exists.
 
-The pending call is a `generic` card titled `ralph`; the immutable objective is its `rawInput`. The result keeps the generic card. Both presentation functions depend only on tool arguments and the settled tool envelope.
+### What each round sees
 
-## Config
+Each child receives only the immutable objective, its current round and cap, a shared-workspace-as-authority instruction, and the previous structured handoff; parent conversation and prior child sessions are never seeded. The workspace is the long-term memory across rounds. Reports carry a status (`continue`, `complete`, or `blocked`), a non-empty summary, evidence, next steps, and blocker text; invalid or oversized reports fail the workflow instead of being truncated or mistaken for cap exhaustion.
 
-| Key | Default | Meaning |
+### Config
+
+| Field | Default | Meaning |
 |---|---|---|
 | `subagentProvider` | `spawn` | Fresh structured-output provider used for every round. |
 | `maxRounds` | `256` | Default and deployment ceiling for one Ralph run. |
 | `maxHandoffChars` | `16384` | Maximum serialized characters in one round report. |
 | `maxResultChars` | `16384` | Maximum characters in the complete successful parent result. |
 
-All config values are normalized and validated when the plugin applies, including direct application outside Loader schema normalization. Provider capabilities are resolved immediately before each call because provider registration can change under plugin lifecycle and HMR.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-ralph) is the exhaustive source for every accepted field. The configured provider must exist, support structured output, and report `inheritsParentContext: false`; a call against a provider that violates this fails loud before any round starts.
 
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the fixed-script design and the validation and lifecycle mechanics; observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The loop is a deployment-owned fixed script: the model supplies data only and cannot alter the loop, provider route, schema, or handoff validation. The tool is an ordinary plugin over `ctx.workflowEngine` and `ctx.subagents` — no Ralph mode or fresh-agent loop is added to `agent-loop`, and the same-session goal domain stays independent. The [Ralph Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-fresh-agent-ralph-workflow-tool.md) owns the policy and deferred work.
+
+### Fixed script and routing
+
+The configured provider is carried as `WorkflowStartRequest.subagentProvider`, so the fixed script cannot inspect or change routing and the ordinary model-written `workflow` tool gains no provider selector. The resolved round cap is carried as `WorkflowStartRequest.maxTotalAgents`, coordinating the fixed loop with the engine's total-child backstop; the engine rejects a cap above its deployment ceiling before publishing a run.
+
+### Report validation
+
+Status-specific semantics and the serialized `maxHandoffChars` ceiling are validated inside the fixed workflow and again at the consumer boundary: a continuing report needs next steps and an empty blocker, a completion report needs evidence and no next steps, and a blocked report needs a concrete blocker. Invalid, missing, or oversized reports fail the workflow.
+
+### Lifecycle and cancellation
+
+The caller's agent is the parent of every fresh child, preserving cwd and lineage without copying its conversation. `exec.signal` enters the workflow engine and is also bridged to `run.cancel()` for implementation independence. The tool awaits `run.result` and calls `run.dispose()` in `finally`, so a cancelled parent step waits for the engine's bounded termination and child quiescence before returning.
+
+### Render intent
+
+The pending call is a `generic` card titled `ralph` with the immutable objective as its `rawInput`; the result keeps the generic card. Both presentation functions depend only on tool arguments and the settled tool envelope, and the completion and blocker labels state that a worker reported the outcome, not independent certification.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: fixed script, provider routing, report validation, tool registration |
+| — | No runtime invariant companion is published; this model-facing orchestration adapter owns no independent event stream; workflow and subagent owners validate the runs and child lifecycles it starts. |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the tool-level contract is not enough. They move from the shared workflow model to the engine, the subagent seam, and the adjacent goal domain.
+
+- [Workflow subsystem](../../../docs/subsystems/workflow.md) — the seam contract behind the fixed loop.
+- [Workflow seam](../workflow/README.md) — the run and result vocabulary.
+- [Worker-thread engine](../workflow-worker-thread/README.md) — the engine that executes the fixed script.
+- [subagent seam](../../subagent/subagent/README.md) — the fresh-child provider contract.
+- [Goal group](../../goal/goal/README.md) — same-session goal tools for ordinary long-running objectives.
+- [Ralph tool Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-fresh-agent-ralph-workflow-tool.md) — the policy, provider requirements, and deferred work.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### System prompt
@@ -44,7 +113,7 @@ Every parent request in this plugin's registration scope receives the fixed rout
 ##### Ralph guidance
 
 ```markdown
-Use the ralph tool ONLY when the direct human explicitly asks for a Ralph loop or fresh-agent iterative execution. Each Ralph round starts a fresh child with no conversation seed and uses the shared workspace as durable memory. Completion and blockers are worker reports, not independent evaluation. Use same-session goal tools for ordinary long-running objectives, and plain subagents or workflowEngine for bounded delegation and fan-out.
+Use the ralph tool ONLY when the direct human explicitly asks for a Ralph loop or fresh-agent iterative execution. Each Ralph round starts a fresh child with no conversation seed and uses the shared workspace as durable memory. Completion and blockers are worker reports, not independent evaluation. Use same-session goal tools for ordinary long-running objectives, and plain subagents or workflows for bounded delegation and fan-out.
 ```
 
 #### Token effect
@@ -85,9 +154,26 @@ Each fresh child has an independent request cache. The parent result appends aft
 
 ## Known Limitations and Deferred Work
 
-- **Completion is worker self-declaration** — there is no independent evaluator or verifier deciding whether the objective is actually complete; evaluator policy and evaluator-driven continuation are deferred.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define what the tool does not yet support. They are current constraints, not a task backlog.
+
+- **Completion is worker self-declaration** — there is no independent evaluator or verifier deciding whether the objective is complete; evaluator policy and evaluator-driven continuation are deferred.
 - **Foreground only** — there is no job id, background collection, process-resume checkpoint, scheduler, or wall-clock start policy.
 - **The workspace is the only cross-round long-term memory** — one bounded report is the explicit handoff, and uncommitted conversational reasoning disappears with each child.
-- **One round is one fresh child** — there is no within-round fan-out, model/provider switching, fork context, or model-call-selected provider.
+- **One round is one fresh child** — there is no within-round fan-out, model or provider switching, fork context, or model-call-selected provider.
 - **Ordinary child failure is terminal for the run** — the fixed script reports the failed round and last successful handoff but does not retry; fatal workflow infrastructure failures can end before that state is returned.
 - **Only round count bounds aggregate effort** — token, price, and elapsed-time budgets are deferred.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers: open directions that are not decided. It is explicitly non-authoritative — shipped behavior, limits, and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+Open directions: an independent evaluator with evaluator-driven continuation; within-round fan-out and provider selection; and token, price, and elapsed-time budgets beyond the round cap.
+
+</details>

@@ -1,8 +1,3 @@
-// StateDot: session state indicator (figma nodes 14:3303/3305/3312, 122:9182).
-// done/warning/error: 10x10 halo (same color, 10% opacity) around a 6x6 solid
-// core. ongoing: a pixel-art chase — the 8 outer cells of a 3x3 matrix light
-// up clockwise with a stepped trail. Colors resolve through --dsw-* tokens only.
-
 import clsx from 'clsx'
 import css from './StateDot.module.css'
 

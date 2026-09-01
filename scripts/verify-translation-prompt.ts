@@ -24,14 +24,15 @@ try {
   if (mode !== undefined && mode !== '--snapshot') throw new Error(`unsupported argument ${JSON.stringify(mode)}`)
   const document = read('docs/i18n/translation-prompt.md')
   const terminology = read('docs/i18n/terminology.md')
+  // Synthetic reviewed examples, not live documents: editing a paired document must not
+  // churn the prompt snapshot. Each pair mirrors the other side's structure and uses
+  // terminology-table forms.
   const examplePaths = [
-    ['README.md', 'README.zh.md'],
-    ['docs/development.md', 'docs/development.zh.md'],
-    ['docs/i18n/README.md', 'docs/i18n/README.zh.md'],
-    ['docs/i18n/translation-rules.md', 'docs/i18n/translation-rules.zh.md'],
+    ['scripts/fixtures/translation-prompt/examples/product.md', 'scripts/fixtures/translation-prompt/examples/product.zh.md'],
+    ['scripts/fixtures/translation-prompt/examples/rules.md', 'scripts/fixtures/translation-prompt/examples/rules.zh.md'],
     [
-      '.agents/notes/implemented/process/2026-07-02-bilingual-docs-and-pairing-gate.md',
-      '.agents/notes/implemented/process/2026-07-02-bilingual-docs-and-pairing-gate.zh.md',
+      'scripts/fixtures/translation-prompt/examples/agent-note.md',
+      'scripts/fixtures/translation-prompt/examples/agent-note.zh.md',
     ],
   ] as const
   const examples: TranslationExample[] = examplePaths.map(([english, chinese]) => ({

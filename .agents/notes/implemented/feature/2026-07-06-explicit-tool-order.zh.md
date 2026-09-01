@@ -23,7 +23,7 @@ Status: implemented
 
 范围刻意收窄：本 Agent Note 修复的是注册顺序竞态，而非插件行为。`system-prompt/assemble` 的监听器仍然可以添加、移除或重排工具——正如它可以在 section 排序之后编辑 section——并对自身输出的确定性负责；waterfall 约定已经要求监听器是确定性的（可重建性不变式会捕获在构建与回放之间行为不一致的监听器）。
 
-配置传递沿用 `persona` 的先例，`toolOrder` 与之并列：TUI、Headless 和 ACP 应用配置接受该键，并通过 `dsh-agent-spine-demo`（其 schema 是各所有者 schema 的交集）转发给 `SystemPrompt` 子服务。有一个 schemastery 细节至关重要：schemastery 数组默认为 `[]`，但省略的 `toolOrder` 必须保持 ABSENT（= 字典序），而不是变成一个显式配置的空列表（无效——缺少 rest 条目），因此链路上每个 schema 都将默认值强制为 `undefined`。
+配置传递沿用 `persona` 的先例，`toolOrder` 与之并列，位于每个组合的 `dsh-system-prompt` 配置行。有一个 schemastery 细节至关重要：schemastery 数组默认为 `[]`，但省略的 `toolOrder` 必须保持 ABSENT（= 字典序），而不是变成一个显式配置的空列表（无效——缺少 rest 条目），因此每个接受该字段的 schema 都将默认值强制为 `undefined`。
 
 ## 曾考虑的替代方案
 

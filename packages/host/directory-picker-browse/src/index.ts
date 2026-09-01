@@ -303,8 +303,8 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
       throw new DirectoryPickerError('directory-create-failed', path, `cannot create under "${path}": not a fully qualified parent path`)
     }
     const parent = resolve(path)
-    // The backend owns segment validation (the wire schema also refuses these,
-    // but direct service consumers must hit the same fence).
+    // The backend owns segment validation; the Remote controller also refuses
+    // invalid wire input, but direct service consumers must hit the same fence.
     if (name.trim() === '' || name === '.' || name === '..' || /[/\\]/.test(name)) {
       throw new DirectoryPickerError('directory-create-failed', join(parent, name), `"${name}" is not a single path segment`)
     }

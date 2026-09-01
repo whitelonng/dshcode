@@ -1,11 +1,42 @@
+---
+description: "feedback 包组：关于会话与 assistant 消息的用户反馈，供用户与维护者选择、组合或排查反馈采集。"
+kind: "package-group"
+---
+
 # feedback/：记录的人类反馈
 
 [English](README.md) | 中文
 
-反馈家族只公开一份契约：写入权威 Session 日志的不可变评价。它绝不会进入模型对话。
+## 概述
 
-| 包 | 职责 | ctx 键 |
-|---|---|---|
-| `command-feedback/` | 与触发方式无关的 `feedback/record` 事件，以及面向用户的 `/feedback` 生产方 | 无 |
+feedback 组收集用户对 harness 工作成果的意见：用户可以提交一条关于整个会话的自由文本评价，也可以对单条 assistant 消息评分或加备注。两类反馈都不会到达模型——它们是关于输出的信号，绝不是输入。用户通过 `/feedback` 命令记录会话评价；产品界面通过 `messageFeedback` 服务读取和修改逐消息评分。两个包相互独立：会话评价与逐消息评分互不影响。本页是组的映射；包 README 与[反馈子系统页](../../docs/subsystems/feedback.zh.md)负责各自的包级约定。
 
-command feedback 评价仅写入日志：它绝不会进入模型上下文或派生历史。挂载后，[`dsh-session-telemetry-otel`](../session/session-telemetry-otel) 会观察 `feedback/record`，以释放待处理的遥测前缀，或在遥测已禁用时警告反馈将留在本地；采集本身与该策略相互独立。
+## 目录
+
+- [包](#packages)
+- [相关文档](#related-documentation)
+- [开发备注](#dev-note)
+
+<a id="packages"></a>
+## 包
+
+| 包 | 职责 |
+|---|---|
+| [`command-feedback`](command-feedback/README.zh.md) | 一条命令即可记录自由文本会话评价的 `/feedback` 命令，无需模型轮次 |
+| [`message-feedback`](message-feedback/README.zh.md) | 逐消息评分与备注，通过 `messageFeedback` 服务提供给产品界面 |
+
+会话评价是单向信号：在对话的任何时刻记录它都是安全的，且绝不会改变模型看到的内容。在 feedback-gated 共享策略下，记录会话评价正是释放会话共享的动作。
+
+逐消息评分与备注与会话一起保存，重启后依然存在，并且绝不会出现在模型历史或遥测中。
+
+<a id="related-documentation"></a>
+## 相关文档
+
+- [反馈子系统](../../docs/subsystems/feedback.zh.md)——message-feedback 的类型、服务契约与 Web 消费方。
+- [会话遥测子系统](../../docs/subsystems/session-telemetry.zh.md)——`/feedback` 确认文本披露的共享策略。
+- [匿名用户身份](../identity/README.zh.md)——嵌入反馈确认文本的按 harness home 共享 id。
+
+<a id="dev-note"></a>
+## 开发备注
+
+无。

@@ -31,7 +31,7 @@ export interface HeadlessStartupValues {
 function headlessCommand(): Command {
   return new Command()
     .name('dsh --profile headless')
-    .description('Answer one task, print the final assistant message, and exit.')
+    .description('Answer one task, stream reasoning to stderr, print the final assistant message, and exit.')
     .helpOption('-h, --help', 'show this help')
     .argument('[task...]', 'the task text; multiple words are joined by spaces')
     .addHelpText('after', `

@@ -30,5 +30,5 @@ The cold-boot budget is pinned at two reads by `apps/web/tests/startup-rpc-budge
 - Startup `settings.describe` went 15 → 2, and a new preference-owning plugin adds zero reads.
 - Every derived surface shows the same document revision at any moment; the per-reader guards (`refreshWelcomeIfLoaded`, `refreshPermissionIfLoaded`, `refreshDocumentIfLoaded`) and their subscriptions are gone.
 - The mirror refreshes on every document commit regardless of namespace, so an external settings edit now costs one background read even while no settings surface is open — the price of surfaces that open already fresh. The per-namespace `ns !== spec.namespace` filters are gone with the per-scope subscriptions.
-- `credentials.describe` (3 startup calls), `agentPreset.list` (2), and `llm.providers` are separate sources and stay direct; the same mirror pattern fits them if they ever need it.
+- `credentials/describe` (3 startup calls), `agentPresets/list` (2), `llm/listProviders`, and `llm/listConfigurableProviders` are separate sources and stay direct; the same mirror pattern fits them if they ever need it.
 - A new direct `settings.describe` caller in client code is a budget regression; the e2e's failure message says to grep for callers outside `ui-settings`.

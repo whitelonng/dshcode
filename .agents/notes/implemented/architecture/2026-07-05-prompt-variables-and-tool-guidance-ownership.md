@@ -32,7 +32,7 @@ Plugins register `{{name}}` values through `ctx.systemPrompt.variable(name, prov
 
 ### Persona as the order-0 section
 
-`dsh-system-prompt` owns `harness:identity` at order `-100` and the configured `deployment:persona` at order 0, so both survive a replacement loop. Prompt rendering has one path, `renderPrompt(assembly)`, and the routed request header therefore records the exact prompt later replayed by `ctx.tokenMeter` for compaction pressure. An agent-scoped `deployment:persona` shadows the global default and lets subagent providers install a persona before publication. The conventional order bands are identity `-100`, persona `0`, and tool guidance `100–199`.
+`dsh-system-prompt` owns `harness:identity` at first-party order `-1000` and the configured `deployment:persona` at order 0, so both survive a replacement loop. Prompt rendering has one path, `renderPrompt(assembly)`, and the routed request header therefore records the exact prompt later replayed by `ctx.tokenMeter` for compaction pressure. An agent-scoped `deployment:persona` shadows the global default and lets subagent providers install a persona before publication. The [first-party order allocation](2026-08-25-sparse-first-party-prompt-section-orders.md) owns the sparse named placements for identity, policy, tool guidance, generated protocol, and final-output obligations.
 
 ### Tool guidance ownership
 

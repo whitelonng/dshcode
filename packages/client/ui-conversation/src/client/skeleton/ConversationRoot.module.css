@@ -1,9 +1,5 @@
-/* Conversation column skeleton: header (breadcrumb row only for subagents not fork + tabs) over the view
-   area, composer InputBar at the bottom. Column width/squeeze is layout's;
-   this fills its cell. Figma: Header 39:27730 (83px two-row), tabs 13px with
-   a 2px active bar. */
-
 .root {
+  position: relative; /* positioning context for slot-owned absolute chrome */
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -12,14 +8,27 @@
 
   /* Shared width axis for the whole column: one content width W
      (--dsh-chat-content-width) for the transcript, the dock cards
-     (todo/goal/queue: card minus four insets, 4 x 8 = 32), and the takeover
-     cards (question/approval/plan review); the input card alone is W + 32px.
+     (todo/goal/queue: card minus four insets, 4 x 8 = 32), and business-owned
+     takeover cards; the input card alone is W + 32px.
      The relation also holds when a narrow viewport shrinks everything: the
      chat scroller and the takeover frames pad clearance + 16px per side while
      the input card clears the bare clearance, so the input card stays exactly
      content + 32px at every width. Declared on the root because the
-     transcript and the composer seat are sibling subtrees. */
-  --dsh-chat-content-width: 748px;
+     transcript and the composer seat are sibling subtrees.
+
+     W adapts to the column, not the viewport (a collapsed sidebar widens the
+     column without resizing the window): the component publishes the column's
+     live width as --dsh-conversation-column-width (px, via ResizeObserver —
+     container-type would re-anchor the subtree's portal-free position:fixed
+     descendants) and the clamp keeps a 680px floor (a step under the figma
+     748px — the full-width reading felt wide on every screen), takes 64% of
+     wider columns, and caps at 920px for line-length
+     readability. A dragged user preference (--dsh-chat-user-width, published
+     by the width handles) replaces the adaptive term wholesale. */
+  --dsh-chat-content-width: var(
+    --dsh-chat-user-width,
+    clamp(680px, calc(var(--dsh-conversation-column-width, 0px) * 0.64), 920px)
+  );
   --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
   --dsh-composer-side-clearance: 16px;
   --dsh-composer-dock-inset: 8px;
@@ -39,8 +48,8 @@
   bottom: 1px;
   left: 0;
   z-index: 0;
-  height: 1px;
-  background: var(--dsw-alias-border-l2);
+  height: 0.5px;
+  background: var(--dsw-alias-border-l3);
   pointer-events: none;
 }
 
@@ -189,6 +198,84 @@
   min-height: 0;
 }
 
+/* Width handles: 40px col-resize strips beside the transcript, absolute in
+   .body (NOT the scrollport: an absolute strip there would extend the
+   scrollable range; NOT .root: a strip from the column top would paint its
+   glow through the header's transparent background). Inner edge sits 24px
+   outside the content column — the
+   same offset the glow line paints at — and the strip extends 40px outward
+   from there; the outer edge is clamped to keep a 24px safe zone against the
+   column edges (sidebar side and scrollbar side stay drag-free). When the
+   margin cannot fit inset + strip + safe zone the computed width goes
+   negative and the strip resolves to zero — no mispositioned hit area on
+   narrow columns. Known half-scrollbar (~4px) centering offset vs the
+   gutter-reserved content box is accepted: it stays well inside the strip. */
+.widthHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 8;
+  width: min(
+    40px,
+    calc((100% - var(--dsh-chat-content-width)) / 2 - 24px - 24px)
+  );
+  cursor: col-resize;
+}
+
+.widthHandle[data-side='left'] {
+  right: calc(50% + var(--dsh-chat-content-width) / 2 + 24px);
+}
+
+.widthHandle[data-side='right'] {
+  left: calc(50% + var(--dsh-chat-content-width) / 2 + 24px);
+}
+
+/* The glow: a short 3px bar riding the pointer's Y, inset 16px outward from
+   the strip's inner edge (40px from the content column),
+   not a full-height rule — a 24px solid core centered on the pointer
+   (published by pointermove as --dsh-width-handle-pointer-y), fading to
+   transparent over 40px each side (~104px total). A solid CORE, not a single
+   solid stop: a lone peak washes out over the fade. The scrollbar hover tint,
+   not a border token: this is a draggable bar and the border alphas (4-16%)
+   disappear against the base fill. Before the first move the fallback centers
+   the glow at 50% height. */
+.widthHandle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to bottom,
+    transparent calc(var(--dsh-width-handle-pointer-y, 50%) - 52px),
+    var(--dsw-alias-scrollbar-hover-l1) calc(var(--dsh-width-handle-pointer-y, 50%) - 12px),
+    var(--dsw-alias-scrollbar-hover-l1) calc(var(--dsh-width-handle-pointer-y, 50%) + 12px),
+    transparent calc(var(--dsh-width-handle-pointer-y, 50%) + 52px)
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.widthHandle[data-side='left']::after {
+  right: 16px;
+}
+
+.widthHandle[data-side='right']::after {
+  left: 16px;
+}
+
+.widthHandle:hover::after,
+.widthHandle[data-dragging]::after {
+  opacity: 1;
+}
+
+/* Views that elect a composer overlay (trajectory etc.) own their full-bleed
+   scrollers; the strips would sit over their content and steal clicks. */
+.root:has([data-conversation-composer-overlay]) .widthHandle {
+  display: none;
+}
+
 /* Composer context stack (Figma 9:937): standalone dock cards share one
    rhythm above the input card. */
 .composerStack {
@@ -227,20 +314,23 @@
   flex: none;
 }
 
+/* Band below the header: the scrollport plus the width handles. Anchoring the
+   handles here keeps their full-height strips and glow under the header's
+   bottom edge at every header height. */
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .scrollBody {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  /* The column scrolls on ONE axis. Stating `hidden` rather than leaving the
-     initial `visible` is what removes the horizontal bar: a box that scrolls in
-     one axis computes `visible` to `auto` in the other, so any bleed becomes
-     user-scrollable. `.heroGlow` bleeds by construction (1051/776 of the hero
-     box), which put a horizontal scrollbar under every center column narrower
-     than the glow. Clipping is unchanged — `overflow-y: auto` already made this
-     a scroll container that clips both axes, so this only takes away the bar. */
-  overflow-x: hidden;
   /* Reserved unconditionally: the composer seat rides this box's content box in
      Chat and its padding box under a view's composer overlay, so an `auto`
      gutter moves the input card sideways by the bar's width whenever the two
@@ -270,6 +360,15 @@
     color-mix(in srgb, var(--dsw-alias-bg-base) 0%, transparent) 0px,
     var(--dsw-alias-bg-base) 36px
   );
+}
+
+/* An open @/slash menu (data-trigger-menu, ui-input-trigger) renders inside
+   the input card, so the seat's stacking context caps its z-index; lift the
+   seat above the back-to-bottom control (z-index 8, ui-chat ChatView) while
+   the menu is open. The steady state stays 7 so the control keeps painting
+   over the card. */
+.root[data-phase='active'] .composerSeat:has([data-trigger-menu]) {
+  z-index: 9;
 }
 
 /* Views may opt into a composer overlay while ConversationRoot retains
@@ -316,7 +415,6 @@
    NOT absolute+transform: a transform would make this box the containing
    block for position:fixed descendants (pickers/modals), shrinking them. */
 .composerHero {
-  position: relative; /* .heroGlow positioning context */
   align-self: center;
   /* figma 75:8208 drew 12 between all three rows; the workspace row now sits
      8 above the card (its margin-top restores 12 under the hero chrome). */
@@ -327,22 +425,6 @@
      width as the docked composer at every viewport. */
   width: min(calc(var(--dsh-composer-card-max-width) + 2 * var(--dsh-composer-side-clearance)), 100%);
   z-index: 1;
-}
-
-/* Blue backdrop ellipse (figma 313:14109), centered on the input card: the
-   card's resting center sits ~92px above the stack bottom (32 foot pad +
-   half of the ~120px two-row card); width tracks the card (glow asset 1051
-   vs design card 776) so blur scales in userSpace with it. z-index -1 keeps
-   it behind the in-flow hero content inside this stacking context. */
-.heroGlow {
-  position: absolute;
-  left: 50%;
-  bottom: 92px;
-  z-index: -1;
-  width: calc(100% * 1051 / 776);
-  aspect-ratio: 1051 / 468;
-  transform: translate(-50%, 50%);
-  pointer-events: none;
 }
 
 .heroWorkspaceRow {

@@ -45,7 +45,7 @@ bash seam（[能力 seam](../architecture/2026-06-13-capability-seams.zh.md)）�
 
 ### 两类可选能力，两种发现方式
 
-- **启动时功能**（`outputSchema`、`depthLimit`、`toolFilter`、`persona`）挂在静态的 `provider.capabilities` 描述符上。服务在委派之前检查每个被请求的功能，如果提供方不支持则**响亮拒绝**（`SubagentError('UNSUPPORTED_CAPABILITY')`），绝不接受后静默忽略。这些功能必须在 run 存在之前检查，因此不能是运行时方法。
+- **启动时功能**（`agentOptions`、`outputSchema`、`depthLimit`、`toolFilter`、`persona`）挂在静态的 `provider.capabilities` 描述符上。服务在委派之前检查每个被请求的功能，如果提供方不支持则**响亮拒绝**（`SubagentError('UNSUPPORTED_CAPABILITY')`），绝不接受后静默忽略。这些功能必须在 run 存在之前检查，因此不能是运行时方法。
 - **可继续创建**使用可选的 `SubagentProvider.prepareContinuable` 方法；方法是否存在本身即为能力，TypeScript 类型收窄即为发现机制，因此不需要可能与实现失同步的独立 flag。继续执行管理器直接通过 `AgentHandle` 负责后续投递与冷恢复，而一次性 `SubagentRun` 没有 steering 或 resume 操作，具体由[可继续 subagent](2026-07-28-continuable-subagent-conversations.zh.md) 细化。
 
 ### Fork 与 fresh 是独立后端，而非一个 flag
@@ -60,9 +60,9 @@ bash seam（[能力 seam](../architecture/2026-06-13-capability-seams.zh.md)）�
 
 `dsh-tool-subagent` 将其执行信号传给 `start()`，等待子 agent 结果，并在报告前 dispose 该 run。非完成态的结果变为错误结果，而非成功的部分输出；它会把由[非交互权限决策](2026-08-15-product-subagent-noninteractive-permissions.zh.md)负责的可选安全诊断与部分 assistant 文本分开呈现。结果与 dispose 的拒绝仍可彼此独立地观察。
 
-### 提供方选择是配置，不面向模型
+### 传输提供方选择是配置，不面向模型
 
-`dsh-tool-subagent` 绑定到恰好一个提供方名称（`Config.provider`）；模型只看到 `{ description, prompt }`。若要暴露多种传输方式，请多次加载该工具插件，每次绑定不同的提供方和不同的 `toolName`（工具注册表拒绝重名）。*服务*持有多提供方注册表；*工具*选择其中一个——schema 中没有提供方/type 参数。
+`dsh-tool-subagent` 绑定到恰好一个 subagent 传输提供方名称（`Config.provider`）。若要暴露多种传输方式，请多次加载该工具插件，每次绑定不同的提供方和不同的 `toolName`（工具注册表拒绝重名）。*服务*持有多提供方注册表；*工具*选择其中一个——schema 中没有 subagent 传输/type 参数。后续 opt-in 增加了子 agent LLM 提供方/模型字段，但没有改变这项传输决策；见[模型选择的 subagent 路由](2026-08-18-model-selected-subagent-routes.zh.md)。
 
 ## 测试
 

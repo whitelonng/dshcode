@@ -12,7 +12,9 @@ Status: implemented
 
 ## 决策
 
-快照测试会启动真实 ACP 示例，通过确定性脚本驱动其 stdio 协议，并将规范化输出与已提交的预期输出比较。从真实 API 一次记录的会话日志为后续所有模型流提供数据。fixture 是[产品持久化 JSONL 的投影](2026-08-18-session-snapshot-envelope-projection.zh.md)：保留 header 与 payload，省略正文序号／时间 envelope。
+录制会话快照通过 `dsh` 启动随附 profile，驱动其公开接口，并将规范化输出与已提交的预期输出比较。归 ACP 所有的场景还会驱动 stdio 协议并比较其 transcript。从真实 API 一次记录的会话日志为后续所有模型流提供数据。fixture 是[产品持久化 JSONL 的投影](2026-08-18-session-snapshot-envelope-projection.zh.md)：保留 header 与 payload，省略正文序号／时间 envelope。
+
+[Session-log 快照语料决策](2026-08-24-session-log-snapshot-corpus.zh.md)取代本 Note 中 ACP 专属的放置位置与控制器所有权；本 Note 继续负责会话日志 fixture、回放推导、例外 override、规范化和 ACP transcript 比较的理由。
 
 ### fixture 投影持久化会话 JSONL
 
@@ -67,7 +69,7 @@ Status: implemented
 
 ### 两个子命令，回放在默认门禁中
 
-`pnpm run test:snapshot` 无需密钥即可回放已提交 fixture；`test:snapshot:record` 使用真实 API，并重写投影后的会话快照与 stdout 预期输出。同一无密钥门禁会通过 `session` 头记录发现仓库中的 JSONL，并拒绝与共享编解码器的投影后规范打包表示不同的任何 fixture。缺少 fixture 时会明确报错。每个场景都包含 `input.json`、`stdout.expected.jsonl` 和 `session.jsonl`；不调用模型的情况使用仅含头记录的日志。只有标记为 `overridden` 的场景才需要 `replay.override.json`，因为它一旦存在就会取代派生回放。fixture 守卫会拒绝缺失、不匹配和孤立文件。两个命令都接受场景过滤器。
+`pnpm run test:snapshot` 无需密钥即可回放已提交 fixture；`test:snapshot:record` 使用真实 API，并重写投影后的会话快照与接口专属预期输出。同一无密钥门禁会通过 `session` 头记录发现仓库中的 JSONL，并拒绝与共享编解码器的投影后规范打包表示不同的任何 fixture。缺少 fixture 时会明确报错。每个 ACP 场景都包含 `input.json`、`stdout.expected.jsonl` 和 `session.jsonl`；不调用模型的情况使用仅含头记录的日志。其他 profile 从 `session.jsonl` 推导普通的已受理用户输入，只在 `snapshot.yml` 中保留已受理会话无法重建的控制器输入。只有成功模型行为无法从日志推导的场景才需要 `replay.override.json`。fixture 守卫会拒绝缺失、不匹配和孤立文件。两个命令都接受场景过滤器。
 
 ## 曾考虑的替代方案
 
@@ -79,6 +81,6 @@ Status: implemented
 
 ## 后果
 
-该测试层为每个场景增加经过评审的输入、会话、stdout、可选 override 和可选 workspace fixture，并为每个不同的已固定提示词序列、每个不同的已固定工具 schema 序列各增加一个文件。记录与回放都会把 workspace seed 复制到生成的 cwd。作为回报，该层通过真实 Loader 和工具组合提供确定性的无密钥覆盖，其中包括一个组装后的上下文溢出恢复场景，其带标记的压缩摘要提供辅助调用。保留下来的大多数场景测试的是组装后的后端而非 ACP；[仅面向自动化的 ACP 决策](../simplification/2026-07-23-acp-automation-only-protocol.zh.md#snapshot-boundary)将该语料保留在此处，直至它能够在不损失覆盖的情况下迁移到传输无关的 headless 套件。
+该测试层为每个场景增加经过评审的会话、manifest、接口专属预期输出、可选 override 和可选 workspace fixture，并为每个不同的已固定提示词序列、每个不同的已固定工具 schema 序列各增加一个文件。记录与回放都会把 workspace seed 复制到生成的 cwd。作为回报，该层通过真实 Loader 和工具组合提供确定性的无密钥覆盖，其中包括一个组装后的上下文溢出恢复场景，其带标记的压缩摘要提供辅助调用。ACP 子树现在只保留协议行为；属于 headless、SDK 和 Web 接口的行为由各自接口拥有。
 
-本 Agent Note 与[拟议的确定性 Agent Note](../../proposed/testing/2026-06-11-deterministic-and-stress-testing.zh.md)相关，但不取代它：该提案的「通用回放 fixture」在每次测试后重新派生会话*消息历史*（内部一致性不变量），而这些快照固定组装后的行为与外部自动化输出。在后端语料迁出 ACP 之前，两者相互补充。
+本 Agent Note 与[拟议的确定性 Agent Note](../../proposed/testing/2026-06-11-deterministic-and-stress-testing.zh.md)相关，但不取代它：该提案的「通用回放 fixture」在每次测试后重新派生会话*消息历史*（内部一致性不变量），而这些快照固定组装后的行为与接口专属输出。两者仍相互补充。

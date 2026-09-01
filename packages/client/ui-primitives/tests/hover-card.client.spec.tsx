@@ -25,7 +25,13 @@ function mount(props: {
   copiedLabel?: string
 } = {}) {
   const view = render(
-    <HoverCard anchor={<span>row</span>} content={<div>card body</div>} {...props} />,
+    <HoverCard
+      anchor={<span>row</span>}
+      content={<div>card body</div>}
+      copyLabel={props.copyLabel ?? 'Copy'}
+      copiedLabel={props.copiedLabel ?? 'Copied'}
+      {...props}
+    />,
   )
   const anchor = screen.getByText('row')
   stubAnchorRect(anchor, { top: 40, right: 200 })
@@ -370,7 +376,15 @@ describe('HoverCard', () => {
     fireEvent.pointerEnter(wrapper)
     act(() => { vi.advanceTimersByTime(500) })
     expect(screen.getByText('card body')).toBeTruthy()
-    view.rerender(<HoverCard anchor={<span>row</span>} content={<div>card body</div>} disabled />)
+    view.rerender(
+      <HoverCard
+        anchor={<span>row</span>}
+        content={<div>card body</div>}
+        copyLabel="Copy"
+        copiedLabel="Copied"
+        disabled
+      />,
+    )
     expect(screen.queryByText('card body')).toBeNull()
   })
 

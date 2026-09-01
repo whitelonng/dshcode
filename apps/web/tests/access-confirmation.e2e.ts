@@ -13,7 +13,7 @@ import {
 } from './scaffold.ts'
 import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/access-confirmation', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/access-confirmation', import.meta.url))
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
 const MODE = webSnapshotMode()
 
@@ -35,7 +35,7 @@ describe('web e2e: Full access confirmation', () => {
     // callback.
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd)
   }, 120_000)
@@ -50,13 +50,13 @@ describe('web e2e: Full access confirmation', () => {
     const access = page.locator('button[aria-label^="访问模式"]').first()
     await access.waitFor({ timeout: 10_000 })
 
-    expect(await access.getAttribute('aria-label')).toBe('访问模式，当前：Workspace Write')
+    expect(await access.getAttribute('aria-label')).toBe('访问模式，当前：工作区内修改')
 
     await access.click()
-    await page.getByRole('menuitem', { name: 'Full access' }).click()
-    const dialog = page.getByRole('dialog', { name: '确认启用 Full access？' })
+    await page.getByRole('menuitem', { name: '完全权限' }).click()
+    const dialog = page.getByRole('dialog', { name: '确认启用完全权限？' })
     await dialog.waitFor({ timeout: 10_000 })
-    const enable = dialog.getByRole('button', { name: '启用 Full access' })
+    const enable = dialog.getByRole('button', { name: '启用完全权限' })
     expect(await enable.isDisabled()).toBe(true)
 
     // The modal is in this page's body (not a native/new window) and escapes
@@ -69,7 +69,7 @@ describe('web e2e: Full access confirmation', () => {
     expect(await enable.isEnabled()).toBe(true)
     await enable.click()
     await expect.poll(() => access.getAttribute('aria-label'), { timeout: 10_000 })
-      .toBe('访问模式，当前：Full access')
+      .toBe('访问模式，当前：完全权限')
     expect(await dialog.count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)

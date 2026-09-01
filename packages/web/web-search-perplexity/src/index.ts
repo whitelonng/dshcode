@@ -1,8 +1,6 @@
 /**
- * `@deepseek-ai/dsh-web-search-perplexity`: registers a Perplexity-backed
- * `WebSearchProvider` with `ctx.web`. A function/namespace plugin (NOT a
- * default-export service): it registers INTO the seam's provider registry, like
- * `@deepseek-ai/dsh-llm-deepseek` registers an adapter into `ctx.llm`.
+ * Perplexity-backed `WebSearchProvider` plugin. It contributes to the
+ * `ctx.web` registry without owning the service.
  *
  * @module @deepseek-ai/dsh-web-search-perplexity
  */

@@ -21,3 +21,25 @@ export function resolveLinuxNodePtyAddon(
     `build-exe-for-python-sdk: node-pty addon is absent from both ${built} and ${prebuilt}.`,
   )
 }
+
+/**
+ * Require both node-pty addons used by the Windows ConPTY backend.
+ * @param packageDirectory - staged node-pty package directory.
+ * @param arch - Windows target architecture.
+ * @returns the existing addon paths in load order.
+ */
+export function resolveWindowsNodePtyAddons(
+  packageDirectory: string,
+  arch: 'x64',
+): string[] {
+  const directory = join(packageDirectory, 'prebuilds', `win32-${arch}`)
+  const addons = [
+    join(directory, 'conpty.node'),
+    join(directory, 'conpty_console_list.node'),
+  ]
+  const missing = addons.filter(path => !existsSync(path))
+  if (missing.length > 0) {
+    throw new Error(`build-exe-for-python-sdk: Windows node-pty addons are missing: ${missing.join(', ')}.`)
+  }
+  return addons
+}

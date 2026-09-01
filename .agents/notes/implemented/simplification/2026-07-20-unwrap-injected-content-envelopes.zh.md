@@ -19,7 +19,7 @@ Status: implemented
 
 `ContextEnvelope` 类型和所有 `envelope` 字段都被移除——包括 `SessionEventMap` 中的 `context/message`、`InjectOptions`、`HookContext`，以及 `dsh-agent-loop` 中 `inject()`/`additionalContexts` 的相关管线。`agent-instructions` 不再请求 `'raw'`；它自带框架的内容渲染方式不变。`renderTagged`/`renderContextEnvelope` 辅助函数被删除。`context/message.meta` 仍携带持久的、对模型隐藏的 JSON 状态。
 
-封套曾携带的 `source` 来源信息并未丢失——它仍保留在持久事件上；只是不再渲染进 transcript。
+`source` 来源信息保留在持久事件上，不渲染进 transcript。
 
 ## 权衡的替代方案
 

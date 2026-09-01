@@ -90,7 +90,7 @@ schema 不将 `expected_hash`、`expected_version` 或 `create_only` 作为面�
 - 目录列表、glob、grep 和搜索工具。
 - 二进制安全的读/写操作。
 - PDF/图片/多模态 `read`。
-- 文件系统工具的 Code Mode 投影值。
+- 文件系统工具的 PTC mode 投影值。
 - 规范的 edit diff 格式。
 
 ## 测试
@@ -107,6 +107,6 @@ schema 测试固定每个工具的必填/可选参数集、空 `old_string` 拒�
 
 **首版 schema 有意小于 Claude Code 的。** 去掉 PDF pages、多模态 read、丰富的 grep/list flag 和 expected hash 字段使实现保持聚焦，但用户可能很快就会提出这些需求。这些功能将通过独立 Agent Note 或聚焦的后续工作引入，而不是让初始 schema 承载过多内容。
 
-**v1 中没有显式的面向模型的陈旧版本防护。** schema 不要求模型提供 expected hash/version。这是有意为之：陈旧检查来自后端产生的版本和 `dsh-fs-observation-policy` 插件的观测状态，而非模型复制的脆弱令牌。文件系统安全失败通过 `dsh-fs` 拥有的结构化 `FsError` 代码暴露，而非模型提供的版本字段。
+**没有显式的面向模型的陈旧版本防护。**schema 不要求模型提供 expected hash/version。这是有意为之：陈旧检查来自后端产生的版本和 `dsh-fs-observation-policy` 插件的观测状态，而非模型复制的脆弱令牌。文件系统安全失败通过 `dsh-fs` 拥有的结构化 `FsError` 代码暴露，而非模型提供的版本字段。
 
 **命名成为公开 API。** 一旦发布，将 `file_path` 改为 `filePath` 或 `old_string` 改为 `oldString` 会导致提示词、示例和下游客户端随之改动。本 Agent Note 预先选择 snake_case，并将其视为稳定的面向模型的约定。

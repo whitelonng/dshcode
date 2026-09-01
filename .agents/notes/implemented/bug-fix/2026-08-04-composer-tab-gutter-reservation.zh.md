@@ -18,7 +18,7 @@ composer 座位在组件树中只有一个节点、一个位置，但它究竟�
 
 选 `stable` 而非 `auto`，是因为 `auto` 只在盒子确实溢出时才预留，而「溢出与否」恰恰就是 Chat 两种相位之间的那点差别——`auto` 的写法只是把缺陷重述一遍，并不能修掉它。
 
-这条预留位于 `overflow-y: auto` 的盒子上，而这个形式是承重的：WebKit 对 `overflow-y: auto` 的盒子应用 `scrollbar-gutter`，对 hidden 的盒子则忽略它——这是在本应用 composer 自身的图层上实测所得，并记录于 [composer 滚动视口记录](2026-07-31-composer-text-layers-share-one-scrollport.zh.md)——所以把预留放在 hidden 盒子上，会在 Chromium 上成立，在 Safari 上悄无声息地不成立。覆盖分支同样保留 `overflow-y: auto` 的形式，作为没有任何内容会滚出去的裁剪盒：单轴滚动的盒子会把另一轴的 `visible` 计算为 `auto`，因此横向轴显式声明为 `hidden` 而不是交给推导，否则某个视图的内容第一次伸出列外时，它就会长出自己的横向滚动条。
+这条预留位于 `overflow-y: auto` 的盒子上，而这个形式是承重的：WebKit 对 `overflow-y: auto` 的盒子应用 `scrollbar-gutter`，对 hidden 的盒子则忽略它——这是在本应用 composer 自身的图层上实测所得，并记录于 [composer 滚动视口记录](../../archived/bug-fix/2026-07-31-composer-text-layers-share-one-scrollport.md)——所以把预留放在 hidden 盒子上，会在 Chromium 上成立，在 Safari 上悄无声息地不成立。覆盖分支同样保留 `overflow-y: auto` 的形式，作为没有任何内容会滚出去的裁剪盒：单轴滚动的盒子会把另一轴的 `visible` 计算为 `auto`，因此横向轴显式声明为 `hidden` 而不是交给推导，否则某个视图的内容第一次伸出列外时，它就会长出自己的横向滚动条。
 
 这条预留之所以值回它的代价，前提是滚动条在这里确实占布局空间——这并非浏览器的默认行为，而是本客户端的选择：ui-theme 的样式表给 `::-webkit-scrollbar` 声明了宽度（[滚动条主题化](2026-07-28-themed-scrollbars-and-reserved-gutter.zh.md)），侧边栏的会话列表也正是出于同一原因预留了自己的滚动条槽。
 
@@ -36,7 +36,7 @@ composer 座位在组件树中只有一个节点、一个位置，但它究竟�
 
 - Chat 的内容列永久变窄 8px——hero 态与 transcript 尚短、根本不绘制滚动条时同样如此。这就是这笔交易：以最宽的列换取卡片在任何内容高度下都只有一个位置。
 - 卡片在三种切换下保持同一位置，由两种机制达成：预留让 Chat 的座位在自身各相位间保持同一宽度（transcript 较短 ↔ 可滚动、hero ↔ 第一个可滚动轮次），Chat ↔ Trajectory 的切换则由覆盖座位的补偿来对齐（[座位宽度补偿](2026-08-12-composer-overlay-seat-width-compensation.zh.md)）。
-- overlay 状态现在是一个滚动容器。今天其中没有任何内容会溢出；将来若有视图允许自身内容超出会话列，这个盒子会滚动而不是裁剪，那个视图就需要像 Trajectory 视图那样自带裁剪。
+- overlay 状态现在是一个滚动容器。其中没有已交付内容会溢出；将来若有视图允许自身内容超出会话列，这个盒子会滚动而不是裁剪，那个视图就需要像 Trajectory 视图那样自带裁剪。
 - 提交的 golden 记录了预留条带，因此样式表中 `::-webkit-scrollbar` 宽度的变化——决定这条预留有多宽的那个值——会在本场景中与在侧边栏场景中一样，以可评审的 diff 形式出现。
 
 ## 测试

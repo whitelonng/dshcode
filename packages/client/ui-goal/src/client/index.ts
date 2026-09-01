@@ -6,15 +6,24 @@
  * refresh chain, and no event listener. The inject face carries only the
  * four mutation verbs through the generated Goal Remote API;
  * their CAS ref reads the session's current projected value at call time.
- * Goal creation stays on the /goal host command.
+ * This plugin does not create goals; deployments may expose /goal separately.
  */
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 // Type-only: pulls the generated Remote API and ctx.remote merge through the Client assembly boundary.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-// Type-only: pulls the ui-conversation SlotMap merge (the input.dock entry).
+// Type-only: pulls the Session Controller service used for projected goal state.
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+// Type-only: pulls the Chat node slot and its keyed data map.
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
+// Type-only: pulls the Conversation service and input-dock slot.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+// Type-only: pulls the renderer-owned slots service.
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: pulls the Session standard useProjection seat.
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 // Type-only: the `goal` SessionProjectionMap key merge (single source, the domain's pure outlet).
 import type { GoalProjection, GoalRef } from '@deepseek-ai/dsh-goal/client'
 import type { GoalActionResult, GoalBarActions } from './slots.ts'
@@ -38,14 +47,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'goal'
 
 /** Required services for the Goal dock, command-input projection, Remote mutations, and copy. */
-export const inject = ['slots', 'sessions', 'remote', 'remote.goals', 'locale', 'conversationEvents']
+export const inject = ['slots', 'sessions', 'remote', 'remote.goals', 'locale', 'uiConversation']
 
 /**
  * Client plugin body: the GoalBar dock entry with its mutation verbs.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  ctx.conversationEvents.register(goalCommandInputDefinition)
+  ctx.uiConversation.events.register(goalCommandInputDefinition)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-goal: dictionaries')
 
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
@@ -66,7 +75,7 @@ export function apply(ctx: ClientContext): void {
 
   const noCurrentGoal: GoalActionResult = {
     ok: false,
-    error: { code: 'no-current-goal', message: 'no current goal to mutate', details: {} },
+    error: { code: 'no-current-goal', message: 'no current goal to mutate' },
   }
 
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({

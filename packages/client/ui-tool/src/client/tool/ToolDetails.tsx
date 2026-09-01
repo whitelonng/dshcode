@@ -4,23 +4,29 @@ import type { ToolDetailsProps } from '../contract/slots.ts'
 import { diffCardModel } from './models/diff-card-model.ts'
 import { readCardModel } from './models/read-card-model.ts'
 import { searchCardModel } from './models/search-card-model.ts'
-import { terminalBlockLabels, terminalCardModel } from './models/terminal-card-model.ts'
+import {
+  localizeTerminalCardModel, terminalBlockLabels, terminalCardModel,
+} from './models/terminal-card-model.ts'
+import {
+  diffBlockLabels, readBlockLabels, searchBlockLabels, webBlockLabels,
+} from './models/primitive-labels.ts'
 import { resultText } from './models/tool-call-model.ts'
 import { webCardModel } from './models/web-card-model.ts'
 import css from './ToolDetails.module.css'
 
 /**
- * Render the selected Tool call's structured output when its presentation
- * intent is known, otherwise preserve the flattened result text.
+ * Render the selected Tool call's structured output when its raw fields form a
+ * supported root card, otherwise preserve the flattened result text.
  * @param props - selected call slice, workspace root, host home, and locale seat.
  * @returns the details output body.
  */
 export function ToolDetails({
-  block, cwd, useHostDescription, t,
-}: Pick<ToolDetailsProps, 'block' | 'cwd' | 'useHostDescription' | 't'>) {
-  const home = useHostDescription(description => description?.home)
-  const terminal = terminalCardModel(block, cwd)
-  if (terminal !== null) {
+  block, cwd, useHostInfo, t,
+}: Pick<ToolDetailsProps, 'block' | 'cwd' | 'useHostInfo' | 't'>) {
+  const home = useHostInfo(info => info.home)
+  const terminalModel = terminalCardModel(block, cwd)
+  if (terminalModel !== null) {
+    const terminal = localizeTerminalCardModel(terminalModel, t)
     return (
       <>
         {terminal.description !== undefined ? (
@@ -31,14 +37,14 @@ export function ToolDetails({
     )
   }
   const read = readCardModel(block, cwd, home)
-  if (read !== null) return <ReadBlock {...read} className={css.read} />
+  if (read !== null) return <ReadBlock {...read} labels={readBlockLabels(t)} className={css.read} />
   const diff = diffCardModel(block)
-  if (diff !== null) return <DiffBlock {...diff.card} className={css.cardBody} />
+  if (diff !== null) return <DiffBlock {...diff.card} labels={diffBlockLabels(t)} className={css.cardBody} />
   const search = searchCardModel(block)
   if (search !== null) {
     return (
       <>
-        <SearchBlock {...search.card} className={css.cardBody} />
+        <SearchBlock {...search.card} labels={searchBlockLabels(t)} className={css.cardBody} />
         {search.recovery !== undefined ? <div className={css.recovery}>{search.recovery}</div> : null}
       </>
     )
@@ -48,7 +54,7 @@ export function ToolDetails({
     const body = 'kind' in block ? resultText(block) : ''
     return (
       <>
-        <WebBlock {...web} className={css.web} />
+        <WebBlock {...web} labels={webBlockLabels(t)} className={css.web} />
         {body !== '' ? <pre className={css.code}>{body}</pre> : null}
       </>
     )

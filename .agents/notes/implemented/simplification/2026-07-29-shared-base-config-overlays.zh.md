@@ -20,17 +20,17 @@ Status: implemented
 
 优先级即列表顺序，逐配置项后写者胜：base，然后是 surface overlay，接着是 `--config` overlay 或个人 `~/.dsh/config.yaml`，最后是启动器自身的 flag 与 profile patch。
 
-`--config <path>` 现在应用一个 overlay 来**取代**个人 overlay，因此 demo 或测试用的树绝不会继承用户的提供方与 model。`--config-replace <path>` 则把某个文件作为整棵树启动，同时绕过 base、surface overlay 与个人 overlay；这正是旧 `--config` 的行为，所以像 `examples/web-cordis` 这样的树改用了新 flag。两个 flag 都会在 `/resume` 的 execve 交接中保留，否则恢复时会静默更换 agent（智能体）。
+`--config <path>` 应用一个 overlay 来**取代**个人 overlay，因此测试树绝不会继承用户的提供方与 model。`--config-replace <path>` 则把某个文件作为整棵树启动，同时绕过 base、surface overlay 与个人 overlay。两个 flag 都会在 `/resume` 的 execve 交接中保留，否则恢复时会静默更换 agent（智能体）。
 
 patch 会整体替换目标配置项的 `config` 而不合并。因此，取值因 surface 而异的配置项住在 overlay 中，绝不住在 base 里，从而没有任何配置项会被三层同时 patch。会话身份根本不能经由配置键传递——它迁移到了 `dsh-agent-loop` 的 `CONFIGURED_AGENT_IDENTITIES_KEY`，正如启动器持有身份的记录所述。
 
-`examples/tui-agent`、`examples/cordis-agent`、`examples/code-mode` 与 `packages/examples/tui-demo` 均被删除。TUI 测试迁往 `apps/cli/tests/`，cordis 工具集的 e2e 迁入 `packages/extensions/tool-cordis/tests/`，受支持的 Code Mode demo 则保留为 `examples/acp-agent/code-mode.cordis.yml` 中的 ACP（Agent Client Protocol）overlay。
+TUI 测试位于 `apps/cli/tests/`，Cordis 工具集 e2e 位于 `packages/extensions/tool-cordis/tests/`，受支持的 PTC mode demo 则以 `DSH_TOOLS_MODE=ptc` 运行 `dsh --profile headless`。
 
 ## 备选方案
 
 **保留两棵平铺且重复的树。** 拒绝：43 个配置项维护两份正是缺陷本身，而用一个门禁断言二者保持一致只会固化重复，而非消除它。
 
-**把 overlay 嵌套成 include（`code-mode` → `tui` → `base`）。** 在对 Loader 实测后拒绝：patch 不会跨越 include 边界，因此外层文件的 patch 只会伴随一条告警被丢弃。三层链条使 `tools` 无法被 patch，而位于一层 include 之后的 base，会让每个个人 patch 都变成静默的空操作。
+**把 overlay 嵌套成 include（`ptc` → `tui` → `base`）。** 在对 Loader 实测后拒绝：patch 不会跨越 include 边界，因此外层文件的 patch 只会伴随一条告警被丢弃。三层链条使 `tools` 无法被 patch，而位于一层 include 之后的 base，会让每个个人 patch 都变成静默的空操作。
 
 **把所有配置项的并集放进 base，由各 overlay 禁用自己不需要的部分。** 拒绝：base 将不再意味着「共享」，而每个 surface 都要携带仅为将其关闭而存在的配置项。
 
@@ -46,7 +46,7 @@ patch 会整体替换目标配置项的 `config` 而不合并。因此，取值�
 
 ## 验证
 
-组合的正确性通过用真实 Loader 启动每棵树并检查已就绪的条目来核对，而不是靠阅读 YAML：两个界面都能完全就绪，且没有未加载项；Web 会以沙箱化 Bash 与文件系统提供方启动 `httpServer`。Code Mode 继续由 ACP overlay 与程序化 TUI 快照覆盖，而不再维护独立交付的 TUI 应用。
+组合的正确性通过用真实 Loader 启动每棵树并检查已就绪的条目来核对，而不是靠阅读 YAML：两个界面都能完全就绪，且没有未加载项；Web 会以沙箱化 Bash 与文件系统提供方启动 `httpServer`。PTC mode 继续由 ACP overlay 与程序化 TUI 快照覆盖，而不再维护独立交付的 TUI 应用。
 
 全部八个终端快照场景在迁移后逐字节重放一致，14 个用例的 PTY 冒烟测试全部通过，其中两个用例断言个人 overlay 能触达一个 **insert 进来的**配置项——这正是 vendored `plugin-include` 修复所启用的行为（[`vendor/README.md`](../../../../vendor/README.md) 本地修改第 8 条，由 `packages/boot/app-boot/tests/config-reload.spec.ts` 覆盖）。
 

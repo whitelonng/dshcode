@@ -1,12 +1,62 @@
+---
+description: "The shipped JSONL session-persistence backend for deployments and maintainers choosing, configuring, or debugging per-session durable logs with optional Zstandard compression."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-session-persistence-jsonl
 
 English | [中文](README.zh.md)
 
-The JSONL durable session-persistence backend — a concrete `SessionPersistence` (the `dsh-session-persistence` seam). Each session has one append-only logical JSONL log, stored as `.jsonl.zstd` by default or raw `.jsonl` when compression is disabled.
+## Summary
 
-## On-disk layout
+`dsh-session-persistence-jsonl` stores each session in its own append-only JSONL log — checksummed Zstandard frames by default, raw newline-delimited lines when compression is disabled. It serves the same logical `SessionEvent` stream as any persistence backend, so choosing it changes nothing for the agent loop, the model, or replay; compression, packing, and crash recovery are storage-internal details. Choose it when consumers need a per-session artifact on disk: `locate(meta)` returns the transcript path, and the logs are readable as plain lines when `compression: 'none'` is selected. A root directory is the one required configuration; durability, lazy materialization, and interrupted-turn recovery come with the backend.
 
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Mount this backend when a composition needs durable sessions backed by per-session files. The common path is explicit: load the session service, mount the backend, and give it a root directory.
+
+### When to choose it
+
+Choose this backend when consumers benefit from one artifact per session — navigation, external tooling, or a raw line-readable log. It is the sole first-party Session-persistence provider. The backend keeps sessions under a deployment-controlled root: project-local, shared, temporary, or centralized.
+
+### Minimal configuration
+
+```yaml
+- name: '@deepseek-ai/dsh-session'
+- name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: /absolute/path/to/session-logs
 ```
+
+`root` is required and has no default: a `process.cwd()` default would scatter session files as the process's cwd changes. An existing root must be a readable directory; an absent root is created on first materialization.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `root` | required | Root directory for all session files |
+| `packChunks` | `true` | Write eligible `assistant/chunk` runs as packed rows; `false` keeps one event per line for diagnostics |
+| `compression` | `'zstd'` | Physical encoding: `'zstd'` checksummed frames, or `'none'` newline-delimited UTF-8 text |
+| `preparedSessionCacheSize` | `5` | Cold session preparations retained for resume reuse |
+| `writeBatchMaxDelayMs` | `200` | Fixed live-event coalescing window, in milliseconds |
+
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-session-persistence-jsonl) is the exhaustive source for every accepted field and its JSDoc.
+
+### On-disk layout
+
+Each session gets a session-owned directory under a readable project directory; the first logical line is the private v0 physical header, followed by one storage record per logical event (or one packed chunk row per eligible run). Its optional numeric `seedLength` remains byte-compatible: absence decodes to `SessionHeader.isSeeded: false`, while zero or a positive value decodes to `isSeeded: true` plus the exact `inheritedEventCount`. Storage records use the lossless provenance representation described below:
+
+```text
 <root>/
   --<normalized-cwd>--/          # readable project directory (or _no-cwd/)
     <encoded-id>/                # session-owned directory
@@ -14,43 +64,61 @@ The JSONL durable session-persistence backend — a concrete `SessionPersistence
       session.jsonl              # only with compression: 'none'
 ```
 
-- The first logical line is the immutable `SessionHeader` tagged `{ type: 'session', version, id, cwd?, createdAt, parentSession?, seedLength?, origin?, delegationDepth, agentPreset? }`. `delegationDepth` is required on disk and is `0` for a top-level session; a missing or invalid value rejects the log. `agentPreset` is durable because it decides the resumed session's tools and prompt — restoring a different composition would replay history the model can no longer act on. Every subsequent logical line is one storage record; `assistant/chunk` events are never dropped, and `seq` stays contiguous across the decoded log (`events[i].seq === i`).
-- A storage record is a `SessionEvent` JSON verbatim, or — for an eligible run when `packChunks` is enabled — a **packed chunk row** (`text-chunks` / `reasoning-chunks` / `tool-call-chunks`; bare slash-less tags like the header's `session`, so row tags cannot be confused with event types): one line holding a run of ≥3 consecutive same-block `assistant/chunk` delta events, `seq0`/`time0` plus per-member `dt` gaps reconstructing every member's `seq`/`time` exactly. The lossless codec lives in `@deepseek-ai/dsh-session` (`packChunkRuns`/`decodeStorageRecord`) and whitelists exact shapes — anything unrecognized stores verbatim. Reading is layout-blind: `load` always decodes rows, so packed, unpacked, and mixed files load identically.
-- The project directory keeps the normalized cwd readable for navigation and is bounded for filesystem component limits. Separator replacement and truncation are intentionally lossy, so cwd strings that normalize alike share a project directory; session ids still select distinct session directories. On a case-insensitive filesystem, identity validation accepts an alternate path spelling only when filesystem canonicalization resolves both spellings to the same transcript. The configured root remains deployment-controlled: it may be project-local, shared, temporary, or centralized. The [project-session directory decision](../../../.agents/notes/implemented/architecture/2026-07-24-project-session-directories.md) records this tradeoff.
-- Session ids are unvalidated branded strings, so they are injectively escaped to a single safe path segment before use (no traversal, no collision). The resulting directory is reserved for additional session-owned artifacts; discovery reads only the fixed transcript filename.
+Session ids are injectively escaped to one safe path segment before use (no traversal, no collision). The normalized cwd keeps the project directory readable for navigation; cwd strings that normalize alike share a project directory while session ids still select distinct session directories. `locate(meta)` returns `{ kind: 'jsonl', path }` for the fixed transcript inside the resolved directories, performing no filesystem I/O.
 
-## Config
+### Durability and crash semantics
 
-| Key | Type | Notes |
-|---|---|---|
-| `root` | `string` (required) | Root directory for all session files. **No default** — a `process.cwd()` default would scatter files as the process's cwd changes (bash calls, subprocesses). An existing root must be a readable directory; an absent root is created on first materialization. |
-| `packChunks` | `boolean` (default `true`) | Write eligible delta-chunk runs as packed rows (~60% smaller logical logs measured on a real coding session). Set `false` for one-event-per-line diagnostics; reading packed rows works regardless of this write-side switch. |
-| `compression` | `'zstd' \| 'none'` | Defaults to `'zstd'`; `'none'` retains newline-delimited UTF-8 text. |
-| `preparedSessionCacheSize` | positive integer (default `5`) | Maximum unpublished Sessions retained after cold history inspection for reuse by resume. |
-| `writeBatchMaxDelayMs` | positive integer (default `200`) | Fixed coalescing window after an idle live-event queue receives work. Later events do not reset it; flush and teardown bypass it. It does not bound event-loop, serialized-operation, or backend latency. At most Node's `2_147_483_647` ms timer limit. |
+A session is materialized lazily: `create(meta)` writes nothing, and the first `append` writes and `fsync`s the encoded header and first batch through a no-overwrite publish — so a created-but-never-appended session leaves nothing on disk unless a lifecycle consumer calls `ensureMaterialized`, which publishes one header frame without an event. Flushed events are never rewritten; each subsequent batch appends lines or one compressed frame, and a caught write or sync failure rolls the file back to its prior length. After a crash, `load` preserves an interrupted final turn: it keeps the complete decoded records of an incomplete last frame, truncates from that frame's start, and re-encodes the records with the synthetic tool, step, and turn closers required by the shared persistence contract. Only a never-fully-written torn tail is discarded; checksum, decompression, or structural failure in the committed prefix rejects as corruption.
 
-`locate(meta)` returns `{ kind: 'jsonl', path }` for the fixed transcript inside the resolved project/session directories. It performs no filesystem I/O: the target can be returned before the directory or file exists, and an existing file contains only the last flushed prefix.
+### Reading the logs
 
-## Physical encoding
+`inspect(id)` returns an immutable balanced view with its exact inherited cut without committing recovery. `readFrom(id, fromOffset)` accepts a `SessionLogOffset`, returns stored events at or past that offset, and retains the same cut beside the suffix; sequential media like JSONL parse the whole artifact and skip forward. Header-only listing exposes `isSeeded` without reading event bodies. With `compression: 'none'`, the log is newline-delimited text an external reader can consume directly; the compressed default must be read through the backend.
 
-The default artifact is a standard concatenation of independent [Zstandard frames](../../../.agents/notes/implemented/architecture/2026-07-19-zstandard-jsonl-session-logs.md): one checksummed frame containing only the header line, followed by one checksummed frame per durable append batch. The backend uses Node's built-in Zstandard API with its default compression level and exposes no level knob. Listing reads and validates only the header frame. `compression: 'none'` keeps the same logical lines in the original raw representation.
+-----
 
-A root belongs to one encoding. Startup discovery and targeted lookup reject the opposite suffix with an error naming the incompatible artifact and instructing the caller to select the matching mode or a separate root. Flat `<project>/<id>.jsonl*` artifacts are also rejected instead of ignored. There is no migration, mixed-root fallback, or dual write.
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
-## Durability and crash semantics
+<details>
+<summary>Implementation internals — click to expand</summary>
 
-- **Bound storage identity.** Lookup requires one matching session directory across the readable project directories, then verifies that the header id equals the requested id and that the header's id/cwd derive the selected transcript path. Listing applies the same path check and rejects duplicate ids. Identity failures occur before repair or append.
-- **Lazy materialization.** `create(meta)` writes nothing; on the first `append`, the backend writes and `fsync`s the encoded header and first batch in a temporary file. POSIX publishes it without overwrite via a hard link and `fsync`s the parent directory. Windows publishes it without overwrite via `MoveFileExW(..., MOVEFILE_WRITE_THROUGH)` and creates missing directories through the same write-through pattern. A created-but-never-appended session leaves nothing on disk and is absent from `list`.
-- **Append-only.** Flushed events are never rewritten. Subsequent raw batches append lines; compressed batches append one frame. Both paths `fsync`, and a caught write or sync failure rolls the file back to its prior byte length.
-- **Crash recovery — preserve valid tail work.** `load` validates every complete compressed frame and scans their decompressed JSONL. If the last frame is structurally incomplete, the reader keeps its complete decoded records, truncates from that frame's start, and re-encodes those records with the synthetic tool, step, and turn closers required by the shared [persistence contract](../../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md). Raw mode truncates from its first incomplete line. An existing compressed artifact with no complete header frame, a checksum/decompression failure in a complete frame, or a defect at or before the last committed `turn/end` is corruption and rejects.
-- **Non-mutating inspection.** `inspect()` returns an immutable balanced logical view and may synthesize recovery closers in memory, without truncating an incomplete tail or changing the lightweight revision.
-- **Contiguous-seq.** `append` rejects a batch whose first `seq` does not continue the stored log, and rejects non-JSON-serializable `event.data` naming the offending event type.
-- **Lightweight revisions.** `listSnapshots(signal?)` identifies a log by its device, inode, size, and nanosecond timestamps, avoiding a full-log parse while changing after append, repair, replacement, or store changes. A full-prefix read requires the same identity before and after reading the bytes, and `readStoredRevision()` uses that identity to validate retained preparations without loading the log. Snapshot listing forwards the exact signal through artifact discovery and checks cancellation around every `stat`; because filesystem `stat` is not interruptible, cancellation waits for the active call to settle, then rejects without starting another.
+This section explains the physical encoding and write path; the observable contract is covered in [Use this package](#use-this-package).
 
-## Write path
+### Design concept
 
-The plugin copies frozen session events into one controller per live session. The first pending event starts the configured fixed batching window, and later events join without resetting it. Expiry starts one durable append; events admitted during that write form a separately bounded follow-up batch. `session/flush` cancels the wait and drains current and pending batches. A per-session cursor prevents resumed sessions from re-appending stored events, and live sessions are seeded when the plugin loads. The owning backend instance serializes operations for one session; disposal drains every retained controller before teardown. Every logical event remains present: batching only lets one compressed frame or raw fsync carry more records.
+The backend is a thin storage layer over the shared [PersistenceCoordinator](../session-persistence/README.md#understand-the-implementation): it loads stored records, appends batches, commits repairs, and delegates lifecycle orchestration to the coordinator. Its physical identity is a file revision: device, inode, size, and nanosecond timestamps identify one log and change after append or repair, which is what `listSnapshots` and retained-preparation validation use.
 
+### Physical encoding
+
+The default artifact is a standard concatenation of independent [Zstandard frames](../../../.agents/notes/implemented/architecture/2026-07-19-zstandard-jsonl-session-logs.md): one checksummed frame containing only the header line, then one checksummed frame per durable append batch, using Node's built-in Zstandard API at its default compression level (no level knob). `sourceEventSeqs` uses a lossless storage representation: consecutive runs of at least three sequence numbers become `[start, end]` pairs, any other list stays verbatim, and reading expands the exact in-memory array. Listing reads and validates only the header frame. `compression: 'none'` keeps the same storage-form logical lines without frame compression. A root belongs to one encoding: startup discovery and targeted lookup reject the opposite suffix, and there is no format or compression migration, mixed-root fallback, or dual write. When `packChunks` is enabled, an eligible run of ≥3 consecutive same-block `assistant/chunk` delta events becomes one packed row (`text-chunks`/`reasoning-chunks`/`tool-call-chunks`) whose `seq0`/`time0` and per-member `dt` gaps reconstruct every member exactly; the lossless codec lives in `dsh-session` and reading is layout-blind, so packed, unpacked, and mixed files load identically.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, backend class, coordinator wiring |
+| [`src/format.ts`](src/format.ts) | Log path derivation, header encoding, record scanning, packed-row layout |
+| [`src/zstd.ts`](src/zstd.ts) | Zstandard frame compression, decoding, and frame scanning |
+| [`src/win32.ts`](src/win32.ts) | Windows write-through publish and directory creation |
+| — | No runtime invariant companion is published; persistence correctness requires backend round-trip and crash-tail tests; this package exposes no continuously observable in-process relation. |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the shared persistence model to the sibling backend and the physical-format decisions.
+
+- [Session persistence subsystem](../../../docs/subsystems/persistence.md) — backend-neutral service semantics and provider relationships.
+- [Session persistence seam](../session-persistence/README.md) — the service contract this backend implements.
+- [Project-session directory decision](../../../.agents/notes/implemented/architecture/2026-07-24-project-session-directories.md) — the layout tradeoff behind project and session directories.
+- [Zstandard JSONL session logs](../../../.agents/notes/implemented/architecture/2026-07-19-zstandard-jsonl-session-logs.md) — the checksummed-frame encoding rationale.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Resumed conversation history
@@ -69,9 +137,24 @@ JSONL storage does not mutate live request prefixes. A resumed loop can reuse pr
 
 ## Known Limitations and Deferred Work
 
-- **Only the configured encoding and current `SESSION_FORMAT_VERSION` (v0) load** — changing compression requires a separate/fresh root or selecting the legacy raw mode; the pre-release format has no migration.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when this backend is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
+
+- **Only the configured encoding and current `SESSION_FORMAT_VERSION` (v0) load** — changing compression requires a separate or fresh root, or selecting raw mode; the pre-release format has no migration.
 - **The flat-file storage layout does not load** — use a separate root or move pre-release artifacts into the project/session directory layout before loading.
 - **Compressed files are not directly line-readable** — use the backend to load them, or select `compression: 'none'` before writing a fresh root when external line readers are required.
-- **Nothing deletes session files** — logs accumulate under `root` until removed externally (the seam has no deletion API).
-- **One live writer per session** — append and repair are coordinated only inside the owning backend instance. Another backend instance or process must not write the same session until that owner reaches quiescent disposal; initial same-id publication remains collision-safe through the POSIX no-overwrite hard link or Windows write-through rename without replacement.
+- **Nothing deletes session files** — logs accumulate under `root` until removed externally; the seam has no deletion API.
+- **One live writer per session** — append and repair are coordinated only inside the owning backend instance; another instance or process must not write the same session until that owner reaches quiescent disposal.
 - **POSIX materialization requires hard-link support** — first append uses `link()` so same-id races fail instead of overwriting a committed log; Windows uses write-through rename without replacement.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

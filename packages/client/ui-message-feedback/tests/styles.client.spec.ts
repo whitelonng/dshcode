@@ -90,4 +90,14 @@ describe('MessageFeedbackActions theme styles', () => {
     const bare = css.replace(/\/\*[\s\S]*?\*\//g, '')
     expect((bare.match(/\}/g) ?? []).length).toBe((bare.match(/\{/g) ?? []).length)
   })
+
+  it('slot-injected actions ride the content font-size axis like their host row', () => {
+    // These buttons render inside ui-chat's MessageIconActions row; a fixed
+    // 28px would leave them undersized (or overflowing) once the Settings
+    // font size moves the row.
+    expect(block('.action')).toMatch(/width:\s*calc\(28px \+ var\(--dsh-content-font-delta, 0px\)\)/)
+    expect(block('.action')).toMatch(/height:\s*calc\(28px \+ var\(--dsh-content-font-delta, 0px\)\)/)
+    expect(block('.action svg')).toMatch(/width:\s*calc\(15px \+ var\(--dsh-content-font-delta, 0px\)\)/)
+    expect(block('.noteOpen')).toMatch(/line-height:\s*calc\(28px \+ var\(--dsh-content-font-delta, 0px\)\)/)
+  })
 })

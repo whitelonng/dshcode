@@ -18,16 +18,13 @@ Making cold ordering exact remains a durable-format decision, which is why it is
 
 Store the latest human-prompt time where a listing already reads — the Session index — so `summarizeCold()` can serve it without opening the log or depending on a cache checkpoint. The coordinator computes the value because it sees every append and already owns per-id state; backends persist it. That makes it a new `PersistenceBackend` contract element rather than backend-local bookkeeping, with the same event predicate as the attached projection: `user/message` whose `source.kind` is `user`.
 
-The two shipped backends have opposite constraints, and the proposal is deliberately asymmetric about them:
-
-- **SQLite** gets a column on `sessions`, written in the same transaction as `appendBatch`, at the cost of a monotonic `SCHEMA_VERSION` bump.
-- **JSONL cannot host a mutable header field.** The header is line 1, written once during materialization, and the log is opened for append forever after; `jsonl.spec.ts` pins that committed bytes are never rewritten. A per-append header field would violate an asserted durability invariant, not merely complicate the writer. A per-session sidecar file is the shape to compare against leaving JSONL approximate.
+The shipped JSONL backend determines the concrete storage constraint. Its header is line 1, written once during materialization, and the log is opened for append forever after; `jsonl.spec.ts` pins that committed bytes are never rewritten. A per-append header field would violate an asserted durability invariant, not merely complicate the writer. A per-session sidecar file is therefore the shape to compare against leaving JSONL approximate. An out-of-tree backend may store the value in its own index only if it defines the update atomicity, versioning, and recovery semantics for that representation; this proposal does not prescribe another provider's schema.
 
 Three questions must be answered before implementation, and none of them is settled here:
 
 **How is the shared predicate owned?** A stored field encodes the rule at write time, where the writer sees one batch, while the attached summary folds a whole log. Both must use one exported event predicate or reducer so new message-source variants cannot make attached and cold ordering disagree.
 
-**How do pre-field logs behave?** Existing artifacts have no value. Falling back to mtime keeps them at today's accuracy; falling back to `createdAt` is honest but reorders every existing session in the picker and the tree.
+**How do pre-field logs behave?** Existing artifacts have no value. Falling back to mtime keeps them at the existing mtime-based accuracy; falling back to `createdAt` is honest but reorders every existing session in the picker and the tree.
 
 **Is a sidecar acceptable for JSONL?** It reintroduces a second file per session that can disagree with the log, which the single-artifact design avoided.
 
@@ -47,7 +44,7 @@ Three questions must be answered before implementation, and none of them is sett
 - A resumed-then-abandoned session does not sort above a session worked in afterwards, in the web session tree and the TUI resume picker, pinned by an assembled snapshot rather than unit tests alone.
 - The prompt-time rule has one definition: a test proves the stored field and attached fold agree over a log containing human prompts, injected user messages, boundaries, and closers.
 - Pre-field artifacts load and list without error under the chosen fallback, with the fallback's ordering consequence asserted.
-- SQLite's `SCHEMA_VERSION` bump rejects the old on-disk version per the repo's no-migration stance.
+- The selected JSONL representation preserves committed log bytes and either updates the activity value atomically with the corresponding append or defines a conservative, observable stale-value failure mode.
 
 ## Risks
 

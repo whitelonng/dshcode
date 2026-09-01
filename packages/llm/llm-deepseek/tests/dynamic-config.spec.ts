@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,13 +15,12 @@ import type {
 } from '@deepseek-ai/dsh-attachment'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { LocalCredentialProvider } from '@deepseek-ai/dsh-credentials-local'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { FileSettingsProvider } from '@deepseek-ai/dsh-settings-file'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
 
-const NS = settingsNamespace('llm-deepseek')
+const NS = 'llm-deepseek'
 const KEY_REF = credentialRef('DEEPSEEK_API_KEY')
 const IMAGE_REF: ImageAttachmentRef = {
   attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
@@ -29,6 +28,18 @@ const IMAGE_REF: ImageAttachmentRef = {
   bytes: 3,
   width: 1,
   height: 1,
+}
+const HOST_IMAGE_PATH = '/host/.dsh/attachments/objects/aa/object'
+const MODEL_IMAGE_PATH = '/model/.dsh/attachments/objects/aa/object'
+
+class MappedFileSystem extends Service {
+  constructor(ctx: Context) {
+    super(ctx, 'fs')
+  }
+
+  processPathFromHostPath(hostPath: string): string | undefined {
+    return hostPath === HOST_IMAGE_PATH ? MODEL_IMAGE_PATH : undefined
+  }
 }
 
 class StaticAttachmentStore extends AttachmentStore {
@@ -51,6 +62,10 @@ class StaticAttachmentStore extends AttachmentStore {
 
   readImage(ref: ImageAttachmentRef, _signal?: AbortSignal): Promise<StoredImageAttachment> {
     return Promise.resolve({ ref, data: Uint8Array.of(1, 2, 3) })
+  }
+
+  override imageHostPath(_ref: ImageAttachmentRef): string {
+    return HOST_IMAGE_PATH
   }
 
   override readImageRequest(
@@ -193,6 +208,7 @@ describe('request-level dynamic configuration', () => {
       { kind: 'sse', events: textEvents },
     ])
     const { ctx } = await boot(dir, { baseURL: server.url })
+    await ctx.plugin(MappedFileSystem)
     const messages = [createUserMessage({
       content: [
         { type: 'image', attachment: IMAGE_REF },
@@ -208,7 +224,8 @@ describe('request-level dynamic configuration', () => {
     const first = (server.requests[0] as { messages: Array<{ content: unknown }> }).messages[0]?.content
     const second = (server.requests[1] as { messages: Array<{ content: unknown }> }).messages[0]?.content
     expect(JSON.stringify(first).match(/"type":"file"/g)).toHaveLength(2)
-    expect(JSON.stringify(second)).toContain('[image omitted to keep the request within its image limit')
+    expect(JSON.stringify(second)).toContain('[image omitted to fit request image limits')
+    expect(JSON.stringify(second)).toContain(MODEL_IMAGE_PATH)
     expect(JSON.stringify(second).match(/"type":"file"/g)).toHaveLength(1)
   })
 

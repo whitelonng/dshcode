@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
@@ -29,7 +29,7 @@ class StubStore extends SpillStore {
 function request(content: string): SaveTextSpill {
   return {
     owner: { sessionId: SessionId('s1') },
-    source: { toolName: 'web_fetch', callId: CallId('c1'), label: 'result' },
+    source: { toolName: 'web_fetch', callId: ToolCallId('c1'), label: 'result' },
     suggestedName: 'web_fetch.txt',
     content,
   }

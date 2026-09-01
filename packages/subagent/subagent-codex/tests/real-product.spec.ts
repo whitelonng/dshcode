@@ -17,6 +17,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type {
   SubprocessHandle,
   SubprocessOutcome,
@@ -124,6 +125,7 @@ interface RealRuntime {
 async function realRuntime(): Promise<RealRuntime> {
   const ctx = new Context()
   contexts.push(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(LocalSubprocessRuntime)
   const handles: SubprocessHandle[] = []
@@ -183,7 +185,7 @@ function expectedProcessExitDiagnostic(outcome: SubprocessOutcome): string {
   const fields = [
     'product: Codex',
     'stage: process',
-    'category: process-exit',
+    'category: process',
   ]
   if (outcome.exitCode !== null) fields.push(`exit code: ${outcome.exitCode}`)
   if (outcome.signal !== null) fields.push(`signal: ${outcome.signal}`)
@@ -191,9 +193,6 @@ function expectedProcessExitDiagnostic(outcome: SubprocessOutcome): string {
 }
 
 interface JsonSchemaNode {
-  readonly enum?: string[]
-  readonly format?: string
-  readonly minimum?: number
   readonly properties?: Record<string, JsonSchemaNode>
   readonly required?: string[]
   readonly type?: string | string[]
@@ -215,18 +214,18 @@ function responseInputTexts(body: Record<string, unknown>): string[] {
   })
 }
 
-describe('real @openai/codex 0.147.0 product', () => {
+describe('real @openai/codex 0.149.1 product', () => {
   it('starts approve-for-me through the real app-server and returns exact text', async () => {
-    const sentinel = 'REAL_CODEX_SENTINEL_0_147_0'
+    const sentinel = 'REAL_CODEX_SENTINEL_0_149_1'
     const task = 'Return the fixture sentinel exactly.'
     const { harness, fixture } = await realHarness([
       { kind: 'complete', text: sentinel },
     ], 'approve-for-me')
-    expect(codexPackage.version).toBe('0.147.0')
+    expect(codexPackage.version).toBe('0.149.1')
     const version = await execFileAsync(process.execPath, [codexEntry, '--version'], {
       env: { ...process.env, ...harness.env },
     })
-    expect(version.stdout.trim()).toBe('codex-cli 0.147.0')
+    expect(version.stdout.trim()).toBe('codex-cli 0.149.1')
     const schemaRoot = mkdtempSync(join(tmpdir(), 'dsh-codex-schema-'))
     roots.push(schemaRoot)
     await execFileAsync(process.execPath, [
@@ -237,46 +236,17 @@ describe('real @openai/codex 0.147.0 product', () => {
       schemaRoot,
     ], { env: { ...process.env, ...harness.env } })
     const schema = JSON.parse(readFileSync(
-      join(schemaRoot, 'ServerNotification.json'),
+      join(schemaRoot, 'ClientRequest.json'),
       'utf8',
     )) as {
       definitions: {
-        CodexErrorInfo: {
-          oneOf: JsonSchemaNode[]
-        }
+        ThreadStartParams: JsonSchemaNode
       }
     }
-    expect(schema.definitions.CodexErrorInfo.oneOf[0]?.enum).toEqual([
-      'contextWindowExceeded',
-      'sessionBudgetExceeded',
-      'usageLimitExceeded',
-      'serverOverloaded',
-      'cyberPolicy',
-      'internalServerError',
-      'unauthorized',
-      'badRequest',
-      'threadRollbackFailed',
-      'sandboxError',
-      'other',
-    ])
-    expect(schema.definitions.CodexErrorInfo.oneOf.slice(1).map(variant =>
-      Object.keys(variant.properties ?? {})[0])).toEqual([
-      'httpConnectionFailed',
-      'responseStreamConnectionFailed',
-      'responseStreamDisconnected',
-      'responseTooManyFailedAttempts',
-      'activeTurnNotSteerable',
-    ])
-    for (const variant of schema.definitions.CodexErrorInfo.oneOf.slice(1, 5)) {
-      const category = Object.keys(variant.properties ?? {})[0]!
-      const detail = variant.properties?.[category]
-      expect(detail?.required).toBeUndefined()
-      expect(detail?.properties?.httpStatusCode).toEqual({
-        format: 'uint16',
-        minimum: 0,
-        type: ['integer', 'null'],
-      })
-    }
+    expect(schema.definitions.ThreadStartParams.properties?.model).toEqual({
+      type: ['string', 'null'],
+    })
+    expect(schema.definitions.ThreadStartParams.required).toBeUndefined()
 
     const run = await harness.ctx.subagents.start('codex', {
       prompt: [{ type: 'text', text: task }],
@@ -301,6 +271,7 @@ describe('real @openai/codex 0.147.0 product', () => {
     expect(recorded.method).toBe('POST')
     expect(recorded.path).toBe('/v1/responses')
     expect(recorded.headers.authorization).toBe('Bearer dsh-fake-openai-key')
+    expect(recorded.body.model).toBe('fixture-model')
     expect(responseInputTexts(recorded.body)).toContain(task)
     await expectQuiescent(harness.handles)
   }, 60_000)
@@ -332,12 +303,14 @@ describe('real @openai/codex 0.147.0 product', () => {
     const { ctx, handles, spawnSpecs } = await realRuntime()
     const safeFiber = await ctx.plugin(codex, {
       providerName: 'codex-safe',
+      model: 'codex-safe-model',
       env: safeInstance.env,
       permissionMode: 'never',
       disposeGraceMs: 2_000,
     })
     const bypassFiber = await ctx.plugin(codex, {
       providerName: 'codex-bypass',
+      model: 'codex-bypass-model',
       env: bypassInstance.env,
       permissionMode: 'dangerously-bypass-approvals-and-sandbox',
       disposeGraceMs: 2_000,
@@ -385,6 +358,8 @@ describe('real @openai/codex 0.147.0 product', () => {
     await Promise.all([safeRun.dispose(), bypassRun.dispose()])
     expect(safeInstance.fixture.requests).toHaveLength(1)
     expect(bypassInstance.fixture.requests).toHaveLength(1)
+    expect(safeInstance.fixture.requests[0]?.body.model).toBe('codex-safe-model')
+    expect(bypassInstance.fixture.requests[0]?.body.model).toBe('codex-bypass-model')
     expect(safeInstance.fixture.requests[0]?.body.input)
       .not.toEqual(bypassInstance.fixture.requests[0]?.body.input)
     expect(spawnSpecs.map(spec => spec.env?.CODEX_HOME).sort()).toEqual([
@@ -440,13 +415,9 @@ describe('real @openai/codex 0.147.0 product', () => {
     expect(result.stopReason).toBe('error')
     const diagnosticLines = result.diagnostic?.split('\n') ?? []
     expect(diagnosticLines[0]).toBe(
-      'Product subagent failure (product: Codex; stage: turn; category: other)',
+      'Product subagent failure (product: Codex; stage: turn; category: product-error)',
     )
-    expect([
-      'Codex unattended decision (mode: never; request: command approval; decision: cancelled): the provider does not grant interactive approval',
-      'Codex unattended decision (mode: never; request: sandbox execution; decision: failed): Codex reported a sandbox failure',
-      'Codex unattended decision (mode: never; request: command execution; decision: denied): Codex rejected an escalation because the selected policy never asks for approval',
-    ]).toContain(diagnosticLines[1])
+    expect(diagnosticLines).toHaveLength(1)
     expect(result.diagnostic).not.toContain(command)
     expect(result.diagnostic).not.toContain(harness.workspace)
     await run.dispose()
@@ -478,7 +449,7 @@ describe('real @openai/codex 0.147.0 product', () => {
       const result = await run.result
       expect(result).toMatchObject({ output: [], stopReason: 'error' })
       expect(result.diagnostic).toBe(
-        'Product subagent failure (product: Codex; stage: turn; category: internalServerError)',
+        'Product subagent failure (product: Codex; stage: turn; category: service)',
       )
       expect(result.diagnostic).not.toContain('SECRET_TOKEN')
       expect(result.diagnostic).not.toContain('/private/secret.txt')

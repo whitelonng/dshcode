@@ -1,14 +1,51 @@
+---
+description: "The subprocess group map: the shared child-process service and its local host provider, for users and maintainers navigating the group."
+kind: "package-group"
+---
+
 # subprocess/ — subprocess capability family
 
 English | [中文](README.zh.md)
 
-The shared process substrate for one execution world: executable lookup, fully-specified managed child-process trees with raw or collected stdio, and one deep terminal-process primitive that owns PTY allocation, foreground groups, and provider-observable session cleanup. Command defaulting, shell semantics, deadlines, protocol framing, readiness, and presentation stay with consumers — the [bash executors](../shell/README.md), [LSP host](../lsp/README.md), [PTY shell backend](../terminal/README.md), and [ACP subagent backend](../subagent/README.md). See the [subprocess seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.md).
+## Summary
 
-| Package | ctx key | Role |
+Every child process and terminal session the harness runs — bash commands, language servers, persistent shells, and out-of-process subagent backends — starts, observes, and terminates through one shared service (`ctx.subprocess`), with a local provider running them on the host machine. It is not a standalone product feature: the consuming capability seams decide what each process means, and command semantics, deadlines, and model-facing presentation stay with them. The group provides executable lookup, bounded output capture with spill recovery, whole-tree termination, and a scrubbed starting environment for every child.
+
+## Table of Contents
+
+- [Packages](#packages)
+- [Related documentation](#related-documentation)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="packages"></a>
+## Packages
+
+| Package | Role | ctx key |
 |---|---|---|
-| [`subprocess`](subprocess/README.md) (`@deepseek-ai/dsh-subprocess`) | `ctx.subprocess` | Service Definition: executable lookup, ordinary managed spawns, the terminal-process primitive, handle lifecycles, and shared environment/output vocabulary |
-| [`subprocess-local`](subprocess-local/README.md) (`@deepseek-ai/dsh-subprocess-local`) | — | Local Service Provider: detached process trees, bounded collection/spill, `node-pty`, foreground/session inspection, tree signalling, and terminate-and-join disposal |
+| [`subprocess`](subprocess/README.md) | Defines the child-process service: executable lookup, managed process spawns, and real terminal sessions | `ctx.subprocess` |
+| [`subprocess-local`](subprocess-local/README.md) | Runs those process and terminal spawns on the host machine | registers on `ctx.subprocess` |
+| [`win32-process`](win32-process/README.md) | Owns the shared Win32 bindings for restricted process creation, stdio, Job assignment, waits, and handle cleanup | library — no ctx key |
 
-The service owns process lifetime across consumer reloads; consumers own what a process means (a bash command, a future non-shell runner) and every default that shapes one.
+The service keeps process lifetime across consumer reloads; consumers own what a process means (a bash command, a language server) and every default that shapes one.
 
-The subsystem reference — spawn specs, output readers, outcomes, the `DSH_*` environment — is [docs/subsystems/subprocess.md](../../docs/subsystems/subprocess.md); the seam decision in the [subprocess seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.md).
+-----
+
+<a id="related-documentation"></a>
+## Related documentation
+
+- [Subprocess subsystem](../../docs/subsystems/subprocess.md) — spawn specs, output readers, outcomes, and the managed `DSH_*` environment.
+- [Subprocess seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.md) — why the process half of the bash executors became its own seam.
+
+-----
+
+<a id="dev-note"></a>
+## Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

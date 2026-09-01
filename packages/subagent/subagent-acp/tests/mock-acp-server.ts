@@ -18,6 +18,13 @@
  *                        `dispose()` must still kill the process.
  * - `MOCK_PERMISSION`  — if `1`, the agent calls `session/request_permission`
  *                        before answering, to exercise the client's auto-answer.
+ * - `MOCK_PERMISSION_IGNORE_DECISION` — if `1`, continue after a denied
+ *                        permission so the terminal failure can carry the
+ *                        provider's fixed permission fact.
+ * - `MOCK_CRASH_ON_INITIALIZE` — exit while the unpublished initialize
+ *                        operation is active.
+ * - `MOCK_CRASH_AFTER_CHUNK` — exit after streaming the assistant chunk, so
+ *                        the parent preserves partial output with process facts.
  * - `MOCK_ECHO_CWD`    — if `1`, ignore MOCK_TEXT and stream two lines instead:
  *                        the agent PROCESS's `process.cwd()` and the `cwd` the
  *                        client announced in `session/new` — so a test can assert
@@ -55,10 +62,11 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, writeFileSync } from 'node:fs'
 import { Readable, Writable } from 'node:stream'
 import {
-  AgentSideConnection,
+  agent as createAcpAgentApp,
+  methods,
   ndJsonStream,
   PROTOCOL_VERSION,
-  type Agent,
+  type AgentContext,
   type CancelNotification,
   type AuthenticateRequest,
   type InitializeRequest,
@@ -67,7 +75,9 @@ import {
   type NewSessionResponse,
   type PromptRequest,
   type PromptResponse,
+  type RequestPermissionResponse,
   type StopReason,
+  type ToolKind,
 } from '@agentclientprotocol/sdk'
 
 // When MOCK_ECHO_ENV names a variable, stream that variable's value in place
@@ -80,11 +90,15 @@ const ECHO_CWD = process.env.MOCK_ECHO_CWD === '1'
 const STOP = (process.env.MOCK_STOP ?? 'end_turn') as StopReason
 const HANG = process.env.MOCK_HANG === '1'
 const WANT_PERMISSION = process.env.MOCK_PERMISSION === '1'
+const IGNORE_PERMISSION_DECISION = process.env.MOCK_PERMISSION_IGNORE_DECISION === '1'
 const NO_ALLOW = process.env.MOCK_NO_ALLOW === '1'
 const THOUGHT = process.env.MOCK_THOUGHT === '1'
+const CRASH_ON_INITIALIZE = process.env.MOCK_CRASH_ON_INITIALIZE === '1'
 const CRASH_ON_CANCEL = process.env.MOCK_CRASH_ON_CANCEL === '1'
 const CRASH_ON_PROMPT = process.env.MOCK_CRASH_ON_PROMPT === '1'
+const CRASH_AFTER_CHUNK = process.env.MOCK_CRASH_AFTER_CHUNK === '1'
 const IGNORE_CANCEL = process.env.MOCK_IGNORE_CANCEL === '1'
+const TOOL_KIND = process.env.MOCK_TOOL_KIND as ToolKind | undefined
 const READY_FILE = process.env.MOCK_READY_FILE
 const FLUSH_ON_EOF = process.env.MOCK_FLUSH_ON_EOF
 // When MOCK_NEWSESSION_READY/GO are set, newSession touches READY then blocks
@@ -93,7 +107,7 @@ const NEWSESSION_GATE = process.env.MOCK_NEWSESSION_READY !== undefined && proce
   ? { ready: process.env.MOCK_NEWSESSION_READY, go: process.env.MOCK_NEWSESSION_GO }
   : undefined
 
-function makeAgent(conn: AgentSideConnection): Agent {
+function makeAgent() {
   // Pending cancel resolver for the HANG path: a `session/cancel` resolves the
   // prompt with `cancelled`.
   let resolveCancel: ((reason: StopReason) => void) | undefined
@@ -102,9 +116,10 @@ function makeAgent(conn: AgentSideConnection): Agent {
 
   return {
     initialize(_params: InitializeRequest): Promise<InitializeResponse> {
+      if (CRASH_ON_INITIALIZE) process.exit(11)
       return Promise.resolve({
         protocolVersion: PROTOCOL_VERSION,
-        agentCapabilities: { loadSession: false, promptCapabilities: { image: false, audio: false, embeddedContext: false } },
+        agentCapabilities: { promptCapabilities: { image: false, audio: false, embeddedContext: false } },
         authMethods: [],
       })
     },
@@ -124,7 +139,7 @@ function makeAgent(conn: AgentSideConnection): Agent {
       // No auth methods advertised; nothing to do.
       return Promise.resolve()
     },
-    async prompt(params: PromptRequest): Promise<PromptResponse> {
+    async prompt(params: PromptRequest, conn: AgentContext): Promise<PromptResponse> {
       if (CRASH_ON_PROMPT) process.exit(1)
       if (WANT_PERMISSION) {
         // Ask the client to approve before answering; honor its decision. Under
@@ -136,32 +151,40 @@ function makeAgent(conn: AgentSideConnection): Agent {
             { optionId: 'yes', name: 'Allow', kind: 'allow_once' as const },
             { optionId: 'no', name: 'Reject', kind: 'reject_once' as const },
           ]
-        const decision = await conn.requestPermission({
+        const decision = await conn.request(methods.client.session.requestPermission, {
           sessionId: params.sessionId,
-          toolCall: { toolCallId: 'mock-call', title: 'mock side effect' },
+          toolCall: {
+            toolCallId: 'mock-call',
+            title: 'mock side effect',
+            ...(TOOL_KIND === undefined ? {} : { kind: TOOL_KIND }),
+          },
           options,
-        })
-        if (decision.outcome.outcome === 'cancelled') {
+        }) as RequestPermissionResponse
+        if (decision.outcome.outcome === 'cancelled' && !IGNORE_PERMISSION_DECISION) {
           return { stopReason: 'cancelled' }
         }
       }
       // Optionally emit a NON-message update first (a thought), so the client's
       // sessionUpdate sees an update it must consume-but-not-accumulate.
       if (THOUGHT) {
-        await conn.sessionUpdate({
+        await conn.notify(methods.client.session.update, {
           sessionId: params.sessionId,
           update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'thinking…' } },
         })
       }
       // Stream the canned assistant text as one chunk (or, under MOCK_ECHO_CWD,
       // the observable process cwd + announced session cwd).
-      await conn.sessionUpdate({
+      await conn.notify(methods.client.session.update, {
         sessionId: params.sessionId,
         update: {
           sessionUpdate: 'agent_message_chunk',
           content: { type: 'text', text: ECHO_CWD ? `${process.cwd()}\n${sessionCwd ?? ''}` : TEXT },
         },
       })
+      if (CRASH_AFTER_CHUNK) {
+        await new Promise<void>((resolve) => { setImmediate(resolve) })
+        process.exit(17)
+      }
       // Signal "prompt is in flight" by touching the readiness file, so a test
       // can wait on a CONDITION (file exists) rather than an arbitrary timeout
       // before cancelling — deterministic regardless of subprocess cold-start.
@@ -195,13 +218,20 @@ function makeAgent(conn: AgentSideConnection): Agent {
   }
 }
 
-new AgentSideConnection(
-  makeAgent,
-  ndJsonStream(
+const implementation = makeAgent()
+createAcpAgentApp({ name: 'dsh-subagent-acp-test-agent' })
+  .onRequest(methods.agent.initialize, ({ params }) => implementation.initialize(params))
+  .onRequest(methods.agent.authenticate, async ({ params }) => {
+    await implementation.authenticate(params)
+    return {}
+  })
+  .onRequest(methods.agent.session.new, ({ params }) => implementation.newSession(params))
+  .onRequest(methods.agent.session.prompt, ({ params, client }) => implementation.prompt(params, client))
+  .onNotification(methods.agent.session.cancel, ({ params }) => implementation.cancel(params))
+  .connect(ndJsonStream(
     Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,
     Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>,
-  ),
-)
+  ))
 
 // Under MOCK_TRAP_SIGTERM, ignore SIGTERM and keep stdin open so the process
 // neither quiesces on EOF nor dies on the graceful signal — exercising the

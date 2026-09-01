@@ -7,7 +7,9 @@
   },
   "files": [
     "src/index.ts",
-    "src/invariant.ts",
+    "src/remote-error-codes.ts",
+    "src/stream-protocol.ts",
+    "src/stream-server.ts",
     "src/types.ts"
   ],
   "references": [
@@ -18,13 +20,22 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../../vendor/schemastery"
     },
     {
       "path": "../../client/connection/tsconfig.host.json"
     },
     {
+      "path": "../../host/webserver"
+    },
+    {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../util/deque"
+    },
+    {
+      "path": "../../util/timeout"
     }
   ]
 }

@@ -1,13 +1,13 @@
 // Web e2e scenario: the single-line produced-files summary a finished turn
 // ends with. Cold-seeds ten writes (zero model calls), then verifies the real
-// assembled lane keeps a precise +N and a capability-gated folder handoff.
+// assembled lane adapts from a coarse width budget and keeps a capability-gated folder handoff.
 // The folder request is intercepted so one real browser click can exercise
 // the full client carrier without launching a native application in CI.
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vitest'
-import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import {
@@ -20,7 +20,7 @@ const OVERLAY = fileURLToPath(new URL('./produced-files.overlay.yml', import.met
 const SEED_ID = 'produced-files-web-e2e'
 const DONE = 'PRODUCED_FILES_DONE'
 
-/** Short leading names plus a long third name make the narrow lane deterministically show two. */
+/** Ten varied names exercise estimated prefix selection and CSS shrinking. */
 const PRODUCED = [
   '关于我.md',
   'index.html',
@@ -49,7 +49,7 @@ function producedFixture(): string {
   session.append('step/start', { turn: 1, step: 1 })
   const calls = PRODUCED.map((path, index) => ({
     path,
-    callId: CallId(`produced-files-${String(index)}`),
+    callId: ToolCallId(`produced-files-${String(index)}`),
     args: JSON.stringify({ file_path: path, content: `content of ${path}\n` }),
   }))
   session.append('assistant/message', {
@@ -96,7 +96,7 @@ function producedFixture(): string {
       type: 'session', version: SESSION_FORMAT_VERSION, id: '{{sessionId}}',
       createdAt: 0, cwd: '{{cwd}}',
     }),
-    ...session.events.map(event => JSON.stringify({
+    ...session.snapshotEvents().map(event => JSON.stringify({
       ...event, time: eventTimeOrigin + event.seq * 1_000,
     })),
     '',
@@ -116,9 +116,9 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     page = await newEnglishPage(browser)
     // Keep the responsive sidebar available while selecting the cold seed;
     // the assertion itself narrows the conversation after navigation.
-    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.setViewportSize({ width: 1800, height: 900 })
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 120_000)
 
@@ -127,7 +127,7 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     await scaffold?.close()
   })
 
-  it.skipIf(MODE === 'record')('keeps a narrow ten-file summary on one line with +8 and a folder action', async () => {
+  it.skipIf(MODE === 'record')('adapts a ten-file summary without leaving one line', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-produced-files'))
     const groupRow = page.locator('[role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
@@ -137,36 +137,37 @@ describe('web e2e: a finished turn ends with the files it produced', () => {
     await sessionRow.click()
 
     await expect.poll(() => page.getByText(DONE, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
-    await page.setViewportSize({ width: 780, height: 900 })
     const row = page.locator('[data-produced-files-row]')
     await row.waitFor({ timeout: 15_000 })
     const chips = row.getByRole('button')
-    await expect.poll(() => chips.count()).toBe(2)
+    await expect.poll(() => chips.count()).toBe(6)
+    await expect.poll(() => row.getByText('+ 4 files', { exact: true }).isVisible()).toBe(true)
+
+    await page.setViewportSize({ width: 780, height: 900 })
+    await expect.poll(() => chips.count()).toBe(5)
     expect(await chips.nth(0).innerText()).toBe('关于我.md')
     expect(await chips.nth(1).innerText()).toBe('index.html')
-    expect(await row.getByText('+ 8 files', { exact: true }).count()).toBe(1)
+    expect(await chips.nth(4).innerText()).toBe('app.ts')
+    await expect.poll(() => row.getByText('+ 5 files', { exact: true }).isVisible()).toBe(true)
     const showFolder = page.getByRole('button', { name: 'Show in folder', exact: true })
     expect(await showFolder.count()).toBe(1)
     expect(await page.getByText('Produced', { exact: true }).count()).toBe(1)
 
-    const openPath = vi.spyOn(scaffold.ctx.apiProxy.host, 'openPath')
-      .mockImplementation(async (request, _signal) => ({
-        rpcId: request.rpcId,
-        result: { ok: true, value: { opened: true as const } },
-      }))
+    const openPath = vi.spyOn(scaffold.ctx.sessionController, 'openWorkspacePath')
+      .mockResolvedValue({ opened: true })
     try {
       const [response] = await Promise.all([
-        page.waitForResponse(response => new URL(response.url()).pathname === '/api/host.openPath'),
+        page.waitForResponse(response => new URL(response.url()).pathname === '/api/session/openWorkspacePath'),
         showFolder.click({ clickCount: 1 }),
       ])
       expect(response.status()).toBe(200)
       expect(openPath).toHaveBeenCalledTimes(1)
-      expect(openPath.mock.calls[0]![0].payload).toEqual({ path: `${scaffold.workspaceCwd}/.` })
+      expect(openPath.mock.calls[0]![0]).toMatchObject({ path: `${scaffold.workspaceCwd}/.` })
     } finally {
       openPath.mockRestore()
     }
 
-    const tops = await row.locator(':scope > *').evaluateAll(elements =>
+    const tops = await row.locator(':scope > *:visible').evaluateAll(elements =>
       elements.map(element => element.getBoundingClientRect().top))
     expect(new Set(tops.map(top => Math.round(top))).size).toBe(1)
     const geometry = await row.evaluate(element => ({

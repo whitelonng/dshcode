@@ -12,7 +12,9 @@ The blocker for a full-transcript test is the model: the agent's output is drive
 
 ## Decision
 
-A snapshot test boots the real ACP example, drives its stdio protocol from a deterministic script, and compares normalized output with committed expected outputs. A session log recorded once from the real API supplies all later model streams. The fixture is a [projection of the product's persisted JSONL](2026-08-18-session-snapshot-envelope-projection.md): its header and payloads remain, while body sequence/time envelopes are omitted.
+A recorded-session snapshot starts a shipped profile through `dsh`, drives its public interface, and compares normalized output with committed expected outputs. ACP-owned scenarios additionally drive the stdio protocol and compare its transcript. A session log recorded once from the real API supplies all later model streams. The fixture is a [projection of the product's persisted JSONL](2026-08-18-session-snapshot-envelope-projection.md): its header and payloads remain, while body sequence/time envelopes are omitted.
+
+The [session-log snapshot corpus decision](2026-08-24-session-log-snapshot-corpus.md) supersedes this note's ACP-specific placement and controller ownership. This note remains the rationale authority for session-log fixtures, replay derivation, exceptional overrides, normalization, and ACP transcript comparison.
 
 ### The fixture projects the persisted session JSONL
 
@@ -67,7 +69,7 @@ Tool determinism comes from a generated cwd, scrubbed environment, fresh non-log
 
 ### Two subcommands, replay in the default gate
 
-`pnpm run test:snapshot` replays committed fixtures keylessly; `test:snapshot:record` uses the real API and rewrites the projected session snapshot and stdout expected output. The same keyless gate discovers repository JSONL by its `session` header and rejects any fixture that differs from the shared codec's projected canonical packed representation. Missing fixtures fail loud. Every scenario carries `input.json`, `stdout.expected.jsonl`, and `session.jsonl`; no-model cases use a header-only log. `replay.override.json` is required only for scenarios marked `overridden`, because its presence replaces derived replay. Fixture guards reject missing, mismatched, and orphaned files. Both commands accept scenario filters.
+`pnpm run test:snapshot` replays committed fixtures keylessly; `test:snapshot:record` uses the real API and rewrites the projected session snapshot plus interface-specific expected output. The same keyless gate discovers repository JSONL by its `session` header and rejects any fixture that differs from the shared codec's projected canonical packed representation. Missing fixtures fail loud. Every ACP scenario carries `input.json`, `stdout.expected.jsonl`, and `session.jsonl`; no-model cases use a header-only log. Other profiles derive ordinary accepted user input from `session.jsonl` and retain only controller input that the accepted session cannot reconstruct in `snapshot.yml`. `replay.override.json` is required only for scenarios whose successful model behavior cannot be derived from the log. Fixture guards reject missing, mismatched, and orphaned files. Both commands accept scenario filters.
 
 ## Alternatives considered
 
@@ -79,6 +81,6 @@ Tool determinism comes from a generated cwd, scrubbed environment, fresh non-log
 
 ## Consequences
 
-The tier adds reviewed per-scenario input, session, stdout, optional override, and optional workspace fixtures, plus one file for each distinct pinned prompt and tool-schema sequence. Workspace seeds are copied into the generated cwd for both record and replay. In return the tier provides deterministic keyless coverage through the real Loader and tool composition, including an assembled context-overflow recovery whose marked compaction summary supplies the auxiliary call. Most retained scenarios exercise the assembled backend rather than ACP; the [automation-only ACP decision](../simplification/2026-07-23-acp-automation-only-protocol.md#snapshot-boundary) keeps that corpus here until it can move to a transport-neutral headless suite without losing coverage.
+The tier adds reviewed per-scenario session, manifest, interface-specific expected output, optional override, and optional workspace fixtures, plus one file for each distinct pinned prompt and tool-schema sequence. Workspace seeds are copied into the generated cwd for both record and replay. In return the tier provides deterministic keyless coverage through the real Loader and tool composition, including an assembled context-overflow recovery whose marked compaction summary supplies the auxiliary call. The ACP subtree now retains only protocol behavior; headless, SDK, and Web own the scenarios whose behavior belongs to those interfaces.
 
-This Agent Note relates to but does not supersede the [proposed determinism Agent Note](../../proposed/testing/2026-06-11-deterministic-and-stress-testing.md): that proposal's "universal replay fixture" re-derives session *message history* after every test (an internal-consistency invariant), whereas these snapshots pin assembled behavior plus the external automation output. They are complementary until the backend corpus moves off ACP.
+This Agent Note relates to but does not supersede the [proposed determinism Agent Note](../../proposed/testing/2026-06-11-deterministic-and-stress-testing.md): that proposal's "universal replay fixture" re-derives session *message history* after every test (an internal-consistency invariant), whereas these snapshots pin assembled behavior plus interface-specific output. They remain complementary.

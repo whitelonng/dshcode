@@ -6,11 +6,13 @@
  * serialize per Session, and a disposed controller stops publishing.
  */
 import { describe, expect, it, vi } from 'vitest'
-import type { MessageId, SessionId } from '@deepseek-ai/dsh-client-connection/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { MessageId, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
   MessageFeedbackItem, MessageFeedbackVersion,
 } from '@deepseek-ai/dsh-message-feedback/types'
-import { MessageFeedbackController, type MessageFeedbackRemote } from '../src/client/controller.ts'
+import { MessageFeedbackController } from '../src/client/controller.ts'
 
 const SESSION = 's-1' as SessionId
 const MSG = 'm-1' as MessageId
@@ -37,10 +39,10 @@ type Script = {
 }
 
 /**
- * A recording fake Remote. Scripts return the *business* result; this wraps it
+ * A recording fake context. Scripts return the *business* result; this wraps it
  * in the carrier envelope the generated face uses, so specs stay readable. A
- * script may also return an already-enveloped `{ok:false,error:{code,message,
- * details}}` to exercise a carrier failure.
+ * script may also return an already-enveloped `{ok:false,error:RemoteError}` to
+ * exercise a carrier failure.
  */
 function fakeRemote(script: Script = {}) {
   const calls: { method: string; request: unknown }[] = []
@@ -53,21 +55,25 @@ function fakeRemote(script: Script = {}) {
       const business = real === undefined ? Promise.resolve(fallback) : real(request)
       return business.then(v => (isCarrier(v) ? v : { ok: true, value: v })) as Promise<never>
     }
-  const remote = {
-    list: record('list', script.list, { ok: true, value: { items: [] } }),
-    put: record('put', script.put, { ok: true, value: item() }),
-    delete: record('delete', script.delete, { ok: true, value: { absent: true } }),
-  } as unknown as MessageFeedbackRemote
-  return { remote, calls }
+  const ctx = {
+    remote: {
+      messageFeedback: {
+        list: record('list', script.list, { ok: true, value: { items: [] } }),
+        put: record('put', script.put, { ok: true, value: item() }),
+        delete: record('delete', script.delete, { ok: true, value: { absent: true } }),
+      },
+    },
+  } as unknown as ClientContext
+  return { ctx, calls }
 }
 
 describe('MessageFeedbackController', () => {
   it('seeds the view from one list read and keys items by message id', async () => {
     const seeded = item({ note: 'good' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [seeded] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(controller.getSnapshot().status).toBe('cold')
     expect(await controller.ensure()).toEqual({ ok: true })
@@ -79,8 +85,8 @@ describe('MessageFeedbackController', () => {
   })
 
   it('collapses concurrent loads onto one in-flight read', async () => {
-    const { remote, calls } = fakeRemote()
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const { ctx, calls } = fakeRemote()
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     await Promise.all([controller.ensure(), controller.ensure(), controller.refresh()])
 
@@ -90,13 +96,13 @@ describe('MessageFeedbackController', () => {
   it('sends ifVersion null for a first rating and the observed version afterwards', async () => {
     const first = item({ version: version('v1') })
     const second = item({ version: version('v2'), rating: 'negative' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       put: request => Promise.resolve({
         ok: true,
         value: (request as { rating: string }).rating === 'positive' ? first : second,
       }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.rate(MSG, 'positive')).toEqual({ ok: true })
     expect(await controller.rate(MSG, 'negative')).toEqual({ ok: true })
@@ -108,8 +114,8 @@ describe('MessageFeedbackController', () => {
   })
 
   it('forwards an optional note and omits the field when absent', async () => {
-    const { remote, calls } = fakeRemote()
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const { ctx, calls } = fakeRemote()
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     await controller.rate(MSG, 'positive', 'helpful')
     await controller.rate(OTHER, 'negative')
@@ -121,13 +127,13 @@ describe('MessageFeedbackController', () => {
 
   it('reconciles a version conflict from the authoritative item without refetching', async () => {
     const authoritative = item({ version: version('v9'), rating: 'negative', note: 'changed elsewhere' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       put: () => Promise.resolve({
         ok: false,
         error: { code: 'version-conflict', current: authoritative },
       }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.rate(MSG, 'positive')).toEqual({
       ok: false,
@@ -139,14 +145,14 @@ describe('MessageFeedbackController', () => {
   })
 
   it('drops the local item when a conflict reports the feedback is gone', async () => {
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [item()] } }),
       delete: () => Promise.resolve({
         ok: false,
         error: { code: 'version-conflict', current: null },
       }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
 
     expect(await controller.clear(MSG)).toMatchObject({ ok: false, error: { code: 'version-conflict' } })
@@ -154,10 +160,10 @@ describe('MessageFeedbackController', () => {
   })
 
   it('deletes with the observed version and removes the item on success', async () => {
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [item({ version: version('v7') })] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
 
     expect(await controller.clear(MSG)).toEqual({ ok: true })
@@ -168,8 +174,8 @@ describe('MessageFeedbackController', () => {
   })
 
   it('treats clearing an unrated message as already satisfied without a call', async () => {
-    const { remote, calls } = fakeRemote()
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const { ctx, calls } = fakeRemote()
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.clear(MSG)).toEqual({ ok: true })
     expect(calls.filter(call => call.method === 'delete')).toHaveLength(0)
@@ -180,7 +186,7 @@ describe('MessageFeedbackController', () => {
     let overlapped = false
     const versions = [version('v1'), version('v2')]
     let index = 0
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       put: async () => {
         inFlight += 1
         if (inFlight > 1) overlapped = true
@@ -191,7 +197,7 @@ describe('MessageFeedbackController', () => {
         return { ok: true, value: item({ version: next }) }
       },
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     await Promise.all([controller.rate(MSG, 'positive'), controller.rate(MSG, 'negative')])
 
@@ -202,10 +208,10 @@ describe('MessageFeedbackController', () => {
   })
 
   it('publishes an error status when the list read is rejected by the Host', async () => {
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: false, error: { code: 'session-not-found', sessionId: SESSION } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.ensure()).toMatchObject({ ok: false, error: { code: 'session-not-found' } })
     expect(controller.getSnapshot()).toMatchObject({
@@ -214,31 +220,9 @@ describe('MessageFeedbackController', () => {
     })
   })
 
-  it('settles a transport throw as a result instead of rejecting', async () => {
-    const { remote } = fakeRemote({ list: () => Promise.reject(new Error('socket closed')) })
-    const controller = new MessageFeedbackController(remote, SESSION)
-
-    expect(await controller.ensure()).toEqual({
-      ok: false,
-      error: { code: 'transport', message: 'socket closed' },
-    })
-    expect(controller.getSnapshot().status).toBe('error')
-  })
-
-  it('settles a mutation transport throw without corrupting the view', async () => {
-    const { remote } = fakeRemote({ put: () => Promise.reject(new Error('socket closed')) })
-    const controller = new MessageFeedbackController(remote, SESSION)
-
-    expect(await controller.rate(MSG, 'positive')).toEqual({
-      ok: false,
-      error: { code: 'transport', message: 'socket closed' },
-    })
-    expect(controller.getSnapshot().items.has(MSG)).toBe(false)
-  })
-
   it('notifies subscribers on publication and stops after unsubscribe', async () => {
-    const { remote } = fakeRemote()
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const { ctx } = fakeRemote()
+    const controller = new MessageFeedbackController(ctx, SESSION)
     const listener = vi.fn()
     const unsubscribe = controller.subscribe(listener)
 
@@ -252,8 +236,8 @@ describe('MessageFeedbackController', () => {
   })
 
   it('contains a throwing subscriber at the observable boundary', async () => {
-    const { remote } = fakeRemote()
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const { ctx } = fakeRemote()
+    const controller = new MessageFeedbackController(ctx, SESSION)
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     controller.subscribe(() => { throw new Error('subscriber exploded') })
     const healthy = vi.fn()
@@ -267,8 +251,8 @@ describe('MessageFeedbackController', () => {
   })
 
   it('refuses mutations and stops publishing once disposed', async () => {
-    const { remote, calls } = fakeRemote()
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const { ctx, calls } = fakeRemote()
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
     const listener = vi.fn()
     controller.subscribe(listener)
@@ -289,20 +273,20 @@ describe('MessageFeedbackController', () => {
       ['note-too-large', 'the note is too long'],
     ] as const
     for (const [code, message] of codes) {
-      const { remote } = fakeRemote({
+      const { ctx } = fakeRemote({
         list: () => Promise.resolve({ ok: false, error: { code, sessionId: SESSION } } as never),
       })
-      const controller = new MessageFeedbackController(remote, SESSION)
+      const controller = new MessageFeedbackController(ctx, SESSION)
       expect(await controller.ensure()).toMatchObject({ ok: false, error: { code } })
       expect(controller.getSnapshot().error).toBe(message)
     }
   })
 
   it('falls back to the raw code for an unrecognized failure', async () => {
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: false, error: { code: 'brand-new-code' } } as never),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.ensure()).toMatchObject({ ok: false, error: { code: 'brand-new-code' } })
     expect(controller.getSnapshot().error).toBe('brand-new-code')
@@ -311,13 +295,13 @@ describe('MessageFeedbackController', () => {
   it('publishes nothing when the list settles after disposal', async () => {
     let release = (): void => {}
     const gate = new Promise<void>((resolve) => { release = resolve })
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: async () => {
         await gate
         return { ok: true, value: { items: [item()] } }
       },
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     const pending = controller.ensure()
     const listener = vi.fn()
     controller.subscribe(listener)
@@ -330,47 +314,11 @@ describe('MessageFeedbackController', () => {
     expect(listener).not.toHaveBeenCalled()
   })
 
-  it('swallows a rejected list that settles after disposal', async () => {
-    let reject = (): void => {}
-    const gate = new Promise<void>((_resolve, rejectFn) => { reject = () => { rejectFn(new Error('late')) } })
-    const { remote } = fakeRemote({ list: () => gate })
-    const controller = new MessageFeedbackController(remote, SESSION)
-    const pending = controller.ensure()
-
-    controller.dispose()
-    reject()
-
-    expect(await pending).toEqual({ ok: true })
-    expect(controller.getSnapshot().status).not.toBe('error')
-  })
-
-  it('describes a non-Error list rejection with a stable message', async () => {
-    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection is the scenario under test.
-    const { remote } = fakeRemote({ list: () => Promise.reject('socket string') })
-    const controller = new MessageFeedbackController(remote, SESSION)
-
-    expect(await controller.ensure()).toEqual({
-      ok: false,
-      error: { code: 'transport', message: 'message feedback list failed' },
-    })
-  })
-
-  it('describes a non-Error mutation rejection with a stable message', async () => {
-    // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- the non-Error rejection is the scenario under test.
-    const { remote } = fakeRemote({ put: () => Promise.reject('nope') })
-    const controller = new MessageFeedbackController(remote, SESSION)
-
-    expect(await controller.rate(MSG, 'positive')).toEqual({
-      ok: false,
-      error: { code: 'transport', message: 'message feedback mutation failed' },
-    })
-  })
-
   it('propagates a failed load to a queued mutation without calling the wire', async () => {
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: false, error: { code: 'session-not-found', sessionId: SESSION } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.rate(MSG, 'positive')).toMatchObject({
       ok: false,
@@ -381,23 +329,23 @@ describe('MessageFeedbackController', () => {
 
   it('keeps a later mutation running after an earlier one settles as a failure', async () => {
     let first = true
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       put: () => {
         if (first) {
           first = false
-          return Promise.reject(new Error('first blew up'))
+          return Promise.resolve({ ok: false, error: new RemoteError('gateway/internal', 'first blew up', {}) })
         }
         return Promise.resolve({ ok: true, value: item({ rating: 'negative' }) })
       },
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     const [a, b] = await Promise.all([
       controller.rate(MSG, 'positive'),
       controller.rate(MSG, 'negative'),
     ])
 
-    expect(a).toMatchObject({ ok: false, error: { code: 'transport' } })
+    expect(a).toMatchObject({ ok: false, error: { code: 'gateway/internal' } })
     expect(b).toEqual({ ok: true })
     expect(controller.getSnapshot().items.get(MSG)?.rating).toBe('negative')
   })
@@ -408,14 +356,14 @@ describe('MessageFeedbackController', () => {
     // fiber unloads, and its authoritative item must not be published.
     let release = (): void => {}
     const gate = new Promise<void>((resolve) => { release = resolve })
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [item({ version: version('v1') })] } }),
       put: async () => {
         await gate
         return { ok: false, error: { code: 'version-conflict', current: item({ version: version('v2'), rating: 'negative' }) } }
       },
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
     const listener = vi.fn()
     controller.subscribe(listener)
@@ -432,14 +380,14 @@ describe('MessageFeedbackController', () => {
   it('drops a delete conflict reconciliation once disposed mid-flight', async () => {
     let release = (): void => {}
     const gate = new Promise<void>((resolve) => { release = resolve })
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [item()] } }),
       delete: async () => {
         await gate
         return { ok: false, error: { code: 'version-conflict', current: null } }
       },
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
     const pending = controller.clear(MSG)
 
@@ -455,11 +403,11 @@ describe('MessageFeedbackController', () => {
 
   it('leaves the local item untouched when a rating fails for a non-conflict reason', async () => {
     const existing = item({ version: version('v3'), rating: 'positive' })
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [existing] } }),
       put: () => Promise.resolve({ ok: false, error: { code: 'note-too-large', maxBytes: 8, actualBytes: 9 } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
 
     expect(await controller.rate(MSG, 'negative', 'far too long')).toMatchObject({
@@ -471,11 +419,11 @@ describe('MessageFeedbackController', () => {
 
   it('leaves the local item untouched when a delete fails for a non-conflict reason', async () => {
     const existing = item({ version: version('v4') })
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [existing] } }),
       delete: () => Promise.resolve({ ok: false, error: { code: 'session-not-found', sessionId: SESSION } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
 
     expect(await controller.clear(MSG)).toMatchObject({
@@ -489,10 +437,10 @@ describe('MessageFeedbackController', () => {
     // Regression: a control that rendered before the first list read holds no
     // item, so it passes note=undefined; that must not erase the stored note.
     const stored = item({ version: version('v1'), rating: 'positive', note: 'keep me' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [stored] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.rate(MSG, 'negative')).toEqual({ ok: true })
 
@@ -503,10 +451,10 @@ describe('MessageFeedbackController', () => {
 
   it('toggle retracts when the committed rating already matches', async () => {
     const stored = item({ version: version('v1'), rating: 'positive' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [stored] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.toggle(MSG, 'positive')).toEqual({ ok: true })
 
@@ -519,10 +467,10 @@ describe('MessageFeedbackController', () => {
     // The click lands before any list read: the cold view knows no item, yet the
     // stored rating matches, so the toggle must retract rather than re-put.
     const stored = item({ version: version('v1'), rating: 'positive', note: 'kept' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [stored] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     expect(controller.getSnapshot().status).toBe('cold')
 
     expect(await controller.toggle(MSG, 'positive')).toEqual({ ok: true })
@@ -532,10 +480,10 @@ describe('MessageFeedbackController', () => {
 
   it('toggle replaces the opposite rating and carries the note forward', async () => {
     const stored = item({ version: version('v1'), rating: 'positive', note: 'kept' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [stored] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.toggle(MSG, 'negative')).toEqual({ ok: true })
 
@@ -545,10 +493,10 @@ describe('MessageFeedbackController', () => {
 
   it('clearNote drops the note and keeps the rating', async () => {
     const stored = item({ version: version('v1'), rating: 'negative', note: 'remove me' })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [stored] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.clearNote(MSG)).toEqual({ ok: true })
 
@@ -558,10 +506,10 @@ describe('MessageFeedbackController', () => {
   })
 
   it('clearNote is a no-op when there is no note to drop', async () => {
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [item()] } }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.clearNote(MSG)).toEqual({ ok: true })
     expect(calls.filter(c => c.method === 'put')).toHaveLength(0)
@@ -573,7 +521,7 @@ describe('MessageFeedbackController', () => {
     const order: string[] = []
     let releasePut = (): void => {}
     const putGate = new Promise<void>((r) => { releasePut = r })
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => {
         order.push('list')
         return Promise.resolve({ ok: true, value: { items: [item({ version: version('v1') })] } })
@@ -585,7 +533,7 @@ describe('MessageFeedbackController', () => {
         return { ok: true, value: item({ version: version('v9'), rating: 'negative' }) }
       },
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
 
     const rating = controller.rate(MSG, 'negative')
@@ -605,14 +553,14 @@ describe('MessageFeedbackController', () => {
     const gate = new Promise<void>((r) => { release = r })
     let started = (): void => {}
     const listStarted = new Promise<void>((r) => { started = r })
-    const { remote, calls } = fakeRemote({
+    const { ctx, calls } = fakeRemote({
       list: async () => {
         started()
         await gate
         return { ok: true, value: { items: [] } }
       },
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     const pending = controller.rate(MSG, 'positive')
 
     await listStarted
@@ -626,49 +574,49 @@ describe('MessageFeedbackController', () => {
   it('renders a carrier failure from the Remote envelope', async () => {
     // The generated face folds transport faults into ok:false with a
     // RemoteFailure, so the controller reads them as values, not rejections.
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({
         ok: false,
-        error: { code: 'carrier-closed', message: 'socket closed', details: {} },
+        error: new RemoteError('gateway/internal', 'socket closed', {}),
       }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.ensure()).toEqual({
       ok: false,
-      error: { code: 'carrier-closed', message: 'socket closed' },
+      error: { code: 'gateway/internal', message: 'socket closed' },
     })
     expect(controller.getSnapshot()).toMatchObject({ status: 'error', error: 'socket closed' })
   })
 
   it('renders a carrier failure on a mutation without touching the view', async () => {
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       put: () => Promise.resolve({
         ok: false,
-        error: { code: 'carrier-closed', message: 'socket closed', details: {} },
+        error: new RemoteError('gateway/internal', 'socket closed', {}),
       }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
 
     expect(await controller.rate(MSG, 'positive')).toEqual({
       ok: false,
-      error: { code: 'carrier-closed', message: 'socket closed' },
+      error: { code: 'gateway/internal', message: 'socket closed' },
     })
     expect(controller.getSnapshot().items.has(MSG)).toBe(false)
   })
 
   it('renders a carrier failure on a delete', async () => {
-    const { remote } = fakeRemote({
+    const { ctx } = fakeRemote({
       list: () => Promise.resolve({ ok: true, value: { items: [item()] } }),
       delete: () => Promise.resolve({
         ok: false,
-        error: { code: 'carrier-closed', message: 'socket closed', details: {} },
+        error: new RemoteError('gateway/internal', 'socket closed', {}),
       }),
     })
-    const controller = new MessageFeedbackController(remote, SESSION)
+    const controller = new MessageFeedbackController(ctx, SESSION)
     await controller.ensure()
 
-    expect(await controller.clear(MSG)).toMatchObject({ ok: false, error: { code: 'carrier-closed' } })
+    expect(await controller.clear(MSG)).toMatchObject({ ok: false, error: { code: 'gateway/internal' } })
     expect(controller.getSnapshot().items.has(MSG)).toBe(true)
   })
 })

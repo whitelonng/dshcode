@@ -1,15 +1,14 @@
 // @vitest-environment jsdom
-// DiffBlock: the per-file hunk rows (path header, removed block, added block),
-// the same-file second-hunk gap separator, the `+A -R · N file(s)` footer and
-// its singular/plural, the head/tail height cap and its expand control, the
-// empty-diffs null render, and the copy control writing the prefixed diff text
-// on both the accepted and the refused clipboard paths. writeClipboard's own
-// return contract is pinned in terminal-block.spec.tsx (the shared return contract), so
-// only its DOM consequence is asserted here.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { DEFAULT_DIFF_MAX_LINES, DiffBlock, type DiffHunk } from '../src/index.ts'
+import type { ComponentProps } from 'react'
+import { DEFAULT_DIFF_MAX_LINES, DiffBlock as LocalizedDiffBlock, type DiffHunk } from '../src/index.ts'
+import { diffBlockLabels } from './labels.client.ts'
+
+function DiffBlock(props: Omit<ComponentProps<typeof LocalizedDiffBlock>, 'labels'>) {
+  return <LocalizedDiffBlock {...props} labels={diffBlockLabels} />
+}
 
 afterEach(cleanup)
 
@@ -17,17 +16,14 @@ beforeEach(() => {
   vi.useRealTimers()
 })
 
-/** The rendered body rows, one string per visible line (CSS-module class prefix). */
 function bodyRows(container: HTMLElement): string[] {
   return [...container.querySelectorAll('[class*="_line_"]')].map(row => row.textContent ?? '')
 }
 
-/** Only the changed rows (add/del), excluding the path header and gap chrome. */
 function changeRows(container: HTMLElement): string[] {
   return [...container.querySelectorAll('[class*="_del_"], [class*="_add_"]')].map(row => row.textContent ?? '')
 }
 
-/** `count` numbered added lines as one hunk's newText. */
 function added(count: number): string {
   return Array.from({ length: count }, (_v, i) => `line ${i + 1}`).join('\n')
 }

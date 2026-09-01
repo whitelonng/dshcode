@@ -24,7 +24,7 @@ Status: implemented
 
 包测试固定了两种调用形态的分类器。一个门控测试直接驱动注册表，其两个子 agent 各自阻塞，直到两者都已启动，以此证明该声明所依赖的那一半：工具体和提供方启动路径能容忍并发分发——这条栈中任何隐藏的串行化都会造成死锁，而不是静默通过。一个可继续门控测试让两项提供方准备停在同一个 await 上，在发布前取消其中一个调用方，并证明已取消的子 agent 不会留下 agent 或持久会话，而其同级则到达 inbox 接受状态并独立持久化。另一半（分类真正产生重叠执行）由分类器 pin 测试和下述快照负责。
 
-人工编写的 `subagent-parallel` 快照固定了组装后应用的 transcript（文本记录）：一条 assistant 消息携带两个 subagent 调用，父级日志记录为 `tool/call, tool/call, tool/result, tool/result`（串行执行会让调用/结果成对交错出现），两个子 agent 各自作为独立会话完成。其中的孪生委派刻意做成完全相同：`dsh-llm-replay` 按首次调用顺序绑定子脚本，harvester 按 `createdAt` 对子 agent 排序，二者在并发子 agent 之间都不具确定性（即 `XXX(concurrent-subagents)` 标记），因此目前只有可互换的孪生委派才能无竞态地回放。
+人工编写的 `subagent-parallel` 快照固定了组装后应用的 transcript（文本记录）：一条 assistant 消息携带两个 subagent 调用，父级日志记录为 `tool/call, tool/call, tool/result, tool/result`（串行执行会让调用/结果成对交错出现），两个子 agent 各自作为独立会话完成。其中的孪生委派刻意做成完全相同：`dsh-llm-replay` 按首次调用顺序绑定子脚本，harvester 按 `createdAt` 对子 agent 排序，二者在并发子 agent 之间都不具确定性（即 `XXX(concurrent-subagents)` 标记），因此只有可互换的孪生委派才能确定性回放。
 
 ## 备选方案
 

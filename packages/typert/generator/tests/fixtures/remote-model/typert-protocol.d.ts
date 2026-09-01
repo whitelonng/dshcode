@@ -60,7 +60,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     context: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => Result>,
   ): void
 
-  export function Remote(exportName: string):
+  export function Remote(option: string | { readonly mode: 'stream' }):
   <This extends object, Args extends unknown[], Result>(
     method: (this: This, ...args: Args) => Result,
     context: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => Result>,

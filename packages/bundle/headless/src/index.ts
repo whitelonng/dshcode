@@ -2,7 +2,8 @@
  * @deepseek-ai/dsh-headless — one-shot direct Agent driver. The bundle patch
  * rides over dsh-base without Host, HTTP, or browser plugins; this runner
  * creates one Agent through the core registry, drives the task to quiescence,
- * flushes its Session, prints the final assistant text, and exits.
+ * streams provider reasoning to stderr, flushes its Session, prints the final
+ * assistant text to stdout, and exits.
  *
  * @module @deepseek-ai/dsh-headless
  */
@@ -10,12 +11,14 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
+import { SessionSeq } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 // Empty type imports carry the loader Context merge for the settlement await
 // and the cmdline Context merge for the appExit host value.
 import type {} from '@deepseek-ai/cordis-plugin-loader'
@@ -58,12 +61,16 @@ export const internals: { stdout: HeadlessIo['stdout']; stderr: HeadlessIo['stde
 }
 
 /** Aggregate the last assistant text and turn outcome in one owned interval. */
-function summarize(events: readonly SessionEvent[], firstSeq: number): RunOutcome {
+function summarize(session: Session, firstSeq: SessionLogOffset): RunOutcome {
   let started = false
   let text = ''
   let reason: SessionEvent<'turn/end'>['data']['reason'] | undefined
-  for (const event of events) {
-    if (event.seq < firstSeq) continue
+  const length = session.seq
+  for (let seq = firstSeq; seq < length; seq++) {
+    const event = session.eventAt(SessionSeq(seq))
+    if (event === undefined) {
+      throw new Error(`headless summary cannot read seq ${String(seq)} below captured length ${String(length)}`)
+    }
     if (event.type === 'turn/start') {
       started = true
       continue
@@ -79,6 +86,71 @@ function summarize(events: readonly SessionEvent[], firstSeq: number): RunOutcom
     if (event.type === 'turn/end') reason = event.data.reason
   }
   return { text, reason }
+}
+
+/**
+ * Project provider-reported reasoning from one owned run to stderr as it is
+ * appended, while keeping final outcome derivation on the durable log.
+ * @param ctx - plugin context carrying the Session event feed.
+ * @param agent - the exact Agent whose reasoning belongs to this invocation.
+ * @param stderr - progress output sink.
+ * @returns a disposer that also terminates an unterminated reasoning line.
+ */
+function streamReasoning(
+  ctx: Context,
+  agent: Agent,
+  stderr: HeadlessIo['stderr'],
+): () => void {
+  let started = false
+  let open = false
+  let endsWithNewline = true
+  const close = (): void => {
+    if (!open) return
+    if (!endsWithNewline) stderr.write('\n')
+    open = false
+    endsWithNewline = true
+  }
+  const dispose = ctx.on('session/event', (session, event) => {
+    if (session !== agent.session) return
+    if (event.type === 'turn/start') {
+      close()
+      started = true
+      return
+    }
+    if (!started || event.type !== 'assistant/chunk') return
+    const chunk = event.data.chunk
+    switch (chunk.type) {
+      case 'reasoning-delta':
+        if (chunk.text === '') return
+        if (!open) {
+          stderr.write('dsh: reasoning:\n')
+          open = true
+        }
+        stderr.write(chunk.text)
+        endsWithNewline = chunk.text.endsWith('\n')
+        return
+      case 'block-start':
+        if (chunk.blockType !== 'reasoning') close()
+        return
+      case 'block-end':
+        if (chunk.block.type !== 'reasoning') close()
+        return
+      case 'usage':
+        return
+      case 'text-delta':
+      case 'tool-call-delta':
+      case 'finish':
+        close()
+        return
+      /* v8 ignore next -- closed-union exhaustiveness guard */
+      default:
+        return assertNever(chunk, 'headless reasoning stream')
+    }
+  })
+  return () => {
+    dispose()
+    close()
+  }
 }
 
 /** Report an unexpected direct-driver failure and request a failing exit. */
@@ -109,7 +181,7 @@ async function run(ctx: Context, task: string, io: HeadlessIo): Promise<void> {
   // that DOES configure one has to join it here first
   // (@deepseek-ai/dsh-agent-presets README, "Composing a child agent").
   const { agent } = await agents.create({
-    sessionId: SessionId(`session-${randomUUID()}`),
+    sessionId: brandString<SessionId>(`session-${randomUUID()}`),
     meta: { cwd: process.cwd() },
     agentOptions: { provider: selection.provider, model: selection.model },
     setup: (agentCtx) => {
@@ -119,13 +191,18 @@ async function run(ctx: Context, task: string, io: HeadlessIo): Promise<void> {
   })
   await agent.whenIdle()
   const firstSeq = agent.session.seq
-  agent.followup(createUserMessage({
-    content: [{ type: 'text', text: task }],
-    source: { kind: 'user' },
-  }))
-  await agent.whenIdle()
+  const stopReasoning = streamReasoning(ctx, agent, io.stderr)
+  try {
+    agent.followup(createUserMessage({
+      content: [{ type: 'text', text: task }],
+      source: { kind: 'user' },
+    }))
+    await agent.whenIdle()
+  } finally {
+    stopReasoning()
+  }
   await sessions.flush(agent.session)
-  const outcome = summarize(agent.session.events, firstSeq)
+  const outcome = summarize(agent.session, firstSeq)
   io.stdout.write(outcome.text + '\n')
   if (outcome.reason?.kind === 'error') {
     io.stderr.write(`dsh: ${outcome.reason.error.code}: ${outcome.reason.error.message}\n`)

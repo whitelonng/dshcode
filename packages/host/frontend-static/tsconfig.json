@@ -18,10 +18,10 @@
       "path": "../../../vendor/schemastery"
     },
     {
-      "path": "../webserver"
+      "path": "../../client/connection/tsconfig.host.json"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../webserver"
     }
   ]
 }

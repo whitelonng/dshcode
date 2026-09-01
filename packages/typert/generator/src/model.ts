@@ -131,6 +131,7 @@ export interface InvocationModel {
   readonly namespace: string
   readonly method: string
   readonly implementation?: string
+  readonly mode?: 'stream'
   readonly invocation:
     | { readonly kind: 'direct' }
     | {

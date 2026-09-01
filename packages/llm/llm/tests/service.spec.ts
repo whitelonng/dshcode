@@ -525,13 +525,20 @@ describe('LlmRuntime', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     const provider = { id: 'catalog', name: 'Catalog Provider' }
-    const model = { provider: 'catalog', id: 'fast', name: 'Fast', description: 'Low latency' }
+    const model = {
+      provider: 'catalog',
+      id: 'fast',
+      name: 'Fast',
+      description: 'Low latency',
+      inputModalities: ['text'] as const,
+    }
     ctx.llm.registerAdapter(['catalog'], new CatalogAdapter(provider, [model]))
 
     const providers = ctx.llm.listProviders()
     const models = await ctx.llm.listModels('catalog')
     expect(providers).toEqual([provider])
     expect(models).toEqual([model])
+    expect(models[0]!.inputModalities).not.toBe(model.inputModalities)
 
     providers[0]!.name = 'mutated'
     models[0]!.name = 'mutated'
@@ -539,7 +546,7 @@ describe('LlmRuntime', () => {
     model.name = 'source mutated'
     expect(ctx.llm.listProviders()).toEqual([{ id: 'catalog', name: 'Catalog Provider' }])
     await expect(ctx.llm.listModels('catalog')).resolves.toEqual([{
-      provider: 'catalog', id: 'fast', name: 'source mutated', description: 'Low latency',
+      provider: 'catalog', id: 'fast', name: 'source mutated', description: 'Low latency', inputModalities: ['text'],
     }])
   })
 

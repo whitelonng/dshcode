@@ -32,7 +32,7 @@ Three limits stay open and are recorded where they bite rather than fixed here: 
 
 **Keep the meter in the preset and scope-layer the projection registry.** The precise fix, and much larger: `snapshot`, `checkpoint`, and the eager drive would each need a session→scope resolution that a cold read does not have without the api-proxy's `presenterScopeFor`. Rejected as disproportionate to one Service with no per-preset state at all; the general rule is documented on the registry instead.
 
-**Veto publication for an unjoined agent.** Loud beats silent, and the registry supports it — a synchronous `agent/created` listener that throws rolls the creation back. Rejected because composing an agent outside the roster is legal: `recompose` documents the bare agent it then binds, and the ACP bridge, the SDK server, and the headless bundle all create one today. A veto would convert a capability gap into an outage.
+**Veto publication for an unjoined agent.** Loud beats silent, and the registry supports it — a synchronous `agent/created` listener that throws rolls the creation back. Rejected because composing an agent outside the roster is legal: `recompose` documents the bare agent it then binds, and the ACP bridge, the SDK server, and the headless bundle all create one. A veto would convert a capability gap into an outage.
 
 **Check the join at `agent/created` in the companion too.** Rejected: publication cannot distinguish a missed join from an agent that will be bound later, so the check would reject a documented path. Prompt assembly can distinguish them.
 

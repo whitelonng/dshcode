@@ -1,8 +1,3 @@
-/* Todo strip in the composer context stack (Figma 1236:32276): tip surface,
-   status icons + secondary item labels. Its visible card aligns with the
-   GoalBar and the Queue panel inside their shared dock column: 12px radius,
-   36px collapsed row, 12px side padding, 14px tertiary leading glyph. */
-
 .root {
   box-sizing: border-box;
   flex: none;
@@ -24,7 +19,7 @@
     var(--dsh-composer-dock-inset) -
     var(--dsh-composer-dock-inset)
   );
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   background: var(--dsw-specific-tip);
   /* Elevated surface: `--dsw-specific-tip` is the same dark rung as the menu

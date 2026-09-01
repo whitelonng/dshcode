@@ -8,7 +8,6 @@ import z from '@deepseek-ai/schemastery'
 import { chmod, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { FileSettingsProvider } from '../src/index.ts'
 
 const AlphaSchema: z<{ value: number }> = z.object({ value: z.number().default(0) })
@@ -40,8 +39,8 @@ describe('cross-instance writes', () => {
     const path = join(dir, 'settings.yaml')
     const first = await boot({ path, watch: false })
     const second = await boot({ path, watch: false })
-    const alpha = first.settings.register(settingsNamespace('alpha'), AlphaSchema)
-    const beta = second.settings.register(settingsNamespace('beta'), BetaSchema)
+    const alpha = first.settings.register('alpha', AlphaSchema)
+    const beta = second.settings.register('beta', BetaSchema)
     const rounds = [1, 2, 3, 4, 5]
     await Promise.all([
       (async () => { for (const value of rounds) await alpha.update({ value }) })(),
@@ -52,8 +51,8 @@ describe('cross-instance writes', () => {
     expect(text).toContain('beta:')
     // A third instance resolves both final values from the shared document.
     const third = await boot({ path, watch: false })
-    expect(third.settings.register(settingsNamespace('alpha'), AlphaSchema).get()).toEqual({ value: 5 })
-    expect(third.settings.register(settingsNamespace('beta'), BetaSchema).get()).toEqual({ value: 5 })
+    expect(third.settings.register('alpha', AlphaSchema).get()).toEqual({ value: 5 })
+    expect(third.settings.register('beta', BetaSchema).get()).toEqual({ value: 5 })
   })
 })
 
@@ -62,7 +61,7 @@ describe('writer lock', () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('alpha'), AlphaSchema)
+    const scope = ctx.settings.register('alpha', AlphaSchema)
     await writeFile(`${path}.lock`, 'holder\n')
     const release = setTimeout(() => { void rm(`${path}.lock`, { force: true }) }, 120)
     cleanups.push(async () => { clearTimeout(release) })
@@ -75,7 +74,7 @@ describe('writer lock', () => {
     const path = join(dir, 'settings.yaml')
     await writeFile(path, 'alpha:\n  value: 4\n')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('alpha'), AlphaSchema)
+    const scope = ctx.settings.register('alpha', AlphaSchema)
     const lockPath = `${path}.lock`
     await writeFile(lockPath, 'slow-holder\n')
     const past = (Date.now() - 60_000) / 1000
@@ -90,7 +89,7 @@ describe('writer lock', () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('alpha'), AlphaSchema)
+    const scope = ctx.settings.register('alpha', AlphaSchema)
     await chmod(dir, 0o500)
     cleanups.push(() => chmod(dir, 0o700))
     await expect(scope.update({ value: 1 })).rejects.toThrow(/EACCES|permission/)

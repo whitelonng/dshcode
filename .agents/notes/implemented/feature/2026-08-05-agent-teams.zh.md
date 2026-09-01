@@ -10,7 +10,7 @@ subagent seam 已提供 fresh／fork provider、持久 child Session、FIFO foll
 
 同进程 Agent 还共享一个 checkout。文件系统 edit 工具可以拒绝已观察到的陈旧版本，但 Bash、formatter、generator 与外部 writer 会绕过该屏障。把 teammate name 或 task owner 当作文件锁只会掩盖而不是解决该并发边界。
 
-面向模型的 Team 工具保持显式启用，使默认工具目录与简单任务行为不变。显式请求的 Team 必须能跨越 child Activation settlement 与 mailbox 投递竞争，使 Lead 在进程 teardown 前汇总结果。
+在公开约定稳定到足以进入已发布 CLI 或 Web bundle 前，Agent Teams 需要显式的源码 checkout 组合。默认工具目录与简单任务行为必须保持不变；而显式请求的 Team 必须能跨越 child Activation settlement 与 mailbox 投递竞争，使 Lead 在进程 teardown 前汇总结果。
 
 ## Decision
 
@@ -54,7 +54,7 @@ Worktree isolation 不是 harness runtime 行为。deployment 或 prompt 可以�
 
 **自动创建隔离 worktree。** 拒绝，因为 worktree 创建、branch 命名、merge 策略、ignored file、构建产物与 cleanup 都是 deployment 选择；它也会改变既有 subagent 与 sandbox 暴露的 same-world 行为。
 
-**在默认工具目录中启用 Team。** 拒绝，因为 scoped Team control 会覆盖同名旧全局工具，主动 delegation 也会给简单任务增加延迟和 token 成本。显式组合可以保持面向模型的归属明确，同时不改变默认 request。
+**在默认工具目录中启用 Team。** 拒绝，因为 scoped Team control 会覆盖同名旧全局工具，主动 delegation 也会给简单任务增加延迟和 token 成本。私有 profile bundle 会插入 Team 并禁用旧 control，同时不向已发布依赖图添加 Team 包。
 
 **使用内存 task board 与 mailbox。** 拒绝，因为 child settlement、HMR 与进程中断会丢失已接受协调状态，并让重试变得含糊。
 
@@ -62,7 +62,7 @@ Worktree isolation 不是 harness runtime 行为。deployment 或 prompt 可以�
 
 ## Testing
 
-Package test 以逐文件 100% coverage 覆盖身份、名字与权限检查、provider 选择、预留 id 持久化冲突、child-before-Lead flush 顺序、持久 provisioning 失败与 pending-inbox JSONL／SQLite 对账、target-local 并发顺序、pending／history 去重、mailbox 限额、flush 后 notification、取消在途创建与 dispatch 的有界 dispose、failed member cleanup、task CAS 与 DAG 校验、write-scope warning、wait cancel／timeout、保留 inbox 的 interrupt、普通 fork 隔离、旧 control shadowing、声明 schema 的紧凑结果渲染与 scoped registration HMR。一条 keyless headless Loader 快照会组合真实 Team 插件，并记录 teammate 创建、peer mail、依赖任务、等待与 Lead 汇总。
+Package test 以逐文件 100% coverage 覆盖身份、名字与权限检查、provider 选择、预留 id 持久化冲突、child-before-Lead flush 顺序、持久 provisioning 失败与 pending-inbox JSONL 对账、target-local 并发顺序、pending／history 去重、mailbox 限额、flush 后 notification、取消在途创建与 dispatch 的有界 dispose、failed member cleanup、task CAS 与 DAG 校验、write-scope warning、wait cancel／timeout、保留 inbox 的 interrupt、普通 fork 隔离、旧 control shadowing、声明 schema 的紧凑结果渲染与 scoped registration HMR。一条 keyless 产品快照会通过 `dsh --profile headless` 加载私有 Agent Teams profile bundle，并为两个 teammate、依赖任务、peer 投递、等待、完成和汇总固定完整的面向模型工具列表、Team policy 与持久 workflow 投影。CLI e2e 会复用同一个确定性 adapter，并验证带持久 Team 与 child 日志的正常退出。
 
 ## Consequences
 

@@ -1,8 +1,4 @@
 // @vitest-environment jsdom
-/**
- * Field-control behavior: what a control renders for a staged draft, how an
- * overridden field offers its reset, and that a control never writes on its own.
- */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

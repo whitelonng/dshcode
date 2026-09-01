@@ -2,21 +2,30 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { createHash } from 'node:crypto'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
-  ClientSideConnection,
+  client as createAcpClientApp,
+  methods,
   ndJsonStream,
   type Agent as AcpAgent,
-  type Client,
+  type PromptRequest,
+  type PromptResponse,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
+  type SendRequestOptions,
   type SessionNotification,
   type Stream,
 } from '@agentclientprotocol/sdk'
 import AttachmentStore, { AttachmentError, AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentLimits, ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
-import { type GenerateOptions, LlmAdapter, type LlmResolvedModelInfo, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { type GenerateOptions, LlmAdapter, ReasoningEffortId, type LlmResolvedModelInfo, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import * as AcpPlugin from '../src/index.ts'
 import type { AcpConfig } from '../src/index.ts'
 
@@ -27,22 +36,32 @@ class MockAdapter extends LlmAdapter {
   constructor(
     private readonly script: (StreamChunk[] | 'hang')[],
     private readonly imageCapable: boolean,
+    private readonly provider = 'mock',
   ) {
     super()
   }
 
   override providerInfo(provider: string) {
-    if (provider !== 'mock') throw new Error(`MockAdapter: unknown provider ${provider}`)
-    return { id: 'mock', name: 'Mock' }
+    if (provider !== this.provider) throw new Error(`MockAdapter: unknown provider ${provider}`)
+    return { id: this.provider, name: this.provider === 'mock' ? 'Mock' : `Mock ${this.provider}` }
   }
 
   override listModels(provider: string) {
-    return Promise.resolve(provider === 'mock' ? [{
-      provider: 'mock',
-      id: 'mock',
-      name: 'Mock',
-      inputModalities: this.imageCapable ? ['text', 'image'] as const : ['text'] as const,
-    }] : [])
+    return Promise.resolve(provider === this.provider ? [
+      {
+        provider: this.provider,
+        id: 'mock',
+        name: 'Mock Reasoner',
+        description: 'Mock model with selectable reasoning.',
+        inputModalities: this.imageCapable ? ['text', 'image'] as const : ['text'] as const,
+      },
+      {
+        provider: this.provider,
+        id: 'plain',
+        name: 'Mock Plain',
+        inputModalities: ['text'] as const,
+      },
+    ] : [])
   }
 
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
@@ -50,7 +69,17 @@ class MockAdapter extends LlmAdapter {
       provider,
       id: model,
       name: model,
-      inputModalities: this.imageCapable ? ['text', 'image'] : ['text'],
+      inputModalities: this.imageCapable && model === 'mock' ? ['text', 'image'] : ['text'],
+      context: { contextWindow: 1_024 },
+      ...model === 'mock' ? {
+        reasoning: {
+          efforts: [
+            { id: ReasoningEffortId('low'), name: 'Low' },
+            { id: ReasoningEffortId('high'), name: 'High' },
+          ],
+          defaultEffort: ReasoningEffortId('high'),
+        },
+      } : {},
     })
   }
 
@@ -153,16 +182,32 @@ export function errorResponse(message: string): StreamChunk[] {
 
 export type CapturedUpdate = SessionNotification['update']
 
+/** Stable-v1 client methods exercised by the bridge tests. */
+interface BridgeClient {
+  initialize: NonNullable<AcpAgent['initialize']>
+  authenticate: NonNullable<AcpAgent['authenticate']>
+  newSession: NonNullable<AcpAgent['newSession']>
+  listSessions: NonNullable<AcpAgent['listSessions']>
+  resumeSession: NonNullable<AcpAgent['resumeSession']>
+  closeSession: NonNullable<AcpAgent['closeSession']>
+  setSessionConfigOption: NonNullable<AcpAgent['setSessionConfigOption']>
+  prompt: (params: PromptRequest, options?: SendRequestOptions) => Promise<PromptResponse>
+  cancel: NonNullable<AcpAgent['cancel']>
+}
+
 export interface BridgeHarness {
   ctx: Context
-  client: ClientSideConnection
+  client: BridgeClient
   adapter: MockAdapter
   attachments: MemoryAttachmentStore | undefined
   updates: CapturedUpdate[]
   sessionUpdates: { sessionId: string; update: CapturedUpdate }[]
   permissionRequests: RequestPermissionRequest[]
+  persistenceRoot: string
   onPermission: (request: RequestPermissionRequest) => RequestPermissionResponse
   onSessionUpdateError: (() => void) | undefined
+  registerCatalogProvider: (provider: string) => () => void
+  replacePrimaryProviders: (providers: string[]) => void
   closeClientTransport: () => Promise<void>
   abortClientTransport: () => Promise<void>
   acpFiber: Awaited<ReturnType<Context['plugin']>>
@@ -180,13 +225,22 @@ export async function makeBridgeHarness(options: {
   persona?: string
   imageCapable?: boolean
   attachments?: boolean
+  persistenceRoot?: string
 } = {}): Promise<BridgeHarness> {
   const adapter = new MockAdapter(options.script ?? [], options.imageCapable === true)
   const ctx = new Context()
+  const ownsPersistenceRoot = options.persistenceRoot === undefined
+  const persistenceRoot = options.persistenceRoot ?? await mkdtemp(join(tmpdir(), 'dsh-acp-test-'))
   await mountAgentLoopTestDependencies(ctx, { systemPrompt: { persona: options.persona ?? '' } })
+  // The agent loop and the composed approval/permission services declare
+  // sessionProjections a required injection: mount the registry (and with it
+  // the loop's turnBoundary unit) before the loop activates.
+  await ctx.plugin(SessionProjectionRegistry)
+  await ctx.plugin(JsonlSessionPersistence, { root: persistenceRoot, compression: 'none' })
+  await ctx.plugin(TokenMeter)
   if (options.attachments !== false) await ctx.plugin(MemoryAttachmentStore)
   const loopFiber = await ctx.plugin(AgentLoop, { agents: [] })
-  ctx.llm.registerAdapter(['mock'], adapter)
+  const primaryAdapter = ctx.llm.registerAdapter(['mock'], adapter)
 
   const agentToClient = new TransformStream<Uint8Array, Uint8Array>()
   const clientToAgent = new TransformStream<Uint8Array, Uint8Array>()
@@ -207,28 +261,33 @@ export async function makeBridgeHarness(options: {
     updates,
     sessionUpdates,
     permissionRequests,
+    persistenceRoot,
     onPermission: () => ({ outcome: { outcome: 'cancelled' } }),
     onSessionUpdateError: undefined,
-    client: undefined as unknown as ClientSideConnection,
+    registerCatalogProvider: provider => ctx.llm.registerAdapter([provider], new MockAdapter([], false, provider)),
+    replacePrimaryProviders: (providers) => { primaryAdapter.replace(providers) },
+    client: undefined as unknown as BridgeClient,
     acpFiber: undefined as unknown as BridgeHarness['acpFiber'],
     loopFiber,
     closeClientTransport: async () => { await clientToAgentWriter.close() },
     abortClientTransport: async () => { await clientToAgentWriter.abort(new Error('client transport failed')) },
-    dispose: async () => { await ctx.fiber.dispose() },
+    dispose: async () => {
+      await ctx.fiber.dispose()
+      if (ownsPersistenceRoot) await rm(persistenceRoot, { recursive: true, force: true })
+    },
   }
 
-  const makeClient = (_agent: AcpAgent): Client => ({
-    sessionUpdate(params: SessionNotification): Promise<void> {
+  const clientApp = createAcpClientApp({ name: 'dsh-acp-test-client' })
+    .onNotification(methods.client.session.update, ({ params }) => {
       updates.push(params.update)
       sessionUpdates.push({ sessionId: params.sessionId, update: params.update })
       if (harness.onSessionUpdateError !== undefined) return Promise.reject(new Error('client update rejected'))
       return Promise.resolve()
-    },
-    requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    })
+    .onRequest(methods.client.session.requestPermission, ({ params }) => {
       permissionRequests.push(params)
       return Promise.resolve(harness.onPermission(params))
-    },
-  })
+    })
 
   const config = { stream: agentStream, ...options.config } as AcpConfig
   if (!(options.config && 'provider' in options.config)) config.provider = 'mock'
@@ -238,6 +297,18 @@ export async function makeBridgeHarness(options: {
     inject: [...AcpPlugin.inject],
     apply: (inner: Context) => { AcpPlugin.apply(inner, config) },
   })
-  harness.client = new ClientSideConnection(makeClient, clientStream)
+  const clientConnection = clientApp.connect(clientStream)
+  const client = clientConnection.agent
+  harness.client = {
+    initialize: params => client.request(methods.agent.initialize, params),
+    authenticate: params => client.request(methods.agent.authenticate, params),
+    newSession: params => client.request(methods.agent.session.new, params),
+    listSessions: params => client.request(methods.agent.session.list, params),
+    resumeSession: params => client.request(methods.agent.session.resume, params),
+    closeSession: params => client.request(methods.agent.session.close, params),
+    setSessionConfigOption: params => client.request(methods.agent.session.setConfigOption, params),
+    prompt: (params, options) => client.request(methods.agent.session.prompt, params, options),
+    cancel: params => client.notify(methods.agent.session.cancel, params),
+  }
   return harness
 }

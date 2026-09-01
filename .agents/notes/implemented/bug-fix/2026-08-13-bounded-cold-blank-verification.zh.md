@@ -12,7 +12,7 @@ Web 会话树会隐藏空白 Session，并把当前选中的空白项复用为 N
 
 ## Decision
 
-`dsh-host-apiproxy` 注册 `sessionListMetadata` 投影，其中包含 `blank` 与 `lastPromptAt`。已附加摘要直接用同一组函数折叠实时日志。`blank` 只在 `turn/start` 时从 true 单调变为 false；`lastPromptAt` 只在来源 kind 为 `user` 的 `user/message` 上更新。
+`dsh-api-session-controller` 注册 `sessionListMetadata` 投影，其中包含 `blank` 与 `lastPromptAt`。已附加摘要直接用同一组函数折叠实时日志。`blank` 只在 `turn/start` 时从 true 单调变为 false；`lastPromptAt` 只在来源 kind 为 `user` 的 `user/message` 上更新。
 
 冷摘要信任缓存的 `blank: false`，因为已包含 `turn/start` 的 checkpoint 前缀会始终保持非空。缓存的 `blank: true` 和 cache miss 都无法证明当前日志为空。当 persistence 通过 `locate()` 暴露物理工件，且其观测大小不超过 `coldBlankProbeMaxBytes` 资格阈值（默认每个 Session 1 KiB）时，网关调用 `readFrom(id, 0)`，从已存前缀折叠精确列表元数据。超过阈值的文件、不提供位置的后端、已消失的工件和读取失败都产生 `blank: false`，让 Session 保持可见。
 
@@ -24,7 +24,7 @@ Web 会话树会隐藏空白 Session，并把当前选中的空白项复用为 N
 
 **读取每一份冷日志。** 拒绝，因为列表延迟与 I/O 会随所有已存对话的总字节数增长。物理大小资格检查只针对能够低成本核验的小型历史工件，更大的未知项则向保持可见降级。该检查有意不为“让阈值与读取原子化”单独新增 persistence 操作：并发增长可能增加一次探测的读取成本，但新增事件只会保持可见，或把空白结果改为非空。
 
-**把空白状态与最近时间存入权威 persistence index。** 暂缓，因为 JSONL 的首行不可变，需要增加带有顺序写入要求的第二份持久工件；SQLite 则需要 schema 字段。更广泛的精确索引设计仍由[最后活动提案](../../proposed/architecture/2026-07-29-durable-last-activity-index.zh.md)负责。
+**把空白状态与最近时间存入权威 persistence index。** 暂缓，因为交付的 JSONL provider 首行不可变，需要增加带有顺序写入要求的第二份持久工件。仓库外 provider 只有定义更新原子性、版本与恢复语义后才可使用自己的索引。更广泛的精确索引设计仍由[最后活动提案](../../proposed/architecture/2026-07-29-durable-last-activity-index.zh.md)负责。
 
 **继续按 mtime 排序 JSONL。** 拒绝，因为 mtime 记录包括拾起边界在内的每一次工件写入，而非最近真人 prompt；其错误方向会把未经操作的 Session 提升到列表开头。
 

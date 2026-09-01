@@ -1,0 +1,1 @@
+../../session/read-image/system-prompt.expected.md

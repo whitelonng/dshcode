@@ -33,7 +33,7 @@ import {
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/message-feedback-layout', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/message-feedback-layout', import.meta.url))
 /**
  * Committed golden of the popover relations at every stop. Booleans and counts
  * only, never absolute coordinates.
@@ -41,7 +41,7 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/message-feedback-layout'
 const GEOMETRY_EXPECTED = join(SNAPSHOT_DIR, 'geometry.expected.md')
 const MODE = webSnapshotMode()
 /** Borrowed read-only: this scenario needs any settled assistant message to rate. */
-const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
+const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.jsonl', import.meta.url))
 const SEED_ID = 'message-feedback-layout-e2e'
 /** Viewport widths from full-screen desktop down to a narrow window. */
 const WIDTHS = [1680, 1280, 1024, 900, 700, 600]
@@ -207,7 +207,7 @@ describe('web e2e: the feedback note editor floats above the column', () => {
     browser = await chromium.launch()
     page = await newEnglishPage(browser, 900)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 180_000)
 

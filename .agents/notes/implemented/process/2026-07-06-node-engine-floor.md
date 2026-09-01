@@ -14,12 +14,12 @@ Set `engines.node` to `^22.19.0 || >=24.0.0` and test keyless CI on `['22.19', 2
 
 Two Node features gate the source runtime:
 
-- **`node:sqlite`** — `packages/session/session-persistence-sqlite` does a top-level `import { DatabaseSync } from 'node:sqlite'`. The module dropped its `--experimental-sqlite` flag requirement at **22.13** (LTS) and **23.4** (Current); before those, importing it throws at load.
-- **Native TypeScript type-stripping** — the built-mode `examples/headless-agent/tests/keyless-smoke.e2e.ts` smoke boots its unexported `.ts` driver under plain `node` (no tsx) and loads the example's `.ts` test adapter (`cli-mock-llm.ts`). Type-stripping is the default from **22.18** (LTS) and **23.6** (Current); before those it needs `--experimental-strip-types`.
+- **`node:sqlite`** — `packages/storage/storage-sqlite` does a top-level `import { DatabaseSync } from 'node:sqlite'`, and the optional Session-query provider loads it on first search. The module dropped its `--experimental-sqlite` flag requirement at **22.13** (LTS) and **23.4** (Current); before those, importing it throws at load.
+- **Native TypeScript type-stripping** — the built-mode `apps/cli/tests/profiles/headless/tests/keyless-smoke.e2e.ts` smoke boots the test-support `.ts` driver under plain `node` (no tsx) and loads the `.ts` test adapter (`cli-mock-llm.ts`). Type-stripping is the default from **22.18** (LTS) and **23.6** (Current); before those it needs `--experimental-strip-types`.
 
 Those source features clear on the 22.x line at **22.18**, but the installed Pi adapter dependency raises the advertised LTS floor. `@deepseek-ai/dsh-llm-pi-ai` depends on `@earendil-works/pi-ai@0.79.3`, whose package declares `engines.node >=22.19.0`, so the LTS floor is **22.19**. The 24.x branch remains `>=24.0.0`. The disjoint range excludes Node 23 entirely: Node 23.0–23.5 still has at least one flagged source feature, and the 23 line is non-LTS/EOL, so advertising `>=23.6` would add a dead release line and a CI leg no deployment should use.
 
-`@types/node` remains pinned to the 22.x line (`^22.20.0`) to match the LTS support line: reaching for a Node 23+/24+/25+ API fails `tsc` on every machine and in the typecheck gate, rather than compiling clean and surviving to a runtime failure only a floor matrix leg could catch. The whole tree typechecks clean against the Node 22 type API today, so the pin costs nothing.
+`@types/node` remains pinned to the 22.x line (`^22.20.0`) to match the LTS support line: reaching for a Node 23+/24+/25+ API fails `tsc` on every machine and in the typecheck gate, rather than compiling clean and surviving to a runtime failure only a floor matrix leg could catch. The whole tree typechecks clean against the Node 22 type API, so the pin costs nothing.
 
 ## Consequences
 

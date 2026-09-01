@@ -26,4 +26,4 @@ Status: implemented
 
 ## 测试
 
-`packages/client/runtime/tests/workspaces-service.client.spec.ts` 覆盖四种结果：成员空白会话被复用（无 create RPC）；cwd 匹配但非成员的游离空白会话**不被**复用、改为创建全新入账会话（回归用例）；已归档空白会话不被复用；首次提示词被拒后成员空白会话仍可复用。完整客户端套件（`pnpm run test:gui`）保持绿色。
+`packages/client/ui-workspace/tests/workspaces-service.client.spec.ts` 覆盖四种结果：成员空白会话被复用（无 create RPC）；cwd 匹配但非成员的游离空白会话**不被**复用、改为创建全新入账会话（回归用例）；已归档空白会话不被复用；首次提示词被拒后成员空白会话仍可复用。完整客户端套件（`pnpm run test:gui`）保持绿色。

@@ -41,7 +41,7 @@ export type SurfaceOp =
 
 ### 持久化
 
-新字段作为顶层 JSON 属性序列化。JSONL 后端无需任何改动：`JSON.stringify`/`JSON.parse` 透明地保留一切。SQLite 后端的 `events` 表新增两个可空 TEXT 列（`source_event_seqs`、`surface_op`）。磁盘上的 `SCHEMA_VERSION` 递增以反映列集变化，并且按照预发布的 bump-and-reject 策略，由其他构建写入的数据库在打开时被拒绝而非迁移（没有需要升级的持久化用户数据）。会话格式 `version` 固定为 `SESSION_FORMAT_VERSION = 0`（「不稳定/预发布」立场）：可选的 surface 字段被吸收而不递增版本号。
+新字段作为顶层 JSON 属性序列化。JSONL 存储无需单独列映射：其无损 JSON 边界会保留两个值。会话格式 `version` 固定为 `SESSION_FORMAT_VERSION = 0`；可选 surface 字段被吸收而不递增版本号。
 
 ### 崩溃恢复
 
@@ -64,7 +64,6 @@ export type SurfaceOp =
 
 - **`packages/core/session`**：`surface.ts`（`SurfaceManager`）维护一个用于候选接纳和实时投影的有序 seq 数组；`SessionSurface` 是其只读公共视图。`SurfaceOp`/`SurfaceIntent` 与顶层会话事件字段记录条目如何加入它。`append()` 要求 surface 事件携带 `SurfaceIntent`，`deriveMessages()` 以遍历 surface 作为唯一派生路径，`repair.ts` 则发出 surface 感知的闭合事件。种子构造函数拒绝缺少 `surfaceOp` 标记的可进入 surface 的种子事件（见「不变式」一节）。
 - **`packages/core/agent-loop`**：所有涉及 surface 事件的追加操作都传入 surface 选项。每个 `assistant/message` 都引用产生它的分片 seq；每个 `tool/result` 都引用它的 `tool/call` seq。
-- **`packages/session/session-persistence-sqlite`**：`events` 表新增两个可空 TEXT 列（`source_event_seqs`、`surface_op`）；`SCHEMA_VERSION` 递增（bump-and-reject，无迁移）。
 - **`packages/session/session-persistence-jsonl`**：无需改动。
 - **`packages/session/session-persistence`**：抽象接口不变。
 

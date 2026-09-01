@@ -826,7 +826,7 @@ function renderRuntimeApi(
     '    const next: string[] = []',
     '    for (const entry of TYPE_API) {',
     '      if (included.has(entry.name)) continue',
-    '      const pattern = new RegExp(`\\b${entry.name}\\b`)',
+    '      const pattern = new RegExp(`\\\\b${entry.name}\\\\b`)',
     '      if (!frontier.some(text => pattern.test(text))) continue',
     '      included.add(entry.name)',
     '      next.push(entry.declaration)',

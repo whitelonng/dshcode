@@ -2,12 +2,19 @@
  * Machine state arrives through the standard provide channel
  * (useInput + inputActions); the keyboard/DOM command face and stop arrive
  * through this entry's own inject, whose hooks compartment binds
- * useNotices/useLexicon; layout-phase inputs (variant, placeholder,
- * region-slot content) ride the owner props. Session facts
- * (running/removed/promptError) are self-selected via useSession. */
+ * useNotices/useLexicon; layout-phase inputs (variant and placeholder) ride
+ * the owner props. Session facts
+ * (running/removed/promptError) are self-selected via useSession.
+ *
+ * The text surface is the shell-owned Lexical editor bound here through
+ * ComposerContentEditable; chips render as decorator portals, and the
+ * keymap registers submit/menu/paste gestures on the editor command layer.
+ * The no-session state renders the SAME div inert as the Workspace-picker
+ * trigger instead of a parallel tree.
+ */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   IconPaperclipOutline16, IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
@@ -22,15 +29,14 @@ import type {} from '@deepseek-ai/dsh-goal/client'
 // api-remotes import already places it in every client program.
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerBarProps } from '../contract/slots.ts'
-import { deriveDecorations } from '../input/decorations.ts'
-import type { DraftDecorations } from '../input/decorations.ts'
-import type { EditRange } from '../input/contract.ts'
+import { ComposerContentEditable } from '../input/editor/ComposerContentEditable.tsx'
+import { DecoratorPortals } from '../input/editor/DecoratorPortals.tsx'
+import { registerComposerKeymap } from '../input/editor/keymap.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import { ReferenceIcon } from '../reference/ReferenceIcon.tsx'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
-import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
@@ -92,24 +98,24 @@ function editRangeOf(pending: PendingEdit | null, prevLength: number, nextLength
 
 export type InputBarProps = ComposerBarProps
 
-export function InputBar({
+export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
   pickFiles, locateFiles,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
-  placeholder, accessory, overlay, leftItems, rightItems, footer,
+  placeholder, accessory,
 }: InputBarProps) {
   const input = useInput(s => s)
   const notice = useNotices(s => s)
-  const lexicon = useLexicon(s => s)
+  void useLexicon // hook seat stays bound by the inject compartment; text-ref decoration rides the shell's editor transforms
   const commandMenuOpen = useMenuLauncher(source => source === 'command')
   const promptError = useSession(s => s.promptError) ?? null
   const running = useSession(s => s.running) ?? false
   const subagent = useSession(s => s.subagent) ?? null
   const removed = useSession(s => s.removed) ?? false
-  // Plan mode swaps the textarea placeholder (the projection is the folded
+  // Plan mode swaps the composer placeholder (the projection is the folded
   // host value; owner-prop placeholders — hero, session-unavailable — win).
   const planActive = useProjection('plan', plan => plan !== undefined && (plan.pending ? !plan.active : plan.active))
   // Absent (undefined: no frame yet) and cleared (null) both mean no goal.
@@ -118,6 +124,7 @@ export function InputBar({
   // current; the bar renders the same DOM inert instead of a parallel tree.
   const live = input !== undefined && keyboard !== undefined && inputActions !== undefined
   const draft = input?.draft ?? ''
+  const editor = keyboard?.editor ?? null
   const attachments = useMemo(
     () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
     [draftImages, input?.imageIds],
@@ -141,34 +148,21 @@ export function InputBar({
   // and the user resubmits. A remount over a session whose machine still holds
   // an unresolved promptError deliberately re-announces it once — the failure
   // is still pending, and a transient banner is its only surface. Attachment
-  // rejections show product copy keyed by the wire reason; other codes are
-  // developer-facing and keep the raw message plus code.
+  // rejections show product copy keyed by the wire reason — whichever domain
+  // refused them; other codes are developer-facing and keep the raw message
+  // plus code.
   useEffect(() => {
     if (promptError === null) return
-    showToast(promptError.error.code === 'attachment-error'
-      ? attachmentErrorText(t, promptError.error.details.reason, imageLimits)
-      : `${promptError.error.message} (${promptError.error.code})`)
+    const { error } = promptError
+    showToast(error.code === 'session/attachment-invalid' || error.code === 'subagent/attachment-invalid'
+      ? attachmentErrorText(t, error.details.reason, imageLimits)
+      : `${error.message} (${error.code})`)
   }, [promptError, showToast, t, imageLimits])
   useEffect(() => {
     if (notice?.level === 'error') showToast(notice.text)
   }, [notice, showToast])
-  const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  const mirrorRef = useRef<HTMLDivElement | null>(null)
-  const safari = useMemo(() => isSafariBrowser(navigator), [])
-  const safariNativeShrinkRef = useRef(false)
-  // IME guard: composition Enter picks a candidate, it must not send. The ref outlives renders;
-  // clearing is deferred one tick because Safari delivers the closing keydown AFTER compositionend.
-  const composingRef = useRef(false)
-  const onCompositionStart = (): void => {
-    composingRef.current = true
-  }
-  const onCompositionEnd = (): void => {
-    setTimeout(() => {
-      composingRef.current = false
-    }, 10)
-  }
 
   // The Access seat's data: the host-computed permissions projection
   // (undefined = capability absent → the chip renders nothing).
@@ -177,7 +171,7 @@ export function InputBar({
   // A continuable child without its live parent cannot accept human input,
   // but its independent Stop below stays available while it runs.
   const continuable = subagent?.address.mode === 'continuable'
-  const parentOffline = continuable && !subagent.parentAvailable
+  const parentOffline = continuable && subagent.parentAvailable !== true
   // Running input stays free; locked = session removed, the
   // inert no-workspace state, the machine faces absent (no session), or a
   // parent-offline continuable child. An owner block also disables input;
@@ -190,12 +184,13 @@ export function InputBar({
   // be disabled do lock it — there is no session to choose a model for.
   const modelSeatLocked = removed || inert || !live
   const machineBusy = input?.phase === 'adjudicating' || input?.phase === 'submitting'
-  // The no-workspace textarea remains the resident DOM node but acts as the
+  // The no-workspace surface remains the resident DOM node but acts as the
   // existing picker trigger. Message controls stay locked until a Session
   // exists; the trigger itself is read-only rather than disabled so pointer
   // and keyboard users can reach the recovery action.
   const workspaceTrigger = inert && !removed && onRequestWorkspace !== undefined
-  const textareaDisabled = removed || (locked && !workspaceTrigger)
+  const editorDisabled = removed || (locked && !workspaceTrigger)
+  const editable = live && !locked && !machineBusy
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
@@ -206,77 +201,43 @@ export function InputBar({
     }
   }, [attachments, input?.imageIds, inputActions])
 
-  // A native Safari edit that shortens the draft may leave the previous
-  // soft-wrap layout behind after the mirror shrinks. The native-change signal
-  // keeps ordinary typing and programmatic draft updates from reading layout;
-  // the helper then repairs only measured overflow before paint while
-  // preserving native editing state. See
-  // .agents/notes/implemented/bug-fix/2026-08-13-safari-textarea-soft-wrap-reflow.md.
-  useLayoutEffect(() => {
-    const nativeShrink = safariNativeShrinkRef.current
-    safariNativeShrinkRef.current = false
-    if (safari && nativeShrink) repairSafariTextareaLayout(inputRef.current)
-  }, [draft, safari])
-  // Scroll the draft scrollport the minimum that brings `caret` into view — the
-  // browser's own behavior for typing, performed for the paths where it does
-  // not act.
-  //
-  // The mirror is the caret's ruler: it renders the same draft at the same
-  // metrics and the same wrap width in the same stack (that is what makes it
-  // the height authority), so a Range collapsed at the caret's index reports
-  // where the caret is without a caret API.
-  const revealCaret = (caret: number): void => {
+  // Scroll the draft scrollport the minimum that brings the selection focus
+  // into view — the browser's own behavior for typing, performed for the
+  // paths where it does not act (programmatic focus with preventScroll, and
+  // session switches that land the caret off screen). The live DOM selection
+  // is the ruler; no mirror layer exists to consult.
+  const revealSelection = (): void => {
     const scrollEl = scrollRef.current
-    const mirrorEl = mirrorRef.current
-    const text = mirrorEl?.firstChild
-    if (scrollEl === null || mirrorEl === null || !(text instanceof Text)) return
-    // A box that cannot scroll has nothing to reveal: the draft fits, so every
-    // caret is already in view and the assignment below would clamp to itself.
-    if (scrollEl.scrollHeight <= scrollEl.clientHeight) return
-    const at = Math.min(caret, text.data.length)
-    // A caret straight after a newline sits on a line with nothing on it to
-    // measure — the shape a trailing-newline draft ends in — and the engines
-    // disagree there: chromium returns NO client rects at all (an all-zero box,
-    // which would scroll the wrong way), firefox reports the line above, WebKit
-    // the right one. Measure the newline itself instead, which is the line the
-    // caret just left, and step one line down; that they all agree on.
-    const afterNewline = at > 0 && text.data[at - 1] === '\n'
-    const range = document.createRange()
-    range.setStart(text, afterNewline ? at - 1 : at)
-    if (afterNewline) range.setEnd(text, at)
-    else range.collapse(true)
-    const line = afterNewline ? Number.parseFloat(getComputedStyle(mirrorEl).lineHeight) : 0
-    const rect = range.getBoundingClientRect()
+    if (scrollEl === null || scrollEl.scrollHeight <= scrollEl.clientHeight) return
+    const selection = window.getSelection()
+    if (selection === null || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    let rect = range.getBoundingClientRect()
+    if (rect.height === 0 && rect.width === 0) {
+      // A collapsed caret at an empty line reports a zero rect in some
+      // engines; the anchor's element box is the line the caret sits on.
+      const anchor = selection.anchorNode
+      const el = anchor instanceof HTMLElement ? anchor : anchor?.parentElement
+      if (el === undefined || el === null) return
+      rect = el.getBoundingClientRect()
+    }
     const box = scrollEl.getBoundingClientRect()
-    if (rect.bottom + line > box.bottom) scrollEl.scrollTop += rect.bottom + line - box.bottom
-    else if (rect.top + line < box.top) scrollEl.scrollTop -= box.top - rect.top - line
-  }
-
-  // Reveal the focus end of the current selection. Today's entry paths leave a
-  // collapsed selection, but honoring direction keeps a future range-preserving
-  // path from revealing its anchor instead of its focus.
-  const revealSelectionFocus = (el: HTMLTextAreaElement): void => {
-    // selectionStart/End are number|null in lib.dom; the type-aware lint program narrows them.
-    const caret = el.selectionDirection === 'backward' ? el.selectionStart : el.selectionEnd
-    // oxlint-disable-next-line typescript/no-unnecessary-condition
-    revealCaret(caret ?? el.value.length)
+    if (rect.bottom > box.bottom) scrollEl.scrollTop += rect.bottom - box.bottom
+    else if (rect.top < box.top) scrollEl.scrollTop -= box.top - rect.top
   }
 
   // Unlock (mount / session switch) returns focus to the box, and owns the
-  // reveal that comes with it. `preventScroll` because this focus is ours, not
-  // a gesture: the textarea is as tall as the draft, so the browser's reveal
-  // would walk up to the conversation scrollport and move the transcript under
-  // a user who only switched session. That leaves the caret to us — the DOM is
-  // reused across sessions, so switching to a longer draft keeps the previous
-  // offset while the value swap puts the caret at the new draft's end, which is
-  // off screen (measured on all three engines: offset 0 with the caret 940px
-  // down). Suppress the walk, then reveal in our own box.
+  // reveal that comes with it. Lexical's focus() suppresses the browser's
+  // scroll walk (preventScroll inside), so the reveal in our own scrollport
+  // is ours to perform — switching to a longer draft otherwise leaves the
+  // caret (restored at the draft's end) off screen.
   useEffect(() => {
-    const el = inputRef.current
-    if (locked || el === null) return
-    el.focus({ preventScroll: true })
-    revealSelectionFocus(el)
-  }, [locked, sessionId])
+    if (locked || editor === null) return
+    // Lexical's focus() restores the editor selection but never calls the DOM
+    // focus itself; preventScroll keeps the conversation scrollport still.
+    editor.getRootElement()?.focus({ preventScroll: true })
+    editor.focus(() => { revealSelection() })
+  }, [locked, sessionId, editor])
 
   // A persisted draft arrives AFTER the unlock effect: ConversationSession
   // adopts it in its own mount effect, and a parent's mount effect runs after
@@ -285,24 +246,9 @@ export function InputBar({
   // not focus: send-clear, failed-send restore, and first-character transitions
   // must not steal focus from another control the user moved to.
   useEffect(() => {
-    const el = inputRef.current
-    if (locked || draft === '' || el === null) return
-    revealSelectionFocus(el)
+    if (locked || draft === '') return
+    revealSelection()
   }, [draft !== ''])
-
-  // Caret restore after an edit the composer performs itself. The machine owns
-  // the draft and the undo log, so paste and cut suppress the native edit and
-  // write the value through the machine — and a
-  // programmatic selection change reveals nothing: measured in chromium and
-  // WebKit, pasting a long block leaves the view where it was while the caret
-  // sits at the end of the draft. Native typing gets its reveal from the
-  // browser; these two have to ask for it, so they share one restore.
-  const restoreCaret = (el: HTMLTextAreaElement, caret: number): void => {
-    requestAnimationFrame(() => {
-      el.setSelectionRange(caret, caret)
-      revealCaret(caret)
-    })
-  }
 
   // Wheel chaining on the draft scrollport, one lifetime (it is never
   // unmounted — the inert state renders the same element disabled). While the
@@ -579,6 +525,20 @@ export function InputBar({
           if (total > imageLimits.maxMessageImageBytes) {
             return t('image.totalTooLarge', { size: imageSizeText(imageLimits.maxMessageImageBytes) })
           }
+  // Intake pre-check: an addition that would break
+  // a projected limit is refused as a whole batch, announced immediately, and
+  // never enters the rail — no more submit-time failure rolling the rail
+  // back. The host enforces the same limits at submit for callers that bypass
+  // this composer.
+  const intakeImages = useCallback((files: readonly File[]): void => {
+    if (addImages === undefined || files.length === 0) return
+    const rejected = ((): string | null => {
+      if (imageLimits !== undefined) {
+        // Format precedes limits: a batch with
+        // a non-image must announce the format problem, not a count or size
+        // it could never pass anyway — addImages rejects it authoritatively.
+        if (files.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
+          return addImages(files)
         }
         return addImages(images)
       })()
@@ -619,31 +579,73 @@ export function InputBar({
 
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
 
-  const onSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>): void => {
-    // Any caret/selection gesture ends a live paste attempt (the machine
-    // cannot observe DOM selection). Cheap no-op when none is live.
-    if (keyboard !== undefined && keyboard.snapshot.paste !== undefined) keyboard.invalidatePaste()
-    void e
-  }
+  // The keymap handlers read live bar state through this ref so the editor
+  // registration survives re-renders without re-arming per keystroke.
+  const gate = useRef({
+    locked, machineBusy, canSteerQueue, running, subagent, resolveSubmitMode, intakeImages,
+  })
+  gate.current = { locked, machineBusy, canSteerQueue, running, subagent, resolveSubmitMode, intakeImages }
 
-  // Button presses steal focus from the textarea; suppress at mousedown so
-  // typing continues seamlessly. `preventScroll` for the same reason as the
-  // unlock effect, and with no reveal of its own: the caret has not moved, and
-  // the next keystroke gets the browser's native one.
+  useEffect(() => {
+    if (editor === null || keyboard === undefined) return
+    return registerComposerKeymap(editor, {
+      arbitrate: (key, composing) => keyboard.arbitrate(key, composing),
+      space: () => {
+        if (gate.current.machineBusy || gate.current.locked) return false
+        return keyboard.space()
+      },
+      dismissPopup: () => { keyboard.dismissPopup() },
+      canSubmit: () => !gate.current.locked && !gate.current.machineBusy,
+      submit: (accelerated) => {
+        const g = gate.current
+        // Empty-draft accelerated Enter acts on the queue instead of the
+        // (empty) draft: the machine rejects empty drafts, so the gesture
+        // steers every still-pending queued message into the running turn.
+        if (accelerated && g.canSteerQueue) {
+          keyboard.steerQueue()
+          return
+        }
+        keyboard.submit(g.resolveSubmitMode(
+          g.running,
+          accelerated ? 'accelerated' : 'enter',
+          g.subagent === null,
+        ))
+      },
+      intakeFiles: (files) => { gate.current.intakeImages(files) },
+      pasteText: (text) => {
+        if (gate.current.machineBusy || gate.current.locked) return
+        keyboard.paste(text)
+      },
+    })
+  }, [editor, keyboard])
+
+  // Button presses steal focus from the editor; suppress at mousedown so
+  // typing continues seamlessly. Lexical's focus() carries preventScroll and
+  // restores the previous selection, so no reveal is needed: the caret has
+  // not moved, and the next keystroke gets the browser's native one.
   const keepFocus = (e: MouseEvent<HTMLButtonElement>): void => {
     e.preventDefault()
-    inputRef.current?.focus({ preventScroll: true })
+    editor?.getRootElement()?.focus({ preventScroll: true })
   }
 
   const onToggleCommandMenu = (): void => {
-    const el = inputRef.current
-    if (el !== null) toggleCommandMenu?.(selectionOf(el))
+    if (keyboard !== undefined) toggleCommandMenu?.(keyboard.caretSpan())
   }
 
-  // Ordinary sessions retain their primary Send/Stop toggle. A continuable
-  // child keeps Send as the primary action and exposes Stop independently so
-  // pointer users can queue follow-ups while its current turn is running.
-  const primaryStops = running && subagent === null
+  // The no-session Workspace trigger: the resident editable div acts as the
+  // picker trigger for keyboard users (no editor is bound in this state).
+  const onWorkspaceKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (!workspaceTrigger) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onRequestWorkspace()
+    }
+  }
+
+  // An ordinary running session keeps Stop while the composer is empty or
+  // owner-blocked; an actionable draft gets the existing Queue action. A
+  // continuable child keeps Send primary and exposes Stop independently.
+  const primaryStops = running && subagent === null && (empty || blocked !== undefined)
   const interruptible = running && continuable
   const primaryLabel = primaryStops ? t('input.stop') : t('input.send')
   const onPrimary = (): void => {
@@ -663,102 +665,36 @@ export function InputBar({
     ? null
     : <PermissionSelect key={sessionId} value={permissions} locked={locked} command={command} t={t} />
 
-  // Mirror-layer decorations: a visible backdrop with transparent textarea
-  // text. Claim tokens and references retain the draft's own glyph metrics,
-  // so their decoration cannot drift from wrapping, selection, or the caret.
-  const deco = input === undefined ? INERT_DECORATIONS : deriveDecorations(input, lexicon)
-  const backdrop: ReactNode[] = []
-  {
-    // Segment boundaries: the token range end, every structured-reference
-    // offset, and every text-ref range — merged in draft order (the sources never
-    // overlap: structured references own their ranges, text-refs own plain tokens, the
-    // claim token only leads).
-    let cursor = 0
-    const pushPlain = (upTo: number): void => {
-      if (upTo > cursor) backdrop.push(draft.slice(cursor, upTo))
-      cursor = upTo
-    }
-    if (deco.token !== null) {
-      backdrop.push(
-        <mark key="token" className={css.hlToken} data-decoration="token">
-          {draft.slice(deco.token.start, deco.token.end)}
-        </mark>,
-      )
-      cursor = deco.token.end
-    }
-    type Boundary =
-      | { at: number; kind: 'chip'; chip: (typeof deco.chips)[number] }
-      | { at: number; kind: 'text-ref'; ref: (typeof deco.textRefs)[number]; ordinal: number }
-    const boundaries: Boundary[] = [
-      ...deco.chips.map(chip => ({ at: chip.offset, kind: 'chip' as const, chip })),
-      ...deco.textRefs.map((ref, ordinal) => ({ at: ref.start, kind: 'text-ref' as const, ref, ordinal })),
-    ].sort((a, b) => a.at - b.at)
-    for (const b of boundaries) {
-      if (b.at < cursor) continue // claim-token overlap: the leading mark wins
-      pushPlain(b.at)
-      if (b.kind === 'chip') {
-        const chip = b.chip
-        backdrop.push(
-          <span
-            key={`chip-${chip.occurrenceId}`}
-            className={clsx(css.chip, chip.invalid && css.chipInvalid)}
-            data-decoration="chip"
-            data-reference-appearance={chip.appearance}
-            data-occurrence={chip.occurrenceId}
-            data-invalid={chip.invalid || undefined}
-            title={chip.label}
-          >
-            {chip.appearance === undefined
-              ? chip.text[0]
-              : (
-                <span className={css.chipTrigger}>
-                  <span className={css.chipTriggerGlyph}>{chip.text[0]}</span>
-                  <ReferenceIcon kind={chip.appearance} size={16} className={css.chipIcon} />
-                </span>
-              )}
-            <span>{chip.text.slice(1)}</span>
-          </span>,
-        )
-        cursor = chip.offset + chip.length
-      } else {
-        // Plain-range highlight: the glyphs stay the
-        // textarea's (advance untouched); the mark paints the chip look.
-        // The key is the draft-order ordinal: a fresh scan derives these
-        // ranges every render, so none of them carries identity past its
-        // position, and a draft-offset key would unmount the mark and its
-        // icon for every character typed ahead of it. Structured references
-        // key by occurrenceId, the identity their occurrence table owns.
-        const text = draft.slice(b.ref.start, b.ref.end)
-        backdrop.push(
-          <mark key={`ref-${b.ordinal}`} className={css.textRef} data-decoration="text-ref">
-            {b.ref.appearance === 'folder'
-              ? (
-                <>
-                  <span className={css.textRefTrigger}>
-                    <span className={css.textRefTriggerGlyph}>{text[0]}</span>
-                    <ReferenceIcon kind="folder" size={16} className={css.textRefIcon} />
-                  </span>
-                  {text.slice(1)}
-                </>
-              )
-              : text}
-          </mark>,
-        )
-        cursor = b.ref.end
-      }
-    }
-    pushPlain(draft.length)
-    if (deco.hint !== null) {
-      // Claim tokens have the `/name ` format (trailing space); trim to the bare name.
-      const commandName = input?.claim?.token.slice(1).trim() ?? ''
-      const hintKey = `hint.${commandName === 'goal' && hasGoal ? 'goal.active' : commandName}`
-      // Dynamic lookup by claimed command name: unknown commands miss the
-      // dictionary and keep the machine's own hint, so the call is wide.
-      const translated = (t as Translate)(hintKey)
-      const displayHint = translated !== hintKey ? translated : deco.hint
-      backdrop.push(<span key="hint" className={css.hint} data-decoration="hint">{displayHint}</span>)
-    }
-  }
+  // Claim ghost hint: rendered by CSS as generated content after the last
+  // paragraph while the claim's args are blank (a hint implies a single-line
+  // token draft). The translated per-command hint wins over the claim's own.
+  const claimActive = (input?.phase === 'claimed' || input?.phase === 'submitting')
+    && input.claim !== undefined && draft.startsWith(input.claim.token)
+  const rawHint = claimActive && input.claim.hint !== undefined
+    && draft.slice(input.claim.token.length).trim() === ''
+    ? input.claim.hint
+    : null
+  const hint = ((): string | null => {
+    if (rawHint === null) return null
+    // Claim tokens have the `/name ` format (trailing space); trim to the bare name.
+    const commandName = input?.claim?.token.slice(1).trim() ?? ''
+    const hintKey = `hint.${commandName === 'goal' && hasGoal ? 'goal.active' : commandName}`
+    // Dynamic lookup by claimed command name: unknown commands miss the
+    // dictionary and keep the machine's own hint, so the call is wide.
+    const translated = (t as Translate)(hintKey)
+    return translated !== hintKey ? translated : rawHint
+  })()
+
+  const placeholderText = placeholder ?? (parentOffline
+    ? t('placeholder.parentOffline')
+    : disabled
+      ? t('placeholder.unavailable')
+      // The steer hint deliberately outranks the plan placeholder:
+      // while it shows, the whole-queue gesture is genuinely available
+      // (the gate never consults plan mode), so the actionable hint wins.
+      : canSteerQueue
+        ? t('placeholder.steerQueue')
+        : planActive ? t('placeholder.plan') : t('placeholder.default'))
 
   return (
     <div className={clsx(css.root, variant === 'hero' && css.hero)}>
@@ -776,7 +712,7 @@ export function InputBar({
           {notice.text}
         </div>
       )}
-      {/* Trigger clicks land on the card, not the textarea: the toolbar row's
+      {/* Trigger clicks land on the card, not the editor: the toolbar row's
           disabled controls swallow clicks otherwise (the CSS state disarms
           their pointer events), so the WHOLE capsule is the pick target.
           pointerdown stops here so the Menu's outside-close cannot race the
@@ -788,7 +724,9 @@ export function InputBar({
         onClick={workspaceTrigger ? onRequestWorkspace : undefined}
         onPointerDown={workspaceTrigger ? (e) => { e.stopPropagation() } : undefined}
       >
-        {overlay !== undefined && <div className={css.overlayAnchor}>{overlay}</div>}
+        {sessionId !== undefined && (
+          <div className={css.overlayAnchor}>{renderSlot('conversation.input.overlay', {})}</div>
+        )}
         {accessory !== undefined && <div className={css.accessory}>{accessory}</div>}
         {renderSlot('conversation.input.attachments', {
           attachments,
@@ -800,54 +738,35 @@ export function InputBar({
             size: imageSizeText(imageLimits.maxImageBytes),
           },
         })}
-        {/* One scrollport, two text layers. The hidden mirror renders draft+'\n' and stretches the
-            stack to the draft's FULL height (counting rows by '\n' cannot see soft wraps); the
-            absolutely-positioned backdrop and textarea ride that height, and .scroll — capped at 14
-            lines in CSS — is the only thing that scrolls. The caret belongs to the textarea and the
-            glyphs to the backdrop, so they can only stay together by moving together: one scroll
-            offset the browser applies to both layers at once, never a JS mirror between two boxes,
-            which a compositor-driven gesture outruns and leaves the words trailing the caret. */}
+        {/* One scrollport, one text surface: the contenteditable grows with
+            its content and .scroll — capped at 14 lines in CSS — is the only
+            thing that scrolls. Chips are decorator portals inside the same
+            surface, so wrapping, caret geometry, and scrolling are the
+            browser's own. */}
         <div ref={scrollRef} className={css.scroll} data-input-scroll>
           <div className={css.grow}>
-            <div
-              aria-hidden
-              className={clsx(css.backdrop, textareaDisabled && css.backdropDisabled)}
-              data-input-backdrop
-              data-disabled={textareaDisabled || undefined}
-            >
-              {backdrop}
-            </div>
-            <textarea
-              ref={inputRef}
-              className={css.input}
-              value={draft}
-              disabled={textareaDisabled}
-              readOnly={machineBusy || workspaceTrigger}
-              aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : undefined}
+            <ComposerContentEditable
+              editor={workspaceTrigger ? null : editor}
+              editable={editable}
+              className={clsx(css.input, editorDisabled && css.inputDisabled)}
+              data-phase={input?.phase ?? 'inert'}
+              aria-disabled={editorDisabled || undefined}
+              data-placeholder={placeholderText}
+              // The placeholder was the textarea's accessible name; a div's
+              // data attribute is not, so the label restores it.
+              aria-label={workspaceTrigger ? t('hero.chooseWorkspace') : placeholderText}
               aria-haspopup={workspaceTrigger ? 'menu' : undefined}
               aria-expanded={workspaceTrigger ? workspacePickerOpen : undefined}
-              data-phase={input?.phase ?? 'inert'}
-              placeholder={placeholder ?? (parentOffline
-                ? t('placeholder.parentOffline')
-                : disabled
-                  ? t('placeholder.unavailable')
-                  // The steer hint deliberately outranks the plan placeholder:
-                  // while it shows, the whole-queue gesture is genuinely available
-                  // (the gate never consults plan mode), so the actionable hint wins.
-                  : canSteerQueue
-                    ? t('placeholder.steerQueue')
-                    : planActive ? t('placeholder.plan') : t('placeholder.default'))}
-              rows={2}
-              onChange={onChange}
-              onKeyDown={onKeyDown}
-              onSelect={onSelect}
-              onCopy={(e) => { onCopyOrCut(e, false) }}
-              onCut={(e) => { onCopyOrCut(e, true) }}
-              onPaste={onPaste}
-              onCompositionStart={onCompositionStart}
-              onCompositionEnd={onCompositionEnd}
+              tabIndex={workspaceTrigger ? 0 : undefined}
+              onKeyDown={workspaceTrigger ? onWorkspaceKeyDown : undefined}
+              style={hint === null ? undefined : { '--dsh-composer-hint': JSON.stringify(hint) } as CSSProperties}
             />
-            <div ref={mirrorRef} aria-hidden className={css.mirror} data-input-mirror>{`${draft}\n`}</div>
+            {empty && !claimActive && (
+              <div aria-hidden className={css.placeholder} data-composer-placeholder>
+                {placeholderText}
+              </div>
+            )}
+            <DecoratorPortals editor={workspaceTrigger ? null : editor} />
           </div>
         </div>
         <div className={css.row}>
@@ -880,13 +799,17 @@ export function InputBar({
             </Tooltip>
             <div className={css.modes}>
               {accessSelect}
-              {renderSlot('conversation.input.plan', { locked })}
+              {sessionId === undefined ? null : renderSlot('conversation.input.plan', { locked })}
             </div>
-            {leftItems}
+            {input === undefined || sessionId === undefined
+              ? null
+              : renderSlot('conversation.input.left', {})}
           </div>
           <div className={css.trailing}>
-            {rightItems}
-            {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+            {input === undefined || sessionId === undefined
+              ? null
+              : renderSlot('conversation.input.right', {})}
+            {sessionId === undefined ? null : renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
             {interruptible && (
               <Tooltip label={t('input.stop')} side="top" delayMs={500}>
@@ -927,7 +850,9 @@ export function InputBar({
           </div>
         </div>
       </div>
-      {footer}
+      {variant === 'composer' && input !== undefined && sessionId !== undefined
+        ? renderSlot('conversation.composer.dock', {})
+        : null}
     </div>
   )
-}
+})

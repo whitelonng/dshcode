@@ -200,7 +200,6 @@ function send(message: Record<string, unknown>): void {
   process.stdout.write(Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, 'ascii'), body]))
 }
 
-// Keep the event loop alive.
 process.stdin.resume()
 if (pauseStdinAfterInitialized) {
   setInterval(() => {}, 1000)

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { packedWorkspaceClosure, readWorkspacePackages } from './packed-workspace-closure.ts'
 
 /**
  * Keyless publish-path rehearsal. It packs the provider, its workspace peers, the vendored framework
@@ -25,30 +26,7 @@ const nativeDir = join(repoRoot, 'native/landlock-run')
 const sourceLauncher = join(nativeDir, 'packages', `linux-${process.arch}`, 'bin', 'landlock-run')
 const platformPackageName = `@deepseek-ai/node-addon-landlock-run-linux-${process.arch}`
 
-/** The harness closure the consumer needs; native tarballs are packed through their mode-preserving release script. */
-const WORKSPACE_CLOSURE = [
-  'packages/sandbox/sandbox-local',
-  // sandbox-local's win32 chain rung is a runtime dependency: a packed
-  // consumer resolves it like any other @deepseek-ai peer (koffi arrives
-  // from the registry).
-  'packages/sandbox/sandbox-windows-acl',
-  'packages/sandbox/sandbox',
-  'packages/core/session',
-  'packages/core/scope',
-  'packages/llm/llm',
-  'packages/typert/protocol',
-  'packages/attachment/attachment',
-  'packages/util/brand',
-  'packages/util/timeout',
-  'packages/runtime-diagnostics/invariants',
-  // The framework and the vendored packages the closure declares outright:
-  // rescoped into @deepseek-ai, so the consumer installs this repository's
-  // copies. Schemastery is a hard dependency of three members above, not a
-  // peer, so npm resolves it while installing them.
-  'vendor/cordis',
-  'vendor/cosmokit',
-  'vendor/schemastery',
-]
+const NATIVE_PACKAGE_PREFIX = '@deepseek-ai/node-addon-landlock-run'
 
 /** ELF `e_machine` (offset 18, LE) for this host: x86-64 = 62, AArch64 = 183. */
 const E_MACHINE = { x64: 62, arm64: 183 }[process.arch as 'x64' | 'arm64']
@@ -92,15 +70,22 @@ describe.skipIf(!packable)('sandbox-local: packed-tarball distribution (publish-
       .split('\n')
       .map(tarball => join(nativePackDest, tarball))
 
+    // Derive the current runtime closure so a newly introduced workspace
+    // dependency cannot fall through to an unpublished registry version.
+    const workspaceClosure = packedWorkspaceClosure(
+      '@deepseek-ai/dsh-sandbox-local',
+      readWorkspacePackages(repoRoot),
+    ).filter(member => !member.name.startsWith(NATIVE_PACKAGE_PREFIX))
+
     // Pack each harness closure member with the exact bytes publish would upload.
     const tarballs: string[] = []
-    for (const pkg of WORKSPACE_CLOSURE) {
+    for (const pkg of workspaceClosure) {
       const pack = spawnSync('pnpm', ['pack', '--pack-destination', packDest], {
-        cwd: join(repoRoot, pkg),
+        cwd: pkg.directory,
         encoding: 'utf8',
         timeout: 120_000,
       })
-      expect(pack.status, `pnpm pack failed for ${pkg}:\n${pack.stdout}\n${pack.stderr}`).toBe(0)
+      expect(pack.status, `pnpm pack failed for ${pkg.name}:\n${pack.stdout}\n${pack.stderr}`).toBe(0)
       const lines = pack.stdout.trim().split('\n')
       tarballs.push(lines[lines.length - 1] as string)
     }

@@ -23,6 +23,12 @@ export class GoalService extends TypertRemoteService {
   rename(request: RenameGoalRequest): RenameGoalResult {
     return { renamed: request.title.length > 0 }
   }
+
+  @Remote({ mode: 'stream' })
+  async *watch(agent: Agent, signal: AbortSignal): AsyncIterable<CreateGoalResult> {
+    signal.throwIfAborted()
+    yield { ref: agent.id }
+  }
 }
 
 export type {

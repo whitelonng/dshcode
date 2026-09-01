@@ -57,6 +57,14 @@
           }
         ],
         "no-useless-constructor": "error",
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "crypto",
+            "property": "randomUUID",
+            "message": "browsers withhold crypto.randomUUID outside secure contexts (plain-HTTP LAN pages); mint through @deepseek-ai/dsh-util-crypto instead"
+          }
+        ],
         "typescript/await-thenable": "error",
         "typescript/ban-ts-comment": [
           "error",
@@ -316,6 +324,21 @@
       "rules": {
         "@stylistic/quotes": "off"
       }
+    },
+    {
+      "files": [
+        "packages/experimental/webworker-runtime/src/node/**/*.ts",
+        "packages/experimental/webworker-runtime/src/storage/memory.ts",
+        "packages/experimental/webworker-runtime/src/module-system/module-loader.ts",
+        "packages/experimental/webworker-runtime/src/transport/synthetic-http.ts"
+      ],
+      "rules": {
+        "typescript/require-await": "off", // Async faces Node and Cordis define (fs promises, the module seam) reject rather than throw; the VFS beneath them never awaits.
+        "typescript/no-extraneous-class": "off" // Node constructs these (`new Script()`, `new Worker()`), so a stub that refuses must still be a class.
+      },
+      "plugins": [
+        "typescript"
+      ]
     }
   ]
 }

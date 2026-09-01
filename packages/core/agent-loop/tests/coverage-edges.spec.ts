@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { createUserMessage, CallId, LlmError, StreamChunk, errorChain  } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createUserMessage, ToolCallId, LlmError, StreamChunk, errorChain  } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, TurnEndReason } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -8,6 +8,7 @@ import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
 
 function driverDone(agent: Agent): Promise<void> {
@@ -18,6 +19,7 @@ async function harness(adapter: MockAdapter) {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -47,7 +49,7 @@ describe('tool JSON parse', () => {
       // model emits tool-call with malformed arguments (not valid JSON)
       [
         { type: 'block-start' as const, index: 0, blockType: 'tool-call' as const },
-        { type: 'block-end' as const, index: 0, block: { type: 'tool-call' as const, id: CallId('c1'), name: 'echo', arguments: 'not json' } },
+        { type: 'block-end' as const, index: 0, block: { type: 'tool-call' as const, id: ToolCallId('c1'), name: 'echo', arguments: 'not json' } },
         { type: 'finish' as const, reason: { kind: 'tool-calls' as const } },
       ] satisfies StreamChunk[],
       textResponse('done'),
@@ -67,20 +69,20 @@ describe('tool JSON parse', () => {
     await waitForIdle(ctx, agent)
 
     // tool/call event should have recorded the raw arguments string
-    const callEvent = agent.session.events.find(e => e.type === 'tool/call')
+    const callEvent = agent.session.snapshotEvents().find(e => e.type === 'tool/call')
     expect(callEvent).toBeDefined()
     if (callEvent!.type === 'tool/call') {
       expect(callEvent!.data.arguments).toBe('not json')
     }
     // the loop did not crash — a result was produced
-    expect(agent.session.events.some(e => e.type === 'tool/result')).toBe(true)
+    expect(agent.session.snapshotEvents().some(e => e.type === 'tool/result')).toBe(true)
   })
 
   it('uses empty object when tool-call arguments are empty string', async () => {
     const adapter = new MockAdapter([
       [
         { type: 'block-start' as const, index: 0, blockType: 'tool-call' as const },
-        { type: 'block-end' as const, index: 0, block: { type: 'tool-call' as const, id: CallId('c1'), name: 'noarg', arguments: '' } },
+        { type: 'block-end' as const, index: 0, block: { type: 'tool-call' as const, id: ToolCallId('c1'), name: 'noarg', arguments: '' } },
         { type: 'finish' as const, reason: { kind: 'tool-calls' as const } },
       ] satisfies StreamChunk[],
       textResponse('done'),
@@ -99,7 +101,7 @@ describe('tool JSON parse', () => {
     send(agent, 'use tool')
     await waitForIdle(ctx, agent)
 
-    expect(agent.session.events.some(e => e.type === 'tool/result')).toBe(true)
+    expect(agent.session.snapshotEvents().some(e => e.type === 'tool/result')).toBe(true)
   })
 })
 
@@ -128,9 +130,9 @@ describe('thrown-value propagation', () => {
     expect(errors).toHaveLength(1)
     expect(errors[0]).toBe('naked string error')
     expect(adapter.requests).toHaveLength(0)
-    const starts = agent.session.events.filter(event => event.type === 'turn/start')
-    const ends = agent.session.events.filter(event => event.type === 'turn/end')
-    const messages = agent.session.events.filter(event => event.type === 'user/message')
+    const starts = agent.session.snapshotEvents().filter(event => event.type === 'turn/start')
+    const ends = agent.session.snapshotEvents().filter(event => event.type === 'turn/end')
+    const messages = agent.session.snapshotEvents().filter(event => event.type === 'user/message')
     expect(starts).toHaveLength(0)
     expect(ends).toHaveLength(0)
     expect(messages).toHaveLength(0)
@@ -153,7 +155,7 @@ describe('thrown-value propagation', () => {
 
     send(agent, 'go')
     await waitForIdle(ctx, agent)
-    const turnEnd = agent.session.events.find(e => e.type === 'turn/end')
+    const turnEnd = agent.session.snapshotEvents().find(e => e.type === 'turn/end')
     expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason.kind === 'error'
       ? turnEnd.data.reason.error.message
       : undefined).toBe('[object Object]')
@@ -178,7 +180,7 @@ describe('durable error rendering', () => {
     send(agent, 'go')
     await waitForIdle(ctx, agent)
 
-    const turnEnd = agent.session.events.find(e => e.type === 'turn/end')
+    const turnEnd = agent.session.snapshotEvents().find(e => e.type === 'turn/end')
     expect(turnEnd).toBeDefined()
     if (turnEnd?.type === 'turn/end' && turnEnd.data.reason.kind === 'error') {
       expect(turnEnd.data.reason.error).toEqual({
@@ -234,7 +236,7 @@ describe('structured tool error propagation (the runtime-validation Agent Note, 
     send(agent, 'go')
     await waitForIdle(ctx, agent)
 
-    const toolResult = agent.session.events.find(e => e.type === 'tool/result')
+    const toolResult = agent.session.snapshotEvents().find(e => e.type === 'tool/result')
     expect(toolResult?.type === 'tool/result' && toolResult.data.message.content[0].isError).toBe(true)
     expect(toolResult?.type === 'tool/result' && toolResult.data.error)
       .toEqual({ name: 'HarnessError', code: 'BOOM' })
@@ -260,7 +262,7 @@ describe('request-error action edges', () => {
 
     // One failed request, no retry turn.
     expect(adapter.requests).toHaveLength(1)
-    const ends = agent.session.events.filter(e => e.type === 'turn/end')
+    const ends = agent.session.snapshotEvents().filter(e => e.type === 'turn/end')
     expect(ends).toHaveLength(1)
   })
 
@@ -282,7 +284,7 @@ describe('request-error action edges', () => {
     await agent.whenIdle()
 
     expect(adapter.requests).toHaveLength(1)
-    const end = agent.session.events.findLast(e => e.type === 'turn/end')
+    const end = agent.session.snapshotEvents().findLast(e => e.type === 'turn/end')
     expect(end?.type === 'turn/end' && end.data.reason.kind).toBe('aborted')
   })
 })
@@ -311,7 +313,7 @@ describe('stream failure edges', () => {
 
     // No facts -> not offered to recovery; the turn fails through settle().
     expect(recoveries).toBe(0)
-    const end = agent.session.events.findLast(e => e.type === 'turn/end')
+    const end = agent.session.snapshotEvents().findLast(e => e.type === 'turn/end')
     expect(end?.type === 'turn/end' && end.data.reason.kind).toBe('error')
   })
 })
@@ -386,7 +388,7 @@ describe('tool result meta persistence', () => {
     send(agent, 'go')
     await waitForIdle(ctx, agent)
 
-    const result = agent.session.events.find(e => e.type === 'tool/result')
+    const result = agent.session.snapshotEvents().find(e => e.type === 'tool/result')
     expect(result?.type === 'tool/result' && result.data.meta).toEqual({ presentation: 'diff-card' })
   })
 })
@@ -434,7 +436,7 @@ describe('recovery without a retry action', () => {
 
     expect(recoveries).toBe(1)
     expect(adapter.requests).toHaveLength(1)
-    const end = agent.session.events.findLast(e => e.type === 'turn/end')
+    const end = agent.session.snapshotEvents().findLast(e => e.type === 'turn/end')
     expect(end?.type === 'turn/end' && end.data.reason.kind).toBe('error')
   })
 })
@@ -459,7 +461,7 @@ describe('unrenderable failure settlement', () => {
     send(agent, 'go')
     await agent.whenIdle()
 
-    const end = agent.session.events.findLast(e => e.type === 'turn/end')
+    const end = agent.session.snapshotEvents().findLast(e => e.type === 'turn/end')
     expect(end?.type === 'turn/end' && end.data.reason.kind).toBe('error')
     if (end?.type === 'turn/end' && end.data.reason.kind === 'error') {
       // The durable failure keeps the adapter facts' message, not the
@@ -500,7 +502,7 @@ describe('driver bookkeeping edges', () => {
 
     expect(proposals).toBe(2)
     expect(adapter.requests).toHaveLength(1)
-    const end = agent.session.events.findLast(event => event.type === 'turn/end')
+    const end = agent.session.snapshotEvents().findLast(event => event.type === 'turn/end')
     expect(end?.type === 'turn/end' && end.data.reason).toEqual({ kind: 'blocked' })
   })
 
@@ -522,9 +524,9 @@ describe('driver bookkeeping edges', () => {
     send(agent, 'go')
     await agent.whenIdle()
 
-    const types = agent.session.events.map(e => e.type)
+    const types = agent.session.snapshotEvents().map(e => e.type)
     expect(types.filter(t => t === 'step/end')).toHaveLength(1)
-    const end = agent.session.events.findLast(e => e.type === 'turn/end')
+    const end = agent.session.snapshotEvents().findLast(e => e.type === 'turn/end')
     expect(end?.type === 'turn/end' && end.data.reason.kind).toBe('error')
   })
 })

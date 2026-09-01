@@ -19,7 +19,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { conversationContextKey, newEnglishPage, saveFailureShot } from './support.ts'
+import { conversationContextKey, expandOwningTurnProcess, newEnglishPage, saveFailureShot } from './support.ts'
 
 const MODE = webSnapshotMode()
 const SESSION_ID = 'chat-long-interactions-e2e'
@@ -155,7 +155,7 @@ describe('web e2e: long Chat interaction contract', () => {
     browser = await chromium.launch()
     page = await newEnglishPage(browser, 900)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await openSeed(page)
   }, 120_000)
@@ -181,17 +181,66 @@ describe('web e2e: long Chat interaction contract', () => {
     const toolAssistantMarker = FIXTURE.markers.assistant(TOOL_TURN)
     const toolMarker1 = FIXTURE.markers.tool(TOOL_TURN, 1)
     const toolMarker2 = FIXTURE.markers.tool(TOOL_TURN, 2)
-    const toolUserEvent = requiredEvent(source.session.events, 'user/message', toolUserMarker)
-    const toolAssistantEvent = requiredEvent(source.session.events, 'assistant/message', toolAssistantMarker)
+    const toolUserEvent = requiredEvent(source.session.snapshotEvents(), 'user/message', toolUserMarker)
+    const toolAssistantEvent = requiredEvent(source.session.snapshotEvents(), 'assistant/message', toolAssistantMarker)
     const branchUserMarker = FIXTURE.markers.user(BRANCH_TURN)
     const branchAssistantMarker = FIXTURE.markers.assistant(BRANCH_TURN)
-    const branchUserEvent = requiredEvent(source.session.events, 'user/message', branchUserMarker)
-    const branchAssistantEvent = requiredEvent(source.session.events, 'assistant/message', branchAssistantMarker)
-    const boundary = source.session.events.find((event): event is SessionEvent<'turn/end'> => (
+    const branchUserEvent = requiredEvent(source.session.snapshotEvents(), 'user/message', branchUserMarker)
+    const branchAssistantEvent = requiredEvent(source.session.snapshotEvents(), 'assistant/message', branchAssistantMarker)
+    const boundary = source.session.snapshotEvents().find((event): event is SessionEvent<'turn/end'> => (
       event.type === 'turn/end' && event.data.turn === BRANCH_TURN
     ))
     if (boundary === undefined) throw new Error(`turn ${String(BRANCH_TURN)} has no turn/end event`)
     const expectedUserText = textContent(branchUserEvent.data.content)
+
+    const turnNavigation = page.getByRole('navigation', { name: 'Turn navigation' })
+    await turnNavigation.waitFor({ state: 'visible', timeout: 15_000 })
+    // The whole-log outline offers every fixture turn before any paging, with
+    // the live tail mark current.
+    const marks = turnNavigation.getByRole('button')
+    await expect.poll(() => marks.count(), { timeout: 15_000 }).toBe(FIXTURE_TURNS)
+    expect(await marks.last().getAttribute('aria-current')).toBe('true')
+    // The oldest turn is an unloaded mark whose outline preview already
+    // carries both the prompt and the settled response.
+    const firstTurnButton = turnNavigation
+      .getByRole('button', { name: 'Load and jump to turn 1', exact: true })
+    await firstTurnButton.focus()
+    const preview = page.getByRole('tooltip')
+    await preview.waitFor({ state: 'visible', timeout: 5_000 })
+    expect(await preview.textContent()).toContain(FIXTURE.markers.user(1))
+    expect(await preview.textContent()).toContain(FIXTURE.markers.assistant(1))
+    const firstTurnPosition = await firstTurnButton.evaluate(button => (
+      button.parentElement?.style.getPropertyValue('--turn-natural-position') ?? ''
+    ))
+    expect(firstTurnPosition).toBe('0px')
+
+    const loadEarlier = page.getByRole('button', { name: 'Load earlier', exact: true })
+    const loadedMarks = turnNavigation.getByRole('button', { name: /^Jump to turn / })
+    const loadedBefore = await loadedMarks.count()
+    await loadEarlier.click()
+    // Paging converts marks to their loaded form without moving the
+    // fixed-pitch ladder.
+    await expect.poll(() => loadedMarks.count(), { timeout: 15_000 }).toBeGreaterThan(loadedBefore)
+    expect(await firstTurnButton.evaluate(button => (
+      button.parentElement?.style.getPropertyValue('--turn-natural-position') ?? ''
+    ))).toBe(firstTurnPosition)
+    // Activating the still-unloaded oldest mark pages the rest in and lands
+    // on the turn's own row.
+    await firstTurnButton.focus()
+    await firstTurnButton.press('Enter')
+    const firstLoaded = turnNavigation.getByRole('button', { name: 'Jump to turn 1', exact: true })
+    await firstLoaded.waitFor({ timeout: 60_000 })
+    await expect.poll(() => firstLoaded.getAttribute('aria-current'), { timeout: 15_000 }).toBe('true')
+    await expect.poll(
+      () => page.locator('[data-chat-turn="1"][data-chat-flow-kind="user"]').count(),
+      { timeout: 5_000 },
+    ).toBe(1)
+
+    // Desktop-only affordance: a narrow Chat container hides the rail outright.
+    await page.setViewportSize({ width: 800, height: 900 })
+    await turnNavigation.waitFor({ state: 'hidden', timeout: 5_000 })
+    await page.setViewportSize({ width: 1_680, height: 900 })
+    await turnNavigation.waitFor({ state: 'visible', timeout: 5_000 })
 
     await wheelUntilMounted(page, `[data-chat-call-id="${TARGET_CALL_2}"]`, -1_100)
     const toolUserKey = messageKey(toolUserEvent)
@@ -230,6 +279,7 @@ describe('web e2e: long Chat interaction contract', () => {
 
     const summary1 = call1.locator('[data-sample="bash"]')
     const summary2 = call2.locator('[data-sample="bash"]')
+    await expandOwningTurnProcess(page, call2)
     expect(await summary1.getAttribute('aria-expanded')).toBe('false')
     expect(await summary2.getAttribute('aria-expanded')).toBe('false')
     await summary2.focus()
@@ -261,10 +311,10 @@ describe('web e2e: long Chat interaction contract', () => {
     const child = scaffold.ctx.agents.list()
       .find(agent => agent.session.header.parentSession === SessionId(SESSION_ID))
     if (child === undefined) throw new Error('message branch did not create a child session')
-    expect(child.session.header.seedLength).toBe(boundary.seq + 1)
-    expect(child.session.events.some(event => carries(event, branchAssistantMarker))).toBe(true)
-    expect(child.session.events.some(event => carries(event, FIXTURE.markers.user(BRANCH_TURN + 1)))).toBe(false)
-    expect(child.session.events.some(event => carries(event, FIXTURE.markers.user(FIXTURE.turns)))).toBe(false)
+    expect(child.session.inheritedEventCount).toBe(boundary.seq + 1)
+    expect(child.session.snapshotEvents().some(event => carries(event, branchAssistantMarker))).toBe(true)
+    expect(child.session.snapshotEvents().some(event => carries(event, FIXTURE.markers.user(BRANCH_TURN + 1)))).toBe(false)
+    expect(child.session.snapshotEvents().some(event => carries(event, FIXTURE.markers.user(FIXTURE.turns)))).toBe(false)
 
     const currentCrumb = page.getByRole('navigation', { name: 'Session hierarchy' })
       .getByRole('button').last()
@@ -272,20 +322,20 @@ describe('web e2e: long Chat interaction contract', () => {
       .toBe(`${FIXTURE.title} (1)`)
     await page.getByText(branchAssistantMarker, { exact: false }).last().waitFor({ timeout: 15_000 })
     const settled = scaffold.whenTurnSettled(60_000)
-    const composer = page.locator('textarea:enabled').last()
+    const composer = page.locator('[data-composer-input][contenteditable="true"]').last()
     await composer.fill(CONTINUE_PROMPT)
     await page.getByRole('button', { name: 'Send message', exact: true }).click()
     await expect.poll(() => page.getByText(CONTINUE_PROMPT, { exact: true }).count(), { timeout: 15_000 }).toBe(1)
     expect(await settled).toBe(child.session.id)
     await page.getByText(CONTINUE_DONE, { exact: false }).last().waitFor({ timeout: 15_000 })
     await expect.poll(() => page.locator('[data-streaming="true"]').count(), { timeout: 15_000 }).toBe(0)
-    expect(await composer.inputValue()).toBe('')
+    expect(await composer.textContent()).toBe('')
     expect(await composer.isEnabled()).toBe(true)
-    expect(source.session.events.some(event => carries(event, CONTINUE_PROMPT))).toBe(false)
-    expect(child.session.events.filter(event => (
+    expect(source.session.snapshotEvents().some(event => carries(event, CONTINUE_PROMPT))).toBe(false)
+    expect(child.session.snapshotEvents().filter(event => (
       event.type === 'user/message' && carries(event, CONTINUE_PROMPT)
     ))).toHaveLength(1)
-    const lastTurnEnd = child.session.events.findLast((event): event is SessionEvent<'turn/end'> => (
+    const lastTurnEnd = child.session.snapshotEvents().findLast((event): event is SessionEvent<'turn/end'> => (
       event.type === 'turn/end'
     ))
     expect(lastTurnEnd?.data.reason).toEqual({ kind: 'completed' })

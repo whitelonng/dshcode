@@ -42,9 +42,7 @@ export function runGit(root: string, args: string[], operation: string, input?: 
 
 /** One regular stage-zero Git index entry and its exact blob bytes. */
 export interface GitIndexBlob {
-  /** Object ID recorded in the index. */
   objectId: string
-  /** Blob bytes stored under that object ID. */
   content: Buffer
 }
 

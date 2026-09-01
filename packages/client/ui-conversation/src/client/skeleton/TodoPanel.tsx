@@ -1,10 +1,3 @@
-// TodoPanel: plan strip above the composer (the web counterpart of the TUI
-// plan panel). Renders the standing todo/write whole-list snapshot (cleared on
-// the next turn/start) — no data of its own, hidden while the list is empty.
-// Mounted through the 'conversation.input.dock' slot (QueueDock posture): the
-// dock adapter does the selecting, so the panel takes the plain list and stays
-// framework-free. Visual: figma 772:51905 / 772:52972 / 772:53419.
-
 import { useId, useState } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -127,26 +120,19 @@ export function TodoPanel({ todos, t }: TodoPanelProps) {
   )
 }
 
-/** Full props of a dock entry: InputZone owner share + session standard kit + global seat + the locale seat. */
+/** Props for the projected todo dock. */
 export type TodoDockProps = PropsRuntime<'conversation.input.dock'> & PropsLocale<'conversation'>
 
-/** Dock adapter: reads the host-computed 'todos' projection (whole list; absent or null renders nothing). */
+/** Renders the current todo projection, or nothing when it is absent. */
 export function TodoDock({ useProjection, t }: TodoDockProps) {
   const todos = useProjection('todos')
   return <TodoPanel todos={todos ?? []} t={t} />
 }
 
-/**
- * The plan strip as a plain registrant plugin (QueueDock posture), following
- * the input-dock declaration across independent activation and reload.
- */
+/** Registers the projected todo dock. */
 export const todoDockEntry = {
   name: 'conversation-todo-dock',
   inject: ['slots'],
-  /**
-   * Register the plan strip before the goal and queue entries (order 0).
-   * @param ctx - registrant context (disposal rides ctx.effect inside slots.register).
-   */
   apply(ctx: Context): void {
     ctx.slots.inject('conversation.input.dock', () =>
       ctx.slots.register({ name: 'conversation.input.dock', id: 'todo', order: 0, locale: NS }, TodoDock))

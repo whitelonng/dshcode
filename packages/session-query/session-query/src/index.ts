@@ -5,7 +5,13 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import { Session, snapshotSessionEvent, type SessionId } from '@deepseek-ai/dsh-session'
+import {
+  Session,
+  SessionSeq,
+  snapshotSessionEvent,
+  type SessionId,
+  type SessionSeq as SessionSeqType,
+} from '@deepseek-ai/dsh-session'
 import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
 import type { SessionTitleSnapshot } from '@deepseek-ai/dsh-session-title'
 import type {
@@ -37,6 +43,11 @@ import {
   type Config,
 } from './config.ts'
 import { SessionCorpus } from './corpus.ts'
+import {
+  SessionObservationReader,
+  type SessionObservation,
+  type SessionObservationOptions,
+} from './observation.ts'
 import { buildSessionEventSearchDocuments } from './documents.ts'
 import {
   filterSessionEventDocuments,
@@ -64,6 +75,7 @@ export {
   materializeSessionResultFilters,
 } from './filters.ts'
 export { assertSessionHeadersCompatible } from './sources.ts'
+export type { SessionObservation, SessionObservationOptions } from './observation.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -83,6 +95,7 @@ export abstract class SessionQueryEngine extends Service {
 
   private readonly _readWindowMax: number
   private readonly _corpus: SessionCorpus
+  private readonly _observations: SessionObservationReader
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'sessionQuery')
@@ -102,6 +115,20 @@ export abstract class SessionQueryEngine extends Service {
       )
     }
     this._corpus = new SessionCorpus(ctx, persistedInspectConcurrency)
+    this._observations = new SessionObservationReader(ctx)
+  }
+
+  /**
+   * Observe one exact live or prepared Session without a persistence listing preflight.
+   * @param sessionId - logical Session identity.
+   * @param options - cancellation and projection selection for this read.
+   * @returns a caller-owned observation lease.
+   */
+  observeSession(
+    sessionId: SessionId,
+    options: SessionObservationOptions = {},
+  ): Promise<SessionObservation> {
+    return this._observations.read(sessionId, options)
   }
 
   /**
@@ -143,9 +170,15 @@ export abstract class SessionQueryEngine extends Service {
    */
   async readSession(sessionId: SessionId): Promise<SessionLogSnapshot> {
     const loaded = await this._corpus.load(sessionId)
-    Session.create(sessionId, loaded.events, loaded.header)
+    Session.create(
+      sessionId,
+      loaded.events,
+      loaded.header,
+      loaded.inheritedEventCount,
+    )
     return {
       session: structuredClone(loaded.header),
+      inheritedEventCount: loaded.inheritedEventCount,
       events: loaded.events.map(snapshotSessionEvent),
     }
   }
@@ -264,6 +297,7 @@ export abstract class SessionQueryEngine extends Service {
     const loaded = await this._corpus.load(sessionId)
     return {
       session: structuredClone(loaded.header),
+      inheritedEventCount: loaded.inheritedEventCount,
       capturedThroughSeq: loaded.events.at(-1)?.seq ?? null,
       events: tracing.currentSurfaceEvents(sessionId, loaded.events),
     }
@@ -314,7 +348,7 @@ export abstract class SessionQueryEngine extends Service {
 
   private async _readEvent(
     sessionId: SessionId,
-    seq: number,
+    seq: SessionSeqType,
     before: number,
     after: number,
     signal?: AbortSignal,
@@ -328,8 +362,8 @@ export abstract class SessionQueryEngine extends Service {
         'SESSION_QUERY_EVENT_NOT_FOUND',
       )
     }
-    const startSeq = Math.max(0, seq - before)
-    const endSeq = Math.min(loaded.events.length - 1, seq + after)
+    const startSeq = SessionSeq(Math.max(0, seq - before))
+    const endSeq = SessionSeq(Math.min(loaded.events.length - 1, seq + after))
     const targetSnapshot = snapshotSessionEvent(target)
     const events = loaded.events.slice(startSeq, endSeq + 1)
       .map(event => event === target
@@ -337,6 +371,7 @@ export abstract class SessionQueryEngine extends Service {
         : snapshotSessionEvent(event))
     return {
       session: structuredClone(loaded.header),
+      inheritedEventCount: loaded.inheritedEventCount,
       target: targetSnapshot,
       events,
       startSeq,

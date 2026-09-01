@@ -1,39 +1,181 @@
+---
+description: "The shipped shell backend for persistent terminal sessions: interactive bash or pwsh under the shared sandbox policy, with readiness detection and bounded line-oriented output."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-terminal-bash
 
 English | [中文](README.zh.md)
 
-Persistent shell backend for `ctx.terminals` over `ctx.subprocess.spawnTerminal`. It starts an interactive shell under the shared `ctx.sandboxPolicy`, retains bounded line-oriented output, and detects readiness while the subprocess provider owns PTY allocation, environment scrubbing, foreground process groups, signalling, and complete terminal-session cleanup. The same PTY backend therefore composes with local or remote execution-world providers.
+## Summary
 
-## Plugin (`terminal-bash`)
+`dsh-terminal-bash` starts a persistent interactive shell under the deployment's sandbox policy: the session stays alive across tool calls, readiness for input is detected, and bounded line-oriented output is retained for reads. It provides the `shell` backend type and supports bash on POSIX and pwsh on Windows through a `shellDialect` setting. The same backend composes with local or remote execution worlds through the mounted subprocess provider. Full-screen terminal applications are outside its line-oriented contract.
 
-The plugin injects `pty`, `sandboxPolicy`, and `subprocess`, then registers the configured backend type (`shell`). `danger-full-access` starts the shell directly without requiring a sandbox provider; confined modes require a same-world `ctx.sandbox` and wrap the exact shell argv through it, failing before spawn when none is mounted. At spawn, one `ctx.sandboxPolicy.resolve({ session })` call supplies both the effective mode and the session workspace root; the same root is the default shell cwd when the caller omits one. A change to a different effective mode is rejected before its `sandbox/mode` event commits while that owner has an open PTY or a spawn in progress; the fence is attached to the exact owner and therefore outlives a provider reload that retains existing sessions. Wait for creation to settle and close the sessions before changing modes, so a terminal opened with wider access cannot survive a downgrade.
+## Table of Contents
 
-`shellDialect` selects the shell stack (`bash` default, `pwsh`): it picks the default `shellPath`/`shellArgs` (bash `--noprofile --norc -i`; pwsh `-NoLogo -NoProfile` through the shared `dsh-pwsh-local` resolver) and the startup contract. The bash dialect installs its prompt through the environment (`PS1` plus an OSC `133;D;`-terminated `PROMPT_COMMAND`). pwsh cannot install a prompt from the environment, so the backend writes a `prompt` function through the session and waits until the controlled prompt is actually visible — looping over follow-up sends because the pwsh banner-to-prompt gap can outlast the silence bound — while its environment drops the bash-only markers and adds `NO_COLOR`. That first send also prefixes the shared `dsh-pwsh-local` encoding preamble, pinning `[Console]::OutputEncoding` and `$OutputEncoding` to UTF-8 before anything runs: the session decode path reads PTY bytes as UTF-8, and an un-pinned console writes its host code page for non-ASCII output. Both dialects emit the same BEL-terminated OSC marker, so the readiness machinery and consumers are dialect-agnostic.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-Readiness combines a foreground-verified private bash prompt marker, provider-reported foreground stdin-wait facts, silence fallback, and absolute timeout. A marker is not ready until the printable tail after the latest owned marker exactly equals the controlled `PS1`, including when the OSC marker and prompt are split across data callbacks; echoed input or output following an earlier prompt therefore cannot settle the current send. The controlled `PROMPT_COMMAND` re-asserts that `PS1` before every prompt, so an in-shell prompt override cannot degrade later sends to silence readiness. Prompt and silence evidence collected before the provider write, including while pre-write foreground inspection is pending, is discarded at the write boundary. When bash prints the marker before the terminal provider publishes its return to the foreground process group, polling retains the candidate for `handoffGraceMs` past the ordinary silence bound so a coincident handoff can win. An interactive child that inherits `PROMPT_COMMAND` therefore cannot suppress inferred-idle readiness until the absolute timeout. Unknown foreground state is never a positive exact-idle signal. A foreground group's stdin wait that existed before a send is likewise not post-write readiness: the same group must be observed outside that wait before a later wait can settle the send, while a changed foreground group is new evidence. During unpublished startup, a fallback requires observed output; zero-output silence cannot publish an empty session, and timeout rejects the spawn. Cancellation closes the unpublished shell and rejects with the caller's exact abort reason; `TerminalBackendCleanupError` separately preserves a cleanup failure. The caller's signal is forwarded for terminal allocation and readiness initialization; after publication the handle owns its lifetime. Incomplete terminal-control sequences are bounded by `maxReadBytes` and discarded through their terminator after crossing that limit; malformed UTF-8 terminal output uses replacement characters, and a trailing carriage return is carried across callbacks so split CRLF becomes one newline.
+-----
 
-Send cancellation marks queued input as canceled before asking the terminal handle to signal the current foreground process group with a real `SIGINT`; if asynchronous pre-write inspection later settles, it cannot execute that input. If a provider write is already in flight, signalling waits for it to settle; a rejected write sends no signal. The canceled send retains its slot until the write and foreground signalling settle, so a successor cannot receive either late bytes or that signal. A provider write or signal that never settles therefore retains the slot indefinitely; closing the session (`terminal_close`) is the recovery. The absolute deadline remains armed while cancellation waits. A signal failure is a terminal transport failure and rejects the active send. Cancellation never emulates interruption by writing `\x03`, so raw-mode programs remain cancellable. Close rejects new public signals, stops readiness polling, and awaits the handle's provider-owned complete-session termination before settling the active send as `session_exit`.
+<a id="use-this-package"></a>
+## Use this package
 
+Mount this backend when a composition needs persistent shell sessions — state such as cwd, exported variables, functions, or running interactive children must survive across tool calls. It is the default `shell` type: a composition that mounts `@deepseek-ai/dsh-terminal` without it has no sessions to open.
+
+### When to choose it
+
+Choose this backend when work needs an interactive shell or REPL whose state persists: stepping a debugger, exploring in a Python or Node REPL, or returning to a shell after interrupting a foreground command. Choose the one-shot bash tool for bounded commands that should start and end in one call. The bash dialect targets POSIX; the pwsh dialect targets Windows hosts where `dsh-pwsh-local` can resolve a pwsh executable.
+
+### Composition
+
+Mount the terminal service, a subprocess provider, the sandbox and policy services, this backend, and a tool package:
+
+```yaml
+- name: '@deepseek-ai/dsh-terminal'
+- name: '@deepseek-ai/dsh-subprocess-local'
+- name: '@deepseek-ai/dsh-sandbox-local'
+- name: '@deepseek-ai/dsh-sandbox-policy'
+- name: '@deepseek-ai/dsh-terminal-bash'
+- name: '@deepseek-ai/dsh-tool-terminal'
+```
+
+`danger-full-access` starts the shell directly. Confined modes require a same-world `ctx.sandbox` provider: without one, the spawn fails before the shell starts.
+
+### Configuration
+
+| Field | Default | Meaning |
+|---|---|---|
+| `backendType` | `shell` | Backend type registered on `ctx.terminals` |
+| `shellDialect` | `bash` | Interactive shell stack: `bash` or `pwsh` |
+| `shellPath` / `shellArgs` | per dialect | Shell executable and arguments; empty selects the dialect defaults |
+| `maxReadBytes` | `262144` | Maximum UTF-8 bytes returned by one read or settled send |
+| `timeoutMs` | `30000` | Absolute bound on one send wait |
+| `disposeGraceMs` | `3000` | Grace before teardown escalates to `SIGKILL` |
+
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-terminal-bash) is the exhaustive source for every field, including the readiness timings (`pollIntervalMs`, `exactProbeAfterMs`, `idleSilenceMs`, `handoffGraceMs`), terminal size (`rows`, `cols`), and scrollback bounds (`scrollbackLines`, `scrollbackMaxBytes`).
+
+### Shell dialects and readiness
+
+Both dialects expose the same readiness contract, so consumers are dialect-agnostic. A send settles when the shell is ready again: after the controlled prompt is verified, after the foreground process group provably waits on stdin (Linux), after output silence (`inferred_idle`), or at the absolute `timeoutMs`. An `inferred_idle` or `timeout` result does not prove the foreground command exited.
+
+### Sandboxing and safe operation
+
+The shell runs under the effective sandbox boundary for its whole life. Changing the effective sandbox mode is rejected while the owner still has open sessions or a spawn in progress — wait for creation to settle and close the sessions first, so a terminal opened with wider access cannot survive a downgrade. The backend supplies only terminal-specific environment overrides; the subprocess provider applies its shared credential scrub.
+
+### Observable outcomes and failures
+
+An open returns the session id and a bounded startup message. Sends settle with one of the four wait reasons and a session status; `session_exit` means the top-level shell exited. Setup failures reject the open: a missing sandbox provider in a confined mode, a shell that exits during startup, a shell that fails to reach readiness before the startup timeout, or caller cancellation. Cleanup failures reject the close instead of claiming success.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design behind the backend and points at the code that realizes it; the observable behavior is covered in [Use this package](#use-this-package).
+
+### Design concept
+
+One backend serves both dialects: bash and pwsh share the same session machinery — sanitizer, bounded buffers, readiness polling, cancellation, and teardown — and differ only in argv, environment, and prompt installation. Bash receives a private marker through `PS1` plus `PROMPT_COMMAND`. Pwsh writes a prompt function, pins UTF-8 console encoding, and publishes startup only after the backend reports `stdin_read`; echoed setup text cannot publish the shell. A zero-scrollback `@xterm/headless` instance consumes raw PTY data and returns terminal-protocol replies through the same handle, while the line sanitizer remains the only output projection.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Backend registration, sandbox-mode fence, argv and environment assembly, startup sequence |
+| [`src/config.ts`](src/config.ts) | Dialect resolution, defaults, and validation of every timing field |
+| [`src/session.ts`](src/session.ts) | `LocalPtySession`: send lifecycle, readiness polling, scrollback, signals, close |
+| [`src/sanitize.ts`](src/sanitize.ts) | Streaming control-sequence sanitizer and line normalization |
+
+### Readiness model
+
+Three bounded tiers settle a send: exact stdin-wait evidence from the subprocess provider (Linux only), the verified private prompt marker with an exact printable tail, and output silence (`inferred_idle`); an absolute timeout always bounds the wait. Pwsh startup uses one deadline across its complete setup loop, so an `inferred_idle` follow-up does not restart the bound. Evidence collected before the provider write is discarded at the write boundary, a stdin wait that predates the write is not post-write readiness, and unknown foreground state is never a positive exact-idle signal.
+
+### Send cancellation and teardown
+
+Cancellation marks queued input as canceled, then signals the current foreground process group with a real `SIGINT` after any in-flight provider write settles; it never emulates interruption by writing `\x03`. Closing stops readiness polling, terminates the provider-owned process tree, awaits quiescence, and settles the active send as `session_exit`.
+
+### Sandbox-mode fence
+
+A write that would change the effective sandbox mode is rejected before the `sandbox/mode` event commits while that owner has an open session or a spawn in progress. The fence is attached to the exact owner and outlives a provider reload that retains existing sessions.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the shared terminal model to the service, the tools, and the execution-world substrate.
+
+- [Terminal subsystem reference](../../../docs/subsystems/terminal.md) — the service contract this backend implements and the generated `ctx.terminals` surface.
+- [terminal service](../terminal/README.md) — backend registration, owner fencing, and cleanup semantics.
+- [tool-terminal tools](../tool-terminal/README.md) — the model-facing tools that operate sessions.
+- [Subprocess seam](../../../docs/subsystems/subprocess.md) — the terminal primitive that owns PTY allocation and process-tree cleanup.
+- [Persistent PTY Agent Note](../../../.agents/notes/implemented/feature/2026-07-16-persistent-pty-sessions.md) — the capability design and deferred boundaries.
+- [Persistent pwsh Agent Note](../../../.agents/notes/implemented/architecture/2026-08-11-pwsh-persistent-pty.md) — the Windows substrate and the pwsh dialect.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-### Current file policy and indirect consumer
+### Indirect consumer
 
 #### What the model sees
 
-The policy owner contributes capability-neutral `sandbox:policy` context. Through `@deepseek-ai/dsh-tool-terminal` or another PTY consumer, the model may also receive bounded MOTD, send deltas, scrollback pages, readiness reasons, and cleanup errors.
+This package registers no prompt or tool. Through `@deepseek-ai/dsh-tool-terminal` or another PTY consumer, the model may receive bounded startup output, send deltas, scrollback pages, readiness reasons, and cleanup errors.
 
 #### Token effect
 
-The current-policy clause is present while this backend is mounted. Retained PTY scrollback is not placed in model history until a consumer returns bounded output.
+Retained PTY scrollback is not placed in model history until a consumer returns bounded output.
 
 #### KV Cache effect
 
-A standing-policy change appends an owner-rendered superseding runtime-context snapshot after retained history; consumer results remain append-only.
+No direct invalidation; consumer results remain append-only.
+
+### Sandbox policy context
+
+#### What the model sees
+
+While this backend is composed, the `sandbox-policy` owner contributes the capability-neutral `sandbox:policy` runtime-context clause to prompts.
+
+#### Token effect
+
+The policy clause is present on requests while the backend is mounted.
+
+#### KV Cache effect
+
+A standing-policy change appends a superseding runtime-context snapshot after retained history.
 
 ## Known Limitations and Deferred Work
 
-- Line-oriented output is normalized; full-screen alternate-buffer interaction is unsupported.
-- Exact stdin-wait detection depends on the mounted subprocess provider; providers that cannot prove it use prompt-marker and silence/timeout readiness. Windows is such a provider: the shell pid is the pseudo foreground group and there is no exact stdin-wait tier, so a marker-less child settles on the silence bound.
-- The pwsh bootstrap writes through `[Console]::` (the UTF-8 encoding pin and the prompt function), which the Windows ACL sandbox's read-only mode (ConstrainedLanguage) may deny. The shell can still settle through the controlled printable prompt and silence tier, but marker readiness is unavailable and non-ASCII output may follow the host code page.
-- Cleanup guarantees are those of `SubprocessTerminalHandle`; provider-specific gaps belong to that implementation's contract rather than this PTY consumer.
-- Sessions do not survive harness process exit.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define where the backend is a poor fit or needs special operational care. They are current package constraints, not a general shell comparison or a task backlog.
+
+- **Line-oriented output only** — a headless xterm maintains control-sequence state only for terminal-protocol replies. Returned output remains normalized to lines, and full-screen alternate-buffer interaction is unsupported.
+- **Readiness is heuristic without an exact tier** — exact stdin-wait detection depends on the mounted subprocess provider; providers that cannot prove it (macOS, Windows) settle on prompt-marker and silence/timeout readiness.
+- **pwsh bootstrap in a constrained sandbox** — the prompt function and UTF-8 pin write through `[Console]::`, which the Windows ACL sandbox's read-only mode may deny. When that prevents marker readiness, startup rejects at `timeoutMs` instead of publishing an incomplete shell.
+- **Cleanup guarantees belong to the provider** — process-tree teardown is the `SubprocessTerminalHandle` contract, not this backend's.
+- **Sessions do not survive process exit** — a harness restart destroys every session.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published. Readiness, terminal buffers, and process-tree state are private per-session implementation state, and the backend publishes no independent lifecycle stream or snapshot.

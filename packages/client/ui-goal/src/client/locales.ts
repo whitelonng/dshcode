@@ -6,7 +6,7 @@ export const zh = {
   'phase.paused': '已暂停的目标',
   'phase.blocked': '受阻的目标',
   'objective.aria': '目标内容',
-  'commandInput.aria': '命令输入',
+  'commandInput.aria': '指令输入',
   'action.save': '保存目标',
   'action.cancel': '取消编辑',
   'action.pause': '暂停目标',

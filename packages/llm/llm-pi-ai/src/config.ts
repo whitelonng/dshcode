@@ -55,7 +55,7 @@ export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 300_000
 export const DEFAULT_MAX_REQUEST_IMAGE_BYTES = 20 * 1024 * 1024
 /** Default total-pixel budget preserves the complete 2048px normalized attachment. */
 export const DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET = 2048 * 2048
-/** Default raw encoded-byte cap before inline base64 expansion. */
+/** Default raw encoded-byte target before inline base64 expansion; the smallest quality-ladder output is used when no quality fits. */
 export const DEFAULT_REQUEST_IMAGE_MAX_BYTES = 1024 * 1024
 
 /** Context capacity assumed for a model neither configuration nor the catalog sizes. */
@@ -147,7 +147,7 @@ export interface PiAiProviderProfile {
    * to answer instead.
    */
   defaultInput?: PiAiModality[]
-  /** Provider request headers; Harness attribution wins reserved names. */
+  /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
   /** Provider-neutral pi-ai reasoning level. */
   reasoning?: ModelThinkingLevel
@@ -172,7 +172,10 @@ export interface PiAiProviderProfile {
   maxRequestImageBytes?: number
   /** Total-pixel budget for each deterministic inline request version. */
   requestImagePixelBudget?: number
-  /** Raw encoded-byte cap for each deterministic inline request version. */
+  /**
+   * Raw encoded-byte target for each deterministic inline request version;
+   * the smallest quality-ladder output is used when no quality fits.
+   */
   requestImageMaxBytes?: number
   /** Provider-owned model-request retry policy; omission uses normal mode with five retries. */
   retryPolicy?: RetryPolicyConfig
@@ -193,7 +196,7 @@ export interface ResolvedPiAiProviderProfile
   maxRequestImageBytes: number
   /** Positive total-pixel request-version budget after defaulting. */
   requestImagePixelBudget: number
-  /** Positive raw request-version byte cap after defaulting. */
+  /** Positive raw request-version byte target after defaulting; the smallest quality-ladder output is used when no quality fits. */
   requestImageMaxBytes: number
   /** Immutable retry policy captured with this provider route. */
   retryPolicy: ResolvedRetryPolicy
@@ -236,9 +239,10 @@ const thinkingBudgets = z.object({
 })
 
 /**
- * One `chat_template_kwargs` value. The `$var` member is pi-ai's placeholder
- * for a value dispatch fills from the request's thinking state, which is what
- * makes a chat-template gateway configurable without restating its template.
+ * One `chat_template_kwargs` or `chat_template_args` value. The `$var` member
+ * is pi-ai's placeholder for a value dispatch fills from the request's
+ * thinking state, which makes a template-driven gateway configurable without
+ * restating its template.
  */
 const chatTemplateKwarg: z<ChatTemplateKwargValue> = z.union([
   z.string(),
@@ -256,6 +260,7 @@ const compatProfile: z<PiAiCompatProfile> = z.object({
   supportsDeveloperRole: z.boolean(),
   supportsReasoningEffort: z.boolean(),
   supportsUsageInStreaming: z.boolean(),
+  supportsFinishReason: z.boolean(),
   maxTokensField: z.union(MAX_TOKENS_FIELDS),
   requiresToolResultName: z.boolean(),
   requiresAssistantAfterToolResult: z.boolean(),
@@ -263,6 +268,8 @@ const compatProfile: z<PiAiCompatProfile> = z.object({
   requiresReasoningContentOnAssistantMessages: z.boolean(),
   thinkingFormat: z.union(SUPPORTED_THINKING_FORMATS),
   chatTemplateKwargs: z.dict(chatTemplateKwarg),
+  chatTemplateArgs: z.dict(chatTemplateKwarg),
+  supportsThinkingTokenBudget: z.boolean(),
   supportsStrictMode: z.boolean(),
   cacheControlFormat: z.union(CACHE_CONTROL_FORMATS),
   supportsLongCacheRetention: z.boolean(),
@@ -362,7 +369,7 @@ export const Config: z<Config> = z.object({
  * renders and the value an absent section resolves to; wrapping it would break
  * both.
  * @param config - the resolved section to check.
- * @throws Error naming the route and model that cannot be served.
+ * @throws Error naming the route and configuration entry that cannot be served.
  */
 export function assertServiceable(config: Config): void {
   resolveProfiles(config.providers)
@@ -383,6 +390,20 @@ function rejectRemovedFields(provider: string, source: PiAiProviderProfile): voi
       `llm-pi-ai: provider "${provider}" sets maxRetries or maxRetryDelayMs, which were removed;`
       + ' compose agent recovery with dsh-llm-retry',
     )
+  }
+}
+
+/** Reject a profile header that Fetch cannot put on a provider request. */
+function assertValidHeaders(provider: string, headers: Readonly<Record<string, string>> | undefined): void {
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    try {
+      new Headers([[name, value]])
+    } catch {
+      throw new Error(
+        `llm-pi-ai: provider "${provider}" header "${name}" is not valid for Fetch;`
+        + ' use a valid HTTP field name and a single-line value representable as bytes',
+      )
+    }
   }
 }
 
@@ -411,6 +432,7 @@ export function resolveProfiles(
     if (source.displayName !== undefined && source.displayName.length === 0) {
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
+    assertValidHeaders(provider, source.headers)
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0

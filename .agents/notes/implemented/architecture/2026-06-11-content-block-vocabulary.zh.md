@@ -25,4 +25,4 @@ harness 需要一套统一的内部消息语言，供 agent loop（智能体循�
 - 多模态块只有在适配器、UI 和上下文压缩（context compaction）三方协同支持后才会回归；见 [drop-image Agent Note](../../archived/simplification/2026-07-04-drop-image-content-block.md)。
 - 缓存提示与 assistant prefill 在有实际适配器能兑现之前保持缺席；见[无生产者的词汇变体](../../archived/simplification/2026-07-04-prune-producerless-vocabulary-variants.md)与[无端到端可用路径的请求旋钮](../../archived/simplification/2026-07-04-drop-inert-request-knobs.md) Agent Note。
 - 每个适配器都需承担翻译成本；首批真实适配器已验证了流式输出协议，新适配器应继续在适配器本地测试中验证其提供方特有的映射。
-- 跨包边界的 ID 使用品牌类型（`CallId`、agent 与会话共享的 `SessionId`）——零运行时开销的名义类型。
+- 跨包边界的 ID 使用品牌类型（`ToolCallId`、agent 与会话共享的 `SessionId`）——零运行时开销的名义类型。

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveLinuxNodePtyAddon } from './build-exe-for-python-sdk-native-pty.ts'
+import { resolveLinuxNodePtyAddon, resolveWindowsNodePtyAddons } from './build-exe-for-python-sdk-native-pty.ts'
 
 const roots: string[] = []
 
@@ -31,6 +31,24 @@ describe('resolveLinuxNodePtyAddon', () => {
 
     expect(() => resolveLinuxNodePtyAddon(root, 'x64')).toThrow(
       `node-pty addon is absent from both ${join(root, 'build', 'Release', 'pty.node')} and ${join(root, 'prebuilds', 'linux-x64', 'pty.node')}`,
+    )
+  })
+})
+
+describe('resolveWindowsNodePtyAddons', () => {
+  it('requires both ConPTY addons from the x64 prebuild', () => {
+    const root = temporaryPackage()
+    const conpty = createAddon(root, 'prebuilds', 'win32-x64', 'conpty.node')
+    const consoleList = createAddon(root, 'prebuilds', 'win32-x64', 'conpty_console_list.node')
+
+    expect(resolveWindowsNodePtyAddons(root, 'x64')).toEqual([conpty, consoleList])
+  })
+
+  it('names every missing Windows addon', () => {
+    const root = temporaryPackage()
+
+    expect(() => resolveWindowsNodePtyAddons(root, 'x64')).toThrow(
+      `Windows node-pty addons are missing: ${join(root, 'prebuilds', 'win32-x64', 'conpty.node')}, ${join(root, 'prebuilds', 'win32-x64', 'conpty_console_list.node')}`,
     )
   })
 })

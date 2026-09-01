@@ -3,10 +3,10 @@
  * configured loader path and fails loud if that assumption changes.
  */
 
-/** Throwing stand-in for node:module's createRequire (never reached in the browser boot). */
+/** Fail if browser boot reaches Node's module loader. */
 export const createRequire = (): never => {
   throw new Error('node:module is not available in the browser')
 }
 
-/** Erased type peer for the vendored loader's type-only LoadHookContext import. */
+/** Type-only peer for the vendored loader. */
 export type LoadHookContext = never

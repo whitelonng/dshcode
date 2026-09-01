@@ -9,7 +9,7 @@ Cordis 是 DeepSeek Harness 底层以 vendor 方式引入的插件框架。本�
 - **插件是实现 Service 的对象。** 它可以是一个带有可选 `inject` 和 `apply(ctx)` 字段的函数，也可以是一个 `Service` 子类，其生命周期由 Cordis 挂载到当前上下文中。
 - **上下文是服务的容器。** 一个服务占据一个稳定的 `ctx.<key>`（如 `ctx.tools`、`ctx.llm`、`ctx.sessions`）；其他插件通过 key 查找服务，而非导入具体实现。
 - **通过 `inject` 声明服务依赖。** 插件声明所需的服务后，会等待这些服务就绪才启动；加载顺序通过服务依赖表达，而非手动编排启动序列。
-- **类型化事件用于通信。** 服务通过 TypeScript 声明合并注册事件名，然后以 `emit`、`waterfall`（瀑布式事件）、`parallel` 或 `serial` 方式分发，分别对应监听者观察、包装、并行扇出或按序执行。
+- **类型化事件用于通信。** 服务通过 TypeScript 声明合并注册事件名，然后以 `emit`、`waterfall`（瀑布式事件）、`parallel`、`serial` 或 `bail` 方式分发，分别对应监听者观察、包装、并行扇出、按序执行或停在首个 bail 值。
 - **注册是可逆的副作用。** 提示词片段、工具 schema、适配器、提供方和监听器通过 `ctx.effect()` 或 `ctx.on()` 安装，reload 和 teardown 时会按预期撤销。
 
 <a id="dispatch-modes"></a>
@@ -24,6 +24,7 @@ Cordis 是 DeepSeek Harness 底层以 vendor 方式引入的插件框架。本�
 | `waterfall` | 否 | 监听器按注册顺序观察 | 是 |
 | `parallel` | 是 | 所有监听器并行观察事件 | 否 |
 | `serial` | 是 | 监听器按注册顺序观察 | 是 |
+| `bail` | 否 | 监听器按注册顺序观察，直到某个监听器返回 bail 值 | 是 |
 
 分发模式是事件公开约定的一部分。新的 harness 事件通过 `@mode` 标签记录模式，以便生成的目录可以将声明与分发调用点做交叉校验。
 

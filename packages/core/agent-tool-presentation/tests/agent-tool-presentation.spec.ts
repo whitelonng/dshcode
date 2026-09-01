@@ -63,9 +63,9 @@ describe('the tool-presentation row', () => {
     expect(inject).toEqual(['tools'])
   })
 
-  it('gives its own agent Code Mode and leaves the rest native', async () => {
+  it('gives its own agent PTC mode and leaves the rest native', async () => {
     const ctx = await host()
-    const coded = await mount(ctx, { mode: 'code' }, 'coded')
+    const coded = await mount(ctx, { mode: 'ptc' }, 'coded')
     const plain = await mount(ctx, { mode: 'native' }, 'plain')
 
     const codedAssembly = await ctx.systemPrompt.assemble({ scope: coded.agent })
@@ -87,7 +87,7 @@ describe('the tool-presentation row', () => {
 
   it('restores the deployment default when the agent unloads', async () => {
     const ctx = await host()
-    const { agent, row } = await mount(ctx, { mode: 'code' })
+    const { agent, row } = await mount(ctx, { mode: 'ptc' })
 
     await row.dispose()
 
@@ -101,7 +101,7 @@ describe('the tool-presentation row', () => {
   it('waits for a code runtime the deployment does not compose', async () => {
     const ctx = await host({ runtime: false })
 
-    const { agent, row } = await mount(ctx, { mode: 'code' })
+    const { agent, row } = await mount(ctx, { mode: 'ptc' })
 
     // Pending, not applied: `dsh-agent-presets` rejects a mount holding a row
     // that never reached a usable state, naming this id — so the preset fails
@@ -113,7 +113,7 @@ describe('the tool-presentation row', () => {
 
   it('applies once the runtime arrives', async () => {
     const ctx = await host({ runtime: false })
-    const { agent } = await mount(ctx, { mode: 'code' })
+    const { agent } = await mount(ctx, { mode: 'ptc' })
 
     await ctx.plugin(StubRuntime)
 

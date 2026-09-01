@@ -22,7 +22,7 @@ const FILE_REFERENCE_PROMPT = 'When you successfully create or modify files, men
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'ui:deliverable-file-references',
-    order: 190,
+    order: ctx.systemPrompt.getSectionOrder('DELIVERABLE_FILE_REFERENCES'),
     text: FILE_REFERENCE_PROMPT,
   })
 }

@@ -2,8 +2,8 @@
  * The `permissions` projection unit and the `/permission` command: mounting
  * the permission service beside the projection registry serves the whole
  * select (table options + effective current value, `custom` appended exactly
- * while derived) folded from the three knob events over the composition
- * defaults; the command child registers `/permission` whose handler switches
+ * while derived) folded from permission events over the composition defaults;
+ * the command child registers `/permission` whose handler switches
  * through `permission.set` (bare invocation reports, unknown names error);
  * compositions without either registry are unaffected; unmounting the
  * service removes the key (HMR safety).
@@ -60,10 +60,9 @@ describe('permissions projection unit', () => {
       changes.push({ key, value, seq })
     })
     ctx.permissionPresets.set(session, 'danger-full-access')
-    // set() appends preset + sandbox/mode + approval/policy: three knob transitions.
-    expect(changes).toHaveLength(3)
-    expect(changes.at(-1)).toMatchObject({ key: 'permissions', value: { currentValue: 'danger-full-access' } })
-    // Unrelated event: same-reference apply, no notification.
+    const permissionChanges = changes.filter(change => change.key === 'permissions')
+    expect(permissionChanges).toHaveLength(3)
+    expect(permissionChanges.at(-1)).toMatchObject({ key: 'permissions', value: { currentValue: 'danger-full-access' } })
     session.append('turn/start', { turn: 1 })
     expect(changes).toHaveLength(3)
   })
@@ -80,7 +79,8 @@ describe('permissions projection unit', () => {
     const { ctx, session } = await harness({ withPermission: false })
     expect('permissions' in ctx.sessionProjections.snapshot(session).values).toBe(false)
     const fiber = await ctx.plugin(PermissionPresetService, {})
-    expect(ctx.sessionProjections.snapshot(session).values.permissions).toMatchObject({ currentValue: 'workspace-write' })
+    expect(ctx.sessionProjections.snapshot(session).values.permissions)
+      .toMatchObject({ currentValue: 'workspace-write' })
     await fiber.dispose()
     expect('permissions' in ctx.sessionProjections.snapshot(session).values).toBe(false)
   })
@@ -92,14 +92,14 @@ describe('/permission command', () => {
     const { agent, inject } = await agentFor(ctx, session)
     const execution = await ctx.commands.execute(agent, '/permission danger-full-access', [], new AbortController().signal)
     expect(execution?.result).toEqual({ kind: 'success', text: 'preset danger-full-access' })
-    expect(ctx.permissionPresets.current(session.events)).toBe('danger-full-access')
+    expect(ctx.permissionPresets.current(session)).toBe('danger-full-access')
     expect(inject.mock.calls[0]?.[0]).toMatchObject({
       content: [{
         type: 'text',
         text: 'The approval policy changed from "ask" to "never" (changed by the user).',
       }],
     })
-    const run = session.events.find(event => event.type === 'command/run')
+    const run = session.snapshotEvents().find(event => event.type === 'command/run')
     expect(run?.data).toMatchObject({ name: 'permission', args: ' danger-full-access' })
   })
 
@@ -111,13 +111,13 @@ describe('/permission command', () => {
       kind: 'success',
       text: 'current preset workspace-write (available: workspace-write, danger-full-access)',
     })
-    expect(session.events.filter(event => event.type === 'permission/preset')).toHaveLength(1)
+    expect(session.snapshotEvents().filter(event => event.type === 'permission/preset')).toHaveLength(1)
   })
 
   it('rejects an unknown preset without touching the log', async () => {
     const { ctx, session } = await harness()
     const { agent } = await agentFor(ctx, session)
-    const before = session.events.filter(event =>
+    const before = session.snapshotEvents().filter(event =>
       event.type !== 'command/run' && event.type !== 'command/done')
     const execution = await ctx.commands.execute(agent, '/permission yolo', [], new AbortController().signal)
     // The error text carries the same no-self-labelling rule as the success
@@ -127,7 +127,7 @@ describe('/permission command', () => {
       kind: 'error',
       text: 'unknown preset "yolo" (available: workspace-write, danger-full-access)',
     })
-    expect(session.events.filter(event =>
+    expect(session.snapshotEvents().filter(event =>
       event.type !== 'command/run' && event.type !== 'command/done')).toEqual(before)
   })
 })

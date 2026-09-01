@@ -1,0 +1,16 @@
+version: 1
+scenario: session-sandbox-root
+profile: headless
+composition: session-sandbox-root
+recording: authored
+header:
+  class: session-sandbox-root
+  pin: true
+  systemPromptSource: text-turn
+  toolSchemasSource: text-turn
+replay:
+  override: true
+permission: workspace-write
+workspace:
+  final: true
+  parent: home

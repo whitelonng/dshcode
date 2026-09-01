@@ -51,19 +51,19 @@ Agent-bound auxiliary controls are unavailable in addressed child views. In part
 
 ## Host adapter and wire contract
 
-`@deepseek-ai/dsh-host-apiproxy` owns a browser-safe `subagents` domain:
+`@deepseek-ai/dsh-subagent` owns the browser-safe generated `subagent` Remote namespace:
 
 - `subagent.list` takes `parentSessionId`, calls `ctx.subagents.listChildren(parentSessionId, signal)`, returns the complete ordered entries with each healthy row's boolean `hasChildren` snapshot, replaces each healthy row's corpus activity with whether its exact Agent driver is running, and includes whether the exact parent currently resolves from `ctx.agents`.
 - `subagent.history` takes the full mode-bearing address plus ordinary page arguments. It verifies the child and mode against the direct catalog, reads through `ctx.sessionQuery.readSession()`, rechecks direct lineage, and returns the ordinary raw-event, render-intent, pagination, and host-computed session-projection baseline without publishing an Agent.
-- `subagent.prompt` accepts only a `mode: 'continuable'` address and `ContentBlock[]`. It requires the exact live parent, revalidates the catalog address, calls `ctx.subagents.followup(parent, childId, content, { source, signal })`, and returns the accepted `MessageId`.
+- `subagent.prompt` accepts only a `mode: 'continuable'` address and upload-shaped `PromptContentPart[]`; the Host admits and persists image parts into durable references before delivery ([image delivery](../bug-fix/2026-08-27-steer-followup-image-delivery.md)). It requires the exact live parent, revalidates the catalog address, calls `ctx.subagents.followup(parent, childId, content, { source, signal })`, and returns the accepted `MessageId`.
 
-The gateway maps missing parent, missing or diagnostic catalog entries, not-resumable and unauthorized children, request cancellation, and temporarily unavailable continuation admission to typed RPC errors. It does not expose descriptor or provider details. A list/prompt race is normal: the prompt result, not the earlier availability or activity snapshot, is authoritative.
+The gateway maps missing parent, missing or diagnostic catalog entries, not-resumable and unauthorized children, request cancellation, image admission and image-capability refusals (`subagent/attachment-invalid`), and temporarily unavailable continuation admission to typed RPC errors. It does not expose descriptor or provider details. A list/prompt race is normal: the prompt result, not the earlier availability or activity snapshot, is authoritative.
 
 Viewing persisted history creates no mux subscription by itself. When a follow-up materializes a cold child Activation, the existing Host and mux streams publish its lifecycle and events. Reconnect rebuilds the addressed window through `subagent.history`.
 
 The ordinary `session.history` route is likewise observation-only for both ordinary and subagent sessions, but it does not carry the catalog address or grant continuation authority. Every ordinary route that needs an Agent resolves through the shared ownership fence before cold resume; `session.cancel` and `session.updateQueue` apply the same check directly because they intentionally query only attached Agents.
 
-The adapter stays in `dsh-host-apiproxy`; `dsh-host-webserver` remains a carrier. Browser code imports the contract through the existing connection package and never reaches host `ctx`, preserving the [GUI RPC layering](../../implemented/architecture/2026-07-19-gui-layering-and-rpc-protocol.md).
+The adapter stays behind the generated Remote namespace; `dsh-host-webserver` remains a carrier. Browser code imports the contract through the existing connection package and never reaches host `ctx`, preserving the [archived GUI RPC layering decision](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md).
 
 ## Client object layer and presentation
 

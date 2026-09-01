@@ -1,61 +1,112 @@
+---
+description: "The read-before-edit filesystem policy plugin for deployments and maintainers choosing or debugging guarded write and edit behavior."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-fs-observation-policy
 
 English | [中文](README.zh.md)
 
-The **fs-observation-policy plugin**: it records observed presence or absence and adds read-before-edit plus guarded write/edit on top of the `ctx.fs` provider contract ([`@deepseek-ai/dsh-fs`](../fs)) — through the `fs/*` event gate, **NOT** through a method service. This plugin registers **no** `ctx.fsPolicy` service and has no public `read`/`write`/`edit`/`resolve` methods. It is the policy third of the filesystem stack: not a swappable seam, but the policy that does not belong on the `FileSystem` provider base class.
+## Summary
 
-```ts
-import type { Context } from '@deepseek-ai/cordis'
-import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
+`dsh-fs-observation-policy` adds the read-before-edit policy to the `ctx.fs` filesystem contract ([`dsh-fs`](../fs/README.md)): it records which files the calling session has observed, and guards every write and edit with that record — an unseen file can only be created, an observed file can only be replaced at the version last seen, and editing requires a prior read. It participates through the `fs/*` events only, so it registers no service and has no public methods; removing it leaves the bare provider's unconditional mutation behavior instead of breaking the tools. Loading it alongside a backend (`fs-local`, `fs-sandbox`) and the tools (`tool-fs`) makes model file edits fail with a clear remedy until the file has been read. Choose it for deployments that want agents to read before they mutate files.
 
-declare const ctx: Context
+## Table of Contents
 
-// No service to inject — this plugin only registers the three fs/* listeners.
-// Load it alongside a ctx.fs provider (e.g. @deepseek-ai/dsh-fs-local) and the
-// @deepseek-ai/dsh-tool-fs tools; the tools dispatch the fs/* events this plugin
-// decides. Order does not matter for resolution (no inject), but the policy
-// listener should be the first decider registered for the fs/*-intent slots.
-await ctx.plugin(FsPolicy)
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Load this plugin alongside a `ctx.fs` backend and the `dsh-tool-fs` tools when a deployment wants the model to read a file before it can overwrite or edit it. The plugin needs no configuration and injects no service; it only listens for the `fs/*` events the tools dispatch.
+
+### Minimal composition
+
+Load a backend, then this plugin, then the tools. The policy listener should be the first decider registered for the `fs/*`-intent slots.
+
+```yaml
+- name: '@deepseek-ai/dsh-fs-local'
+- name: '@deepseek-ai/dsh-fs-observation-policy'
+- name: '@deepseek-ai/dsh-tool-fs'
 ```
 
-## The four-layer split
+### What changes for the model
 
-| Layer | Package | Role |
-|---|---|---|
-| tool / executor | `@deepseek-ai/dsh-tool-fs` | model-facing schemas + read windowing + text rendering; reads/writes/edits via `ctx.fs`, dispatches the `fs/*` events |
-| policy | `@deepseek-ai/dsh-fs-observation-policy` (this) | observed-state + read-before-edit + version-guarded write/edit, contributed through the `fs/*` event gate (no service) |
-| provider contract | `@deepseek-ai/dsh-fs` | `ctx.fs`: text IO + atomic mutation primitives (optional version guard); owns the `fs/*` event vocabulary |
-| provider | `@deepseek-ai/dsh-fs-local` | local implementation of `ctx.fs` |
+With the policy mounted, `write` creates new files but refuses to overwrite an existing file that the session has not read, `edit` requires a prior read of the target, and a file that changed since it was read fails with `FS_STALE_VERSION`. Absence is recorded too: reading a missing file marks it confirmed absent, so a later `write` may recreate it through the guarded-create flow. A session resumes with no observed state, so it must re-read files before guarded mutations succeed again.
 
-## How the gate participates
+### Failures and recovery
 
-Three `fs/*` events (declared by `@deepseek-ai/dsh-fs`, dispatched by `@deepseek-ai/dsh-tool-fs`):
+An edit without a prior observation fails with code `FS_NOT_OBSERVED` and message `edit requires reading "<path>" first`; editing a target observed absent fails with `FS_NOT_FOUND`. The tools append the recovery instruction — re-read the file, then retry — while preserving the code. Following the remedy on an externally deleted file records absence, so the next guarded write can recreate it without clobbering a concurrent creator.
 
-| Event | This plugin's listener |
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design decisions behind the policy plugin and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The plugin is built on two ideas:
+
+- **Event gate, not method service.** The plugin influences the world only through the `fs/*` events, so it registers no `ctx.fsPolicy` service and has no public methods. Removing it cannot break `dsh-tool-fs` at a service-injection boundary — the tool falls through to the bare provider.
+- **Observed state is a prior-observation record.** A weak owner-to-target map holds three logical states — unseen, confirmed absent, or present at a version. The plugin performs no filesystem I/O of its own; it converts recorded state into the provider's optional guard, and the provider performs the atomic freshness check.
+
+### Source map
+
+| File | Role |
 |---|---|
-| `fs/write-intent` | Unseen or observed absent → `{ kind: 'createIfAbsent' }`; observed present → `{ kind: 'replaceIfVersion', version: vObserved }`. Single-slot decision; does NOT call `next()`. |
-| `fs/edit-intent` | Unseen → `FS_NOT_OBSERVED`; observed absent → `FS_NOT_FOUND`; observed present → `{ version: vObserved }` as the CAS basis. Single-slot decision; does NOT call `next()`. |
-| `fs/observed` | Records `{ kind: 'present', version }` or `{ kind: 'absent' }` for this owner+target. Synchronous, side-effect-only `WeakMap.set`. |
+| [`src/index.ts`](src/index.ts) | The three `fs/*` listeners and the observed-state gate |
+| [`src/types.ts`](src/types.ts) | The opaque event actor shape from which the owner session is derived |
 
-## Observed state is the prior-observation record; freshness is provider CAS
+### Decision flow
 
-Observed state is a weak owner-to-target map with three logical states: unseen, confirmed absent, or present at a version. A successful file read or mutation records presence; a metadata miss from `read` or the `str_replace_editor` `view`, `str_replace`, or `insert` command records absence before returning `FS_NOT_FOUND`. The plugin performs no filesystem I/O: it converts that state into a provider guard. Presence supplies the observed version, while absence lets only a `createIfAbsent` write proceed; edit has no version basis and returns `FS_NOT_FOUND`. A windowed read observes the whole file version, so a later targeted edit is allowed only while that file remains unchanged. State is discarded on plugin disposal and is not persisted across sessions.
+`fs/write-intent` resolves unseen or confirmed absent to `{ kind: 'createIfAbsent' }` and observed present to `{ kind: 'replaceIfVersion', version: vObserved }`. `fs/edit-intent` rejects an unseen target with `FS_NOT_OBSERVED`, a confirmed-absent target with `FS_NOT_FOUND`, and otherwise supplies the observed version as the compare-and-swap basis. `fs/observed` records `{ kind: 'present', version }` or `{ kind: 'absent' }` for the owner and target — a synchronous, side-effect-only `WeakMap.set`, because successful mutations have already committed.
 
-## Single-slot, first-wins
+### Single-slot, first-wins
 
-The `fs/write-intent`/`fs/edit-intent` slots hold exactly one decider — this plugin fully decides and does not call `next()`. The slot is first-wins by registration order; this plugin owning it is the default-deployment convention, not an event-enforced invariant (a decider registered before / `prepend`ed would win instead). This is not a composable authorization chain — layered permission/audit/sandbox interception belongs on `tools/execute`.
+Each intent slot holds exactly one decider: this plugin fully decides and never calls `next()`. The slot is first-wins by registration order — this plugin owning it is the default-deployment convention, not an event-enforced invariant. Layered permission, audit, or sandbox interception belongs on the `tools/execute` waterfall instead.
 
-## No method coupling
+### Lifecycle
 
-Because the plugin influences the world only through events, removing it does not break `@deepseek-ai/dsh-tool-fs` at a service-injection boundary: the tool falls through to the bare `ctx.fs` provider (unconditional write/edit, no observed-state). Loading it back layers the policy on. That graceful add/remove is the whole point of the event gate over a mandatory method service.
+Observed state is dropped on plugin disposal (HMR safety) and is never persisted across sessions — a resumed session starts with no observations.
 
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the policy to the contract, tools, and backends it composes with.
+
+- [Filesystem subsystem](../../../docs/subsystems/filesystem.md) — exhaustive provider contract, policy events, and error taxonomy.
+- [dsh-fs](../fs/README.md) — the `ctx.fs` contract and the `fs/*` event vocabulary.
+- [tool-fs](../tool-fs/README.md) — the model-facing tools that dispatch the `fs/*` events.
+- [fs-local](../fs-local/README.md) — the host-filesystem backend this policy guards.
+- [fs-sandbox](../fs-sandbox/README.md) — the sandbox-enforcing backend this policy composes with.
+- [Fsspec-style seam-split note](../../../.agents/notes/implemented/simplification/2026-06-26-fsspec-style-fs-seam.md) — why the policy is an event plugin rather than a provider method.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Filesystem tool outcome
 
 #### What the model sees
 
-This plugin adds no prompt or schema. It rejects an edit without a prior observation with code `FS_NOT_OBSERVED` and exact message `edit requires reading "<path>" first`; editing a target just observed absent returns `FS_NOT_FOUND`. Guarded mutations whose positive observation is stale propagate the provider-owned `FS_STALE_VERSION` error. [`dsh-tool-fs`](../tool-fs/README.md) owns the model-facing error wrapper, which appends the recovery instruction to `FS_STALE_VERSION` (`— re-read the file, then retry`) and `FS_NOT_OBSERVED` (`— read the file, then retry`) messages while preserving the code. Following the stale remedy on an externally deleted target now records absence: the next guarded write may recreate it with `createIfAbsent`, while the provider atomically preserves any concurrent creator.
+This plugin adds no prompt or schema. It rejects an edit without a prior observation with code `FS_NOT_OBSERVED` and exact message `edit requires reading "<path>" first`; editing a target observed absent returns `FS_NOT_FOUND`. Guarded mutations whose positive observation is stale propagate the provider-owned `FS_STALE_VERSION` error. [`dsh-tool-fs`](../tool-fs/README.md) owns the model-facing error wrapper, which appends the recovery instruction to `FS_STALE_VERSION` (`— re-read the file, then retry`) and `FS_NOT_OBSERVED` (`— read the file, then retry`) messages while preserving the code. Following the stale remedy on an externally deleted target records absence: the next guarded write may recreate it with `createIfAbsent`, while the provider atomically preserves any concurrent creator.
 
 #### Token effect
 
@@ -67,7 +118,24 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
-- **Observed state does not survive a session resume** — persistence of the `WeakMap` record is deferred, so a resumed session must re-read files before guarded writes/edits.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the policy is a poor fit or needs special operational care. They are current package constraints, not a general filesystem comparison or a task backlog.
+
+- **Observed state does not survive a session resume** — persistence of the record is deferred, so a resumed session must re-read files before guarded writes and edits.
 - **Actors without an agent session can never satisfy the policy** — their edits throw `FS_NOT_OBSERVED` and their writes always resolve `createIfAbsent`, so a non-agent caller cannot overwrite an existing file through the gate.
 - **Direct `ctx.fs` reads emit no `fs/observed`** — a file read outside the `read` tool stays unobserved, and a later guarded edit rejects with `FS_NOT_OBSERVED` until the tool reads it.
-- **Authorization is version freshness, not view completeness** — any windowed read authorizes a full-file overwrite of an unchanged file, deliberately weaker than a full-view rule ([seam-split Agent Note](../../../.agents/notes/implemented/simplification/2026-06-26-fsspec-style-fs-seam.md)).
+- **Authorization is version freshness, not view completeness** — any windowed read authorizes a full-file overwrite of an unchanged file, deliberately weaker than a full-view rule ([seam-split note](../../../.agents/notes/implemented/simplification/2026-06-26-fsspec-style-fs-seam.md)).
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published. This package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam.

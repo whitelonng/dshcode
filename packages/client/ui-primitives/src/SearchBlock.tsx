@@ -1,13 +1,3 @@
-// SearchBlock: the search surface for a completed content or path search — a
-// banner (result summary that folds the pre-cap total in when the tool capped
-// the result, plus a copy control), then either grep matches grouped by file
-// (each file a bold
-// path header with its `lineNumber: line` rows, the group collapsible) or a
-// flat glob path list. Both shapes flatten to one list of rows the height cap
-// slices head/tail over, and neither soft-wraps: a long match line or path
-// scrolls horizontally instead of folding. Geometry mirrors CodeBlock and
-// TerminalBlock so a search card reads as one family with them.
-
 import { useCallback, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { headTailCap } from './head-tail-cap.ts'
@@ -39,6 +29,8 @@ export interface SearchFileGroup {
 
 /** Fields both search shapes carry (the render site positions; this component draws). */
 interface SearchBlockCommon {
+  /** Localized chrome supplied by the owning render site. */
+  labels: SearchBlockLabels
   /**
    * Whether the tool capped the inline result: the shape carries only the
    * retained results, not every result the search found. The banner summary
@@ -52,6 +44,19 @@ interface SearchBlockCommon {
   maxLines?: number | undefined
   /** Extra class merged onto the wrapper. */
   className?: string | undefined
+}
+
+/** Localized chrome for {@link SearchBlock}. */
+export interface SearchBlockLabels {
+  pathsSummary: (shown: number, total: number, truncated: boolean) => string
+  matchesSummary: (shown: number, total: number, files: number, truncated: boolean) => string
+  copy: string
+  copied: string
+  noResults: string
+  collapseAria: string
+  expandAria: (hidden: number) => string
+  collapse: string
+  expand: (hidden: number) => string
 }
 
 /** Props for the grouped-matches (`grep`) shape. */
@@ -123,10 +128,9 @@ function shownCount(props: SearchBlockProps): number {
  * @returns the summary text.
  */
 function summaryText(props: SearchBlockProps, shown: number, truncated: boolean, total: number): string {
-  const count = truncated ? `显示 ${shown} / 共 ${total}` : `${shown}`
   return props.kind === 'paths'
-    ? `${count} 个路径`
-    : `${count} 处匹配 · ${props.files.length} 个文件`
+    ? props.labels.pathsSummary(shown, total, truncated)
+    : props.labels.matchesSummary(shown, total, props.files.length, truncated)
 }
 
 /**
@@ -242,12 +246,12 @@ export function SearchBlock(props: SearchBlockProps) {
         <span className={css.summary}>{summaryText(props, shown, truncated, total)}</span>
         {!empty && (
           <button type="button" className={css.copyButton} onClick={onCopy}>
-            {copied ? '复制成功' : '复制'}
+            {copied ? props.labels.copied : props.labels.copy}
           </button>
         )}
       </div>
       {empty
-        ? <div className={css.empty}>无结果</div>
+        ? <div className={css.empty}>{props.labels.noResults}</div>
         : (
           <div className={css.body}>
             {head.map(row => (
@@ -258,10 +262,10 @@ export function SearchBlock(props: SearchBlockProps) {
                 type="button"
                 className={css.expand}
                 aria-expanded={expanded}
-                aria-label={expanded ? '收起结果' : `展开其余 ${hidden} 行结果`}
+                aria-label={expanded ? props.labels.collapseAria : props.labels.expandAria(hidden)}
                 onClick={onToggle}
               >
-                {expanded ? '收起' : `… 其余 ${hidden} 行`}
+                {expanded ? props.labels.collapse : props.labels.expand(hidden)}
               </button>
             )}
             {tailHeader !== undefined && (

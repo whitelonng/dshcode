@@ -9,9 +9,23 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { SESSION_FORMAT_VERSION, Session, SessionId, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from '@deepseek-ai/dsh-session'
-import type { SessionEvent, SessionHeader, SurfaceEventType, SurfaceIntent } from '@deepseek-ai/dsh-session'
-import { CallId, MessageId, createMessage, freezeMessage } from '@deepseek-ai/dsh-llm'
+import {
+  SESSION_FORMAT_VERSION,
+  Session,
+  SessionId,
+  SessionLogOffset,
+  SessionSeq,
+  TOOL_NOT_STARTED,
+  TOOL_OUTCOME_UNKNOWN,
+} from '@deepseek-ai/dsh-session'
+import type {
+  SessionEvent,
+  SessionHeader,
+  SessionLogOffset as SessionLogOffsetType,
+  SurfaceEventType,
+  SurfaceIntent,
+} from '@deepseek-ai/dsh-session'
+import { ToolCallId, MessageId, createMessage, freezeMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionPersistence } from '../src/index.ts'
 
 /** A backend under test plus its teardown. */
@@ -27,20 +41,21 @@ export function meta(id: string, cwd?: string): SessionHeader {
     id: SessionId(id),
     createdAt: 1000,
     ...cwd !== undefined ? { cwd } : {},
+    isSeeded: false,
   }
 }
 
 /** A well-formed one-turn event log (contiguous seqs from 0). */
 export function oneTurnLog(): SessionEvent[] {
   return [
-    { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
-    { type: 'user/message', seq: 1, time: 2, data: freezeMessage({
+    { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
+    { type: 'user/message', seq: SessionSeq(1), time: 2, data: freezeMessage({
       id: MessageId('one-turn-user'),
       role: 'user',
       content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' },
     }), surfaceOp: 'append' },
-    { type: 'step/start', seq: 2, time: 3, data: { turn: 1, step: 1 } },
-    { type: 'assistant/message', seq: 3, time: 4, data: {
+    { type: 'step/start', seq: SessionSeq(2), time: 3, data: { turn: 1, step: 1 } },
+    { type: 'assistant/message', seq: SessionSeq(3), time: 4, data: {
       turn: 1, step: 1,
       message: freezeMessage({
         id: MessageId('one-turn-assistant'),
@@ -52,8 +67,8 @@ export function oneTurnLog(): SessionEvent[] {
         },
       }),
     }, surfaceOp: 'append' },
-    { type: 'step/end', seq: 4, time: 5, data: { turn: 1, step: 1 } },
-    { type: 'turn/end', seq: 5, time: 6, data: { turn: 1, reason: { kind: 'completed' } } },
+    { type: 'step/end', seq: SessionSeq(4), time: 5, data: { turn: 1, step: 1 } },
+    { type: 'turn/end', seq: SessionSeq(5), time: 6, data: { turn: 1, reason: { kind: 'completed' } } },
   ]
 }
 
@@ -129,6 +144,39 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         await expect(persistence.load(m.id)).rejects.toThrow()
         // Deleting an absent session still resolves (idempotent).
         await persistence.delete(m.id)
+    it('requires an explicit inherited cut exactly when the header is seeded', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const seeded = { ...meta('seeded-create'), isSeeded: true }
+        await expect(persistence.create(seeded))
+          .rejects.toThrow('seeded session metadata requires an inherited event count')
+        await expect(persistence.create(meta('unseeded-nonzero'), SessionLogOffset(1)))
+          .rejects.toThrow('unseeded session metadata inherited event count must be 0')
+
+        await persistence.create(seeded, SessionLogOffset(0))
+        await persistence.append(seeded.id, oneTurnLog())
+        await expect(persistence.load(seeded.id)).resolves.toMatchObject({
+          meta: { isSeeded: true },
+          inheritedEventCount: 0,
+        })
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('does not materialize a seeded artifact before its complete inherited prefix', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const seeded = { ...meta('seeded-partial-create'), isSeeded: true }
+        await persistence.create(seeded, SessionLogOffset(2))
+        await expect(persistence.append(seeded.id, oneTurnLog().slice(0, 1)))
+          .rejects.toThrow('cannot materialize before its inherited prefix is complete')
+        expect((await persistence.list()).map(header => header.id)).not.toContain(seeded.id)
+
+        await persistence.append(seeded.id, oneTurnLog())
+        await expect(persistence.load(seeded.id)).resolves.toMatchObject({
+          inheritedEventCount: 2,
+        })
       } finally {
         await dispose()
       }
@@ -143,8 +191,8 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         // A second turn that crashed mid-flight: turn/start + step/start were
         // durably written, but no step/end / turn/end ever arrived.
         await persistence.append(m.id, [
-          { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-          { type: 'step/start', seq: 7, time: 8, data: { turn: 2, step: 1 } },
+          { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+          { type: 'step/start', seq: SessionSeq(7), time: 8, data: { turn: 2, step: 1 } },
         ])
         const beforeRepair = (await persistence.listSnapshots())
           .find(snapshot => snapshot.header.id === m.id)?.revision
@@ -176,8 +224,8 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         // The closed log is durable and continuable: a fresh append continues at
         // the balanced length (seq 10), and a reload round-trips identically.
         await persistence.append(m.id, [
-          { type: 'turn/start', seq: 10, time: 9, data: { turn: 3 } },
-          { type: 'turn/end', seq: 11, time: 10, data: { turn: 3, reason: { kind: 'completed' } } },
+          { type: 'turn/start', seq: SessionSeq(10), time: 9, data: { turn: 3 } },
+          { type: 'turn/end', seq: SessionSeq(11), time: 10, data: { turn: 3, reason: { kind: 'completed' } } },
         ])
         const reloaded = await persistence.load(m.id)
         expect(reloaded.events.map(e => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
@@ -196,14 +244,14 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         // BEFORE the tool/result was written (the loop runs tools after logging
         // the assistant message — a process killed mid-tool lands exactly here).
         await persistence.append(m.id, [
-          { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-          { type: 'step/start', seq: 7, time: 8, data: { turn: 2, step: 1 } },
-          { type: 'assistant/message', seq: 8, time: 9, data: {
+          { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+          { type: 'step/start', seq: SessionSeq(7), time: 8, data: { turn: 2, step: 1 } },
+          { type: 'assistant/message', seq: SessionSeq(8), time: 9, data: {
             turn: 2, step: 1,
             message: createMessage({
               role: 'assistant',
               content: [
-                { type: 'tool-call', id: CallId('call-x'), name: 'bash', arguments: '{}' },
+                { type: 'tool-call', id: ToolCallId('call-x'), name: 'bash', arguments: '{}' },
               ],
               source: {
                 kind: 'model',
@@ -224,8 +272,8 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         const synthetic = loaded.events.find(e => e.type === 'tool/result')
         expect(synthetic?.type === 'tool/result' && synthetic.data).toMatchObject({
           message: {
-            source: { kind: 'tool', callId: CallId('call-x') },
-            content: [{ type: 'tool-result', toolCallId: CallId('call-x'), isError: true }],
+            source: { kind: 'tool', callId: ToolCallId('call-x') },
+            content: [{ type: 'tool-result', toolCallId: ToolCallId('call-x'), isError: true }],
           },
           error: { code: TOOL_NOT_STARTED },
         })
@@ -234,7 +282,7 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         const call = loaded.events.findLast(e => e.type === 'assistant/message')
         const callId = call?.type === 'assistant/message'
           && call.data.message.content.find(b => b.type === 'tool-call')
-        expect(callId && callId.type === 'tool-call' && callId.id).toBe(CallId('call-x'))
+        expect(callId && callId.type === 'tool-call' && callId.id).toBe(ToolCallId('call-x'))
       } finally {
         await dispose()
       }
@@ -246,14 +294,14 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         const m = meta('unknown-tool-outcome')
         await persistence.create(m)
         await persistence.append(m.id, [
-          { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
-          { type: 'step/start', seq: 1, time: 2, data: { turn: 1, step: 1 } },
-          { type: 'assistant/message', seq: 2, time: 3, data: {
+          { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
+          { type: 'step/start', seq: SessionSeq(1), time: 2, data: { turn: 1, step: 1 } },
+          { type: 'assistant/message', seq: SessionSeq(2), time: 3, data: {
             turn: 1, step: 1,
             message: createMessage({
               role: 'assistant',
               content: [
-                { type: 'tool-call', id: CallId('call-risk'), name: 'write', arguments: '{}' },
+                { type: 'tool-call', id: ToolCallId('call-risk'), name: 'write', arguments: '{}' },
               ],
               source: {
                 kind: 'model',
@@ -261,7 +309,7 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
               },
             }),
           }, surfaceOp: 'append' },
-          { type: 'tool/call', seq: 3, time: 4, data: { turn: 1, step: 1, callId: CallId('call-risk'), name: 'write', arguments: '{}' } },
+          { type: 'tool/call', seq: SessionSeq(3), time: 4, data: { turn: 1, step: 1, callId: ToolCallId('call-risk'), name: 'write', arguments: '{}' } },
         ])
 
         const loaded = await persistence.load(m.id)
@@ -277,7 +325,7 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         const resumed = Session.create(m.id, loaded.events, loaded.meta)
         const resumedResult = resumed.deriveMessages().find(message => message.content.some(block => block.type === 'tool-result'))
         expect(resumedResult?.content[0]).toMatchObject({
-          type: 'tool-result', toolCallId: CallId('call-risk'), isError: true,
+          type: 'tool-result', toolCallId: ToolCallId('call-risk'), isError: true,
         })
       } finally {
         await dispose()
@@ -308,7 +356,11 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         await expect(persistence.listSnapshots(controller.signal)).rejects.toBe(reason)
         await expect(persistence.inspect(SessionId('cancelled-inspect'), controller.signal))
           .rejects.toBe(reason)
-        await expect(persistence.readFrom(SessionId('cancelled-read-from'), 0, controller.signal))
+        await expect(persistence.readFrom(
+          SessionId('cancelled-read-from'),
+          SessionLogOffset(0),
+          controller.signal,
+        ))
           .rejects.toBe(reason)
       } finally {
         await dispose()
@@ -323,28 +375,35 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         await persistence.create(m)
         await persistence.append(m.id, log)
 
-        const whole = await persistence.readFrom(m.id, 0)
+        const whole = await persistence.readFrom(m.id, SessionLogOffset(0))
         expect(whole.meta).toMatchObject({ id: m.id, cwd: '/work' })
+        expect(whole.fromSeq).toBe(0)
         expect(whole.events).toEqual(log)
 
-        const suffix = await persistence.readFrom(m.id, 3)
+        const suffix = await persistence.readFrom(m.id, SessionLogOffset(3))
+        expect(suffix.fromSeq).toBe(3)
         expect(suffix.events).toEqual(log.slice(3))
         expect(suffix.events[0]?.seq).toBe(3)
 
         // At/past the stored end: an empty tail, never an error.
-        await expect(persistence.readFrom(m.id, log.length)).resolves.toMatchObject({ events: [] })
-        await expect(persistence.readFrom(m.id, log.length + 100)).resolves.toMatchObject({ events: [] })
+        await expect(persistence.readFrom(m.id, SessionLogOffset(log.length)))
+          .resolves.toMatchObject({ fromSeq: log.length, events: [] })
+        await expect(persistence.readFrom(m.id, SessionLogOffset(log.length + 100)))
+          .resolves.toMatchObject({ fromSeq: log.length + 100, events: [] })
 
         // Non-mutating: an interrupted-turn log is served as stored, no closers.
         await persistence.append(m.id, [
-          { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
+          { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
         ])
-        const tail = await persistence.readFrom(m.id, 6)
+        const tail = await persistence.readFrom(m.id, SessionLogOffset(6))
         expect(tail.events.map(event => event.type)).toEqual(['turn/start'])
 
-        await expect(persistence.readFrom(SessionId('absent-read-from'), 0)).rejects.toThrow('not found')
-        await expect(persistence.readFrom(m.id, -1)).rejects.toThrow('non-negative safe integer')
-        await expect(persistence.readFrom(m.id, 1.5)).rejects.toThrow('non-negative safe integer')
+        await expect(persistence.readFrom(SessionId('absent-read-from'), SessionLogOffset(0)))
+          .rejects.toThrow('not found')
+        await expect(persistence.readFrom(m.id, -1 as SessionLogOffsetType))
+          .rejects.toThrow('non-negative safe integer')
+        await expect(persistence.readFrom(m.id, 1.5 as SessionLogOffsetType))
+          .rejects.toThrow('non-negative safe integer')
       } finally {
         await dispose()
       }
@@ -364,7 +423,7 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
 
         await persistence.append(m.id, [{
           type: 'turn/start',
-          seq: 6,
+          seq: SessionSeq(6),
           time: 7,
           data: { turn: 2 },
         }])
@@ -395,8 +454,8 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         const m = meta('s4')
         await persistence.create(m)
         const gapped: SessionEvent[] = [
-          { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
-          { type: 'step/start', seq: 2, time: 2, data: { turn: 1, step: 1 } }, // gap: missing seq 1
+          { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
+          { type: 'step/start', seq: SessionSeq(2), time: 2, data: { turn: 1, step: 1 } }, // gap: missing seq 1
         ]
         await expect(persistence.append(m.id, gapped)).rejects.toThrow()
       } finally {
@@ -430,7 +489,7 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
           const events = [
             {
               type: 'user/message',
-              seq: 0,
+              seq: SessionSeq(0),
               time: 1,
               data: {
                 id: MessageId(`invalid-json-${i}`),

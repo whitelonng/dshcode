@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentError, AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, SaveImageAttachment } from '@deepseek-ai/dsh-attachment'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ModelSelection } from '@deepseek-ai/dsh-agent'
 import {
   AcpContentError,
   admitAcpPrompt,
@@ -20,7 +20,7 @@ const REF: ImageAttachmentRef = {
 
 interface AdmissionFixture {
   ctx: Context
-  agent: Agent
+  route: ModelSelection | undefined
   saveImages: ReturnType<typeof vi.fn<(inputs: readonly SaveImageAttachment[]) => Promise<readonly ImageAttachmentRef[]>>>
   resolveModelInfo: ReturnType<typeof vi.fn>
 }
@@ -30,7 +30,6 @@ function admissionFixture(options: {
   llm?: boolean
   provider?: string | undefined
   model?: string | undefined
-  header?: { provider?: string; model?: string }
 } = {}): AdmissionFixture {
   const saveImages = vi.fn(async (inputs: readonly SaveImageAttachment[]) => inputs.map((input, index) => ({
     ...REF,
@@ -55,11 +54,8 @@ function admissionFixture(options: {
   } as unknown as Context
   const provider = 'provider' in options ? options.provider : 'mock'
   const model = 'model' in options ? options.model : 'vision'
-  const agent = {
-    options: { provider, model },
-    session: { requestHeader: () => options.header === undefined ? undefined : { config: options.header } },
-  } as unknown as Agent
-  return { ctx, agent, saveImages, resolveModelInfo }
+  const route = provider === undefined || model === undefined ? undefined : { provider, model }
+  return { ctx, route, saveImages, resolveModelInfo }
 }
 
 describe('ACP rich content codec', () => {
@@ -93,19 +89,19 @@ describe('ACP rich content codec', () => {
     const fixture = admissionFixture()
     const signal = new AbortController().signal
 
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, [
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'image', data: 'AQ==', mimeType: 'image/tiff' },
     ] as never, true, signal)).rejects.toThrow(/mimeType/)
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, [
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'image', data: 'not base64', mimeType: 'image/png' },
     ], true, signal)).rejects.toThrow(/canonical base64/)
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, [
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'image', data: 'AB==', mimeType: 'image/png' },
     ], true, signal)).rejects.toThrow(/canonical base64/)
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, [
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'audio', data: 'AQ==', mimeType: 'audio/wav' },
     ], true, signal)).rejects.toThrow(/audio prompt/)
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, [
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'resource', resource: { uri: 'file:///tmp/a', text: 'a' } },
     ], true, signal)).rejects.toThrow(/embedded resource/)
     expect(fixture.saveImages).not.toHaveBeenCalled()
@@ -114,41 +110,41 @@ describe('ACP rich content codec', () => {
   it('requires the advertised capability, store, and exact image-capable route', async () => {
     const prompt = [{ type: 'image', data: 'AQ==', mimeType: 'image/png' }] as const
     const capable = admissionFixture()
-    await expect(admitAcpPrompt(capable.ctx, capable.agent, prompt, false, new AbortController().signal))
+    await expect(admitAcpPrompt(capable.ctx, capable.route, prompt, false, new AbortController().signal))
       .rejects.toThrow(/not advertised/)
 
     const noStore = admissionFixture({ attachments: false })
-    await expect(admitAcpPrompt(noStore.ctx, noStore.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(noStore.ctx, noStore.route, prompt, true, new AbortController().signal))
       .rejects.toThrow(/no attachment store/)
 
     const noProvider = admissionFixture({ provider: undefined })
-    await expect(admitAcpPrompt(noProvider.ctx, noProvider.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(noProvider.ctx, noProvider.route, prompt, true, new AbortController().signal))
       .rejects.toThrow(/route could not be resolved/)
     const noModel = admissionFixture({ model: undefined })
-    await expect(admitAcpPrompt(noModel.ctx, noModel.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(noModel.ctx, noModel.route, prompt, true, new AbortController().signal))
       .rejects.toThrow(/route could not be resolved/)
     const noLlm = admissionFixture({ llm: false })
-    await expect(admitAcpPrompt(noLlm.ctx, noLlm.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(noLlm.ctx, noLlm.route, prompt, true, new AbortController().signal))
       .rejects.toThrow(/route could not be resolved/)
 
     const broken = admissionFixture()
     broken.resolveModelInfo.mockRejectedValueOnce(new Error('catalog down'))
-    const routeFailure = admitAcpPrompt(broken.ctx, broken.agent, prompt, true, new AbortController().signal)
+    const routeFailure = admitAcpPrompt(broken.ctx, broken.route, prompt, true, new AbortController().signal)
     await expect(routeFailure).rejects.toMatchObject({ kind: 'internal' })
     await expect(routeFailure).rejects.toThrow(/route could not be verified/)
     const unknown = admissionFixture()
     unknown.resolveModelInfo.mockResolvedValueOnce({ provider: 'mock', id: 'vision', name: 'vision' })
-    await expect(admitAcpPrompt(unknown.ctx, unknown.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(unknown.ctx, unknown.route, prompt, true, new AbortController().signal))
       .rejects.toThrow(/does not declare image input/)
     const textOnly = admissionFixture()
     textOnly.resolveModelInfo.mockResolvedValueOnce({
       provider: 'mock', id: 'vision', name: 'vision', inputModalities: ['text'],
     })
-    await expect(admitAcpPrompt(textOnly.ctx, textOnly.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(textOnly.ctx, textOnly.route, prompt, true, new AbortController().signal))
       .rejects.toThrow(/does not declare image input/)
 
-    const routed = admissionFixture({ provider: 'fallback', model: 'fallback', header: { provider: 'live', model: 'vision-2' } })
-    await expect(admitAcpPrompt(routed.ctx, routed.agent, prompt, true, new AbortController().signal)).resolves.toHaveLength(1)
+    const routed = admissionFixture({ provider: 'live', model: 'vision-2' })
+    await expect(admitAcpPrompt(routed.ctx, routed.route, prompt, true, new AbortController().signal)).resolves.toHaveLength(1)
     expect(routed.resolveModelInfo).toHaveBeenCalledWith('live', 'vision-2', expect.any(AbortSignal))
   })
 
@@ -156,16 +152,16 @@ describe('ACP rich content codec', () => {
     const fixture = admissionFixture()
     const prompt = [{ type: 'image', data: 'AQ==', mimeType: 'image/png' }] as const
     fixture.saveImages.mockRejectedValueOnce(new AttachmentError('too many', 'TOO_MANY_IMAGES'))
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, prompt, true, new AbortController().signal))
       .rejects.toMatchObject({ kind: 'invalid', message: 'too many' })
     fixture.saveImages.mockRejectedValueOnce(new AttachmentError('disk failed', 'ATTACHMENT_WRITE_FAILED'))
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, prompt, true, new AbortController().signal))
       .rejects.toMatchObject({ kind: 'internal', message: 'unable to persist the prompt image batch' })
     fixture.saveImages.mockRejectedValueOnce(new AttachmentError('corrupt object', 'ATTACHMENT_CORRUPT'))
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, prompt, true, new AbortController().signal))
       .rejects.toMatchObject({ kind: 'internal', message: 'unable to persist the prompt image batch' })
     fixture.saveImages.mockRejectedValueOnce(new Error('unknown store failure'))
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, prompt, true, new AbortController().signal))
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, prompt, true, new AbortController().signal))
       .rejects.toBeInstanceOf(AcpContentError)
   })
 
@@ -174,7 +170,7 @@ describe('ACP rich content codec', () => {
     const before = admissionFixture()
     const beforeController = new AbortController()
     beforeController.abort(new Error('cancel before write'))
-    await expect(admitAcpPrompt(before.ctx, before.agent, prompt, true, beforeController.signal))
+    await expect(admitAcpPrompt(before.ctx, before.route, prompt, true, beforeController.signal))
       .rejects.toThrow('cancel before write')
     expect(before.saveImages).not.toHaveBeenCalled()
 
@@ -184,19 +180,19 @@ describe('ACP rich content codec', () => {
       afterController.abort(new Error('cancel after write'))
       return [REF]
     })
-    await expect(admitAcpPrompt(after.ctx, after.agent, prompt, true, afterController.signal))
+    await expect(admitAcpPrompt(after.ctx, after.route, prompt, true, afterController.signal))
       .rejects.toThrow('cancel after write')
     expect(after.saveImages).toHaveBeenCalledOnce()
   })
 
   it('reconstructs image-only and baseline prompts without empty text blocks', async () => {
     const fixture = admissionFixture()
-    const imageOnly = await admitAcpPrompt(fixture.ctx, fixture.agent, [
+    const imageOnly = await admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'image', data: 'AQ==', mimeType: 'image/png' },
     ], true, new AbortController().signal)
     expect(imageOnly).toHaveLength(1)
     expect(imageOnly[0]?.type).toBe('image')
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, [
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'text', text: 'before' },
       { type: 'resource_link', name: 'Guide', uri: 'https://example.test/guide' },
       { type: 'text', text: 'after' },
@@ -204,7 +200,7 @@ describe('ACP rich content codec', () => {
       type: 'text',
       text: 'before\n[resource_link name="Guide" uri="https://example.test/guide"]\nafter',
     }])
-    await expect(admitAcpPrompt(fixture.ctx, fixture.agent, [
+    await expect(admitAcpPrompt(fixture.ctx, fixture.route, [
       { type: 'text', text: ' \n ' },
     ], true, new AbortController().signal)).rejects.toThrow(/empty prompt/)
   })

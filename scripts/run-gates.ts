@@ -5,7 +5,8 @@
  * dependency graphs, scheduler environment, and process diagnostics.
  * @see ../.agents/notes/implemented/process/2026-07-06-parallel-pre-push-gates.md
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { readdirSync, readFileSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
@@ -36,6 +37,7 @@ export type Mode =
   | 'check-all'
   | 'hygiene'
   | 'doc-sync'
+  | 'doc-quick'
 
 type GateResultStatus = 'passed' | 'failed' | 'skipped'
 type GateState = 'pending' | 'running' | GateResultStatus
@@ -51,6 +53,8 @@ export interface Gate {
   /** Gate ids that must settle, regardless of outcome, before this gate starts. */
   after?: string[]
   env?: Record<string, string | undefined>
+  /** Include this leaf in the build-free documentation aggregate. */
+  quick?: boolean
   /** Keep a failure visible without failing the aggregate. */
   allowFailure?: boolean
   /** Write child output as it arrives instead of buffering it until completion. */
@@ -66,6 +70,10 @@ export interface GateResult {
   exitCode: number | null
   signalCode: NodeJS.Signals | null
   error?: string
+  /** True when the shared abort signal terminated this gate before its outcome
+   * was observed; such a result must not be reported as passed, even if the
+   * child trapped the signal and exited zero. */
+  aborted?: boolean
 }
 
 interface GateOutputChunk {
@@ -83,7 +91,7 @@ interface ConcurrencyDefault {
   source: string
 }
 
-type GateExecutor = (gate: Gate) => Promise<GateResult>
+type GateExecutor = (gate: Gate, signal?: AbortSignal) => Promise<GateResult>
 type ResultObserver = (result: GateResult) => void
 
 const root = resolve(import.meta.dirname, '..')
@@ -100,14 +108,26 @@ async function main(args: string[]): Promise<number> {
   const concurrencySource = concurrencyOverride === undefined || concurrencyOverride === ''
     ? concurrencyDefault.source
     : '$DSH_GATE_CONCURRENCY'
+  const failFast = flagEnabled('DSH_GATE_FAIL_FAST')
   const startedAt = performance.now()
-  console.log(`run-gates: ${mode} running ${gates.length} gate(s) with ${maxConcurrency} worker(s) from ${concurrencySource}.`)
+  console.log(`run-gates: ${mode} running ${gates.length} gate(s) with ${maxConcurrency} worker(s) from ${concurrencySource}${failFast ? ', fail-fast after first blocking failure' : ''}.`)
 
-  const results = await runGates(gates, maxConcurrency, runGate, printResult)
+  const results = await runGates(gates, maxConcurrency, runGate, printResult, cliGateOptions(failFast))
   printSummary(results, performance.now() - startedAt)
   return results.some(result => result.gate.allowFailure !== true && (result.status === 'failed' || result.status === 'skipped'))
     ? 1
     : 0
+}
+
+/**
+ * The options the CLI entrypoint hands to the scheduler. Host signal
+ * forwarding always follows fail-fast: children are detached only then, so
+ * without it the forwarding would have no tree to drain.
+ * @param failFast - whether `DSH_GATE_FAIL_FAST` is enabled.
+ * @returns the scheduler options for the entrypoint.
+ */
+export function cliGateOptions(failFast: boolean): RunGatesOptions {
+  return { failFast, forwardProcessSignals: failFast }
 }
 
 function parseMode(raw: string | undefined): Mode {
@@ -127,10 +147,11 @@ function parseMode(raw: string | undefined): Mode {
     case 'check-all':
     case 'hygiene':
     case 'doc-sync':
+    case 'doc-quick':
       return raw
     default:
       throw new Error(
-        `run-gates: expected mode ci-primary | ci-linux-primary | ci-static | ci-lint-contracts-ready | ci-coverage | ci-snapshot | ci-artifacts | ci-consumers | ci-windows-blocking | ci-windows-complete | ci-windows-observational | node-compat | check-all | hygiene | doc-sync, got ${JSON.stringify(raw)}.`,
+        `run-gates: expected mode ci-primary | ci-linux-primary | ci-static | ci-lint-contracts-ready | ci-coverage | ci-snapshot | ci-artifacts | ci-consumers | ci-windows-blocking | ci-windows-complete | ci-windows-observational | node-compat | check-all | hygiene | doc-sync | doc-quick, got ${JSON.stringify(raw)}.`,
       )
   }
 }
@@ -150,7 +171,10 @@ export function defaultConcurrency(
   if (selectedMode === 'ci-consumers') return { workers: total, source: 'ci-consumers gate count' }
   // Local modes cap workers: several doc gates each build a full ts.Program,
   // so an uncapped default on a large host trades wall clock for memory blowups.
-  const localCap = selectedMode === 'check-all' || selectedMode === 'hygiene' || selectedMode === 'doc-sync'
+  const localCap = selectedMode === 'check-all'
+    || selectedMode === 'hygiene'
+    || selectedMode === 'doc-sync'
+    || selectedMode === 'doc-quick'
   const modeLimit = localCap ? Math.min(4, available) : available
   return {
     workers: Math.min(total, modeLimit),
@@ -241,6 +265,7 @@ export function gatesForMode(selected: Mode): Gate[] {
         pnpmScript('issue-management', 'test:issue-management', { label: 'Issue management policy' }),
         pnpmScript('duplication', 'duplication'),
         snapshotGate(),
+        expectedOutputGate(),
         pnpmScript('build', 'build'),
         pnpmScript('build:web', 'build:web'),
         ...hygieneLeafGates({ artifactNeeds: ['build'] }),
@@ -260,13 +285,17 @@ export function gatesForMode(selected: Mode): Gate[] {
       ]
     case 'doc-sync':
       return docSyncLeafGates()
+    case 'doc-quick':
+      return docQuickLeafGates()
   }
 }
 
 function ciSharedStaticGates(): Gate[] {
   return [
     pnpmScript('runtime-closure', 'verify-runtime-closure', { label: 'runtime closure' }),
+    pnpmScript('application-entrypoints', 'verify-application-entrypoints', { label: 'application entrypoints' }),
     pnpmScript('constraints', 'constraints'),
+    pnpmScript('package-dependencies', 'verify-package-dependencies', { label: 'package dependencies' }),
     pnpmScript('dsh-package-licenses', 'verify-dsh-package-licenses', { label: 'DSH package licenses' }),
     pnpmScript('package-invariants', 'verify-package-invariants', { label: 'package invariants' }),
     pnpmScript('cordis-config', 'verify-cordis-config', { label: 'Cordis config' }),
@@ -274,6 +303,7 @@ function ciSharedStaticGates(): Gate[] {
       label: 'optional dependency imports',
     }),
     pnpmScript('client-packages', 'verify-client-packages', { label: 'client packages' }),
+    pnpmScript('client-ui-i18n', 'verify-client-ui-i18n', { label: 'client UI i18n' }),
     pnpmScript('issue-management', 'test:issue-management', { label: 'Issue management policy' }),
   ]
 }
@@ -293,7 +323,6 @@ function ciPrimaryGates(): Gate[] {
       docTypecheckScript: 'doc-typecheck:contracts-ready',
     }),
     pnpmScript('module-graph', 'verify-module-graph', { label: 'module graph' }),
-    pnpmScript('knip', 'knip'),
     // The prepared typecheck and build both drive Client tsc, while build also
     // repeats the Host contract pass. Wait for all three consumers so build
     // neither races tsbuildinfo nor replaces declarations while they are read.
@@ -392,7 +421,6 @@ function ciStaticGates(options: { ownsBuild: boolean }): Gate[] {
       docsBuildScript: 'docs:build:mpa',
     }),
     pnpmScript('module-graph', 'verify-module-graph', { label: 'module graph' }),
-    pnpmScript('knip', 'knip'),
   ]
 }
 
@@ -412,6 +440,18 @@ function ciArtifactGates(): Gate[] {
 function ciConsumerGates(): Gate[] {
   const builtTree = ['build']
   const validatedBuild = ['built-package-invariants']
+  // The HMR web test starts `dev:web`, which rewrites the shared `lib/` and
+  // `apps/web/dist/` trees. Let every build-artifact reader settle before that
+  // writer starts; `after` preserves the web diagnostic even if a reader fails.
+  const buildArtifactReaders = [
+    'publint',
+    'lint-and-duplication',
+    'snapshot',
+    'expected-output',
+    'doc-typecheck',
+    'node-next-types',
+    'built-bin-smoke',
+  ]
   return [
     ciBuildGate(),
     pnpmScript('node-compat', 'check:node-compat', {
@@ -425,7 +465,8 @@ function ciConsumerGates(): Gate[] {
       needs: validatedBuild,
     }),
     snapshotGate(validatedBuild),
-    webSnapshotGate(validatedBuild),
+    expectedOutputGate(validatedBuild),
+    webSnapshotGate(validatedBuild, buildArtifactReaders),
     pnpmScript('doc-typecheck', 'doc-typecheck:contracts-ready', {
       needs: validatedBuild,
       env: { DSH_DOC_TYPECHECK_USE_BUILD_OUTPUT: '1' },
@@ -438,7 +479,8 @@ function ciConsumerGates(): Gate[] {
   ]
 }
 
-function webSnapshotGate(needs: string[]): Gate {
+function webSnapshotGate(needs: string[], after?: string[]): Gate {
+  const order = after === undefined ? { needs } : { needs, after }
   const workerRaw = process.env.DSH_WEB_SNAPSHOT_WORKERS
   if (workerRaw !== undefined && workerRaw !== '') {
     const workers = Number.parseInt(workerRaw, 10)
@@ -449,7 +491,7 @@ function webSnapshotGate(needs: string[]): Gate {
       label: 'web browser snapshot',
       displayCommand: `DSH_SNAPSHOT=replay DSH_WEB_SNAPSHOT_WORKERS=${workers} pnpm run test:web:ci`,
       env: { DSH_SNAPSHOT: 'replay' },
-      needs,
+      ...order,
       streamOutput: true,
     })
   }
@@ -457,7 +499,7 @@ function webSnapshotGate(needs: string[]): Gate {
     label: 'web browser snapshot',
     displayCommand: 'DSH_SNAPSHOT=replay pnpm run test:web:built',
     env: { DSH_SNAPSHOT: 'replay' },
-    needs,
+    ...order,
   })
 }
 
@@ -469,9 +511,10 @@ function ciWindowsBlockingGates(): Gate[] {
 }
 
 function ciWindowsCompleteGates(): Gate[] {
-  const coverage = coverageGates().map(gate => gate.id === 'coverage-exempt-heavy'
-    ? { ...gate, needs: [...new Set(['build', ...(gate.needs ?? [])])] }
-    : gate)
+  const coverage = coverageGates().map(gate => ({
+    ...gate,
+    needs: [...new Set(['build', ...(gate.needs ?? [])])],
+  }))
   const coverageAfter = coverage.map(gate => gate.id)
   const observational = ciWindowsObservationalGates()
     // The required production site replaces the observational MPA build; both
@@ -480,7 +523,10 @@ function ciWindowsCompleteGates(): Gate[] {
     .map(gate => ({
       ...gate,
       allowFailure: true,
-      after: [...new Set([...coverageAfter, ...(gate.after ?? [])])],
+      after: [...new Set([
+        ...coverageAfter,
+        ...(gate.after ?? []).map(id => id === 'docs-site-build' ? 'windows-site' : id),
+      ])],
     }))
   return [
     ciBuildGate(),
@@ -491,7 +537,7 @@ function ciWindowsCompleteGates(): Gate[] {
 }
 
 function ciWindowsObservationalGates(): Gate[] {
-  return [
+  const predecessors = [
     ...ciStaticGates({ ownsBuild: true }),
     // Linux owns required lint and snapshots; Windows omits those duplicates.
     pnpmScript('duplication', 'duplication'),
@@ -501,7 +547,15 @@ function ciWindowsObservationalGates(): Gate[] {
       needs: ['build'],
     }),
     builtPackageInvariantsGate(['build']),
-    builtBinSmokeGate(),
+  ]
+  return [
+    ...predecessors,
+    {
+      ...builtBinSmokeGate(),
+      // This smoke starts real application children with bounded startup
+      // deadlines. Let other Windows processes settle before measuring startup.
+      after: predecessors.map(gate => gate.id),
+    },
   ]
 }
 
@@ -533,7 +587,7 @@ function lintGate(options: { needs?: string[] } = {}): Gate {
 // small share. A budget of 1 gives each gate 1 worker; lanes that need a strict
 // total of one (the serial reference jobs) also set DSH_GATE_CONCURRENCY=1,
 // which keeps the gates from overlapping at all.
-// DSH_COVERAGE_TEST_TIMEOUT_MS raises Vitest's per-test and expect.poll
+// DSH_COVERAGE_TEST_TIMEOUT_MS raises Vitest's per-test, expect.poll, and hook
 // defaults together for instrumented lanes whose scheduling overhead exceeds
 // those defaults. Explicit fixture timeouts remain authoritative.
 function coverageWorkerArgs(): { instrumented: string[]; exempt: string[] } {
@@ -583,11 +637,19 @@ function coverageGates(): Gate[] {
   ]
 }
 
-// Example and package snapshots boot their bins in `lib` mode (built artifacts under plain Node,
-// plugins via real exports); script snapshots execute their real source entry path.
-// Callers wait either on `build` or on a validation gate that transitively owns that build.
+// Recorded-session adapters boot process scenarios in `lib` mode. Callers wait
+// either on `build` or on a validation gate that transitively owns that build.
 function snapshotGate(needs: string[] = ['build']): Gate {
   return pnpmScript('snapshot', 'test:snapshot', {
+    env: { DSH_EXAMPLE_MODE: 'lib' },
+    needs,
+  })
+}
+
+// Owner-local process expectations consume built package exports without entering
+// the recorded-session corpus or the credentialed provider lane.
+function expectedOutputGate(needs: string[] = ['build']): Gate {
+  return pnpmScript('expected-output', 'test:expected', {
     env: { DSH_EXAMPLE_MODE: 'lib' },
     needs,
   })
@@ -621,9 +683,10 @@ function hygieneLeafGates(options: { artifactNeeds?: string[] } = {}): Gate[] {
   const artifactOptions = options.artifactNeeds === undefined ? {} : { needs: options.artifactNeeds }
   return [
     pnpmScript('rescope-vendor', 'rescope-vendor:check', { label: 'vendor rescope' }),
-    pnpmScript('knip', 'knip'),
     pnpmScript('publint', 'publint', artifactOptions),
     pnpmScript('constraints', 'constraints'),
+    pnpmScript('package-dependencies', 'verify-package-dependencies', { label: 'package dependencies' }),
+    pnpmScript('application-entrypoints', 'verify-application-entrypoints', { label: 'application entrypoints' }),
     pnpmScript('dsh-package-licenses', 'verify-dsh-package-licenses', { label: 'DSH package licenses' }),
     pnpmScript('package-invariants', 'verify-package-invariants', { label: 'package invariants' }),
     builtPackageInvariantsGate(options.artifactNeeds),
@@ -635,6 +698,7 @@ function hygieneLeafGates(options: { artifactNeeds?: string[] } = {}): Gate[] {
       label: 'optional dependency imports',
     }),
     pnpmScript('client-packages', 'verify-client-packages', { label: 'client packages' }),
+    pnpmScript('client-ui-i18n', 'verify-client-ui-i18n', { label: 'client UI i18n' }),
   ]
 }
 
@@ -655,34 +719,50 @@ function docSyncLeafGates(options: {
       : [pnpmScript('doc-typecheck', options.docTypecheckScript ?? 'doc-typecheck', docTypecheckOptions)],
     pnpmScript('docs-site-build', options.docsBuildScript ?? 'docs:build', { label: 'documentation build' }),
     pnpmScript('doc-graphs', 'verify-doc-graphs', { label: 'doc graphs' }),
-    pnpmScript('markdown-links', 'verify-md-links', { label: 'markdown links' }),
-    pnpmScript('type-equivalence', 'verify-type-equiv', { label: 'type equivalence' }),
+    pnpmScript('markdown-links', 'verify-md-links', { label: 'markdown links', quick: true }),
+    pnpmScript('type-equivalence', 'verify-type-equiv', { label: 'type equivalence', quick: true }),
     pnpmScript('cordis-catalog', 'verify-cordis-catalog', { label: 'cordis catalog' }),
+    pnpmScript('cordis-inspect-catalog', 'verify-cordis-inspect-catalog', { label: 'Cordis inspect catalog' }),
     pnpmScript('mermaid', 'verify-mermaid'),
     pnpmScript('scoped-events', 'verify-scoped-events', { label: 'scoped events' }),
-    pnpmScript('translation-pairing', 'verify-translation-pairing', { label: 'translation pairing' }),
-    pnpmScript('markdown-wrap', 'verify-md-wrap', { label: 'markdown wrap' }),
+    pnpmScript('translation-pairing', 'verify-translation-pairing', { label: 'translation pairing', quick: true }),
+    pnpmScript('markdown-wrap', 'verify-md-wrap', { label: 'markdown wrap', quick: true }),
     pnpmScript('client-catalog', 'verify-client-catalog', { label: 'client catalog' }),
     pnpmScript('export-jsdoc', 'verify-export-jsdoc', { label: 'export jsdoc' }),
     pnpmScript('tool-catalog', 'verify-tool-catalog', { label: 'tool catalog' }),
     pnpmScript('config-catalog', 'verify-config-catalog', { label: 'config catalog' }),
     pnpmScript('persistence-catalog', 'verify-persistence-catalog', { label: 'persistence catalog' }),
-    pnpmScript('public-repository-links', 'verify-public-repository-links', { label: 'public repository links' }),
-    pnpmScript('doc-refs', 'verify-doc-refs', { label: 'doc refs' }),
+    pnpmScript('public-repository-links', 'verify-public-repository-links', { label: 'public repository links', quick: true }),
+    pnpmScript('doc-refs', 'verify-doc-refs', { label: 'doc refs', quick: true }),
+    pnpmScript('subsystem-pages', 'verify-subsystem-pages', { label: 'subsystem pages' }),
     pnpmScript('package-paths', 'verify-package-paths', { label: 'package paths' }),
+    pnpmScript('tsconfig-paths', 'verify-tsconfig-paths', { label: 'tsconfig paths' }),
     pnpmScript('config-source-ownership', 'verify-config-source-ownership', { label: 'config source ownership' }),
-    pnpmScript('package-readme-model-experience', 'verify-package-readme-model-experience', { label: 'package README model experience' }),
-    pnpmScript('agent-note-classification', 'verify-agent-note-classification', { label: 'agent note classification' }),
-    pnpmScript('agent-note-format', 'verify-agent-note-format', { label: 'agent note format' }),
-    pnpmScript('archived-agent-notes', 'verify-archived-agent-notes', { label: 'archived agent notes' }),
-    pnpmScript('skill-invocation-metadata', 'verify-skill-invocation-metadata', { label: 'skill invocation metadata' }),
-    pnpmScript('translation-prompt', 'verify-translation-prompt', { label: 'translation prompt' }),
-    pnpmScript('doc-budgets', 'verify-doc-budgets', { label: 'doc budgets' }),
+    pnpmScript('package-readme-model-experience', 'verify-package-readme-model-experience', { label: 'package README model experience', quick: true }),
+    pnpmScript('agent-note-classification', 'verify-agent-note-classification', { label: 'agent note classification', quick: true }),
+    pnpmScript('agent-note-format', 'verify-agent-note-format', { label: 'agent note format', quick: true }),
+    pnpmScript('archived-agent-notes', 'verify-archived-agent-notes', { label: 'archived agent notes', quick: true }),
+    pnpmScript('skill-invocation-metadata', 'verify-skill-invocation-metadata', { label: 'skill invocation metadata', quick: true }),
+    pnpmScript('translation-prompt', 'verify-translation-prompt', { label: 'translation prompt', quick: true }),
+    pnpmScript('doc-budgets', 'verify-doc-budgets', { label: 'doc budgets', quick: true }),
+    pnpmExec('doc-standard-tests', ['vitest', 'run', 'scripts/doc-standard.spec.ts'], {
+      label: 'documentation standard tests',
+      quick: true,
+    }),
     pnpmExec('docs-site-projection', ['vitest', 'run', 'scripts/project-doc-site.spec.ts', 'scripts/verify-doc-site-fragments.spec.ts'], {
       label: 'documentation site checks',
     }),
-    pnpmScript('package-readme-limitations', 'verify-package-readme-limitations', { label: 'package README limitations' }),
+    pnpmScript('package-readme-limitations', 'verify-package-readme-limitations', { label: 'package README limitations', quick: true }),
   ]
+}
+
+/**
+ * The quick comprehensive documentation-standard aggregate for `test:docs`.
+ * It covers the prose, pairing, README, budget, and Agent Note gates
+ * without builds, generator regeneration, or the VitePress site build.
+ */
+function docQuickLeafGates(): Gate[] {
+  return docSyncLeafGates({ includeDocTypecheck: false }).filter(gate => gate.quick === true)
 }
 
 function builtBinSmokeGate(needs: string[] = ['build']): Gate {
@@ -691,14 +771,14 @@ function builtBinSmokeGate(needs: string[] = ['build']): Gate {
     'run',
     '--config',
     'vitest.e2e.config.ts',
-    'examples/headless-agent/tests/keyless-smoke.e2e.ts',
+    'apps/cli/tests/profiles/headless/tests/keyless-smoke.e2e.ts',
     'apps/cli/tests/built-bin.e2e.ts',
-    'packages/examples/acp-demo/tests/built-bin.e2e.ts',
     'packages/host/directory-picker-native/tests/built-worker.e2e.ts',
     'packages/sdk/server/tests/built-scope-carrier.e2e.ts',
     'packages/subagent/subagent-codex/tests/loader-composition.e2e.ts',
     'packages/subagent/subagent-claude-code/tests/loader-composition.e2e.ts',
     'packages/api/remotes/tests/built-lib.e2e.ts',
+    'packages/experimental/agent-team/tests/built-lib.e2e.ts',
     // Built execution consumers: the only automated proof that package-name
     // imports reach their lib/ entrypoints under plain Node. The e2e lane runs
     // unbuilt, so these files self-skip there.
@@ -774,11 +854,29 @@ function findDependencyCycle(gates: readonly Gate[]): string[] | undefined {
 }
 
 /**
+ * Scheduling options for one aggregate.
+ */
+export interface RunGatesOptions {
+  /** Stop the aggregate at the first blocking gate failure. */
+  failFast?: boolean
+  /** Forward host SIGINT/SIGTERM to the abort path so detached gate trees are
+   * terminated when the run itself is interrupted or the runner cancels it.
+   * Tree termination additionally requires failFast, because only then is the
+   * abort signal passed to the executor and children detached. */
+  forwardProcessSignals?: boolean
+}
+
+/**
  * Validate and run one aggregate before the injected executor can start a child.
  * @param gates - complete aggregate to execute.
  * @param maxActive - maximum concurrent child count.
- * @param execute - child-process executor.
+ * @param execute - child-process executor; receives the abort signal only when
+ * fail-fast is enabled, so ordinary runs keep their children in the host
+ * process group.
  * @param observe - result observer invoked when each gate settles.
+ * @param options - scheduling options; fail-fast aborts the aggregate at the
+ * first blocking gate failure by killing running children and skipping every
+ * not-yet-run gate.
  * @returns results in aggregate order.
  */
 export async function runGates(
@@ -786,54 +884,105 @@ export async function runGates(
   maxActive: number,
   execute: GateExecutor,
   observe: ResultObserver = () => {},
+  options: RunGatesOptions = {},
 ): Promise<GateResult[]> {
   validateGateGraph(gates)
   if (!Number.isSafeInteger(maxActive) || maxActive < 1) {
     throw new Error(`run-gates: max concurrency must be a positive integer, got ${JSON.stringify(maxActive)}.`)
   }
+  if (options.forwardProcessSignals === true && options.failFast !== true) {
+    throw new Error('run-gates: forwardProcessSignals requires failFast, otherwise no child is detached or killed.')
+  }
   const states = new Map<string, GateState>(gates.map(gate => [gate.id, 'pending']))
   const results = new Map<string, GateResult>()
   const running: RunningGate[] = []
-
-  for (;;) {
-    let madeProgress = false
-    while (running.length < maxActive) {
-      const ready = gates.find(gate => states.get(gate.id) === 'pending' && predecessorsReady(gate, states))
-      if (ready === undefined) break
-      states.set(ready.id, 'running')
-      running.push({ gate: ready, promise: execute(ready) })
-      console.log(`run-gates: start ${ready.label}`)
-      madeProgress = true
+  const abort = new AbortController()
+  let abortCause: string | undefined
+  // Host interruption (terminal Ctrl+C, runner cancellation) drains through
+  // the same abort path as a gate failure, so detached trees are killed and
+  // never orphaned. Handlers are removed before returning.
+  const hostSignals = options.forwardProcessSignals === true ? ['SIGINT', 'SIGTERM'] as const : []
+  const hostHandlers = hostSignals.map((name) => {
+    const handler = () => {
+      abortCause = abortCause ?? 'host interruption'
+      abort.abort()
     }
+    process.on(name, handler)
+    return { name, handler }
+  })
+  const failFastSignal = options.failFast === true ? abort.signal : undefined
 
-    if (running.length === 0) {
-      const pending = gates.filter(gate => states.get(gate.id) === 'pending')
-      if (pending.length === 0) break
-      const gate = pending.find(item => (item.needs ?? []).some(id => gateFailed(states.get(id))))
-      if (gate === undefined) throw new Error('run-gates: validated graph stalled without a failed dependency.')
-      const failedDeps = (gate.needs ?? []).filter(id => gateFailed(states.get(id)))
-      const result: GateResult = {
-        gate,
-        status: 'skipped',
-        durationMs: 0,
-        output: [],
-        exitCode: null,
-        signalCode: null,
-        error: `dependency failed or skipped: ${failedDeps.join(', ')}`,
+  try {
+    for (;;) {
+      let madeProgress = false
+      if (abortCause === undefined) {
+        while (running.length < maxActive) {
+          const ready = gates.find(gate => states.get(gate.id) === 'pending' && predecessorsReady(gate, states))
+          if (ready === undefined) break
+          states.set(ready.id, 'running')
+          running.push({ gate: ready, promise: execute(ready, failFastSignal) })
+          console.log(`run-gates: start ${ready.label}`)
+          madeProgress = true
+        }
       }
-      states.set(gate.id, 'skipped')
-      results.set(gate.id, result)
-      observe(result)
-      continue
-    }
 
-    if (!madeProgress) {
-      const settled = await Promise.race(running.map(async item => ({ item, result: await item.promise })))
-      running.splice(running.indexOf(settled.item), 1)
-      states.set(settled.item.gate.id, settled.result.status)
-      results.set(settled.item.gate.id, settled.result)
-      observe(settled.result)
+      if (running.length === 0) {
+        if (abortCause !== undefined) {
+          for (const gate of gates) {
+            if (states.get(gate.id) !== 'pending') continue
+            const skipped = skippedByFailFast(gate, abortCause)
+            states.set(gate.id, 'skipped')
+            results.set(gate.id, skipped)
+            observe(skipped)
+          }
+          break
+        }
+        const pending = gates.filter(gate => states.get(gate.id) === 'pending')
+        if (pending.length === 0) break
+        const gate = pending.find(item => (item.needs ?? []).some(id => gateFailed(states.get(id))))
+        if (gate === undefined) throw new Error('run-gates: validated graph stalled without a failed dependency.')
+        const failedDeps = (gate.needs ?? []).filter(id => gateFailed(states.get(id)))
+        const result: GateResult = {
+          gate,
+          status: 'skipped',
+          durationMs: 0,
+          output: [],
+          exitCode: null,
+          signalCode: null,
+          error: `dependency failed or skipped: ${failedDeps.join(', ')}`,
+        }
+        states.set(gate.id, 'skipped')
+        results.set(gate.id, result)
+        observe(result)
+        continue
+      }
+
+      if (!madeProgress) {
+        const settled = await Promise.race(running.map(async item => ({ item, result: await item.promise })))
+        running.splice(running.indexOf(settled.item), 1)
+        const observed = abortCause === undefined || settled.result.aborted !== true
+          ? settled.result
+          : skippedByFailFast(settled.item.gate, abortCause)
+        states.set(settled.item.gate.id, observed.status)
+        results.set(settled.item.gate.id, observed)
+        observe(observed)
+        if (abortCause === undefined && options.failFast === true
+          && observed.status === 'failed' && settled.item.gate.allowFailure !== true) {
+          abortCause = `${observed.gate.label} failed`
+          abort.abort()
+          console.error(`run-gates: fail-fast aborting: ${abortCause}.`)
+          for (const gate of gates) {
+            if (states.get(gate.id) !== 'pending') continue
+            const skipped = skippedByFailFast(gate, abortCause)
+            states.set(gate.id, 'skipped')
+            results.set(gate.id, skipped)
+            observe(skipped)
+          }
+        }
+      }
     }
+  } finally {
+    for (const { name, handler } of hostHandlers) process.removeListener(name, handler)
   }
 
   return gates.map((gate) => {
@@ -841,6 +990,31 @@ export async function runGates(
     if (result === undefined) throw new Error(`run-gates: missing result for ${gate.id}.`)
     return result
   })
+}
+
+/**
+ * The result of a gate that produced no evidence because fail-fast aborted.
+ * A gate whose process settled before the abort took effect keeps its real
+ * result instead: it did produce evidence, and the summary must say so. Any
+ * result settling after the abort — including a genuine independent failure
+ * in the race window, and a child that trapped the signal and exited zero —
+ * is recorded skipped with its partial output discarded, because on Windows a
+ * killed process is indistinguishable from a failed one by exit code alone.
+ * @param gate - the gate that produced no evidence.
+ * @param cause - the full clause naming what aborted the aggregate, e.g.
+ * `typecheck failed` or `host interruption`.
+ * @returns the skipped record with the fail-fast error.
+ */
+function skippedByFailFast(gate: Gate, cause: string): GateResult {
+  return {
+    gate,
+    status: 'skipped',
+    durationMs: 0,
+    output: [],
+    exitCode: null,
+    signalCode: null,
+    error: `aborted by fail-fast: ${cause}`,
+  }
 }
 
 function predecessorsReady(gate: Gate, states: Map<string, GateState>): boolean {
@@ -859,12 +1033,17 @@ function gateFailed(state: GateState | undefined): boolean {
 /**
  * Execute one gate through the real shell-free child-process boundary.
  * @param gate - command and scheduler environment to execute.
+ * @param signal - abort signal that terminates the whole gate process tree when
+ * the aggregate fails fast; an already-aborted signal terminates it
+ * immediately. A provided signal spawns the child detached so POSIX can signal
+ * its process group and Windows can reach its tree through taskkill.
  * @returns the complete process outcome.
  */
-export async function runGate(gate: Gate): Promise<GateResult> {
+export async function runGate(gate: Gate, signal?: AbortSignal): Promise<GateResult> {
   const started = performance.now()
   const output: GateOutputChunk[] = []
   let spawnError: string | undefined
+  let aborted = false
 
   const outcome = await new Promise<{
     exitCode: number | null
@@ -874,6 +1053,7 @@ export async function runGate(gate: Gate): Promise<GateResult> {
       cwd: root,
       env: { ...process.env, ...gate.env },
       stdio: ['pipe', 'pipe', 'pipe'],
+      detached: signal !== undefined && process.platform !== 'win32',
     })
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
@@ -885,11 +1065,187 @@ export async function runGate(gate: Gate): Promise<GateResult> {
       if (gate.streamOutput === true) process.stderr.write(chunk)
       else output.push({ stream: 'stderr', text: chunk })
     })
+    // Deliver one signal to the entire gate tree: the negative pid targets the
+    // POSIX process group the detached child leads; Windows has no groups, so
+    // taskkill walks the tree rooted at the child and force-terminates (a
+    // taskkill without `/F` does not terminate console processes, which is
+    // what gate commands are). Outcomes are deliberately unchecked because
+    // delivery races tree exit, and a missing taskkill binary is as tolerable
+    // as ESRCH. Mirrors the subprocess package's teardown contract
+    // (packages/subprocess/subprocess-local/src/spawn.ts).
+    const treeKill = (signalToSend: 'SIGTERM' | 'SIGKILL') => {
+      const pid = child.pid
+      if (pid === undefined) return
+      if (process.platform === 'win32') {
+        for (const args of taskkillArgs(pid, descendants)) {
+          spawnSync('taskkill', args, { stdio: 'ignore' })
+        }
+        return
+      }
+      try {
+        process.kill(-pid, signalToSend)
+      } catch {
+        // The group is gone; the direct child may still be alive alone.
+        child.kill(signalToSend)
+      }
+      // The captured list stays valid after the group kill reparents the
+      // detached descendants of a nested run-gates (the `check:node-compat`
+      // and `check:ci:lint:contracts-ready` gates in ci-consumers): pids do
+      // not change on reparenting, so the escalation reaches leaves that
+      // ignored SIGTERM without re-enumerating.
+      for (const descendantPid of descendants) {
+        try {
+          process.kill(descendantPid, signalToSend)
+        } catch {
+          // The descendant exited between the enumeration and the signal.
+        }
+      }
+    }
+    let escalation: ReturnType<typeof setTimeout> | undefined
+    let terminatedAt = 0
+    // Captured once at terminate and re-signalled on escalation: the group
+    // kill reaps the direct child, after which its detached descendants are
+    // reparented and unreachable by parent id, so the escalation cannot
+    // re-enumerate them.
+    let descendants: number[] = []
+    let pipeDrain: ReturnType<typeof setTimeout> | undefined
+    const terminate = () => {
+      aborted = true
+      const pid = child.pid
+      // Merge while the child is still alive: re-enumerating alone would drop
+      // a descendant that an exited intermediate reparented out of the parent
+      // chain, and replacing the list entirely would lose the sampler's
+      // last-known entries when the child already exited. Union preserves both.
+      // The sampler runs on every platform (including Windows, where an
+      // exited intermediate's table record vanishes and a fresh enumeration
+      // cannot cross the gap), so the cache is the source of truth once the
+      // child is gone.
+      if (pid !== undefined && child.exitCode === null && child.signalCode === null) {
+        descendants = [...new Set([...descendants, ...descendantPids(pid)])]
+      }
+      treeKill('SIGTERM')
+      if (escalation === undefined) {
+        terminatedAt = Date.now()
+        // Force-kill at the deadline regardless of the direct child's exit
+        // state: when the wrapper dies but a grandchild ignores SIGTERM and
+        // still holds the stdio pipes, `close` has not fired and the tree must
+        // still be killed. treeKill swallows an already-absent group.
+        escalation = setTimeout(() => { treeKill('SIGKILL') }, 5000)
+      }
+      if (pipeDrain === undefined) {
+        // `close` can stay pending past the direct child's exit when a
+        // descendant holds the stdio write ends (escaped process group, or
+        // uninterruptible I/O that keeps the SIGKILL pending). Bound the wait
+        // past the 5-second SIGKILL grace and force the streams closed so
+        // fail-fast settles instead of hanging to the job timeout. Only the
+        // abort path arms it: on an ordinary run a gate that outlives its
+        // descendants must keep waiting rather than report passed over a live
+        // leak. Armed in terminate (not only at `exit`) so the window where
+        // the child already exited before the abort is covered too.
+        pipeDrain = setTimeout(() => {
+          child.stdout.destroy()
+          child.stderr.destroy()
+          child.stdin.destroy()
+        }, 10000)
+      }
+    }
+    if (signal !== undefined) {
+      if (signal.aborted) terminate()
+      else signal.addEventListener('abort', terminate, { once: true })
+    }
+    // Refresh the descendant cache while the child runs, so an abort that
+    // arrives after the child already exited can still reach a detached
+    // descendant the child left behind: once the child is gone, its
+    // descendants are reparented (POSIX) or their intermediate's table record
+    // is gone (Windows), so a fresh enumeration cannot cross the gap. The
+    // cache is primed at spawn and refreshed every 5 seconds, so a descendant
+    // is captured once it appears in any enumeration whose parent chain is
+    // still fully present in the table; the residual window is a descendant
+    // that never appears in such a snapshot — created after one enumeration
+    // and orphaned before the next. Enumeration is asynchronous (a slow
+    // WMI/CIM call is bounded by its own 10-second timeout), so a gate's
+    // output draining and exit handling are never blocked while the sampler
+    // reads the process table. Fail-fast runs only; ordinary runs never
+    // abort.
+    let descendantSampler: ReturnType<typeof setInterval> | undefined
+    if (signal !== undefined) {
+      let enumerationInFlight: { cancel: () => void } | undefined
+      const refreshDescendants = () => {
+        const pid = child.pid
+        if (pid === undefined || child.exitCode !== null || child.signalCode !== null) return
+        if (enumerationInFlight !== undefined) return
+        const handle = descendantPidsAsync(pid, process.platform)
+        enumerationInFlight = handle
+        void handle.promise.then((fresh) => {
+          if (enumerationInFlight === handle) enumerationInFlight = undefined
+          // Merge regardless of the child's exit state: the enumeration
+          // started while the child was alive, so its snapshot is the last
+          // reliable view of the tree. The child may exit (its intermediate
+          // gone, its table record vanished) before the promise settles while
+          // a grandchild still holds the stdio write ends and keeps `close`
+          // pending — exactly when terminate needs this list.
+          // Merge instead of replacing, like terminate: an intermediate that
+          // exited since the last tick reparented its detached descendants
+          // out of the parent chain, so a fresh enumeration alone would drop
+          // them. Filter the cache to the still-executing so a long gate
+          // does not accumulate stale pids; while sampler ticks still run the
+          // live filter also keeps the escalation from signalling a reused
+          // pid, but once ticks stop (child exited) the cache can go stale,
+          // and a pid reused after that is the accepted sampling window.
+          descendants = [...new Set([...descendants.filter(processAlive), ...fresh])]
+        })
+      }
+      const cancelInFlightEnumeration = () => {
+        if (enumerationInFlight !== undefined) enumerationInFlight.cancel()
+        enumerationInFlight = undefined
+      }
+      refreshDescendants()
+      descendantSampler = setInterval(refreshDescendants, 5000)
+      // A gate that settles while an enumeration is still running must not
+      // leave the PowerShell subprocess holding stdio handles until its own
+      // timeout: stop it as soon as the child's outcome is known.
+      child.once('close', cancelInFlightEnumeration)
+      child.once('error', cancelInFlightEnumeration)
+    }
     child.on('error', (error) => {
+      if (escalation !== undefined) clearTimeout(escalation)
+      if (pipeDrain !== undefined) clearTimeout(pipeDrain)
+      if (descendantSampler !== undefined) clearInterval(descendantSampler)
+      if (signal !== undefined) signal.removeEventListener('abort', terminate)
       spawnError = `failed to start command: ${error.message}`
       resolveExit({ exitCode: null, signalCode: null })
     })
     child.on('close', (exitCode, signalCode) => {
+      if (pipeDrain !== undefined) clearTimeout(pipeDrain)
+      if (descendantSampler !== undefined) clearInterval(descendantSampler)
+      if (signal !== undefined) signal.removeEventListener('abort', terminate)
+      if (escalation !== undefined && process.platform !== 'win32') {
+        // `close` only means the direct child's stdio closed; a grandchild
+        // that ignored SIGTERM and redirected its stdio can outlive it. Do
+        // not settle until the process group and the captured descendants are
+        // confirmed gone — the deadline SIGKILL covers members still alive at
+        // the grace end — so runGate returns only once the tree is quiescent.
+        const confirmGroupGone = () => {
+          if (!groupAlive(child.pid) && descendants.every(descendantPid => !processAlive(descendantPid))) {
+            clearTimeout(escalation)
+            resolveExit({ exitCode, signalCode })
+            return
+          }
+          if (Date.now() - terminatedAt < 8000) {
+            setTimeout(confirmGroupGone, 50)
+            return
+          }
+          // The grace ended with members still alive (e.g. uninterruptible
+          // I/O that even SIGKILL cannot cut). Fail loud instead of reporting
+          // a quiescent tree: the gate is recorded failed either way.
+          console.error(`run-gates: gate tree not quiescent after 8s (${gate.label}).`)
+          clearTimeout(escalation)
+          resolveExit({ exitCode, signalCode })
+        }
+        confirmGroupGone()
+        return
+      }
+      if (escalation !== undefined) clearTimeout(escalation)
       resolveExit({ exitCode, signalCode })
     })
     child.stdin.end()
@@ -905,7 +1261,252 @@ export async function runGate(gate: Gate): Promise<GateResult> {
     exitCode,
     signalCode,
   }
+  result.aborted = aborted
   if (spawnError !== undefined) result.error = spawnError
+  return result
+}
+
+/**
+ * Parse the state, parent, and process-group fields from a `/proc/<pid>/stat`
+ * line. The comm field may contain spaces and parentheses, so the state starts
+ * after the last closing parenthesis.
+ * @param stat - one `/proc/<pid>/stat` line.
+ * @returns state, parent pid, and process-group pid; undefined when truncated.
+ */
+function procStatFields(stat: string): { state: string; ppid: number; pgrp: number } | undefined {
+  const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
+  const state = fields[0]
+  const ppid = fields[1]
+  const pgrp = fields[2]
+  if (state === undefined || ppid === undefined || pgrp === undefined) return undefined
+  return { state, ppid: Number(ppid), pgrp: Number(pgrp) }
+}
+
+/**
+ * Whether one process is still executing. Zombies (state `Z`) do not count:
+ * they are dead records awaiting reaping, and kill(pid, 0) would report them
+ * as alive. Linux reads /proc/<pid>/stat to distinguish; other platforms fall
+ * back to the signal probe.
+ * @param pid - the process to probe.
+ */
+function processAlive(pid: number): boolean {
+  if (process.platform === 'linux') {
+    try {
+      const parsed = procStatFields(readFileSync(`/proc/${pid}/stat`, 'utf8'))
+      return parsed !== undefined && parsed.state !== 'Z'
+    } catch {
+      return false
+    }
+  }
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Whether any member of the child's POSIX process group is still executing.
+ * Zombie entries (state `Z`) do not count: they are dead records awaiting
+ * reaping, and the kill(-pid, 0) group probe would report them as alive.
+ * Linux enumerates /proc to distinguish after a fast-path group probe; other
+ * POSIX platforms fall back to the probe alone.
+ * @param pid - the group leader's pid; undefined or non-positive means the
+ * spawn failed and nothing is alive.
+ */
+function groupAlive(pid: number | undefined): boolean {
+  if (pid === undefined || pid <= 0) return false
+  if (process.platform === 'linux') {
+    try {
+      process.kill(-pid, 0)
+    } catch {
+      // ESRCH: the group has no entries at all.
+      return false
+    }
+    try {
+      for (const entry of readdirSync('/proc')) {
+        if (!/^\d+$/.test(entry)) continue
+        try {
+          const parsed = procStatFields(readFileSync(`/proc/${entry}/stat`, 'utf8'))
+          if (parsed !== undefined && parsed.pgrp === pid && parsed.state !== 'Z') return true
+        } catch {
+          // The process exited mid-scan; it is not a live member.
+        }
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+  try {
+    process.kill(-pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The pids of every transitive descendant of `root`, read from the live
+ * process table. Linux walks /proc/<pid>/stat parent fields; other platforms
+ * parse `ps` (POSIX) or the CIM process table (Windows) output. This is one
+ * snapshot, not the full tree-ownership mechanism: terminate and the sampler
+ * rely on the 5-second cache to cross an intermediate that exited between
+ * ticks (reparented on POSIX, table record gone on Windows), so a single
+ * enumeration reaches only the descendants whose parent chain is still fully
+ * present in the table.
+ * @param root - the pid whose descendants are wanted.
+ * @returns descendant pids in breadth-first order; empty on enumeration failure.
+ */
+function descendantPids(root: number): number[] {
+  if (root <= 0) return []
+  if (process.platform === 'linux') {
+    const rows: Array<[number, number]> = []
+    try {
+      for (const entry of readdirSync('/proc')) {
+        if (!/^\d+$/.test(entry)) continue
+        try {
+          const parsed = procStatFields(readFileSync(`/proc/${entry}/stat`, 'utf8'))
+          if (parsed !== undefined) rows.push([Number(entry), parsed.ppid])
+        } catch {
+          // The process exited mid-scan; skip it.
+        }
+      }
+    } catch {
+      return []
+    }
+    return collectDescendants(root, rows)
+  }
+  let ps: { error?: Error; stdout: string }
+  if (process.platform === 'win32') {
+    // taskkill /T covers the tree only while the root is alive; once the
+    // direct child exits (a descendant still holding the stdio write ends
+    // keeps `close` pending), abort must reach the survivors from a fresh
+    // enumeration. Windows keeps the exited parent's pid in its descendants'
+    // parent column, so this walk still finds the whole tree. A hung
+    // PowerShell (WMI/CIM service trouble) must not stall the abort path
+    // indefinitely, so the enumeration is bounded.
+    ps = spawnSync('powershell', processTableArgs('win32'), { encoding: 'utf8', timeout: 10000 })
+  } else {
+    ps = spawnSync('ps', processTableArgs('posix'), { encoding: 'utf8' })
+  }
+  if (ps.error !== undefined) return []
+  return collectDescendants(root, parsePidPpidLines(ps.stdout))
+}
+
+/**
+ * The process-table enumeration command for one platform. Windows queries the
+ * CIM provider through PowerShell (each line `pid ppid`); other platforms use
+ * `ps -axo pid=,ppid=`.
+ * @param platform - the target platform.
+ * @returns the command arguments to enumerate every live process's pid/ppid.
+ */
+function processTableArgs(platform: 'win32' | 'posix'): string[] {
+  if (platform === 'win32') {
+    return ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }']
+  }
+  return ['-axo', 'pid=,ppid=']
+}
+
+/**
+ * Asynchronous descendant enumeration, so a slow WMI/CIM call (bounded by a
+ * 10-second timeout) cannot block the event loop: the sampler runs it while
+ * the gate's output streams and exit handling must keep flowing. Returns the
+ * same descendant list as {@link descendantPids}; used by the fail-fast
+ * sampler only, never on the abort path (which needs the synchronous walk to
+ * capture the tree before any member exits).
+ * @param root - the pid whose descendants are wanted.
+ * @param platform - the platform whose table the enumeration reads.
+ * @returns a promise of descendant pids in breadth-first order; empty on
+ * enumeration failure.
+ */
+function descendantPidsAsync(root: number, platform: NodeJS.Platform): { promise: Promise<number[]>; cancel: () => void } {
+  if (root <= 0 || platform === 'linux') {
+    // The /proc walk is synchronous inside the async wrapper so the sampler
+    // keeps the same contract on every platform; /proc reads are fast and
+    // need no subprocess, and a completed enumeration needs no cancellation.
+    return { promise: Promise.resolve(descendantPids(root)), cancel: () => {} }
+  }
+  const [command, args] = platform === 'win32'
+    ? ['powershell', processTableArgs('win32')]
+    : ['ps', processTableArgs('posix')]
+  const child = spawn(command, args, {
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: platform === 'win32' ? 10000 : undefined,
+  })
+  child.stdout.setEncoding('utf8')
+  let stdout = ''
+  let settled = false
+  let settle!: (value: number[]) => void
+  const promise = new Promise<number[]>((resolve) => { settle = resolve })
+  const finish = (value: number[]) => {
+    if (settled) return
+    settled = true
+    // The enumeration completed (or was cancelled): stop the subprocess so
+    // the gate does not wait on its stdio handles.
+    child.kill('SIGTERM')
+    settle(value)
+  }
+  child.stdout.on('data', (chunk: string) => { stdout += chunk })
+  child.on('error', () => { finish([]) })
+  child.on('close', () => { finish(collectDescendants(root, parsePidPpidLines(stdout))) })
+  return {
+    promise,
+    cancel: () => { finish([]) },
+  }
+}
+
+/** Parse `pid ppid` rows from a process-table dump. Both the POSIX `ps -axo
+ * pid=,ppid=` output and the Windows PowerShell `Get-CimInstance Win32_Process`
+ * projection emit one `pid ppid` pair per line.
+ * @param output - the raw dump text.
+ * @returns the parsed pid/ppid rows in line order; blank and malformed lines
+ * are dropped.
+ */
+export function parsePidPpidLines(output: string): Array<[number, number]> {
+  const rows: Array<[number, number]> = []
+  for (const line of output.split('\n')) {
+    const match = line.trim().match(/^(\d+)\s+(\d+)$/)
+    if (match !== null) rows.push([Number(match[1]), Number(match[2])])
+  }
+  return rows
+}
+
+/**
+ * The taskkill invocations that terminate one Windows gate tree. The direct
+ * child leads, because a live `taskkill /T` walks its whole subtree in one
+ * call; each captured descendant follows individually, because when the root
+ * already exited (a descendant holding the stdio write ends keeps `close`
+ * pending) `taskkill /T` rooted at the dead pid finds nothing — Windows never
+ * reparents, so the ppid chain captured at terminate still reaches the whole
+ * tree, and `/T` lets a surviving intermediate carry its own subtree. A pid
+ * that exited between capture and termination is as tolerable as ESRCH on
+ * POSIX: taskkill reports a nonzero status that is deliberately unchecked.
+ * @param rootPid - the direct child's pid.
+ * @param descendants - the captured descendant pids.
+ * @returns one `taskkill` argument list per pid, in termination order.
+ */
+export function taskkillArgs(rootPid: number, descendants: number[]): string[][] {
+  return [rootPid, ...descendants].map(pid => ['/PID', String(pid), '/T', '/F'])
+}
+
+/** Breadth-first walk of the pid/ppid rows starting at `root`. */
+function collectDescendants(root: number, rows: Array<[number, number]>): number[] {
+  const byParent = new Map<number, number[]>()
+  for (const [pid, ppid] of rows) {
+    const children = byParent.get(ppid) ?? []
+    children.push(pid)
+    byParent.set(ppid, children)
+  }
+  const result: number[] = []
+  const queue = byParent.get(root) ?? []
+  for (let index = 0; index < queue.length; index += 1) {
+    const pid = queue[index]
+    if (pid === undefined) continue
+    result.push(pid)
+    queue.push(...(byParent.get(pid) ?? []))
+  }
   return result
 }
 

@@ -31,7 +31,7 @@ export function CordisActionRow({ callId, toolName, block, inspect, t }: CordisA
         <span className={css.separator} aria-hidden />
         <span className={card.errorSummary === null ? css.summary : css.error}>{summary}</span>
         {inspect !== undefined && (
-          <button type="button" className={css.inspect} aria-label="Inspect" onClick={inspect}>
+          <button type="button" className={css.inspect} aria-label={t('action.inspect')} onClick={inspect}>
             <IconInspectOutline12 />
           </button>
         )}

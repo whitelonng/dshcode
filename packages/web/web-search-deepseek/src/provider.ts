@@ -173,7 +173,10 @@ export function mapAnthropicResponse(response: AnthropicResponse): WebSearchResu
   return { sources, truncated: false }
 }
 
-/** The DeepSeek-backed search provider; HTTP redirects fail as `WEB_PROVIDER_ERROR`. */
+/**
+ * The DeepSeek-backed search provider. HTTP redirects fail as `WEB_PROVIDER_ERROR`;
+ * failures after dispatch name the endpoint and tell the model how the user can configure it.
+ */
 export class DeepSeekSearchProvider implements WebSearchProvider {
   readonly id = DEEPSEEK_PROVIDER_ID
 
@@ -237,7 +240,11 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
       })
     } catch (error: unknown) {
       if (signal?.aborted === true || isAbortError(error)) throw searchAborted(signal, error)
-      throw new WebError(`DeepSeek search request failed: ${String(error)}`, 'WEB_PROVIDER_ERROR', { cause: error })
+      throw searchEndpointError(
+        endpoint,
+        `DeepSeek search request failed: ${String(error)}`,
+        error,
+      )
     }
 
     if (!response.ok) {
@@ -246,7 +253,7 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
       try {
         const parsed = await response.json() as AnthropicError
         const detail = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message ?? parsed.message
-        if (detail !== undefined && detail.length > 0) message = detail
+        if (detail !== undefined && detail.length > 0) message += `: ${detail}`
       } catch (error: unknown) {
         // An abort fired mid-body must surface as WEB_ABORTED, not be swallowed
         // into a generic HTTP-error message — cancellation is not a provider
@@ -256,7 +263,7 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
         // malformed/non-JSON error body (normal for gateway 5xx/429s) can only
         // cost a richer provider message, never the real error.
       }
-      throw new WebError(message, 'WEB_PROVIDER_ERROR')
+      throw searchEndpointError(endpoint, message)
     }
 
     try {
@@ -264,8 +271,10 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
       return mapAnthropicResponse(payload)
     } catch (error: unknown) {
       if (signal?.aborted === true || isAbortError(error)) throw searchAborted(signal, error)
-      if (error instanceof WebError) throw error
-      throw new WebError(`DeepSeek returned an unprocessable response body: ${String(error)}`, 'WEB_PROVIDER_ERROR', { cause: error })
+      const message = error instanceof WebError
+        ? error.message
+        : `DeepSeek returned an unprocessable response body: ${String(error)}`
+      throw searchEndpointError(endpoint, message, error)
     }
   }
 
@@ -298,6 +307,20 @@ export class DeepSeekSearchProvider implements WebSearchProvider {
       'WEB_PROVIDER_CREDENTIAL_MISSING',
     )
   }
+}
+
+/** Add endpoint recovery instructions to failures that occur after request dispatch begins. */
+function searchEndpointError(endpoint: string, message: string, cause?: unknown): WebError {
+  return new WebError(
+    `${message}\n\nThe web search request used endpoint ${JSON.stringify(endpoint)}. `
+    + 'Search endpoint configuration is separate from chat. If that endpoint is not intended, '
+    + 'guide the user to Settings > Plugins > Plugin configuration > Web search, where they can '
+    + 'change and save Endpoint. If that settings page is unavailable, the user can set '
+    + 'DEEPSEEK_SEARCH_BASE_URL or configure web-search-deepseek.baseURL to a trusted '
+    + 'Anthropic-compatible Messages API base. Only the user should choose or change the endpoint.',
+    'WEB_PROVIDER_ERROR',
+    cause === undefined ? undefined : { cause },
+  )
 }
 
 /**

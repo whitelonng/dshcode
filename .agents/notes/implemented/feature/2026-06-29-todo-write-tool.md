@@ -10,7 +10,7 @@ The harness gives the model bash and subagent tools but no way to record a struc
 
 ## Decision
 
-Add a model-facing `todo_write(todos: [{ content, status }])` tool whose whole-list state lives on the event-sourced session log as a new `todo/write` `SessionEventMap` variant. Interactive hosts render from the durable event: the TUI folds it directly, the web client projects it into `ConversationSnapshot.todos` ([web todo display](2026-07-23-web-todo-display.md)), while the [automation-only ACP bridge](../simplification/2026-07-23-acp-automation-only-protocol.md) deliberately omits todo presentation.
+Add a model-facing `todo_write(todos: [{ content, status }])` tool whose whole-list state lives on the event-sourced session log as a `todo/write` `SessionEventMap` variant owned by the todo package ([event ownership](../architecture/2026-07-20-todo-event-ownership.md)). Interactive hosts render from the durable event: the TUI folds it directly, the web client projects it into `ConversationSnapshot.todos` ([web todo display](2026-07-23-web-todo-display.md)), while the [automation-only ACP bridge](../simplification/2026-07-23-acp-automation-only-protocol.md) deliberately omits todo presentation.
 
 ### Whole-list replace, three-state status
 

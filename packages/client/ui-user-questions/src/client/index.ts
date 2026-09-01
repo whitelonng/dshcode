@@ -12,17 +12,23 @@
  * separate chain entry per shape would race the same carrier, so the shape
  * choice lives inside this entry — see QuestionComposer.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { PendingInteractionPublisher } from '@deepseek-ai/dsh-client-ui-session/client'
+import type { TypertClientEventListener } from '@deepseek-ai/dsh-typert-protocol'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { QuestionWait } from './contract/slots.ts'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import { PendingQuestion } from './contract/slots.ts'
+import { createQuestionDraftStore } from './draft-store.ts'
 import { QuestionComposer } from './QuestionComposer.tsx'
 import { en, zh, type QuestionKey } from './locales.ts'
 
-export { PendingQuestion } from './contract/slots.ts'
 export type {
-  PlanReview, QuestionAnswer, QuestionComposerProps, QuestionWait,
+  PendingQuestion, PlanReview, QuestionAnswer, QuestionComposerProps, QuestionWait,
 } from './contract/slots.ts'
 export type { QuestionKey } from './locales.ts'
 
@@ -36,12 +42,41 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Dictionary namespace owned by this plugin. */
 const NS = 'question'
 
-/** Required services: the slot registry and the question composer's copy. */
-export const inject = ['slots', 'locale']
+type QuestionListener = TypertClientEventListener<'user-questions/request'>
+type ClientQuestionRequest = Parameters<QuestionListener>[0]
+type ClientQuestionNext = Parameters<QuestionListener>[1]
+type ClientQuestionAnswer = Awaited<ReturnType<QuestionListener>>
 
-/** Chain routing: claim the composer while a question wait is pending (pure — owner props only). */
-function selectQuestion({ interactions }: ComposerChainProps): QuestionWait | null {
-  return interactions.find((i): i is QuestionWait => i.kind === 'question') ?? null
+/** Required services: Agent scopes, Remote Events, Session UI, Slot registry, and copy. */
+export const inject = ['sessions', 'remote', 'uiSession', 'slots', 'locale']
+
+/** Present one request until the user answers, cancels, or its lifetime ends. */
+async function answerQuestion(
+  ctx: ClientContext,
+  owner: ClientContext,
+  request: ClientQuestionRequest,
+  next: ClientQuestionNext,
+  registerPendingInteraction: PendingInteractionPublisher<PendingQuestion>,
+): Promise<ClientQuestionAnswer> {
+  const sessionId = (ctx.sessions as ISessions).scopeOf(owner)
+  if (sessionId === undefined) return next()
+  const pending = new PendingQuestion(sessionId, request.questions, request.signal)
+  const completed = Promise.withResolvers<void>()
+  const remove = registerPendingInteraction(pending, async () => {
+    pending.delegate()
+    await completed.promise
+  })
+  try {
+    try {
+      return await pending.result
+    } catch (error) {
+      if (pending.isDelegation(error)) return await next()
+      throw error
+    }
+  } finally {
+    remove()
+    completed.resolve()
+  }
 }
 
 /**
@@ -52,9 +87,21 @@ function selectQuestion({ interactions }: ComposerChainProps): QuestionWait | nu
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-user-questions: dictionaries')
-
+  const questionDraftStore = createQuestionDraftStore()
+  const registerPendingInteraction = ctx.uiSession.registerPendingInteraction<PendingQuestion>(
+    pending => pending.kind === 'plan-review' ? 2 : 1,
+  )
   ctx.slots.inject('conversation.composer', () => ctx.slots.register(
-    { name: 'conversation.composer', select: selectQuestion, locale: NS },
+    {
+      name: 'conversation.composer',
+      select: ({ pendingInteraction }: ComposerChainProps): PendingQuestion | null =>
+        pendingInteraction instanceof PendingQuestion ? pendingInteraction : null,
+      locale: NS,
+      store: questionDraftStore,
+    },
     QuestionComposer,
   ))
+  ctx.remote.$on('user-questions/request', function (request, next) {
+    return answerQuestion(ctx, this, request, next, registerPendingInteraction)
+  })
 }

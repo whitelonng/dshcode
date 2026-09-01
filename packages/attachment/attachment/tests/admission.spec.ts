@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
-import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
+import { admitEncodedImages, admitPromptContent } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, SaveImageAttachment } from '@deepseek-ai/dsh-attachment/types'
 
 const PNG = 'AAAA' // canonical base64, 3 bytes
@@ -62,5 +62,27 @@ describe('admitEncodedImages', () => {
     const refused = Object.assign(new Error('Image batch exceeds the configured image-count limit.'), { code: 'TOO_MANY_IMAGES' })
     mocks.saveImages.mockRejectedValueOnce(refused)
     await expect(admitEncodedImages(store, [{ mediaType: 'image/png', data: PNG }])).rejects.toBe(refused)
+  })
+})
+
+describe('admitPromptContent', () => {
+  it('converts text-only prompts without touching the attachment store', async () => {
+    const store = { saveImages: () => { throw new Error('text-only prompts must not reach the store') } }
+    await expect(admitPromptContent(store as unknown as AttachmentStore, [
+      { type: 'text', text: 'hello' },
+    ])).resolves.toEqual([{ type: 'text', text: 'hello' }])
+  })
+
+  it('replaces image parts with admitted references in part order', async () => {
+    const { store } = storeOf()
+    await expect(admitPromptContent(store, [
+      { type: 'image', mediaType: 'image/png', data: 'AQ==' },
+      { type: 'text', text: 'between' },
+      { type: 'image', mediaType: 'image/png', data: 'Ag==' },
+    ])).resolves.toEqual([
+      { type: 'image', attachment: { attachmentId: 'att-1', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } },
+      { type: 'text', text: 'between' },
+      { type: 'image', attachment: { attachmentId: 'att-2', mediaType: 'image/png', bytes: 1, width: 1, height: 1 } },
+    ])
   })
 })

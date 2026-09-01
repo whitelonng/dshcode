@@ -12,7 +12,7 @@ Reasoning effort makes the persistence shape significant: a model selection with
 
 ## Decision
 
-`AgentDefaultModelConfig` provides `ctx.agentDefaultModel` and registers `{provider, model, reasoningEffort?}` as the `agent-default-model` Settings section. Its `{provider, model}` composition entry is the base layer and `settings.yaml` supplies the user layer. The service is entry-point-neutral, so direct creation and ApiProxy-backed creation share one default ([headless direct core entry point](../architecture/2026-08-09-headless-direct-core-entry-point.md)).
+`AgentDefaultModelConfig` provides `ctx.agentDefaultModel` and registers `{provider, model, reasoningEffort?}` as the `agent-default-model` Settings section. Its `{provider, model}` composition entry is the base layer and `settings.yaml` supplies the user layer. The service is entry-point-neutral, so direct creation and Session Controller Remote creation share one default ([headless direct core entry point](../architecture/2026-08-09-headless-direct-core-entry-point.md)).
 
 `reasoningEffort` belongs to the Settings section but not to the plugin config. Settings layers merge by field, so a configured effort would survive a user selection that omits it. `saveSelection()` instead writes the complete user section; absence therefore clears a stored effort. A deployment-wide effort default belongs to the adapter profile, which resolves it per model.
 
@@ -26,7 +26,7 @@ The stored selection does not require catalog membership. A provider route may s
 
 ## Consequences
 
-`host.describe` reports the live Agent default. A successful model switch stores an `agent-default-model:` section in `settings.yaml`. The gateway does not expose that namespace through its Settings-page allowlist; the model picker is its editor.
+`session/modelCatalog` reports the live Agent default. A successful model switch stores an `agent-default-model:` section in `settings.yaml`. The Settings page does not expose that namespace; the model picker is its editor.
 
 ## A session that cannot send
 

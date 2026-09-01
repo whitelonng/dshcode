@@ -1,11 +1,3 @@
-/* Plan-review takeover: the waiting-approval card language (amber strip on a
-   floating capsule, right-aligned actions) applied to a reviewed plan. Kept as
-   its own module rather than shared with ui-conversation's ApprovalPanel: the
-   two takeovers agree on tokens and geometry, not on content — this one's body
-   is scrollable markdown, that one's is a headline plus a command line. Warn
-   semantics ride the alias state tokens; no hardcoded colors. */
-
-/* Mirrors the question card's frame so the takeover is a content swap. */
 .frame {
   display: flex;
   justify-content: center;
@@ -58,6 +50,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-state-warn-primary);
 }
 

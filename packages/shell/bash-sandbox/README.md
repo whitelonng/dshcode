@@ -1,28 +1,47 @@
+---
+description: "The sandbox-consuming Bash executor for deployments and maintainers choosing, configuring, or debugging confined command execution with denial and escalation facts."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-bash-sandbox
 
 English | [中文](README.zh.md)
 
-Sandbox-consuming Service Provider for the [`@deepseek-ai/dsh-shell`](../shell/) executor seam. Load it **instead of** `@deepseek-ai/dsh-bash-local`, together with a [`ctx.sandbox`](../../sandbox/sandbox/) provider (e.g. [`@deepseek-ai/dsh-sandbox-local`](../../sandbox/sandbox-local/)) and a [`ctx.sandboxPolicy`](../../sandbox/sandbox-policy/) (which owns the default mode + workspace root, shared with the sandboxed filesystem) — no alternate tool plugin is needed; `dsh-tool-bash` detects the executor's `sandboxMode` capability and adds the escalation fields.
+## Summary
 
-The package root exports the default and named `SandboxBashExecutor` plugin plus its `Config`; result-classification helpers stay internal.
+`dsh-bash-sandbox` is the sandbox-consuming Bash executor: every command runs as a fresh `bash -c` process confined through the `ctx.sandbox` capability instead of with the harness process's full file authority. Each settled result carries the mode the command ran under, whether the sandbox denied a file operation, and how completely the selected runner enforced the requested mode. When no runner can enforce a confined mode, the call fails closed with a structured `SANDBOX_UNAVAILABLE` error rather than running unconfined. It is the confining sibling of `dsh-bash-local` — sharing its process mechanics — and the tool layer's escalation fields appear only while it is mounted.
 
-Every command is confined by handing the provider the exact `['bash', '-c', command]` argv this executor is about to spawn and spawning the returned argv directly. With the shipped native runners, the inner Bash retains shell semantics and evaluates `BASH_ENV` only after the runner establishes confinement. WHICH platform runner confines it — and whether one is usable at all (fail closed with a structured `SANDBOX_UNAVAILABLE` error, never a silent unconfined run) — is the provider's concern; this package owns the bash side only.
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Mount this executor instead of `dsh-bash-local` when commands must not run with the harness process's full file authority. It registers as `ctx.shell` and requires a `ctx.sandbox` provider plus `ctx.sandboxPolicy`; the model-facing `bash` tool works over it unchanged and advertises the `sandbox_permissions`/`justification` escalation fields.
+
+### When to choose it
+
+Choose it when a deployment needs file-level confinement for Bash commands: the configured policy decides the default mode and workspace root, and each session can run under a different mode per call through the tool's escalation flow. The modes govern file effects only — network stays unrestricted and process visibility is backend-specific. For unconfined execution, or when no sandbox backend is available on the platform, mount `dsh-bash-local` instead.
+
+### Modes and file effects
 
 | Mode | File effects |
 |---|---|
-| `read-only` (default) | No writes anywhere (of `/dev`, only the `/dev/null` node is writable, so `>/dev/null` keeps working) |
-| `workspace-write` | Writes only under `workspaceRoot` + `/tmp` (ephemeral under bwrap, the host `/tmp` under Landlock, `/private/tmp` plus the per-user temp dir under Seatbelt) |
-| `danger-full-access` | No confinement; the provider is never consulted. Foreground results carry `sandbox: { mode, denied: false }`; background process handles carry no sandbox facts. |
+| `read-only` (default) | No writes anywhere; of `/dev`, only the `/dev/null` node is writable, so `>/dev/null` keeps working |
+| `workspace-write` | Writes only under the policy's workspace root plus `/tmp` (ephemeral under bwrap, the host `/tmp` under Landlock, `/private/tmp` plus the per-user temp dir under Seatbelt) |
+| `danger-full-access` | No confinement; the provider is never consulted, and results carry `sandbox: { mode, denied: false }` |
 
-Semantics:
+### Minimal configuration
 
-- **Denials are result facts.** A failed run whose stderr carries the selected backend's own denial dialect — the signatures the provider stamps on every wrap (EROFS text under bwrap, EACCES under Landlock, EPERM under Seatbelt) — is reported as `ShellRunResult.sandbox.denied: true` (conservative classification, read from the collected stderr tail); every CONFINED run also carries the mode it executed under (`result.sandbox.mode`) and the provider's enforcement completeness (`result.sandbox.enforcement`: `full`, or `partial` on an older Landlock ABI).
-- **The runner path or syscall must match.** Before a process starts, a rejection is attributed to the runner only when the caller-owned workdir is independently usable and Node reports `ENOENT` or `EACCES` with either an `error.path` equal to provider argv[0] or, when `error.path` is absent, an exact `syscall: 'spawn <runner>'`. A present path also requires `syscall: 'spawn'` or the exact `spawn <runner>`. This covers a missing runner, a non-executable runner, or an executable script whose shebang interpreter is unavailable. A bare `syscall: 'spawn'` without an exact error path, any other code, an invalid or unusable workdir, a resource failure, an unrelated syscall, or an unstructured rejection retains the local executor's command-start failure semantics. Foreground execution throws `SANDBOX_UNAVAILABLE` with the original spawn detail, while asynchronous background settlement stamps `runnerFailed: true` and `denied: false`. If a `SubprocessRuntime` synchronously throws the same runner-identifying `ENOENT`/`EACCES` shape, background start throws `SANDBOX_UNAVAILABLE`; other synchronous errors propagate unchanged. After a process starts, a rule's optional exit-code check and a remaining fatal stderr line must both match after exact informational-line exclusions. A match takes priority over denial; foreground execution throws `SANDBOX_UNAVAILABLE` with the matched fatal line, while a settled background process stamps `process.sandbox.runnerFailed`, which the bash producer renders through generic `job_output`. Confined background handles retain their mode/enforcement facts and release per-process accounting in either path.
-- **Deployment fallback, per-call policy.** [`ctx.sandboxPolicy`](../../sandbox/sandbox-policy/) resolves a complete `SandboxExecutionPolicy` for every tool call: the calling session supplies its mode override and immutable cwd root, while deployment config supplies the fallbacks for agentless calls. An approved escalation changes only that policy's mode; its session root stays attached. `resolve()` carries the policy onto the spec, so overlapping commands from different projects run, classify, and report under their own roots and modes. The capability fact `ctx.shell.sandboxMode` reports the configured default so the tool layer advertises escalation only when this executor is mounted; the static bash tool description separately owns denial and escalation guidance.
-- **File effects only.** The mode vocabulary claims only file effects. Network stays unrestricted; process visibility is backend-specific and documented by [`dsh-sandbox-local`](../../sandbox/sandbox-local/).
-- Process mechanics (spawn, process-group kills, output collection/spill, background handles, credential scrub) are inherited from [`dsh-bash-local`](../bash-local/); runner selection lives in [`dsh-sandbox-local`](../../sandbox/sandbox-local/).
-
-Deny-only at the seam: a denial is a reported fact, and this executor never negotiates permissions itself — the approval question lives in the tool layer (`dsh-tool-bash`), which drives the override this package honors.
+The executor takes no sandbox configuration of its own: the default mode and workspace root come from `ctx.sandboxPolicy`, and the runner choice belongs to the `ctx.sandbox` provider. Its own config is the local executor's knobs verbatim; the generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-bash-sandbox) is the exhaustive source.
 
 ```yaml
 - id: sandbox
@@ -36,13 +55,75 @@ Deny-only at the seam: a denial is a reported fact, and this executor never nego
   name: '@deepseek-ai/dsh-bash-sandbox'
 ```
 
+### Denials are result facts
+
+A denied command is reported, not retried silently: the result carries `sandbox: { mode, denied: true }` and the model-facing tool appends the denial marker. When escalation is available, the model may retry the exact command once with the narrowest wider mode and a one-sentence justification; the approval prompt asks the user, and nothing executes before approval. This executor never negotiates permissions itself — the tool layer drives the override.
+
+### Failures and recovery
+
+If no runner can enforce a confined mode, the foreground call fails with `SANDBOX_UNAVAILABLE` and a background process records a runner-failure fact — never a silent unconfined run. A runner-attributable spawn failure carries the original spawn error as detail; other spawn rejections keep the local executor's ordinary command-start semantics.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design of the executor and points at the code that realizes it; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The executor is the sandboxing Service Provider for the `ctx.shell` seam: it inherits `dsh-bash-local`'s process mechanics and re-wraps each command's exact `['bash', '-c', command]` argv through `ctx.sandbox.confine()`, spawning the returned argv directly. Which platform runner confines the command — and whether one is usable at all — is the provider's concern; this package owns the bash side only: the selected mode, enforcement completeness, and denial classification on results.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: `SandboxBashExecutor`, per-process fact retention, run/start wrapping |
+| [`src/helpers.ts`](src/helpers.ts) | Denial, runner-failure, and runner-spawn-failure classification |
+| — | No runtime invariant companion is published; this package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam. |
+| `tests/` | Exercised behavior across the bwrap, Landlock, and Seatbelt runners |
+
+### Main flow
+
+For a confined mode, `resolve()` stamps the per-call policy (the session's mode override, or the deployment fallback); `run` and `start` wrap the bash argv through the provider and hand the confined argv to the inherited subprocess path. At settlement the executor classifies the outcome: a runner failure outranks a denial because the command never ran, a failed run whose stderr carries the backend's denial dialect is reported `denied: true`, and every confined run carries its mode and enforcement facts. `danger-full-access` bypasses the provider entirely and stamps `denied: false`.
+
+### Invariants
+
+- **Fail closed** — a confined mode with no usable runner throws `SANDBOX_UNAVAILABLE`; unconfined passthrough never happens for a confined policy.
+- **Deny-only at the seam** — this executor never grants permission; the approval flow lives in the tool layer.
+- **Per-process facts** — confinement facts are retained per handle until settlement, because a provider may vary enforcement between overlapping calls.
+- **File effects only** — the mode vocabulary claims only file effects.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the executor contract is not enough. They move from the seam to the sandbox capability this executor consumes.
+
+- [shell seam](../shell/README.md) — the executor contract this provider implements, including the request/spec split.
+- [bash-local](../bash-local/README.md) — the process mechanics this executor inherits.
+- [sandbox seam](../../sandbox/sandbox/README.md) — the confinement capability, its modes, and its fail-closed contract.
+- [sandbox-policy](../../sandbox/sandbox-policy/README.md) — the per-session mode and workspace root this executor honors.
+- [sandbox-local](../../sandbox/sandbox-local/README.md) — the shipped runner backends: bwrap, Landlock, and Seatbelt.
+- [tool-bash](../tool-bash/README.md) — the model-facing `bash` tool and its escalation surface.
+- [Sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) — the sandbox design, escalation, and switching contract.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Bash tool schema, indirectly
 
 #### What the model sees
 
-The generated [`dsh-tool-bash` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash) are the baseline. By advertising a confining `sandboxMode`, this backend augments `bash` with `sandbox_permissions` using enum `workspace-write` | `danger-full-access` and with `justification`. The policy owner separately contributes the current capability-neutral `sandbox:policy` context.
+The generated [`dsh-tool-bash` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash) are the baseline. By advertising a confining `sandboxMode`, this backend augments `bash` with `sandbox_permissions` (enum `workspace-write` | `danger-full-access`) and `justification`. The policy owner separately contributes the current capability-neutral `sandbox:policy` context.
 
 #### Token effect
 
@@ -70,7 +151,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 #### What the model sees
 
-If no runner can enforce a confined mode, the foreground call propagates the [`SANDBOX_UNAVAILABLE` error owned by `dsh-sandbox`](../../sandbox/sandbox/README.md#confinement-error-indirectly). A runner-attributable spawn failure supplies the original spawn error as detail; a rejection without `ENOENT`/`EACCES` path or syscall evidence that names argv[0] remains an ordinary command-start error. A settled runner failure supplies the matched fatal stderr line and preserves the original stderr collection. When present, the appended `Runner failure: <detail>` is the authoritative diagnosis; the preceding backend-install text is the generic `SANDBOX_UNAVAILABLE` prefix.
+If no runner can enforce a confined mode, the foreground call propagates the `SANDBOX_UNAVAILABLE` error from the sandbox seam. A runner-attributable spawn failure supplies the original spawn error as detail; a rejection without `ENOENT`/`EACCES` path or syscall evidence that names `argv[0]` remains an ordinary command-start error. A settled runner failure supplies the matched fatal stderr line and preserves the original stderr collection; the appended `Runner failure: <detail>` is the authoritative diagnosis over the generic `SANDBOX_UNAVAILABLE` prefix.
 
 #### Token effect
 
@@ -82,7 +163,22 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when this executor is not a general security boundary. They are current package constraints, not a roadmap.
+
 - **Confinement covers file effects only** — network restriction and a uniform process-visibility guarantee are absent, so the modes are not a general-purpose security sandbox.
 - **Denials are inferred from failed-command stderr** — backend signatures make the inference portable, but a matching application error can be classified as a denial and a denial omitted from the retained tail can be missed.
-- **An asynchronously observed background runner failure has no immediate error channel** — it is recorded on the settled process and surfaces when the caller reads the generic task with `job_output`; a synchronous `SubprocessRuntime` throw that names the runner path instead fails `start()` immediately.
+- **An asynchronously observed background runner failure has no immediate error channel** — it is recorded on the settled process and surfaces when the caller reads the generic task with `job_output`; a synchronous subprocess throw that names the runner path instead fails `start()` immediately.
 - **`danger-full-access` deliberately bypasses `ctx.sandbox`** — it is an explicit unconfined mode, not a wider sandbox profile.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

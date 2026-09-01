@@ -1,14 +1,51 @@
+---
+description: "subprocess 组地图：共享的子进程服务及其本地宿主提供方，供浏览本组的用户与维护者阅读。"
+kind: "package-group"
+---
+
 # subprocess/：子进程能力家族
 
 [English](README.md) | 中文
 
-这里集中提供一个执行世界的共享进程基底：可执行文件查找、具有原始或收集式 stdio 的完全明确指定的受管子进程树，以及一项底层终端进程原语，负责 PTY 分配、前台进程组和提供方仍可观察到的会话成员清理。命令默认值补全、shell 语义、时限、协议分帧、就绪状态与呈现留在消费方：[bash 执行器](../shell/README.zh.md)、[LSP 主机](../lsp/README.zh.md)、[PTY shell 后端](../terminal/README.zh.md)与 [ACP（Agent Client Protocol）subagent 后端](../subagent/README.zh.md)。参见 [subprocess seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.zh.md)。
+## 概述
 
-| 包 | ctx 键 | 角色 |
+harness 运行的每个子进程与终端会话——bash 命令、语言服务器、持久 shell 与进程外 subagent 后端——都经由一个共享服务（`ctx.subprocess`）启动、观察与终止，并由一个本地提供方在宿主机器上执行。它不是独立的产品功能：消费方能力 seam 决定每个进程的含义，命令语义、时限与面向模型的呈现仍归它们所有。本组提供可执行文件查找、带 spill 恢复的有界输出捕获、整棵进程树的终止，以及每个子进程起步时所用的清理后环境。
+
+## 目录
+
+- [包](#packages)
+- [相关文档](#related-documentation)
+- [开发备注](#dev-note)
+
+-----
+
+<a id="packages"></a>
+## 包
+
+| 包 | 职责 | ctx 键 |
 |---|---|---|
-| [`subprocess`](subprocess/README.zh.md)（`@deepseek-ai/dsh-subprocess`） | `ctx.subprocess` | Service Definition：可执行文件查找、普通受管 spawn、终端进程原语、句柄生命周期，以及共享的环境／输出词汇 |
-| [`subprocess-local`](subprocess-local/README.zh.md)（`@deepseek-ai/dsh-subprocess-local`） | 无 | 本地 Service Provider：detached 进程树、有界收集／spill、`node-pty`、前台／会话检查、进程树信号发送，以及先终止再等待退出的 dispose（资源释放） |
+| [`subprocess`](subprocess/README.zh.md) | 定义子进程服务：可执行文件查找、受管进程 spawn 与真实终端会话 | `ctx.subprocess` |
+| [`subprocess-local`](subprocess-local/README.zh.md) | 在宿主机器上运行这些进程与终端 spawn | 注册到 `ctx.subprocess` |
+| [`win32-process`](win32-process/README.zh.md) | 归属受限进程创建、stdio、Job 分配、等待与句柄清理所用的共享 Win32 绑定 | 库，不使用 ctx key |
 
-即使消费方重载，进程生命周期仍由服务负责管理；消费方负责定义进程的含义（一条 bash 命令、未来的非 shell 运行器），以及决定塑造该进程的每一项默认值。
+即使消费方重载，进程生命周期仍由服务负责管理；消费方负责定义进程的含义（一条 bash 命令、一个语言服务器），以及决定塑造该进程的每一项默认值。
 
-子系统参考——spawn spec、输出读取器、结果、`DSH_*` 环境——见 [docs/subsystems/subprocess.md](../../docs/subsystems/subprocess.zh.md)；seam 决定见 [subprocess seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.zh.md)。
+-----
+
+<a id="related-documentation"></a>
+## 相关文档
+
+- [子进程子系统](../../docs/subsystems/subprocess.zh.md)——spawn spec、输出读取器、结果与受管的 `DSH_*` 环境。
+- [subprocess seam Agent Note](../../.agents/notes/implemented/architecture/2026-07-26-subprocess-seam.zh.md)——bash 执行器的进程部分为何成为独立的 seam。
+
+-----
+
+<a id="dev-note"></a>
+## 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+无。
+
+</details>

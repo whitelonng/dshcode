@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { z } from 'zod'
 import Storage, { storageBackendServiceKey } from '@deepseek-ai/dsh-storage'
-import { apply, DomainFacility, defineDomain, domainTable } from '../src/index.ts'
+import { apply, defineDomain, descriptorOf, DomainFacility, domainTable } from '../src/index.ts'
 import type { Config } from '../src/index.ts'
 import type { DomainChanged } from '../src/events.ts'
 import { MemoryMediaPool, MemoryStorageBackend } from './helpers/memory-backend.ts'
@@ -56,6 +56,17 @@ describe('defineDomain', () => {
       global: { schema: settingsSchema.nullable(), initial: null },
       tables: {},
     })).toThrow(/must not accept null/)
+  })
+
+  it('rejects an invalid layout and projects the declared one onto the descriptor', () => {
+    // A spec built from config can carry any value; the union type is
+    // compile-time only, so the runtime boundary check must reject it.
+    expect(() => defineDomain({ name: 'ok', version: 1, layout: 'every-record' as 'single', tables: {} }))
+      .toThrow(/layout/)
+    expect(descriptorOf(defineDomain({ name: 'per', version: 1, layout: 'per-record', tables: {} })))
+      .toMatchObject({ name: 'per', layout: 'per-record' })
+    // The default (single) layout is absent from the descriptor.
+    expect(descriptorOf(spec)).not.toHaveProperty('layout')
   })
 })
 

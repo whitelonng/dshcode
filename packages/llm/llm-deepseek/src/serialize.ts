@@ -6,8 +6,8 @@
  * @module dsh-llm-deepseek/serialize
  */
 
-import { contentHasImage, LlmError, offloadRequestImagesWithPolicy, requestImageHandleText } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, GenerateOptions, Message } from '@deepseek-ai/dsh-llm'
+import { contentHasImage, LlmError, offloadedImageText, offloadRequestImagesWithPolicy, requestImageHandleText } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, GenerateOptions, ImageAttachmentAccessResolver, Message } from '@deepseek-ai/dsh-llm'
 import type { ImageAttachmentRef, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type {
   WireImageContentPart,
@@ -48,6 +48,8 @@ export interface ImageSerializationOptions {
   representation: ImageRequestRepresentation
   /** Request versions prepared for the conservatively retained normalized attachments, keyed by attachment id. */
   requestImages: ReadonlyMap<ImageAttachmentRef['attachmentId'], RequestImageAttachment>
+  /** Resolve current tool access independently from deterministic request-image versions. */
+  resolveImageAccess?: ImageAttachmentAccessResolver
   /** Positive bound on accumulated represented image bytes. */
   maxRequestImageBytes: number
   /** Maximum represented images in one request. */
@@ -125,12 +127,14 @@ function assertSupportedImageRoles(messages: readonly Message[]): void {
 
 /** Describe the exact request preview and its model-callable coordinate system. */
 function imageHandle(
+  ref: ImageAttachmentRef,
   version: RequestImageAttachment,
+  resolveAccess: ImageAttachmentAccessResolver | undefined,
   precededByContent: boolean,
 ): WireTextContentPart {
   return {
     type: 'text',
-    text: `${precededByContent ? '\n' : ''}${requestImageHandleText(version)}`,
+    text: `${precededByContent ? '\n' : ''}${requestImageHandleText(ref, version, resolveAccess?.(ref))}`,
   }
 }
 
@@ -154,7 +158,7 @@ async function imageParts(
       type: 'image_url',
       image_url: { url: `data:${version.mediaType};base64,${Buffer.from(version.data).toString('base64')}` },
     }
-  return [imageHandle(version, precededByContent), image]
+  return [imageHandle(block.attachment, version, images.resolveImageAccess, precededByContent), image]
 }
 
 /** Convert user or nested tool-result blocks into ordered wire parts. */
@@ -389,10 +393,10 @@ export function serializeRequest(
 
 /**
  * Build one image-capable request while keeping durable bytes out of session
- * messages. Oversized oldest images become deterministic text after their
+ * messages. Oversized oldest images become per-image text after their
  * exact request-version byte lengths are known and before provider serialization.
  * @param options - harness request containing image-capable user content.
- * @param images - attachment resolver, request bound, and cancellation.
+ * @param images - request versions, optional current access resolver, and request bounds.
  * @param defaults - adapter-level thinking defaults.
  * @returns the fully materialized DeepSeek request body.
  */
@@ -415,6 +419,7 @@ export async function serializeRequestWithImages(
     ...images.maxImagesPerRequest === undefined ? {} : { maxImages: images.maxImagesPerRequest },
     ...images.byteQuantum === undefined ? {} : { byteQuantum: images.byteQuantum },
     ...images.countQuantum === undefined ? {} : { countQuantum: images.countQuantum },
+    placeholder: ref => offloadedImageText(ref, images.resolveImageAccess?.(ref)),
   })
   const messages: WireMessage[] = []
   if (options.system !== undefined) {

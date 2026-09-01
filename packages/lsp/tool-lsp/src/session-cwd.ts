@@ -1,9 +1,7 @@
 /**
- * Derive the workspace root an `lsp` call resolves against: the calling agent's per-session
- * workspace (`exec.agent.session.header.cwd`), mirroring how the filesystem tools resolve paths.
- * Unlike those tools, LSP has NO provider fallback — a missing cwd fails the call as
- * `LSP_WORKSPACE_REQUIRED`, because the local provider must canonicalize a real workspace before it
- * can start a server.
+ * Derive the workspace root an `lsp` call resolves against from the calling
+ * agent's session. A missing cwd fails as `LSP_WORKSPACE_REQUIRED` because the
+ * local provider must canonicalize a real workspace before starting a server.
  * @module @deepseek-ai/dsh-tool-lsp/session-cwd
  */
 

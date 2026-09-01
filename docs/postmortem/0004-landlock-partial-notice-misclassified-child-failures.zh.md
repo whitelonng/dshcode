@@ -45,7 +45,7 @@ stderr 仍是带内归因通道。受限子进程可以故意复现 runner 的�
 - [`dsh-bash-sandbox`](../../packages/shell/bash-sandbox/) 直接 spawn 提供方 argv，因此启动前遭拒时使用 spawn 错误通道，而非本地化的 shell 诊断。已结算的前台与后台执行共用一个返回证据的分类器；致命证据优先于拒绝，前台错误会报告匹配到的致命行，同时保持捕获的 stderr 不变。
 - [`dsh-tool-fs-search`](../../packages/fs/tool-fs-search/) 通过 `ctx.subprocess` 运行打包的 ripgrep，并继续位于沙箱化 bash seam 之外。
 - 原生边界回归用例位于 [`partial-landlock.spec.ts`](../../packages/shell/bash-sandbox/tests/partial-landlock.spec.ts)，包括信息性通知、致命证据和前台／后台分类。
-- 组装后的产品路径由 [`partial-landlock` 快照组合](../../examples/acp-agent/partial-landlock.cordis.snapshot.yml)固定，独立于文件系统搜索的实现选择。
+- 组装后的产品路径由 [`partial-landlock` 快照组合](../../snapshots/session/partial-landlock-child-failure/cordis.snapshot.yml)固定，独立于文件系统搜索的实现选择。
 
 ## 教训
 

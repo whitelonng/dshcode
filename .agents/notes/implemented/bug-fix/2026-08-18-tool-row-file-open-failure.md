@@ -6,7 +6,7 @@ English | [中文](2026-08-18-tool-row-file-open-failure.zh.md)
 
 ## Problem
 
-Tool-row path clicks already call `host.openPath` through the chat view's injected `openFile`. The inject swallowed every Host or OS refusal, so a missing desktop opener, a remote or non-loopback carrier, or a path the Host cannot hand off left the row looking successful. The reader had no reason and no second try.
+Tool-row path clicks already call `session/openWorkspacePath` through the chat view's injected `openFile`. The inject swallowed every Host or OS refusal, so a missing desktop opener, a remote or non-loopback carrier, or a path the Host cannot hand off left the row looking successful. The reader had no reason and no second try.
 
 The [file-open-in-OS decision](../feature/2026-07-28-tool-call-file-open-in-os.md) still owns the link gesture and the Host handoff. This note owns only the refusal.
 
@@ -16,7 +16,7 @@ The inject returns the `workspaces.openPath` promise. The chat view wraps that o
 
 The dialog lives on the view that owns the Host call, not on each tool row. Produced-file chips and closing-message mentions use the same wrapper because they already share that opener. The produced-files folder action opens `.`, and that refusal uses the folder title and unknown-open copy.
 
-The Host message is shown as thrown. `WorkspaceRuntime.openPath` prefixes `path open failed: ` onto the wire error; the dialog does not unwrap that prefix.
+The Host message is shown as thrown. The chat view's `openFile` adapter prefixes `path open failed: ` onto the Remote error; the dialog does not unwrap that prefix.
 
 ## Alternatives considered
 
@@ -30,4 +30,4 @@ A silent Host refusal is no longer a success from the reader's seat. Headless or
 
 ## Testing
 
-Package specs cover inject rejection, the dialog copy (Error, non-Error, empty, workspace folder), retry of the same path, cancel, and a settlement that arrives after dismiss. `apps/web/tests/seeded-history.e2e.ts` stubs `host.openPath` to fail over a cold-resumed read row, pins the assembled dialog in `file-open-failure.expected.md`, and asserts the English reason plus a second call with the same payload.
+Package specs cover inject rejection, the dialog copy (Error, non-Error, empty, workspace folder), retry of the same path, cancel, and a settlement that arrives after dismiss. `apps/web/tests/seeded-history.e2e.ts` stubs `session/openWorkspacePath` to fail over a cold-resumed read row, pins the assembled dialog in `file-open-failure.expected.md`, and asserts the English reason plus a second call with the same payload.

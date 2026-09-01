@@ -20,7 +20,7 @@ import z from '@deepseek-ai/schemastery'
 import { SHELL_SETTINGS_NAMESPACE, ShellExecutor } from '@deepseek-ai/dsh-shell'
 import type { ShellExecRequest, ShellExecSpec, ShellProcess, ShellProcessRead, ShellRunResult, CollectedOutput } from '@deepseek-ai/dsh-shell'
 import type { SubprocessCollect, SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
-import { installSettingsSection } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import { clampTimeout, deadline, MAX_TIMER_DELAY_MS, timeoutOf } from '@deepseek-ai/dsh-timeout'
 /* jscpd:ignore-end */
 import { resolvePwshPath } from './resolve.ts'
@@ -165,19 +165,21 @@ export class PwshLocalExecutor extends ShellExecutor {
     this.source = () => entry
     this.declaredPwshPath = entry.pwshPath
     this.resolvedPwshPath = resolvePwshPath(entry.pwshPath)
-    installSettingsSection(ctx, SHELL_SETTINGS_NAMESPACE, PwshLocalExecutor.Config, entry, {
-      validate: assertServiceablePwshConfig,
-      setSource: (current) => {
-        this.source = current as () => ResolvedConfig
-      },
-      // Probing the filesystem is the one fact derived from the source: every
-      // other field is read through the getter at each command.
-      onChange: () => {
-        const declared = this.source().pwshPath
-        if (declared === this.declaredPwshPath) return
-        this.declaredPwshPath = declared
-        this.resolvedPwshPath = resolvePwshPath(declared)
-      },
+    ctx.inject(['settings'], (settingsCtx) => {
+      settingsCtx.settings.installSection(ctx, SHELL_SETTINGS_NAMESPACE, PwshLocalExecutor.Config, entry, {
+        validate: assertServiceablePwshConfig,
+        setSource: (current) => {
+          this.source = current as () => ResolvedConfig
+        },
+        // Probing the filesystem is the one fact derived from the source: every
+        // other field is read through the getter at each command.
+        onChange: () => {
+          const declared = this.source().pwshPath
+          if (declared === this.declaredPwshPath) return
+          this.declaredPwshPath = declared
+          this.resolvedPwshPath = resolvePwshPath(declared)
+        },
+      })
     })
   }
 

@@ -40,21 +40,35 @@ export interface TypertContextMap {}
 export interface TypertRemoteMap {}
 
 /**
- * One Remote call's failure as the carrier reported it. `code` stays open here:
- * the closed RPC code union belongs to the carrier package, which already
- * depends on this one, so naming it would invert that edge.
+ * Merge-extensible Remote failure vocabulary: this package declares the
+ * universal carrier codes once; the Gateway merges its infrastructure codes
+ * and every owner merges its domain codes next to the throwing code.
  */
-export interface RemoteFailure {
-  readonly code: string
-  readonly message: string
-  readonly details: object
+export interface RemoteErrorDetailsMap {
+  /** Owner-side business validation refused the request; `issues` carries codec output when one produced it. */
+  'gateway/bad-request': { readonly issues?: readonly object[] }
+  /** The call was cancelled by the carrier signal or the backend. */
+  'gateway/cancelled': {}
+  /** Carrier, dispatch, or unclassified Host failure. */
+  'gateway/internal': {}
 }
+
+/** Every declared Remote failure code. */
+export type RemoteErrorCode = keyof RemoteErrorDetailsMap
+
+/**
+ * One Remote call's failure: the code-discriminated union of RemoteError
+ * instances, so a `code` branch narrows `details` with no cast.
+ */
+export type RemoteFailure = {
+  [Code in RemoteErrorCode]: import('./remote-error.ts').RemoteError<Code>
+}[RemoteErrorCode]
 
 /**
  * What every generated Remote method resolves to. The Remote face itself folds
  * carrier failures into the error branch, so no consumer wraps a call to
  * recover one; only assembly faults (arity, an unmounted method, a missing
- * Context binder) still reject.
+ * Context adapter) still reject.
  * @template T - the Host method's business result.
  */
 export type RemoteResult<T> =
@@ -64,23 +78,92 @@ export type RemoteResult<T> =
 /** Merge-extensible scoped Remote method signatures generated for consumers. */
 export interface TypertRemoteScopeMap {}
 
+type TypertEventParameters<Event extends keyof Events> =
+  Events[Event] extends (...args: infer Args) => unknown ? Args : never
+
+type TypertEventResult<Event extends keyof Events> =
+  Events[Event] extends (...args: never[]) => infer Result ? Result : never
+
+type TypertProjectedContextKey = Extract<keyof TypertLookupMap, keyof TypertContextMap>
+
+type TypertProjectedContextSubject = {
+  [Key in TypertProjectedContextKey]: TypertLookupHost<TypertLookupMap[Key]>
+}[TypertProjectedContextKey]
+
+type TypertAgentScopedRequest<Request> = Request extends object
+  ? 'agent' extends keyof Request
+    ? Exclude<Request['agent'], undefined> extends TypertProjectedContextSubject ? Request : never
+    : never
+  : never
+
+type TypertWaterfallEvent<Event extends keyof Events> =
+  unknown extends ThisParameterType<Events[Event]>
+    ? never
+    : TypertEventParameters<Event> extends [infer Request, infer Next]
+      ? Next extends () => TypertEventResult<Event>
+        ? TypertEventResult<Event> extends Promise<unknown>
+          ? TypertAgentScopedRequest<Request> extends never ? never : Event
+          : never
+        : never
+      : never
+
+type TypertForwardingMode<Event extends keyof Events> =
+  unknown extends ThisParameterType<Events[Event]>
+    ? TypertEventResult<Event> extends void ? 'emit' : never
+    : TypertWaterfallEvent<Event> extends never ? never : 'waterfall'
+
 /**
- * Cordis event names whose shape a one-way Remote delivery can carry: unbound
- * from any Scope and returning `void`. Which ones are actually forwarded is the
- * Host assembly's selection; this predicate only excludes shapes the carrier
- * cannot represent.
+ * Cordis event names the Remote Event carrier can preserve without a second
+ * signature declaration: unscoped `void` notifications and scoped async
+ * waterfalls whose final parameter is their same-result `next()` callback.
  */
 export type TypertForwardableEvent = {
-  [Event in keyof Events]: unknown extends ThisParameterType<Events[Event]>
-    ? ReturnType<Events[Event]> extends void ? Event : never
+  [Event in keyof Events]: TypertForwardingMode<Event> extends never ? never : Event
+}[keyof Events]
+
+/** Event and dispatch mode accepted by the Remote Event source. */
+export type TypertForwardableEventEntry = {
+  [Event in keyof Events]: TypertForwardingMode<Event> extends infer Mode
+    ? Mode extends 'emit' | 'waterfall'
+      ? { readonly event: Event; readonly mode: Mode }
+      : never
     : never
 }[keyof Events]
 
 /** Merge-extensible forwarding selection declared once by the Host assembly. */
 export interface TypertRemoteEventSelection {}
 
-/** Legal `$on` keys: selected events that exist in the current compilation face. */
-export type TypertRemoteEvent = Extract<keyof Events, keyof TypertRemoteEventSelection>
+/** Legal `$on` keys selected from the carrier-compatible Cordis event declarations. */
+export type TypertRemoteEvent = Extract<TypertForwardableEvent, keyof TypertRemoteEventSelection>
+
+type TypertClientAgent<Value> =
+  Exclude<Value, undefined> extends TypertProjectedContextSubject
+    ? Context | Extract<Value, undefined>
+    : Value
+
+type TypertClientEventRequest<Request> = Request extends object
+  ? { [Key in keyof Request]: Key extends 'agent' ? TypertClientAgent<Request[Key]> : Request[Key] }
+  : never
+
+type TypertScopedClientEventListener<Event extends TypertRemoteEvent> =
+  Events[Event] extends (request: infer Request, next: infer Next) => infer Result
+    ? (
+      this: Context,
+      request: TypertClientEventRequest<Request>,
+      next: Next,
+    ) => Result
+    : never
+
+/**
+ * Listener derived from one selected Cordis event declaration. Scoped Host
+ * subjects become the resolved Client `Context`; one-way notifications retain
+ * their declaration unchanged.
+ * @template Event - selected Remote Event name.
+ */
+export type TypertClientEventListener<Event extends TypertRemoteEvent> =
+  unknown extends ThisParameterType<Events[Event]>
+    ? Events[Event]
+    : TypertScopedClientEventListener<Event>
 
 /**
  * Resolve one direct Remote namespace from the generated flat endpoint map.
@@ -181,6 +264,8 @@ export interface InvocationDescriptor {
   readonly method: string
   /** Service member invoked when the exported method name is an alias. */
   readonly implementation?: string
+  /** Absent for unary calls; stream calls validate and deliver every yielded item. */
+  readonly mode?: 'stream'
   /** Receiver selection mode. */
   readonly invocation:
     | { readonly kind: 'direct' }
@@ -192,7 +277,7 @@ export interface InvocationDescriptor {
     }
   /** Optional consuming-Context projection for one direct lookup parameter. */
   readonly scope?: {
-    /** Context kind whose Client binder supplies the identity. */
+    /** Context kind whose Client adapter supplies the identity. */
     readonly context: string
     /** Lookup parameter wire field replaced by the Context identity. */
     readonly wire: string
@@ -204,7 +289,7 @@ export interface InvocationDescriptor {
     /** Reserved final Host method parameter. */
     readonly parameter: 'signal'
   }
-  /** Codec for the resolved method result. */
+  /** Codec for the unary result or each yielded stream item. */
   readonly result: TypertCodec
   /** Source declaration used only for diagnostics. */
   readonly sourceLocation?: InvocationSourceLocation
@@ -227,26 +312,15 @@ export interface TypertClientRemote extends TypertRemoteNamespaceMap {
    */
   $mount(contribution: TypertRemoteContribution): Promise<TypertDisposer>
   /**
-   * Subscribe to one forwarded Host event; delivery is one-way, in registration
-   * order, and isolates a throwing listener from the rest.
+   * Subscribe to one forwarded Host event. Notifications run in registration
+   * order and isolate failures; scoped waterfalls return, delegate through
+   * `next()`, or reject the Host dispatch.
    * @template Event - forwarded event name selected by the Host assembly.
    * @param event - forwarded Host event name, unchanged on the wire.
-   * @param listener - receives the Host's argument list as declared by Cordis `Events`.
+   * @param listener - receives the Client projection of the Cordis `Events` declaration.
    * @returns disposer owned by the calling fiber.
    */
-  $on<Event extends TypertRemoteEvent>(event: Event, listener: Events[Event]): () => void
-  /**
-   * Hand one decoded forwarded frame to the subscription table. The carrier
-   * owning the Host frame sink calls this; a consumer subscribes with
-   * {@link TypertClientRemote.$on} and never calls it.
-   *
-   * `event` is a plain string because this is the wire boundary: the name is
-   * whatever the Host assembly's allowlist selected, and one nobody subscribed
-   * to is dropped silently.
-   * @param event - forwarded Host event name, exactly as the Host emitted it.
-   * @param args - the Host argument list, already JSON-decoded.
-   */
-  $dispatch(event: string, args: readonly unknown[]): void
+  $on<Event extends TypertRemoteEvent>(event: Event, listener: TypertClientEventListener<Event>): () => void
 }
 
 /**
@@ -290,33 +364,58 @@ export interface TypertLookupDefinition {
   readonly wireTypeSymbol: string
 }
 
-/** Host resolver for one scoped Remote kind. */
-export interface TypertHostContextProvider<Wire = unknown> {
-  /** Wire field carrying the Context identity. */
-  readonly wire: string
-  /** Canonical wire type symbol used by strict generation. */
-  readonly wireTypeSymbol: string
+/** Bidirectional projection between one environment's Context and its wire identity. */
+export interface TypertContextAdapter<Wire = unknown> {
   /**
-   * Resolve a wire identity to its live scoped Context.
+   * Read the identity represented by a live Context.
+   * @param ctx - Context in this adapter's environment.
+   * @returns the wire identity, or `undefined` when the Context has another kind.
+   */
+  identity(ctx: Context): Wire | undefined
+  /**
+   * Resolve a wire identity to a live Context in this adapter's environment.
+   * An asynchronous Client resolver may wait for its owner to create the Context.
    * @param id - validated wire identity.
-   * @returns the scoped Context, or `undefined` when unavailable.
+   * @returns the Context, or `undefined` when it is unavailable.
    */
   resolve(id: Wire): Context | undefined | Promise<Context | undefined>
 }
 
-/** Composition-owned resolver replacing one Host Context provider's default lookup policy. */
+/** Host Context adapter plus the wire declaration used by strict Remote methods. */
+export interface TypertHostContextAdapter<Wire = unknown> extends TypertContextAdapter<Wire> {
+  /** Wire field carrying the Context identity. */
+  readonly wire: string
+  /** Canonical wire type symbol used by strict generation. */
+  readonly wireTypeSymbol: string
+}
+
+/** Composition-owned resolver replacing one Host Context adapter's default lookup policy. */
 export type TypertHostContextResolver<Wire = unknown> = (
   id: Wire,
 ) => Context | undefined | Promise<Context | undefined>
 
-/** Client resolver for the identity carried by the calling scoped Context. */
-export interface TypertClientContextBinder<Wire = unknown> {
+/** Client-side bidirectional Context adapter. */
+export interface TypertClientContextAdapter<Wire = unknown> {
   /**
-   * Read the Remote identity represented by a calling Context.
-   * @param ctx - Context rebound by the Cordis service tracker.
-   * @returns the wire identity, or `undefined` when the Context has the wrong scope.
+   * Read the identity represented by a live Client Context.
+   * @param ctx - Client Context inspected by a scoped Remote caller.
+   * @returns the wire identity, or `undefined` for another Context kind.
    */
   identity(ctx: Context): Wire | undefined
+  /**
+   * Resolve a wire identity from the Client's currently materialized Contexts.
+   * @param id - validated wire identity.
+   * @returns the Client Context, or `undefined` when unavailable.
+   */
+  resolve(id: Wire): Context | undefined
+}
+
+/** Host Context identity selected from the registered adapter set. */
+export interface TypertHostContextIdentity {
+  /** Merge-declared Context kind whose adapter recognized the Context. */
+  readonly kind: string
+  /** Wire identity returned by that adapter. */
+  readonly identity: unknown
 }
 
 /** Notification emitted after a Typert runtime registry changes. */
@@ -423,20 +522,20 @@ export interface TypertLookupRegistry {
   subscribe(listener: TypertRegistryListener): TypertDisposer
 }
 
-/** Runtime registry for Host Context resolvers and Client Context binders. */
+/** Runtime registry for the Host and Client adapters of each Context kind. */
 export interface TypertContextRegistry {
   /**
-   * Register a Host Context resolver.
+   * Register a Host Context adapter.
    * @param key - merge-declared Context key.
-   * @param provider - owning package's Host resolver.
-   * @returns disposer withdrawing the exact provider.
+   * @param adapter - owning package's bidirectional Host projection.
+   * @returns disposer withdrawing the exact adapter.
    */
   registerHost<K extends StringKeyOf<TypertContextMap>>(
     key: K,
-    provider: TypertHostContextProvider<TypertContextWire<TypertContextMap[K]>>,
+    adapter: TypertHostContextAdapter<TypertContextWire<TypertContextMap[K]>>,
   ): TypertDisposer
   /**
-   * Override one Host Context key's identity policy for the calling fiber.
+   * Override one Host Context key's resolution policy for the calling fiber.
    * Configuration may precede provider registration and restores the provider's default resolver on disposal.
    * @param key - merge-declared Context key.
    * @param resolver - composition-owned resolver used by every Host Context lookup of this key.
@@ -447,29 +546,36 @@ export interface TypertContextRegistry {
     resolver: TypertHostContextResolver<TypertContextWire<TypertContextMap[K]>>,
   ): TypertDisposer
   /**
-   * Register a Client Context identity binder.
+   * Register a Client Context adapter.
    * @param key - merge-declared Context key.
-   * @param binder - Client scope identity resolver.
-   * @returns disposer withdrawing the exact binder.
+   * @param adapter - owning package's bidirectional Client projection.
+   * @returns disposer withdrawing the exact adapter.
    */
   registerClient<K extends StringKeyOf<TypertContextMap>>(
     key: K,
-    binder: TypertClientContextBinder<TypertContextWire<TypertContextMap[K]>>,
+    adapter: TypertClientContextAdapter<TypertContextWire<TypertContextMap[K]>>,
   ): TypertDisposer
   /**
-   * Look up a Host Context resolver.
-   * @param key - descriptor Context key.
-   * @returns the provider, or `undefined` when absent.
+   * Identify a live Host Context through the sole registered adapter set.
+   * @param ctx - Context projected by a Host-to-Client scoped event.
+   * @returns its kind and wire identity, or `undefined` when no adapter recognizes it.
+   * @throws when more than one Context kind recognizes the same Context.
    */
-  getHost(key: string): TypertHostContextProvider | undefined
+  identifyHost(ctx: Context): TypertHostContextIdentity | undefined
   /**
-   * Look up a Client Context binder.
+   * Look up a Host Context adapter.
    * @param key - descriptor Context key.
-   * @returns the binder, or `undefined` when absent.
+   * @returns the adapter, or `undefined` when absent.
    */
-  getClient(key: string): TypertClientContextBinder | undefined
+  getHost(key: string): TypertHostContextAdapter | undefined
   /**
-   * Observe later Context provider changes.
+   * Look up a Client Context adapter.
+   * @param key - descriptor Context key.
+   * @returns the adapter, or `undefined` when absent.
+   */
+  getClient(key: string): TypertClientContextAdapter | undefined
+  /**
+   * Observe later Context adapter changes.
    * @param listener - synchronous contained observer.
    * @returns disposer for this subscription.
    */

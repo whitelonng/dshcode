@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { Context } from '@deepseek-ai/cordis'
 import { SettingsSchemaService } from '@deepseek-ai/dsh-client-ui-settings/src/client/schema.ts'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
@@ -15,17 +15,23 @@ import { decodeWelcomeSection, WelcomeNoticeStore } from '../src/client/welcome-
 import type { WelcomeSection } from '../src/client/welcome-store.ts'
 import { en, zh } from '../src/client/locales.ts'
 import {
-  WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_COPY, WELCOME_NOTICE_SETTINGS_NAMESPACE,
+  WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE,
   WELCOME_NOTICE_VERSION,
 } from '../src/onboarding-copy.ts'
+
+const WELCOME_NOTICE_COPY = {
+  en: { title: en.welcomeTitle, body: en.welcomeBody, continueLabel: en.welcomeContinue },
+  zh: { title: zh.welcomeTitle, body: zh.welcomeBody, continueLabel: zh.welcomeContinue },
+}
 
 afterEach(() => {
   cleanup()
   document.getElementById('root')?.remove()
 })
 
-function response<T>(value: T) {
-  return { rpcId: 'welcome-rpc' as never, result: { ok: true as const, value } }
+/** The settings namespace answers over the Remote carrier, which has no envelope. */
+function remoteAnswer<T>(value: T) {
+  return { ok: true as const, value }
 }
 
 function welcomeView(value: unknown, revision = 0) {
@@ -41,10 +47,14 @@ function welcomeView(value: unknown, revision = 0) {
   }
 }
 
+type AttentionSnapshot = Parameters<Parameters<WelcomeNoticeProps['useSessionPendingInteraction']>[0]>[0]
+const noAttention: AttentionSnapshot = new Map()
+const useSessionPendingInteraction: WelcomeNoticeProps['useSessionPendingInteraction'] = selector => selector(noAttention)
+
 function mount(
   version?: string,
   mutateImpl: () => Promise<unknown> = () =>
-    Promise.resolve(response(welcomeView({ [WELCOME_NOTICE_ACK_FIELD]: WELCOME_NOTICE_VERSION }, 1))),
+    Promise.resolve(remoteAnswer(welcomeView({ [WELCOME_NOTICE_ACK_FIELD]: WELCOME_NOTICE_VERSION }, 1))),
 ) {
   const appRoot = document.createElement('div')
   appRoot.id = 'root'
@@ -52,7 +62,7 @@ function mount(
   const mutate = vi.fn(mutateImpl)
   const api = {
     settings: {
-      describe: () => Promise.resolve(response({
+      describe: () => Promise.resolve(remoteAnswer({
         writable: true,
         hasDocument: false,
         namespaces: [welcomeView(version === undefined ? {} : { [WELCOME_NOTICE_ACK_FIELD]: version })],
@@ -60,9 +70,10 @@ function mount(
       mutate,
     },
   }
-  const mirror = new SettingsDescribeMirror(api as never)
+  const ctx = { remote: api } as never
+  const mirror = new SettingsDescribeMirror(ctx)
   const scope = new SettingsScopeController<WelcomeSection>(
-    api as never,
+    ctx,
     { namespace: WELCOME_NOTICE_SETTINGS_NAMESPACE, decode: decodeWelcomeSection },
     mirror,
     'host',
@@ -77,6 +88,7 @@ function mount(
     complete,
     openSection: vi.fn(),
     useSessions: unusedHook,
+    useSessionPendingInteraction,
     useWorkspaces: unusedHook,
     controller,
     useWelcome: bindSnapshotSelector(controller.store),
@@ -142,15 +154,8 @@ describe('WelcomeNotice', () => {
     fireEvent.click(action)
     expect(action.disabled).toBe(true)
     resolveWrite({
-      rpcId: 'welcome-refused' as never,
-      result: {
-        ok: false,
-        error: {
-          code: 'settings-rejected',
-          message: 'read only',
-          details: { ns: WELCOME_NOTICE_SETTINGS_NAMESPACE },
-        },
-      },
+      ok: false,
+      error: new RemoteError('settings/rejected', 'read only', { ns: WELCOME_NOTICE_SETTINGS_NAMESPACE }),
     })
     expect((await screen.findByRole('alert')).textContent).toBe(zh.welcomeError)
     expect(h.complete).not.toHaveBeenCalled()

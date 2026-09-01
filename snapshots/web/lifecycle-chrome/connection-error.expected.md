@@ -1,0 +1,4 @@
+- button "Settings":
+  - img
+  - text: Settings
+- button "Disconnected, reconnect now": Disconnected

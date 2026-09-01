@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -13,6 +14,7 @@ async function harness(adapter: MockAdapter): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -33,7 +35,7 @@ describe('Agent', () => {
 
     agent.inject(createUserMessage({ content: [{ type: 'text', text: 'context' }], source: { kind: 'plugin', plugin: 'p' } }))
 
-    expect(agent.session.events.map(event => event.type)).toEqual(['agent/inbox/spliced'])
+    expect(agent.session.snapshotEvents().map(event => event.type)).toEqual(['agent/inbox/spliced'])
     expect(agent.status).toBe('idle')
     expect(adapter.requests).toHaveLength(0)
     await agent.whenIdle()
@@ -45,7 +47,7 @@ describe('Agent', () => {
 
     agent.inject(createUserMessage({ content: [{ type: 'text', text: 'empty plugin source' }], source: { kind: 'plugin', plugin: '' } }))
 
-    const injected = agent.session.events.at(-1)
+    const injected = agent.session.snapshotEvents().at(-1)
     expect(injected?.type === 'agent/inbox/spliced' && injected.data.inserted[0]?.source)
       .toEqual({ kind: 'plugin', plugin: '' })
   })
@@ -95,7 +97,7 @@ describe('Agent', () => {
     expect(() => {
       agent.inject(createUserMessage({ content: [{ type: 'text', text: 'x', bad: 1n } as never], source: { kind: 'plugin', plugin: 'p' } }))
     }).toThrow(/non-JSON-serializable/)
-    expect(agent.session.events).toHaveLength(0)
+    expect(agent.session.snapshotEvents()).toHaveLength(0)
   })
 
   it('steer() while idle becomes a woken prompt turn', async () => {
@@ -106,7 +108,7 @@ describe('Agent', () => {
     agent.steer(createUserMessage({ content: [{ type: 'text', text: 'steer idle' }], source: { kind: 'plugin', plugin: 'test' } }))
     await agent.whenIdle()
 
-    expect(agent.session.events.some(event => event.type === 'user/message')).toBe(true)
+    expect(agent.session.snapshotEvents().some(event => event.type === 'user/message')).toBe(true)
     expect(adapter.requests).toHaveLength(1)
   })
 

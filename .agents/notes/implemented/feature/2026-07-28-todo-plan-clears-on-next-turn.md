@@ -14,7 +14,7 @@ The standing plan is the latest `todo/write` that is not followed by a later `tu
 
 ### Host projection (web)
 
-`dsh-tool-todo`'s `todos` projection unit folds the rule: `apply` takes the whole list from each `todo/write` and returns `null` on each `turn/start` (`stateVersion` 2). Carriers (`dsh-host-apiproxy`) serve that value on the history tail `projections` block and push `session/projection` frames; the web dock reads it through `useProjection('todos')`. The keyless fixture mirrors the same fold for assembled snapshots.
+`dsh-tool-todo`'s `todos` projection unit folds the rule: `apply` takes the whole list from each `todo/write` and returns `null` on each `turn/start` (`stateVersion` 2). Session Controller serves that value on the history tail `projections` block and pushes `session/projection` frames; the web dock reads it through `useProjection('todos')`. The keyless fixture mirrors the same fold for assembled snapshots.
 
 ### TUI live path
 

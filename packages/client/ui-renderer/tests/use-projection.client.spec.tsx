@@ -4,15 +4,20 @@
  * docs/subsystems/session-projection.md): the fifth
  * framework hook seat rides the same provide channel as useSession — a
  * session slot component receives `useProjection` in its kit, key-addressed
- * over the bundle's projection face; unresolved keys (no value, no face, no
- * session) uniformly read `undefined`; live value changes re-render; the
- * selector overload runs over the whole value.
+ * over the binding's projection source family; unresolved keys and absent
+ * sessions read `undefined`; live value changes re-render; the selector
+ * overload runs over the whole value.
  */
 import { describe, expect, it } from 'vitest'
 import { act, render } from '@testing-library/react'
-import type { SessionMaybeProvideInfo, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SlotRendererHost } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import { Context } from '@deepseek-ai/cordis'
+import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
+import type {
+  ScopedStandardSourceBinding, SlotRendererHost, SlotScopeAdapter, StandardSourceBinding,
+} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createSlotRenderer } from '../src/client/scoped-slots.tsx'
+
+type SessionBinding = ScopedStandardSourceBinding
 
 function observable<T>(initial: T) {
   let value = initial
@@ -27,25 +32,51 @@ function observable<T>(initial: T) {
 type UseProjectionProp = (key: string, selector?: (v: unknown) => unknown) => unknown
 
 function makeHost() {
-  const absentInfo: SessionMaybeProvideInfo = { sessionId: undefined, hooks: { session: undefined }, props: {} }
-  const provide = observable<SessionMaybeProvideInfo>(absentInfo)
+  const scopeCtx = new Context()
+  const absentBinding: StandardSourceBinding = {
+    key: undefined,
+    hooks: { session: undefined },
+    keyedHooks: { projection: undefined },
+    props: { sessionId: undefined },
+  }
+  const currentBinding = observable<StandardSourceBinding>(absentBinding)
   const cells = new Map<string, ReturnType<typeof observable<unknown>>>()
-  /** Store-parallel face: always defined per key; an unseen key snapshots undefined. */
+  /** Store-parallel source family: an unseen key snapshots undefined. */
   const absent = { getSnapshot: () => undefined, subscribe: () => () => {} }
   const sessionEntries: StoredEntry[] = []
-  let withFace = true
+  const bindings = new Map<string, SessionBinding>()
   const rootEntry: StoredEntry = {
     component: (props: { renderSlot: (key: string, owner: object) => React.ReactNode }) =>
       <>{props.renderSlot('k.session', {})}</>,
     options: {},
     children: { 'k.session': { kind: 'single', scope: 'session' } },
   }
-  const info = (id: string): SessionMaybeProvideInfo => ({
-    sessionId: id,
-    hooks: { session: { getSnapshot: () => ({ sid: id }), subscribe: () => () => {} } },
+  const binding = (id: string): SessionBinding => {
+    const cached = bindings.get(id)
+    if (cached !== undefined) return cached
+    const value: SessionBinding = {
+      key: id,
+      ctx: scopeCtx,
+      hooks: { session: { getSnapshot: () => ({ sid: id }), subscribe: () => () => {} } },
+      keyedHooks: { projection: key => cells.get(key) ?? absent },
+      props: { sessionId: id },
+    }
+    bindings.set(id, value)
+    return value
+  }
+  const root = observable<StandardSourceBinding>({
+    key: undefined,
+    hooks: {},
+    keyedHooks: {},
     props: {},
-    ...(withFace ? { projections: { faceOf: (key: string) => cells.get(key) ?? absent } } : {}),
   })
+  const sessionAdapter: SlotScopeAdapter = {
+    current: currentBinding,
+    resolve: binding,
+    renderArea: (scopeBinding, { empty, children }) => scopeBinding.key === undefined
+      ? <>{empty?.() ?? null}</>
+      : <>{children}</>,
+  }
   const host: SlotRendererHost = {
     subscribe: () => () => {},
     getVersion: () => 0,
@@ -57,19 +88,19 @@ function makeHost() {
     specOf: key => key === 'k.session' ? { kind: 'single', scope: 'session' } : undefined,
     isLive: () => true,
     storeOf: () => undefined,
-    sessions: {
-      list: observable<unknown>({ ids: [] }),
-      provideInfo: provide,
-    },
-    workspaces: { list: observable<unknown>({ items: [] }) },
+    root,
+    scopeRevision: observable(0),
+    scope: () => sessionAdapter,
   }
   return {
     host,
     cells,
-    // Same driver surface as before the atomic provide source: set(id)
-    // publishes the resolved bundle (or the absent projection) through it.
-    current: { set: (id: string | undefined) => { provide.set(id === undefined ? absentInfo : info(id)) } },
-    dropFace: () => { withFace = false },
+    // The driver publishes the resolved binding or the absent projection.
+    current: {
+      set: (id: string | undefined) => {
+        currentBinding.set(id === undefined ? absentBinding : binding(id))
+      },
+    },
     registerSession: (entry: StoredEntry) => { sessionEntries.push(entry) },
   }
 }
@@ -90,8 +121,8 @@ describe('useProjection standard-kit delivery', () => {
       },
       options: {},
     })
+    h.current.set('s1')
     render(<>{createSlotRenderer().renderRoot(h.host, {})}</>)
-    act(() => { h.current.set('s1') })
     expect(reads.at(-1)).toEqual({ marks: { marks: ['a'] }, ghost: undefined })
     // Live change re-renders with the new whole value.
     act(() => { cell.set({ marks: ['a', 'b'] }) })
@@ -110,25 +141,8 @@ describe('useProjection standard-kit delivery', () => {
       },
       options: {},
     })
+    h.current.set('s1')
     render(<>{createSlotRenderer().renderRoot(h.host, {})}</>)
-    act(() => { h.current.set('s1') })
     expect(reads.slice(-2)).toEqual([2, 'absent'])
-  })
-
-  it('treats a bundle without the projections face as all-absent (capability absence)', () => {
-    const h = makeHost()
-    h.cells.set('test/marks', observable<unknown>({ marks: ['a'] }))
-    h.dropFace()
-    const reads: unknown[] = []
-    h.registerSession({
-      component: (props: { useProjection: UseProjectionProp }) => {
-        reads.push(props.useProjection('test/marks'))
-        return null
-      },
-      options: {},
-    })
-    render(<>{createSlotRenderer().renderRoot(h.host, {})}</>)
-    act(() => { h.current.set('s1') })
-    expect(reads.at(-1)).toBeUndefined()
   })
 })

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { makeTranslate, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type {
-  SessionId, SessionListState, SessionSummary, SubagentCatalogSnapshot,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  SessionListState, SessionSummary, SubagentCatalogSnapshot,
+} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   SubagentHeaderLineage, type SubagentHeaderLineageProps,
 } from '../src/client/SubagentHeaderLineage.tsx'
@@ -228,33 +229,65 @@ describe('SubagentHeaderLineage', () => {
 
   it('opens only on hover and preserves the portaled-menu crossing grace', async () => {
     vi.useFakeTimers()
+    const advance = async (duration: number): Promise<void> => {
+      await act(async () => { await vi.advanceTimersByTimeAsync(duration) })
+    }
     const view = render(<SubagentHeaderLineage {...props(catalog())} />)
     const trigger = screen.getByRole('button', { name: /2 个子代理/ })
+    const triggerRect = vi.spyOn(trigger, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 40, left: 50 } as DOMRect)
 
     fireEvent.click(trigger)
     expect(screen.queryByRole('tree')).toBeNull()
 
     fireEvent.mouseEnter(trigger.parentElement!)
-    await vi.advanceTimersByTimeAsync(149)
+    await advance(149)
     expect(screen.queryByRole('tree')).toBeNull()
-    await vi.advanceTimersByTimeAsync(1)
+    await advance(1)
     const tree = screen.getByRole('tree')
+    expect(tree.style.top).toBe('45px')
+    expect(tree.style.left).toBe('50px')
+    triggerRect.mockReturnValue({ bottom: 60, left: 70 } as DOMRect)
     fireEvent.resize(window)
+    expect(tree.style.top).toBe('65px')
+    expect(tree.style.left).toBe('70px')
     fireEvent.mouseLeave(trigger.parentElement!)
     fireEvent.mouseEnter(tree)
-    await vi.advanceTimersByTimeAsync(120)
+    await advance(120)
     expect(screen.getByRole('tree')).toBeTruthy()
 
     fireEvent.mouseLeave(tree)
-    await vi.advanceTimersByTimeAsync(119)
+    await advance(119)
     expect(screen.getByRole('tree')).toBeTruthy()
-    await vi.advanceTimersByTimeAsync(1)
+    await advance(1)
     expect(screen.queryByRole('tree')).toBeNull()
 
     hoverCatalog(trigger)
     fireEvent.mouseLeave(trigger.parentElement!)
     view.unmount()
-    await vi.advanceTimersByTimeAsync(120)
+    await advance(120)
+  })
+
+  it('repositions an open catalog after viewport resize and document scroll', () => {
+    const view = render(<SubagentHeaderLineage {...props(catalog())} />)
+    const trigger = screen.getByRole('button', { name: /2 个子代理/ })
+    const bounds = vi.spyOn(trigger, 'getBoundingClientRect')
+    bounds.mockReturnValue({ bottom: 20, left: 30 } as DOMRect)
+    hoverCatalog(trigger)
+    const tree = screen.getByRole('tree')
+    expect(tree.style.top).toBe('25px')
+    expect(tree.style.left).toBe('30px')
+
+    bounds.mockReturnValue({ bottom: 70, left: 80 } as DOMRect)
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    expect(tree.style.top).toBe('75px')
+    expect(tree.style.left).toBe('80px')
+
+    bounds.mockReturnValue({ bottom: 90, left: 100 } as DOMRect)
+    act(() => { document.dispatchEvent(new Event('scroll')) })
+    expect(tree.style.top).toBe('95px')
+    expect(tree.style.left).toBe('100px')
+    view.unmount()
   })
 
   it('repositions the portaled menu when the window resizes while open', async () => {
@@ -570,7 +603,7 @@ describe('SubagentHeaderLineage', () => {
     const failed = props(catalog({
       entries: [],
       state: 'error',
-      error: { code: 'internal', message: 'index down', details: {} },
+      error: new RemoteError('gateway/internal', 'index down', {}),
     }))
     render(<SubagentHeaderLineage {...failed} />)
     hoverCatalog(screen.getByRole('button', { name: /0 个子代理/ }))
@@ -764,7 +797,7 @@ describe('SubagentHeaderLineage', () => {
   it.each([
     ['ancestor', vi.fn()],
     ['current', undefined],
-  ] as const)('refreshes an absent %s switcher catalog without waiting for hover', (_kind, openTitle) => {
+  ] as const)('keeps an absent %s switcher catalog lazy until interaction', (_kind, openTitle) => {
     const input = {
       ...props(undefined, {}, {
         [CHILD]: {
@@ -778,7 +811,7 @@ describe('SubagentHeaderLineage', () => {
     }
     render(<SubagentHeaderLineage {...input} />)
 
-    expect(input.refresh).toHaveBeenCalledWith(PARENT)
+    expect(input.refresh).not.toHaveBeenCalled()
   })
 
   it('keeps a nested title switcher scoped to its direct-parent catalog', () => {

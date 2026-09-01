@@ -24,10 +24,13 @@
       "path": "../ui-primitives"
     },
     {
-      "path": "../runtime"
+      "path": "../store"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-session"
     }
   ]
 }

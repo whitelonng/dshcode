@@ -12,21 +12,21 @@ Source: [`packages/llm/token-meter/src/types.ts`](../../packages/llm/token-meter
 /** Detached immutable request-pressure and surface snapshot at one consumed log revision. */
 interface TokenMeasurement {
   /** Number of durable events consumed; equal to the next unread event seq. */
-  readonly logRevision: number
+  readonly logRevision: SessionLogOffset
   /** Provider or heuristic anchor used for this measurement. */
   readonly baseline: TokenMeasurementBaseline
   /** Signed repricing of current surface content relative to the baseline anchor. */
   readonly surfaceDeltaTokens: number
   /** Non-negative current request-and-response pressure. */
   readonly totalTokens: number
-  /** Total heuristic tokens across the current surface. */
+  /** Total route-priced request tokens across the current surface; equals the sum of the node prices. */
   readonly surfaceTokens: number
   /** Current surface nodes in positional head-to-tail order. */
   readonly nodes: readonly TokenSurfaceNode[]
 }
 ```
 
-`baseline.kind === 'usage'` means the latest successful provider call has the same canonical request envelope and its total is no lower than that call's full heuristic anchor. `estimated` means no reusable conservative usage anchor exists, so the service priced the complete envelope and surface with its fixed heuristic. A later successful request replaces the earlier anchor; signed `surfaceDeltaTokens` preserves growth and shrinkage relative to a matching anchor. `totalTokens` remains request-and-response pressure, while `surfaceTokens` is the surface-only heuristic total and equals the sum of the node prices.
+Every measurement resolves the effective envelope's routed provider/model to that route's declared request-image pricing through `ctx.llm`, so image occurrences are priced as the visual tokens plus model-visible text the request actually sends; routes and compositions without declared pricing keep the fixed heuristic. `baseline.kind === 'usage'` means the latest successful provider call has the same canonical request envelope and its total is no lower than that call's full route-priced anchor. `estimated` means no reusable conservative usage anchor exists, so the service priced the complete envelope and surface itself. A later successful request replaces the earlier anchor; signed `surfaceDeltaTokens` preserves growth and shrinkage relative to a matching anchor, repricing both sides under the same route. `totalTokens` remains request-and-response pressure, while `surfaceTokens` is the surface-only route-priced total and equals the sum of the node prices.
 
 ## `TokenSurfaceNode`
 
@@ -34,9 +34,20 @@ interface TokenMeasurement {
 /** One token-priced node in the current ordered session surface. */
 interface TokenSurfaceNode {
   /** Durable sequence number of the surface event. */
-  readonly seq: number
-  /** Heuristic tokens for the exact message projected by this node. */
+  readonly seq: SessionSeq
+  /**
+   * Request-pressure tokens for the exact message projected by this node under
+   * the measured route: image occurrences carry the route's declared visual
+   * price when the routed adapter declares one, and the fixed heuristic
+   * otherwise. Trigger, retention, and range selection all read this price.
+   */
   readonly tokens: number
+  /**
+   * Fixed-heuristic tokens for the same message, independent of any route.
+   * The shadow-price protocol prices replacements with this value so the O(1)
+   * projection fold stays in agreement with its own appends.
+   */
+  readonly heuristicTokens: number
 }
 ```
 
@@ -60,14 +71,18 @@ Replay owner for one service-wide estimator and isolated per-session folds.
 /**
  * Measure current request pressure and surface through the durable tail.
  *
- * Provider usage is reused only when the latest successful call's canonical
- * request envelope matches `requestHeader` and its total is no lower than
- * that call's full heuristic anchor; otherwise the complete envelope and
- * surface are heuristically repriced.
+ * The effective envelope's routed provider/model selects the request-image
+ * pricing every node is priced under: a route whose adapter declares image
+ * pricing charges each retained image its visual tokens plus its
+ * model-visible text, while other routes keep the fixed heuristic. Provider
+ * usage is reused only when the latest successful call's canonical request
+ * envelope matches `requestHeader` and its total is no lower than that
+ * call's full route-priced anchor; otherwise the complete envelope and
+ * surface are repriced.
  *
- * `requestHeader` affects request pressure only; surface fields always
- * describe the current session surface. Every call clones those positional
- * nodes, so measurement is O(surface).
+ * `requestHeader` replaces the latest logged envelope for pressure and node
+ * pricing; the node set always describes the current session surface. Every
+ * call clones those positional nodes, so measurement is O(surface).
  *
  * @param session - session to replay through its current durable tail.
  * @param requestHeader - optional effective request envelope replacing the latest logged header.

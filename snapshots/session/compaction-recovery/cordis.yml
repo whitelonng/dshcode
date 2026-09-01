@@ -1,0 +1,8 @@
+# Context-overflow composition used by the headless compaction session.
+
+- id: compaction-basic
+  name: '@deepseek-ai/dsh-compaction-basic'
+  config:
+    thresholdRatio: 0.99
+    retainTokens: 20
+    maxTokens: 32

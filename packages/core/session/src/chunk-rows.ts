@@ -1,26 +1,29 @@
 /**
- * Lossless storage packing for `assistant/chunk` delta runs. Providers stream
+ * Lossless row packing for `assistant/chunk` delta runs. Providers stream
  * token-sized deltas, so a log stores hundreds of near-identical event lines
  * whose JSON envelopes dwarf their payloads (~56× measured on a real DeepSeek
  * session). This module packs each run of consecutive same-block delta chunks
  * into ONE storage row — `text-chunks`, `reasoning-chunks`, or
  * `tool-call-chunks` — and expands rows back to the exact original events.
  *
- * Storage rows are a durable-encoding vocabulary, NOT session events: they
- * never enter `Session.events`, have no `SessionEventMap` entry, and use bare
- * (slash-less) type tags so a reader cannot confuse them with the event
- * taxonomy (precedent: the JSONL header line's `session` tag). The encoder
- * whitelists exact shapes — anything it does not fully recognize is stored
- * verbatim, so unknown fields or future chunk variants lose compression, never
- * data. The decoder validates before expanding and fails loud on a malformed
- * row-tagged value instead of silently dropping a whole run.
+ * Packed rows are an encoding vocabulary, NOT session events: they never enter
+ * `Session.snapshotEvents()`, have no `SessionEventMap` entry, and use bare (slash-less)
+ * type tags so a reader cannot confuse them with the event taxonomy
+ * (precedent: the JSONL header line's `session` tag). Persistence and bounded
+ * history transport both use the codec. The encoder whitelists exact shapes —
+ * anything it does not fully recognize stays verbatim, so unknown fields or
+ * future chunk variants lose compression, never data. The decoder validates
+ * before expanding and fails loud on a malformed row-tagged value instead of
+ * silently dropping a whole run.
  *
  * @module @deepseek-ai/dsh-session/chunk-rows
  */
 
-import { CallId, assertNever } from '@deepseek-ai/dsh-llm'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
-import type { SessionEvent } from './types.ts'
+import { SessionSeq } from './types.ts'
+import type { SessionEvent, SessionSeq as SessionSeqType } from './types.ts'
 
 /** The chunk kinds that may pack; block boundaries, usage, and finish chunks always stay one event per line. */
 type DeltaKind = 'text-delta' | 'reasoning-delta' | 'tool-call-delta'
@@ -50,7 +53,7 @@ interface TextRunData extends RunDataBase {
 
 /** Payload of a `tool-call-chunks` row: the run-constant call identity plus each member's raw arguments fragment. */
 interface ToolCallRunData extends RunDataBase {
-  id: CallId
+  id: ToolCallId
   /** Present iff every member carried it, with one uniform value (a mixed run never packs). */
   name?: string
   args: string[]
@@ -62,12 +65,32 @@ interface ToolCallRunData extends RunDataBase {
  * {@link TextRunData} payload, tool-call rows carry {@link ToolCallRunData}.
  */
 export type ChunkRow =
-  | { type: 'text-chunks'; seq0: number; time0: number; data: TextRunData }
-  | { type: 'reasoning-chunks'; seq0: number; time0: number; data: TextRunData }
-  | { type: 'tool-call-chunks'; seq0: number; time0: number; data: ToolCallRunData }
+  | { type: 'text-chunks'; seq0: SessionSeqType; time0: number; data: TextRunData }
+  | { type: 'reasoning-chunks'; seq0: SessionSeqType; time0: number; data: TextRunData }
+  | { type: 'tool-call-chunks'; seq0: SessionSeqType; time0: number; data: ToolCallRunData }
 
 /** One durable log line's JSON value: a session event verbatim, or a packed chunk row. */
 export type StorageRecord = SessionEvent | ChunkRow
+
+/**
+ * Test whether an encoded record is a packed chunk row rather than a Session event.
+ * @param record - one persistence or bounded-history encoding record.
+ * @returns Whether the record is a packed chunk row.
+ */
+export function isChunkRow(record: StorageRecord): record is ChunkRow {
+  return record.type === 'text-chunks'
+    || record.type === 'reasoning-chunks'
+    || record.type === 'tool-call-chunks'
+}
+
+/**
+ * Number of logical Session events represented by one packed row.
+ * @param row - validated or encoder-produced packed row.
+ * @returns Count of consecutive chunk events in the row.
+ */
+export function chunkRowLength(row: ChunkRow): number {
+  return row.type === 'tool-call-chunks' ? row.data.args.length : row.data.texts.length
+}
 
 /**
  * Minimum members before a run packs. Below it a row's envelope rivals the
@@ -96,7 +119,8 @@ function hasExactKeys(value: object, keys: readonly string[]): boolean {
 function classify(event: SessionEvent): DeltaKind | undefined {
   if (event.type !== 'assistant/chunk') return undefined
   if (!hasExactKeys(event, ['type', 'seq', 'time', 'data'])) return undefined
-  if (!Number.isSafeInteger(event.seq) || event.seq < 0 || !Number.isSafeInteger(event.time)) return undefined
+  if (!Number.isSafeInteger(event.seq) || event.seq < 0 || Object.is(event.seq, -0)
+    || !Number.isSafeInteger(event.time)) return undefined
   const data: unknown = event.data
   if (!isRecord(data) || !hasExactKeys(data, ['turn', 'step', 'chunk'])) return undefined
   if (typeof data.turn !== 'number' || typeof data.step !== 'number') return undefined
@@ -167,7 +191,7 @@ function buildRow(kind: DeltaKind, run: readonly DeltaEvent[]): ChunkRow {
       ...envelope,
       data: {
         ...base,
-        id: CallId(call.id),
+        id: brandString<ToolCallId>(call.id),
         ...Object.hasOwn(call, 'name') ? { name: call.name as string } : {},
         args: run.map(event => (event.data.chunk as { argumentsDelta: string }).argumentsDelta),
       },
@@ -249,7 +273,7 @@ function validateRow(value: Record<string, unknown>, tag: ChunkRow['type']): Chu
   if (!hasExactKeys(value, ['type', 'seq0', 'time0', 'data'])) {
     malformed(tag, 'envelope must be exactly {type, seq0, time0, data}')
   }
-  if (!Number.isSafeInteger(value.seq0) || (value.seq0 as number) < 0) {
+  if (!Number.isSafeInteger(value.seq0) || (value.seq0 as number) < 0 || Object.is(value.seq0, -0)) {
     malformed(tag, 'seq0 must be a non-negative safe integer')
   }
   if (!Number.isSafeInteger(value.time0)) {
@@ -278,7 +302,7 @@ function validateRow(value: Record<string, unknown>, tag: ChunkRow['type']): Chu
   // outside any encoder's image: float arithmetic would round it to a
   // different number than exact arithmetic, a silent corruption. Within safe
   // range every step is exact, so the first departure is always caught.
-  if (!Number.isSafeInteger((value.seq0 as number) + payload.length - 1)) {
+  if (payload.length - 1 > Number.MAX_SAFE_INTEGER - (value.seq0 as number)) {
     malformed(tag, 'member seqs must stay safe integers')
   }
   let time = value.time0 as number
@@ -286,6 +310,7 @@ function validateRow(value: Record<string, unknown>, tag: ChunkRow['type']): Chu
     time += gap
     if (!Number.isSafeInteger(time)) malformed(tag, 'member times must stay safe integers')
   }
+  SessionSeq(value.seq0 as number)
   return value as unknown as ChunkRow
 }
 
@@ -313,13 +338,15 @@ function expandRow(row: ChunkRow): SessionEvent[] {
           argumentsDelta: members[k] as string,
         }
         break
-      /* v8 ignore next 2 -- validateRow only returns the three row tags */
-      default:
-        return assertNever(row, 'chunk-rows expandRow')
+      /* v8 ignore next 4 -- validateRow only returns the three row tags */
+      default: {
+        const unreachable: never = row
+        throw new Error(`chunk-rows received unsupported row ${String(unreachable)}`)
+      }
     }
     events.push({
       type: 'assistant/chunk',
-      seq: row.seq0 + k,
+      seq: SessionSeq(row.seq0 + k),
       time,
       data: { turn: row.data.turn, step: row.data.step, chunk },
     })
@@ -331,7 +358,8 @@ function expandRow(row: ChunkRow): SessionEvent[] {
  * Decode one parsed JSONL line value into the session event(s) it stores.
  * Chunk-row-tagged values validate and expand (a malformed row throws — it is
  * corrupt storage, and treating it as an event would silently drop a whole
- * run); every other value passes through as a single event, unvalidated.
+ * run); every other value passes through as a single event after admitting a
+ * numeric `seq` through the Session-sequence constructor.
  *
  * @param value - one line's `JSON.parse` result.
  * @returns the stored events, in log order.
@@ -340,7 +368,8 @@ export function decodeStorageRecord(value: unknown): SessionEvent[] {
   if (!isRecord(value)) return [value as SessionEvent]
   const tag = value.type
   if (tag !== 'text-chunks' && tag !== 'reasoning-chunks' && tag !== 'tool-call-chunks') {
-    return [value as SessionEvent]
+    if (typeof value.seq === 'number') SessionSeq(value.seq)
+    return [value as unknown as SessionEvent]
   }
   return expandRow(validateRow(value, tag))
 }

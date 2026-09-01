@@ -28,6 +28,18 @@ body {
   -moz-osx-font-smoothing: grayscale;
   color: var(--dsw-alias-label-primary, #0f1115);
   background: var(--dsw-alias-bg-base, #fff);
+  /* Supporting browsers insert CJK/Latin spacing in inherited prose. */
+  text-autospace: normal;
+}
+
+code,
+pre,
+[data-diff],
+[data-read],
+[data-search],
+[data-terminal] {
+  /* Literal payloads retain source spacing and column alignment. */
+  text-autospace: no-autospace;
 }
 
 /* Form controls don't inherit the body font (UA sheets pin their families —

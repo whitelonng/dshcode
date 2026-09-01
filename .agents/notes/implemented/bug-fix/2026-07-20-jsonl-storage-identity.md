@@ -6,7 +6,7 @@ English | [中文](2026-07-20-jsonl-storage-identity.zh.md)
 
 ## Problem
 
-JSONL lookup selects a physical log from the requested session id across project directories, while the parsed `SessionHeader` supplies the metadata used by later repair and append operations. Without binding those two facts, a log selected for session A can declare session B's id or cwd and redirect a repair or later append to B's path. The project scan also needs a defined result when the same encoded id exists in more than one project directory. SQLite does not share this ambiguity because its primary-key query binds metadata and events to the requested id.
+JSONL lookup selects a physical log from the requested session id across project directories, while the parsed `SessionHeader` supplies the metadata used by later repair and append operations. Without binding those two facts, a log selected for session A can declare session B's id or cwd and redirect a repair or later append to B's path. The project scan also needs a defined result when the same encoded id exists in more than one project directory. A medium that resolves records through one authoritative key may avoid this ambiguity, but the shipped JSONL provider must bind its selected path explicitly.
 
 ## Decision
 
@@ -20,7 +20,7 @@ An existing configured JSONL root must be a readable directory when the plugin l
 
 **Flatten storage by session id.** A flat namespace makes duplicate publication collide on one path, but path validation and duplicate rejection close the identity defect without making the check depend on a flat global namespace.
 
-**Carry an opaque storage locator through the coordinator.** A locator binds JSONL mutations directly to a selected path, but JSONL can reproduce that path from metadata it has already validated. Adding another generic and argument to SQLite, test backends, append, and repair makes every implementation carry a concept only the file backend needs.
+**Carry an opaque storage locator through the coordinator.** A locator binds JSONL mutations directly to a selected path, but JSONL can reproduce that path from metadata it has already validated. Adding another generic and argument to the coordinator, test backends, append, and repair makes every implementation carry a concept only the file backend needs; an out-of-tree provider keeps its medium-specific locator inside its own primitives.
 
 **Coordinate multiple live writers.** A dedicated coordination service, process-global registry, or cross-process lock would define a new deployment topology rather than repair identity validation. The supported topology has one live writer; no-overwrite hard-link publication still arbitrates an initial same-id creation race.
 

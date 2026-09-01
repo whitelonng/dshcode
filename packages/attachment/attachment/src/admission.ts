@@ -3,7 +3,13 @@
 import { Buffer } from 'node:buffer'
 import { AttachmentError } from './error.ts'
 import type { AttachmentStore } from './index.ts'
-import type { EncodedImageAttachment, ImageAttachmentRef, SaveImageAttachment } from './types.ts'
+import type {
+  AdmittedPromptContentPart,
+  EncodedImageAttachment,
+  ImageAttachmentRef,
+  PromptContentPart,
+  SaveImageAttachment,
+} from './types.ts'
 
 /** Decode one upload payload while rejecting non-canonical base64 forms. */
 function decodeBase64(data: string): Uint8Array {
@@ -38,4 +44,27 @@ export async function admitEncodedImages(
   images: readonly EncodedImageAttachment[],
 ): Promise<readonly ImageAttachmentRef[]> {
   return attachments.saveImages(images.map(saveInput))
+}
+
+/**
+ * Admit one browser prompt and replace each uploaded image with its durable reference.
+ * Text-only prompts do not access the attachment store.
+ * @param attachments - the deployment attachment store owning batch policy.
+ * @param content - browser prompt parts in message order.
+ * @returns admitted prompt parts in the same order as `content`.
+ * @throws AttachmentError when the image batch is refused.
+ */
+export async function admitPromptContent(
+  attachments: AttachmentStore,
+  content: readonly PromptContentPart[],
+): Promise<AdmittedPromptContentPart[]> {
+  if (content.every(part => part.type === 'text')) {
+    return content.map(part => ({ type: 'text', text: part.text }))
+  }
+  const refs = await admitEncodedImages(attachments, content.filter(part => part.type === 'image'))
+  let next = 0
+  return content.map(part => part.type === 'text'
+    ? { type: 'text', text: part.text }
+    // admitEncodedImages returns one reference per image part in order.
+    : { type: 'image', attachment: refs[next++] as ImageAttachmentRef })
 }

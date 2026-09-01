@@ -1,0 +1,9 @@
+# Session-root sandbox snapshot overlay. The generated session cwd lives
+# under the user's home, while this deployment fallback deliberately points at
+# /tmp. A workspace-write mutation can therefore succeed only when the calling
+# session's cwd replaces the process-level fallback root.
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: !!js "process.env.DSH_PERMISSION_MODE ?? (process.env.DSH_SNAPSHOT === undefined ? 'workspace-write' : 'danger-full-access')"
+    workspaceRoot: /tmp

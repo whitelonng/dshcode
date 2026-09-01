@@ -1,19 +1,4 @@
-// PlanReviewPanel: the composer takeover for a question carrying the
-// `plan-review` presentation intent. A plan under review is one decision over
-// one body of markdown, so it takes the waiting-approval card shape — tinted
-// strip, content, right-aligned action row — instead of the generic question
-// flow's pager, numbered options, skip and custom-answer affordances, which
-// read as a quiz the user is being graded on.
-//
-// The three actions are the whole decision surface: approve and decline answer
-// the question with the option labels the asker offered (localised copy on the
-// buttons, the asker's descriptions as their tooltips), while "discuss"
-// dismisses the request so the composer returns and the user can simply say
-// what they want. Dismissal is the generic flow's own cancel verb, promoted to
-// a labelled button because in a two-outcome decision it is the third real
-// answer, not an escape hatch.
-
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button, IconEditOutline16, MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PendingQuestion, PlanReview, QuestionComposerProps } from './contract/slots.ts'
 import css from './PlanReviewPanel.module.css'
@@ -40,10 +25,12 @@ function tooltip(description: string | undefined): { title?: string } {
  * @returns The plan-review takeover for this request.
  */
 export function PlanReviewPanel({ pending, review, t }: PlanReviewPanelProps) {
-  // One-shot latch shaped like the approval takeover's: the panel leaves only
-  // when the host's resolved frame lands, so until then a second click must
-  // not re-fire. A failed send (rejected receipt / transport) re-arms it and
-  // shows why, since nothing else would tell the user the click was lost.
+  const markdownLabels = useMemo(() => ({
+    code: { copyLabel: t('copy'), copiedLabel: t('copied') },
+    footnotes: t('markdown.footnotes'),
+  }), [t])
+  // The panel waits for the host's resolved frame before leaving, so repeated
+  // clicks must not resubmit. A failed send re-enables it and shows the error.
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const settle = (send: () => Promise<void>): void => {
@@ -67,7 +54,7 @@ export function PlanReviewPanel({ pending, review, t }: PlanReviewPanelProps) {
           {t('plan.header')}
         </div>
         <div className={css.body} data-plan-review-scroll>
-          <MarkdownText text={review.plan} />
+          <MarkdownText text={review.plan} labels={markdownLabels} />
         </div>
         <div className={css.footer}>
           <div className={css.feedback} role="status">{error}</div>

@@ -16,7 +16,7 @@ Canonical Markdown remains in the repository tier that owns it. Product-facing g
 
 `scripts/project-doc-site.ts` projects the manifest into the ignored `website/.generated/` directory before VitePress starts or builds. The generated tree follows public routes so VitePress navigation, locale detection, and local search share the same route vocabulary. Each page receives an `editSource` frontmatter field pointing to its canonical repository file; the edit-link callback reads only that page data, so public URLs remain independent of the source layout.
 
-Locale home projections retain only the canonical YAML frontmatter. The repository-facing body keeps its H1 and bilingual source links, while the frontmatter implements the [locale-preserving quick-start redirect](../simplification/2026-08-11-quickstart-documentation-home.md) and the site navigation owns locale switching.
+Locale home projections retain only the canonical YAML frontmatter. The repository-facing body keeps its H1 and bilingual source links, while the frontmatter implements the [locale-preserving quick-start redirect](../../../../docs/user/index.md) and the site navigation owns locale switching.
 
 The projector parses Markdown links without reserializing the document. A link to another published source becomes a site-relative route; a link to an unpublished repository file becomes a source link under the `deepseek-ai/deepseek-harness` repository home; a repository image is copied into the generated tree and referenced from there ([why](2026-08-06-doc-site-carries-its-images.md)). Missing relative targets fail projection. Unit tests pin these transformations, and `docs:check` runs the projector tests plus a production VitePress build as part of `doc-sync` and the parallel documentation gates.
 
@@ -24,7 +24,7 @@ The projector parses Markdown links without reserializing the document. A link t
 
 `website/AGENTS.md` is the only maintained Markdown file in the website subtree. The projector test enumerates tracked and unignored files and rejects any other website Markdown, so site-specific locale, route, API, or generated source copies cannot bypass the publication manifest.
 
-Mermaid renders the canonical diagrams. The website workspace explicitly declares the five packages that `vitepress-plugin-mermaid` asks Vite to prebundle because pnpm's strict dependency isolation otherwise makes those transitive packages unavailable to the local development server; Knip records this runtime-only use as an intentional dependency exception.
+Mermaid renders the canonical diagrams. The website workspace explicitly declares the five packages that `vitepress-plugin-mermaid` asks Vite to prebundle because pnpm's strict dependency isolation otherwise makes those transitive packages unavailable to the local development server.
 
 The configured Markdown renderer keeps a build-local cache for non-Mermaid, non-snippet code fences, keyed by the exact content, info string, delimiter, and token attributes. About half of the bilingual projection's code fences repeat, so Shiki renders each distinct representation once. Mermaid fences bypass the cache because the plugin output includes a token-position id, and VitePress snippets resolve their source files during rendering. The cache is enabled only for production builds, is discarded with the renderer after each build, and does not change the emitted fence HTML.
 

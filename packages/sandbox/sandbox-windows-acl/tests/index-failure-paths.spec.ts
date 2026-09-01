@@ -11,12 +11,13 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { Win32Error } from '@deepseek-ai/dsh-win32-process'
+import { ERROR_BROKEN_PIPE } from '@deepseek-ai/dsh-win32-process/src/abi.ts'
+import { PROCESS_INFORMATION } from '@deepseek-ai/dsh-win32-process/src/ffi.ts'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import koffi from 'koffi'
 
-import { PROCESS_INFORMATION } from '../src/ffi.ts'
 import type { NativePtr, Win32Bindings } from '../src/ffi.ts'
-import { Win32Error } from '../src/errors.ts'
 import { AclSandbox } from '../src/index.ts'
 import * as abi from '../src/win32-abi.ts'
 
@@ -146,10 +147,11 @@ function happyStubs(): HappyStubs {
   const setInformationJobObject = vi.fn(() => 1)
   const assignProcessToJobObject = vi.fn(() => 1)
   const resumeThread = vi.fn(() => 0)
+  const terminateProcess = vi.fn(() => 1)
   const getStdHandle = vi.fn(() => fresh())
   const localFree = vi.fn(() => 0n)
   const closeHandle = vi.fn(() => 1)
-  const getLastError = vi.fn(() => abi.ERROR_BROKEN_PIPE) // the drains' clean EOF
+  const getLastError = vi.fn(() => ERROR_BROKEN_PIPE) // the drains' clean EOF
   const formatMessageW = vi.fn(() => 0)
 
   const api = {
@@ -159,7 +161,8 @@ function happyStubs(): HappyStubs {
     getLengthSid, copySid, createWellKnownSid, isValidSid, createRestrictedToken,
     setTokenInformation, createPipe, setHandleInformation, createProcessAsUserW,
     peekNamedPipe, readFile, waitForSingleObject, getExitCodeProcess, createJobObjectW,
-    setInformationJobObject, assignProcessToJobObject, resumeThread, getStdHandle,
+    setInformationJobObject, assignProcessToJobObject, resumeThread, terminateProcess,
+    getStdHandle,
     localFree, closeHandle, getLastError, formatMessageW,
   } as unknown as Win32Bindings
   return {

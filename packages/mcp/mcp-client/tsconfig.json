@@ -22,10 +22,10 @@
       "path": "../../core/tools"
     },
     {
-      "path": "../../subprocess/subprocess"
+      "path": "../../core/scope"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../subprocess/subprocess"
     },
     {
       "path": "../../util/timeout"

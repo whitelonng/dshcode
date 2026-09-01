@@ -54,23 +54,25 @@
 }
 
 .card {
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 20px;
   display: flex;
   flex-direction: column;
-  background: var(--dsw-alias-bg-layer-3);
+  background: transparent;
   transition: border-color .16s, background .16s;
 }
 
 
 .card:hover:not(.cardActive) {
-  border-color: var(--dsw-alias-label-dimmed);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* The default preset reads as selected, not merely badged. */
+/* The default preset reads as selected exactly like the Appearance cubes:
+   platform fill + the bluish-400 border (static token — the bluish-400 step
+   has no alias-layer name). */
 .cardActive {
-  background: var(--dsw-alias-bg-layer-2);
-  border-color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-module-platform);
+  border-color: var(--dsw-static-neutral-bluish-400);
 }
 
 /* A broken preset reads as damaged before anything else: the card cannot be
@@ -85,6 +87,7 @@
 
 .brokenBadge {
   border-radius: 999px;
+  corner-shape: round;
   padding: 1px 8px;
   font-size: 11px;
   line-height: 17px;
@@ -94,12 +97,62 @@
   color: var(--dsw-alias-bg-layer-3);
 }
 
-/* The discovery-reported reason, verbatim: it names the file and the fix. */
-.cardBrokenReason {
-  font-size: 12px;
+/* The discovery-reported reason, verbatim: it names the rows and the fix.
+   A real element rather than the icon row's `data-tip` pseudo-element, for two
+   reasons: generated content joins the card's accessible text, where this would
+   repeat what the alert already carries, and that tooltip is one `nowrap` line
+   for an icon label while this names package specifiers one per line. */
+.brokenTip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-layer-3);
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.5;
-  color: var(--dsw-alias-state-error-primary);
+  text-align: left;
+  white-space: pre-line;
   overflow-wrap: anywhere;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s;
+}
+
+/* Focusing the card reveals it too: a broken card keeps its place in the tab
+   order (`aria-disabled`, not `disabled`), so this is the keyboard path to a
+   reason the card face no longer shows. */
+.brokenBadge:hover .brokenTip,
+.cardMain:focus-visible .brokenTip {
+  opacity: 1;
+}
+
+.cardMain[aria-disabled='true'] {
+  cursor: default;
+}
+
+.cardMain:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
+}
+
+/* The same reason, for a screen reader. A pointer reveals the badge's tooltip
+   and a keyboard reveals it by focusing the card, but neither announces it;
+   this node is what does. Keeping it out of the card face is what lets a
+   picker card show the preset's own description rather than a package
+   specifier. */
+.cardBrokenReason {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 /* The card body is the control that picks the preset. */
@@ -132,6 +185,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Anchors the broken badge's tooltip: the badge itself stays unpositioned so
+     its `::after` resolves against the card's own width instead of against a
+     badge that sits partway across it. A tooltip grown from the badge would
+     run past the card, and past the section for a card in the last column. */
+  position: relative;
 }
 
 .cardName {
@@ -143,6 +201,7 @@
 .badge,
 .inUse {
   border-radius: 999px;
+  corner-shape: round;
   padding: 1px 8px;
   font-size: 11px;
   line-height: 17px;
@@ -151,7 +210,7 @@
 }
 
 .badge {
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -185,7 +244,7 @@
   margin-top: auto;
   font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
-  color: var(--dsw-alias-label-dimmed);
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .cardFoot {
@@ -193,7 +252,7 @@
   justify-content: flex-end;
   gap: 2px;
   padding: 6px 10px;
-  border-top: 1px solid var(--dsw-alias-border-l2);
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 /* Icon-only actions: the label rides `title` so the row stays quiet until
@@ -313,7 +372,7 @@
 .input {
   box-sizing: border-box;
   padding: 9px 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 10px;
   font: inherit;
   font-size: 13px;
@@ -346,7 +405,7 @@
   padding: 12px;
   max-height: min(52vh, 480px);
   overflow: auto;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
@@ -390,7 +449,7 @@
   gap: 6px;
   height: 44px;
   border: 1px dashed var(--dsw-alias-border-l3);
-  border-radius: 12px;
+  border-radius: 20px;
   font: inherit;
   font-size: 14px;
   line-height: 22px;

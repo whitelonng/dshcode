@@ -1,27 +1,26 @@
 /**
- * Keyless REAL-composition coverage for parent-session cwd inheritance across
- * the SDK wire: a test-only cordis.yml boots the headless app through the
- * Loader with the SDK backend's `cwd` omitted, a scripted model delegates
- * once, and the child — a COMPLETE second harness runtime booted from its own
- * cordis.yml and driven over stdio JSON-RPC — echoes where it actually ran.
- * Both the parent's tool result and the child's own persisted session log
- * must carry the parent session's cwd. Mock-only composition, so only this
- * keyless tier applies (the with-key tier lives in subagent-sdk.e2e.ts).
+ * Keyless REAL-composition coverage for dynamic child routing and parent cwd
+ * inheritance across the SDK wire. A test-only patch boots through the
+ * Loader, a scripted model selects provider/model/reasoning, tool config adds
+ * maxTokens, and a COMPLETE second harness runtime echoes the effective route
+ * and cwd. The same path also verifies model-visible child-failure diagnostics
+ * remain separate from partial output.
  */
 
-import { realpathSync } from 'node:fs'
-import { readFile, readdir } from 'node:fs/promises'
+import { existsSync, realpathSync } from 'node:fs'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { type SessionEvent } from '@deepseek-ai/dsh-session'
-import { resolveExampleLaunch, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
+import { runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 
-const fixtureDir = new URL('../../../../examples/jsonrpc-agent/tests/fixtures/subagent/subagent-dsh-sdk/', import.meta.url)
+const fixtureDir = new URL('./fixtures/loader/', import.meta.url)
 const driver = fileURLToPath(new URL('driver.ts', fixtureDir))
-const configPath = fileURLToPath(new URL('cordis.yml', fixtureDir))
-const childConfigPath = fileURLToPath(new URL('child.cordis.yml', fixtureDir))
-const runtimeBin = fileURLToPath(new URL('../../../../packages/examples/jsonrpc-demo/src/bin.ts', import.meta.url))
+const configPath = fileURLToPath(new URL('dsh-sdk.patch.yml', fixtureDir))
+const childConfigPath = fileURLToPath(new URL('child.patch.yml', fixtureDir))
+const childMockPath = fileURLToPath(new URL('child-mock-llm.ts', fixtureDir))
 const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
 
 async function jsonlFiles(dir: string): Promise<string[]> {
@@ -39,69 +38,136 @@ async function sessionEvents(log: string): Promise<SessionEvent[]> {
   return lines.slice(1).map(line => JSON.parse(line) as SessionEvent)
 }
 
-describe('SDK subagent cwd inheritance through a real cordis.yml', () => {
-  it('runs the child runtime in the parent session workspace', async () => {
-    // The child launch honors the same src/lib mode as the driving harness,
-    // per the shared example-launch resolver (testing policy forbids
-    // hand-written `--import tsx` argv for example subprocesses).
-    const childLaunch = resolveExampleLaunch({
-      srcBin: runtimeBin,
-      configArgs: [childConfigPath],
-      tsconfigPath: repoTsconfig,
-    })
+function toolResultText(events: SessionEvent[]): string {
+  const results = events.filter(event => event.type === 'tool/result')
+  expect(results).toHaveLength(1)
+  return results[0]!.data.message.content[0].content
+    .filter(block => block.type === 'text')
+    .map(block => block.text)
+    .join('')
+}
 
+async function childLaunch(failure = false): Promise<{
+  childHome: string
+  env: Record<string, string>
+}> {
+  const childHome = await mkdtemp(join(tmpdir(), 'dsh-sdk-subagent-home-'))
+  const childPatch = join(childHome, 'child.patch.yml')
+  await writeFile(childPatch, (await readFile(childConfigPath, 'utf8'))
+    .replace("'./child-mock-llm.ts'", JSON.stringify(pathToFileURL(childMockPath).href)))
+  return {
+    childHome,
+    env: {
+      DSH_TEST_CHILD_PATCHES: JSON.stringify([childPatch]),
+      DSH_TEST_CHILD_HOME: childHome,
+      ...(failure ? { DSH_TEST_CHILD_FAILURE: '1' } : {}),
+    },
+  }
+}
+
+describe('SDK subagent routing and diagnostics through the production profile', () => {
+  it('runs the selected child route in the parent session workspace', async () => {
+    const child = await childLaunch()
     let events: SessionEvent[] = []
     let childEvents: SessionEvent[] = []
+    let parentResolvedRoutes: string[] = []
     let workspace = ''
-    const { stderr } = await runLoaderSmoke({
-      label: 'dsh-sdk-subagent cwd composition smoke',
-      tempDirPrefix: 'dsh-sdk-subagent-cwd-e2e-',
-      binScript: driver,
-      libBinScript: driver,
-      configPath,
-      tsconfigPath: repoTsconfig,
-      // Two complete harness runtimes boot in sequence (driver, then the SDK
-      // child); from-source tsx boots under load need more than the default
-      // 30s window.
-      processTimeoutMs: 120_000,
-      env: {
-        DSH_TEST_CHILD_COMMAND: childLaunch.command,
-        DSH_TEST_CHILD_ARGS: JSON.stringify(childLaunch.args),
-        DSH_TEST_CHILD_ENV: JSON.stringify({
-          ...Object.fromEntries(Object.entries(childLaunch.env).filter(([, value]) => value !== undefined)),
-        }),
-      },
-      inspect: async (cwd) => {
-        // The child reports realpaths; canonicalize the temp workspace to match.
-        workspace = realpathSync(cwd)
-        const parentLogs = await jsonlFiles(join(cwd, '.sessions'))
-        expect(parentLogs).toHaveLength(1)
-        events = await sessionEvents(parentLogs[0] as string)
-        // The child runtime persisted its own transcript in ITS cwd — which
-        // must be the parent session's workspace for the inheritance to hold.
-        const childLogs = await jsonlFiles(join(cwd, '.child-sessions'))
-        expect(childLogs).toHaveLength(1)
-        childEvents = await sessionEvents(childLogs[0] as string)
-      },
-    })
-    expect(stderr).not.toContain('UNHANDLED')
+    try {
+      const { stderr } = await runLoaderSmoke({
+        label: 'dsh-sdk-subagent cwd composition smoke',
+        tempDirPrefix: 'dsh-sdk-subagent-cwd-e2e-',
+        binScript: driver,
+        libBinScript: driver,
+        configPath,
+        tsconfigPath: repoTsconfig,
+        // Two complete harness runtimes boot in sequence (driver, then the SDK
+        // child); from-source tsx boots under load need more than the default
+        // 30s window.
+        processTimeoutMs: 120_000,
+        env: {
+          ...child.env,
+          DSH_TEST_CHILD_DEFAULT_ROUTE: '1',
+          DSH_TEST_PARENT_MODEL_RECORD: '.parent-model-routes',
+        },
+        inspect: async (cwd) => {
+          // The child reports realpaths; canonicalize the temp workspace to match.
+          workspace = realpathSync(cwd)
+          const parentLogs = await jsonlFiles(join(cwd, '.sessions'))
+          expect(parentLogs).toHaveLength(1)
+          events = await sessionEvents(parentLogs[0] as string)
+          // The child runtime persists under its explicit isolated home.
+          const childSessions = join(child.childHome, 'sessions')
+          if (!existsSync(childSessions)) {
+            const result = events.find(event => event.type === 'tool/result')
+            throw new Error(`SDK child persisted no session; parent tool result: ${JSON.stringify(result?.data)}`)
+          }
+          const childLogs = await jsonlFiles(childSessions)
+          expect(childLogs).toHaveLength(1)
+          childEvents = await sessionEvents(childLogs[0] as string)
+          parentResolvedRoutes = (await readFile(join(cwd, '.parent-model-routes'), 'utf8')).trim().split('\n')
+        },
+      })
+      expect(stderr).not.toContain('UNHANDLED')
 
-    // The parent's tool result carries the child model's echo of its real
-    // process.cwd() — the parent session's workspace, never the harness
-    // process's launch directory.
-    const results = events.filter(event => event.type === 'tool/result')
-    expect(results).toHaveLength(1)
-    const resultText = results[0]!.data.message.content[0].content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join('')
-    expect(resultText).toBe(`child cwd: ${workspace}`)
+      // The parent's tool result carries the child model's echo of its real
+      // process.cwd() — the parent session's workspace, never the harness
+      // process's launch directory.
+      const results = events.filter(event => event.type === 'tool/result')
+      expect(results).toHaveLength(1)
+      const resultText = results[0]!.data.message.content[0].content
+        .filter(block => block.type === 'text')
+        .map(block => block.text)
+        .join('')
+      expect(resultText).toBe(`child route: mock/mock-routed/max/777; cwd: ${workspace}`)
+      expect(parentResolvedRoutes).toContain('mock/mock-routed')
 
-    // The child ran a real turn of its own: user message in, assistant out.
-    expect(childEvents.some(event => event.type === 'user/message')).toBe(true)
-    const childAnswers = childEvents.filter(event => event.type === 'assistant/message')
-    expect(childAnswers.length).toBeGreaterThan(0)
+      // The child ran a real turn with the model-selected route and tool-configured cap.
+      expect(childEvents.some(event => event.type === 'user/message')).toBe(true)
+      const childHeader = childEvents.find(
+        (event): event is Extract<SessionEvent, { type: 'request/header' }> => event.type === 'request/header',
+      )
+      expect(childHeader?.data.header.config).toEqual({
+        provider: 'mock',
+        model: 'mock-routed',
+        reasoningEffort: 'max',
+        maxTokens: 777,
+      })
+      const childAnswers = childEvents.filter(event => event.type === 'assistant/message')
+      expect(childAnswers.length).toBeGreaterThan(0)
+    } finally {
+      await rm(child.childHome, { recursive: true, force: true })
+    }
     // 15s of vitest headroom past the subprocess deadline, mirroring
     // LOADER_SMOKE_TEST_TIMEOUT_MS's margin over the default window.
+  }, 135_000)
+
+  it('presents the child error diagnostic separately from partial output', async () => {
+    const child = await childLaunch(true)
+    let events: SessionEvent[] = []
+    try {
+      const { stderr } = await runLoaderSmoke({
+        label: 'dsh-sdk-subagent diagnostic composition smoke',
+        tempDirPrefix: 'dsh-sdk-subagent-diagnostic-e2e-',
+        binScript: driver,
+        libBinScript: driver,
+        configPath,
+        tsconfigPath: repoTsconfig,
+        processTimeoutMs: 120_000,
+        env: child.env,
+        inspect: async (cwd) => {
+          const parentLogs = await jsonlFiles(join(cwd, '.sessions'))
+          expect(parentLogs).toHaveLength(1)
+          events = await sessionEvents(parentLogs[0] as string)
+        },
+      })
+      expect(stderr).not.toContain('UNHANDLED')
+      expect(toolResultText(events)).toBe(
+        'Error: subagent run failed\n'
+        + 'Diagnostic: Subagent failure (provider: DSH SDK; stage: session-run; category: child-error)\n'
+        + 'Partial output before the run ended:\npartial child loader answer',
+      )
+    } finally {
+      await rm(child.childHome, { recursive: true, force: true })
+    }
   }, 135_000)
 })

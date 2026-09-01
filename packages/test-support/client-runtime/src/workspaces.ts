@@ -1,10 +1,25 @@
 /** Test-owned workspaces face: the renderer standard-kit observable plus recorded actions. */
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
-  DirectoryListing, IWorkspaces, SessionId, SnapshotStore, WorkspaceId, WorkspaceListState, WorkspaceView,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { workspaceListState } from './fixtures.ts'
-import type { Stabilizer } from './fixtures.ts'
+  IWorkspaces, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
+} from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { workspaceSnapshot } from './fixtures.ts'
+import type { FixtureSnapshot, Stabilizer } from './fixtures.ts'
+
+/** Writable test representation of the immutable Workspace Controller snapshot. */
+type WorkspaceFixtureSnapshot = FixtureSnapshot<WorkspaceSnapshot>
+
+/** Callable command names on the production Workspace Controller face. */
+type WorkspaceAction = {
+  [Key in keyof IWorkspaces]: IWorkspaces[Key] extends (...args: never[]) => unknown ? Key : never
+}[keyof IWorkspaces]
+
+/** Test replacement retaining one Controller command's parameters and result. */
+type WorkspaceStub<Key extends WorkspaceAction> = (
+  ...args: Parameters<IWorkspaces[Key]>
+) => ReturnType<IWorkspaces[Key]>
 
 /**
  * Workspaces test double. Implements the same IWorkspaces face features
@@ -15,59 +30,36 @@ import type { Stabilizer } from './fixtures.ts'
  */
 export class TestWorkspaces implements IWorkspaces {
   /** The useWorkspaces standard feed. */
-  readonly list: SnapshotStore<WorkspaceListState>
+  readonly list: SnapshotStore<WorkspaceFixtureSnapshot>
 
   /** Calls observed on the action face, newest last. */
   readonly calls: { method: string; args: unknown[] }[] = []
 
   /** Replaceable action seat: feature tests may stub richer behavior. */
-  private readonly stubs = new Map<string, (...args: unknown[]) => unknown>()
+  private readonly stubs = new Map<WorkspaceAction, (...args: unknown[]) => unknown>()
 
   /**
    * @param stabilize - the owning runtime's act wrapper.
    */
   constructor(private readonly stabilize: Stabilizer) {
-    this.list = createSnapshotStore<WorkspaceListState>(workspaceListState())
+    this.list = createSnapshotStore<WorkspaceFixtureSnapshot>({ ...workspaceSnapshot() })
   }
 
   /**
    * Update the workspace list state through an immer draft.
    * @param mutate - draft mutator.
    */
-  async update(mutate: (draft: WorkspaceListState) => void): Promise<void> {
+  async update(mutate: (draft: WorkspaceFixtureSnapshot) => void): Promise<void> {
     await this.stabilize(() => { this.list.update(mutate) })
   }
 
   /**
    * Replace an action's behavior (the recorded call is still appended first).
-   * @param method - action name (e.g. 'connectWorkspace').
+   * @param method - Controller action name (e.g. 'create').
    * @param impl - replacement behavior.
    */
-  stub(method: string, impl: (...args: unknown[]) => unknown): void {
-    this.stubs.set(method, impl)
-  }
-
-  /**
-   * Connect a workspace to its reusable/new blank session (recorded). The
-   * default resolves the workspace id back as the session id; stub for
-   * cross-session flows.
-   * @param workspaceId - target workspace.
-   * @returns the connected session id.
-   */
-  async connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId> {
-    this.calls.push({ method: 'connectWorkspace', args: [workspaceId] })
-    const stub = this.stubs.get('connectWorkspace')
-    if (stub !== undefined) return await (stub(workspaceId) as Promise<SessionId>)
-    return `session-of-${workspaceId}` as SessionId
-  }
-
-  /**
-   * New-session flow (recorded; stubbed behavior runs when installed).
-   * @param workspaceId - optional explicit workspace target.
-   */
-  startSession(workspaceId?: WorkspaceId): void {
-    this.calls.push({ method: 'startSession', args: [workspaceId] })
-    this.stubs.get('startSession')?.(workspaceId)
+  stub<Key extends WorkspaceAction>(method: Key, impl: WorkspaceStub<Key>): void {
+    this.stubs.set(method, impl as (...args: unknown[]) => unknown)
   }
 
   /**

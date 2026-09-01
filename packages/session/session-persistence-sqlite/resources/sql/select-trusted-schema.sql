@@ -1,1 +1,0 @@
-PRAGMA trusted_schema;

@@ -1,12 +1,13 @@
 /**
  * The workspace domain declaration: record schema and the `defineDomain` spec
- * the registry opens. The zod schema is the durable-boundary validator today
- * and the direct source of the RPC wire projection in a later phase.
+ * the registry opens. The zod schema validates the shipped format at the
+ * durability boundary and is the direct source of a future RPC wire projection.
  * @module @deepseek-ai/dsh-workspace/src/spec
  */
 
 import { z } from 'zod'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import type { WorkspaceId } from './types.ts'
 
@@ -21,7 +22,7 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
 export const workspaceRecord = z.object({
   path: z.string(),
   title: z.string(),
-  sessionIds: z.array(z.string().transform(SessionId)),
+  sessionIds: z.array(z.string().transform(value => brandString<SessionId>(value))),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -51,7 +52,7 @@ const workspacePendingMutation = z.discriminatedUnion('operation', [
 export const workspaceDomainState = z.object({
   initialized: z.boolean(),
   workspaceIds: z.array(workspaceId),
-  archivedSessionIds: z.array(z.string().transform(SessionId)).default([]),
+  archivedSessionIds: z.array(z.string().transform(value => brandString<SessionId>(value))).default([]),
   pendingMutation: workspacePendingMutation.optional(),
 })
 

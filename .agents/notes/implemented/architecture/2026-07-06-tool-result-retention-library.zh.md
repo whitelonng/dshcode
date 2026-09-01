@@ -16,7 +16,7 @@ Status: implemented
 
 该库包含两个相互独立的 retainer：
 
-- `ItemRetainer<T>` 处理有序逻辑单元，例如路径、grep 匹配项或搜索来源。v1 只支持 `head` 保留，同时维持 retainer 形态，以便未来加入其他保留策略。
+- `ItemRetainer<T>` 处理有序逻辑单元，例如路径、grep 匹配项或搜索来源。它只支持 `head` 保留，同时维持 retainer 形态，以便未来加入其他保留策略。
 - `TextRetainer` 处理面向字节的文本流，例如 bash stdout／stderr 或 web 响应正文。它支持 `head`、`tail` 和 `headTail` 保留，并在 `finish()` 时维持 UTF-8 边界。
 
 两个 retainer 都会返回一个小型 `PushDecision`；每次调用 `push()` 后，调用方都能得知该单元／分片是否完整保留，以及累积结果此时是否已被截断。因为调用方会继续输入每一个已观察到的条目／分片，所以省略计数是精确的。
@@ -95,7 +95,7 @@ type TextRetentionStrategy =
 
 ### 工具映射
 
-`read` 被有意排除在 v1 保留库之外。它的 `read-render` 辅助函数拥有文件专用的分页约定：`offset`／`limit`、行号、`totalLines`、offset 越界错误、逐行预览截断，以及能够在窗口中途停止扫描的所选输出字节上限。这是行窗口渲染器，不是通用保留原语。它未来可以共享中性的提示辅助函数，但不应把已经选定的窗口再传入 `ItemRetainer`。
+`read` 被有意排除在保留库之外。它的 `read-render` 辅助函数拥有文件专用的分页约定：`offset`／`limit`、行号、`totalLines`、offset 越界错误、逐行预览截断，以及能够在窗口中途停止扫描的所选输出字节上限。这是行窗口渲染器，不是通用保留原语。它未来可以共享中性的提示辅助函数，但不应把已经选定的窗口再传入 `ItemRetainer`。
 
 下文的 `FsGlobEntry` 与 `FlatGrepMatch` 是预期由发现工具使用的条目形态，不是现有保留库的导出。`FsGlobEntry` 是一个由后端派生的路径；`FlatGrepMatch` 是后端将保留匹配项按文件分组之前的一条未分组 grep 匹配。
 
@@ -142,15 +142,15 @@ const formatGrepNotice = (notice: RetentionNotice): string =>
 
 **该库维持的边界。** `truncated` 表示 retainer 因预算省略了原本可用的内容，绝不表示上游不完整。工具专用状态，包括 `incomplete`、权限失败、提供方局部失败、跳过二进制文件、bash spill 路径恢复和无效 UTF-8，均留在工具领域字段中、位于 retainer 之外。未来改动迁移某项工具时，该包的 README 与测试必须证明，除了有意改变的提示措辞外，模型可见的结果文本没有变化。
 
-**接受的取舍。** v1 接口刻意只支持条目的 `head` 保留，以及文本的 `head`／`tail`／`headTail` 保留；窗口、分组预算、感知排序的上限和上游停止控制，要等第二个消费方证明需求后再引入。文本保留按字节计数，以保障进程／正文安全；字符级和行级预览预算继续由具体工具负责。
+**接受的取舍。**接口刻意只支持条目的 `head` 保留，以及文本的 `head`／`tail`／`headTail` 保留；窗口、分组预算、感知排序的上限和上游停止控制，要等第二个消费方证明需求后再引入。文本保留按字节计数，以保障进程／正文安全；字符级和行级预览预算继续由具体工具负责。
 
 ## 考虑过的替代方案
 
 **只进行事后 `truncate(text)`。** 不予采纳：它适合 Codex 的历史／工具输出截断场景，却会丢失条目计数、分组边界、UTF-8 安全的字节窗口与精确省略元数据。
 
-**使用一个带可插拔回调的通用 `Collector<T>`。** v1 不予采纳，因为它会掩盖两种重要的资源模式。逻辑条目保留按条目计数；文本保留按字节计数并维持 UTF-8 边界。独立的 `ItemRetainer` 与 `TextRetainer` 名称明确表达这种差异，同时保持 API 精简。
+**使用一个带可插拔回调的通用 `Collector<T>`。**不予采纳，因为它会掩盖两种重要的资源模式。逻辑条目保留按条目计数；文本保留按字节计数并维持 UTF-8 边界。独立的 `ItemRetainer` 与 `TextRetainer` 名称明确表达这种差异，同时保持 API 精简。
 
-**把 `read` 窗口交给 `ItemRetainer`。** v1 不予采纳：`read` 是当前唯一的窗口消费方，其语义属于文件分页，而不是通用保留。一个 `Omitted` 计数无法表示行窗口两侧，而且 `read` 还携带 `totalLines`、offset 范围错误、逐行预览截断和针对所选输出的字节上限。让 `read-render` 由工具所有，可以避免共享库围绕一项特例膨胀。
+**把 `read` 窗口交给 `ItemRetainer`。**不予采纳：`read` 是唯一已交付的窗口消费方，其语义属于文件分页，而不是通用保留。一个 `Omitted` 计数无法表示行窗口两侧，而且 `read` 还携带 `totalLines`、offset 范围错误、逐行预览截断和针对所选输出的字节上限。让 `read-render` 由工具所有，可以避免共享库围绕一项特例膨胀。
 
 **让截断成为 `ToolExecutionResult` 的一部分。** 不予采纳：工具注册表将不得不理解工具专用的恢复指引、分组、行号、退出状态和提供方语义。保留是由工具的 Native renderer（原生渲染器）使用的库；模型可见投影继续由工具所有，而[规范值](2026-07-20-canonical-tool-output-contract.zh.md)可以保留完整的已采集结果。
 

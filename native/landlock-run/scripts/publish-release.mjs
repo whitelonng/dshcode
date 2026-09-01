@@ -8,8 +8,8 @@
  * published tarball has the same integrity is skipped, and a version whose
  * published tarball differs fails the run — that last case means the content
  * changed without a version bump. Skipping on identical integrity is what makes
- * re-running the publish step over the same artifact safe, which matters here
- * because a partial publication used to leave no way forward: republishing an
+ * re-running the publish step over the same artifact safe. Without the
+ * integrity skip, a partial publication has no way forward: republishing an
  * existing version fails permanently.
  *
  * Usage: `node scripts/publish-release.mjs [packed dir]`.

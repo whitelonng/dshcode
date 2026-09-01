@@ -18,7 +18,7 @@ Chat Message Definition 为每个 `ContextMessageNode` 附加一份包含生产�
 
 **名称从日志中读出，绝不来自客户端维护的生产者名称表。** `agent-instructions` 以它对账过的去重指令文件路径命名，`session-reference` 以它读取的会话标题命名，插件来源以其记录的插件 id 命名，其余来源则以自身的 `kind` 命名——这正是可合并扩展联合类型有文档记载的默认分支。没有可读 kind 的来源降级为无名注入。于是新增或重命名的生产者无需客户端发版即可辨识，任何名称都不会相对代码失准，恢复、fork 或来自外部的日志与实时会话的投影结果完全一致。
 
-`recall` 覆盖 `session-reference`，因为它是当前唯一会把另一个会话的材料搬进本会话的已发布来源。今天没有任何 Web 叶子挂载 `dsh-session-reference`——它此前只有终端宿主——因此该分支的存在是为了日志可移植性，而不是为了某个已打包的生产方，其覆盖来自单元测试而非组装后的 Web 场景。
+`recall` 覆盖 `session-reference`，因为它是当前唯一会把另一个会话的材料搬进本会话的已发布来源。没有任何 Web 叶子挂载 `dsh-session-reference`——它此前只有终端宿主——因此该分支的存在是为了日志可移植性，而不是为了某个已打包的生产方，其覆盖来自单元测试而非组装后的 Web 场景。
 
 Chat Inbox 与 Message Definition 会重放持久 `agent/inbox/spliced` 事件；如果一条用户来源的消息以相同身份从 `next-step` 被领取，后续 `user/message` 就投影为 `SteeringMessageNode`。`MessageItem` 为这种持久消息与待处理 steering 气泡加上 `插话` 标注。从排队轮次领取的消息仍是 `UserMessageNode`，非用户来源的 next-step 消息仍是上下文。这推翻了[已归档的取消 steer 入口与插话装饰决策](../../archived/simplification/2026-07-31-web-ui-no-steer-entry-or-interjection-chrome.md)中的一条结论。当时移除徽章，是因为 composer 无法 steer，标签指向了用户做不到的动作。此后 composer 获得了 Steer 手势，却没有同步修订那份 note；本决策提供了它在「重新引入」条款中要求的产品决策，并订正了其中留下的过时事实。标注是这里唯一的 steering 装饰：composer 模式、Queue dock 的严格 steer 操作、待处理 steering 的生命周期仍归各自的所有者。
 

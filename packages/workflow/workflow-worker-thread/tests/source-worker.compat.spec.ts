@@ -9,6 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider } from '@deepseek-ai/dsh-subagent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import WorkerThreadWorkflowEngine from '../src/index.ts'
 import { SessionId } from '@deepseek-ai/dsh-session'
 
@@ -18,10 +19,11 @@ vi.setConfig({ testTimeout: 30_000 })
 
 it('runs the default config through the source worker', async () => {
   const ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
   const subagents = await ctx.plugin(SubagentRuntime)
   const provider: SubagentProvider = {
     name: 'spawn',
-    capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
+    capabilities: { agentOptions: true, outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
     inheritsParentContext: false,
     start: () => Promise.reject(new Error('source-worker compat script must not start a child')),
   }

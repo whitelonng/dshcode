@@ -9,9 +9,22 @@
  */
 
 import { join } from 'node:path'
-import { decodeStorageRecord, packChunkRuns, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
-import type { SessionEvent, SessionHeader, SessionId, StorageRecord } from '@deepseek-ai/dsh-session'
-import { SessionFormatUnsupportedError, sessionFormatVersionRefusal } from '@deepseek-ai/dsh-session-persistence'
+import {
+  decodeSeqRanges, decodeStorageRecord, encodeSeqRanges, packChunkRuns, SESSION_FORMAT_VERSION,
+  SessionLogOffset,
+} from '@deepseek-ai/dsh-session'
+import type {
+  SessionEvent,
+  SessionHeader,
+  SessionId,
+  SessionLogOffset as SessionLogOffsetType,
+  StorageRecord,
+} from '@deepseek-ai/dsh-session'
+import {
+  SessionFormatUnsupportedError,
+  sessionFormatVersionRefusal,
+  type SessionStorageMetadata,
+} from '@deepseek-ai/dsh-session-persistence'
 
 /** Physical encoding selected for JSONL session artifacts. */
 export type JsonlCompression = 'zstd' | 'none'
@@ -26,11 +39,11 @@ export function logSuffix(compression: JsonlCompression): '.jsonl.zstd' | '.json
 }
 
 /**
- * The first JSONL record of a session artifact: the immutable
- * {@link SessionHeader} tagged as a `session` record so a reader can tell it
- * apart from an event line.
+ * The private version-0 physical header stored as the first JSONL record.
+ * Its optional numeric `seedLength` translates to logical lineage metadata
+ * plus a separately carried exact inherited cut.
  */
-export interface HeaderLine {
+interface HeaderLine {
   type: 'session'
   version: number
   id: SessionId
@@ -46,9 +59,21 @@ export interface HeaderLine {
 /**
  * Build the header line object from a {@link SessionHeader}.
  * @param header - the immutable session metadata to serialize.
+ * @param inheritedEventCount - exact inherited prefix length; required for a
+ * seeded header and omitted only for an unseeded header.
  * @returns the `type: 'session'`-tagged line object, absent optional fields omitted (never null).
  */
-export function toHeaderLine(header: SessionHeader): HeaderLine {
+export function toHeaderLine(
+  header: SessionHeader,
+  inheritedEventCount?: SessionLogOffsetType,
+): HeaderLine {
+  if (header.isSeeded && inheritedEventCount === undefined) {
+    throw new Error('seeded session header requires an inherited event count')
+  }
+  const cut = SessionLogOffset(inheritedEventCount ?? 0)
+  if (!header.isSeeded && cut !== 0) {
+    throw new Error('unseeded session header inherited event count must be 0')
+  }
   return {
     type: 'session',
     version: header.version,
@@ -56,7 +81,7 @@ export function toHeaderLine(header: SessionHeader): HeaderLine {
     createdAt: header.createdAt,
     ...header.cwd !== undefined ? { cwd: header.cwd } : {},
     ...header.parentSession !== undefined ? { parentSession: header.parentSession } : {},
-    ...header.seedLength !== undefined ? { seedLength: header.seedLength } : {},
+    ...header.isSeeded ? { seedLength: cut } : {},
     ...header.origin !== undefined ? { origin: header.origin } : {},
     delegationDepth: header.delegationDepth ?? 0,
     ...header.agentPreset !== undefined ? { agentPreset: header.agentPreset } : {},
@@ -64,24 +89,27 @@ export function toHeaderLine(header: SessionHeader): HeaderLine {
 }
 
 /**
- * Parse a header line back into a {@link SessionHeader}.
+ * Translate one version-0 physical header into logical metadata and its cut.
  * @param line - the shape-checked first line of a log (see the `isHeaderLine` guard).
- * @returns the header, absent optional fields omitted.
+ * @returns logical Session metadata paired with the exact inherited prefix length.
  */
-export function fromHeaderLine(line: HeaderLine): SessionHeader {
+function fromHeaderLine(line: HeaderLine): SessionStorageMetadata {
   if (Object.hasOwn(line, 'sandboxMode') || Object.hasOwn(line, 'approvalPolicy')) {
     throw new Error('session header uses retired policy baseline fields')
   }
   return {
-    version: line.version,
-    id: line.id,
-    createdAt: line.createdAt,
-    ...line.cwd !== undefined ? { cwd: line.cwd } : {},
-    ...line.parentSession !== undefined ? { parentSession: line.parentSession } : {},
-    ...line.seedLength !== undefined ? { seedLength: line.seedLength } : {},
-    ...line.origin !== undefined ? { origin: line.origin } : {},
-    delegationDepth: line.delegationDepth,
-    ...line.agentPreset !== undefined ? { agentPreset: line.agentPreset } : {},
+    meta: {
+      version: line.version,
+      id: line.id,
+      createdAt: line.createdAt,
+      ...line.cwd !== undefined ? { cwd: line.cwd } : {},
+      ...line.parentSession !== undefined ? { parentSession: line.parentSession } : {},
+      isSeeded: line.seedLength !== undefined,
+      ...line.origin !== undefined ? { origin: line.origin } : {},
+      delegationDepth: line.delegationDepth,
+      ...line.agentPreset !== undefined ? { agentPreset: line.agentPreset } : {},
+    },
+    inheritedEventCount: SessionLogOffset(line.seedLength ?? 0),
   }
 }
 
@@ -100,6 +128,11 @@ function isHeaderLine(value: unknown): value is HeaderLine {
     && Number.isSafeInteger((value as { delegationDepth: number }).delegationDepth)
     && (value as { delegationDepth: number }).delegationDepth >= 0
     && !Object.is((value as { delegationDepth: number }).delegationDepth, -0)
+    && ((value as { seedLength?: unknown }).seedLength === undefined
+      || (typeof (value as { seedLength?: unknown }).seedLength === 'number'
+        && Number.isSafeInteger((value as { seedLength: number }).seedLength)
+        && (value as { seedLength: number }).seedLength >= 0
+        && !Object.is((value as { seedLength: number }).seedLength, -0)))
     && ((value as { origin?: unknown }).origin === undefined
       || (value as { origin?: unknown }).origin === 'subagent')
     && ((value as { agentPreset?: unknown }).agentPreset === undefined
@@ -211,20 +244,52 @@ export function logPath(
  * Serialize an event batch as JSONL lines (no trailing newline). With
  * `packChunks` on, delta-chunk runs pack into `text-chunks` /
  * `reasoning-chunks` / `tool-call-chunks` storage rows; off writes one event
- * per line, byte-identical to the pre-packing layout. Reading is layout-blind
- * either way ({@link scanLog} always decodes rows), so the switch changes only
- * newly written bytes.
+ * per line. Both modes range-encode provenance at the storage boundary.
+ * Reading is layout-blind either way ({@link scanLog} always decodes rows),
+ * so the switch changes only newly written bytes.
  * @param events - the batch to serialize, in log order.
  * @param packChunks - whether to pack delta runs into storage rows.
  * @returns the batch's JSONL text; the writer adds the final newline.
  */
 export function eventLines(events: readonly SessionEvent[], packChunks: boolean): string {
   const records: readonly StorageRecord[] = packChunks ? packChunkRuns(events) : events
-  return records.map(record => JSON.stringify(record)).join('\n')
+  return records.map(record => JSON.stringify(encodeProvenanceForStorage(record))).join('\n')
+}
+
+/**
+ * Losslessly shrink a record's `sourceEventSeqs` for the log: consecutive
+ * runs of at least three seqs become `[start, end]` pairs, and any other list
+ * stays verbatim.
+ * @param record - one stored record (event or packed row).
+ * @returns the record with its provenance in storage form (widened from the
+ *   in-memory `SessionSeq[]`; {@link expandProvenanceFromStorage} restores it).
+ */
+function encodeProvenanceForStorage(record: StorageRecord): unknown {
+  if (!('sourceEventSeqs' in record)) return record
+  return { ...record, sourceEventSeqs: encodeSeqRanges(record.sourceEventSeqs) }
+}
+
+/**
+ * Expand a parsed line's storage-form provenance back to `SessionSeq[]`.
+ * @param parsed - the JSON-parsed value of one stored line.
+ * @returns the value with provenance expanded.
+ * @throws when the record or its storage-form provenance is malformed.
+ */
+function expandProvenanceFromStorage(parsed: unknown): unknown {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new TypeError('stored session records must be objects')
+  }
+  const record = parsed as { seq?: unknown; sourceEventSeqs?: unknown }
+  if (record.sourceEventSeqs === undefined) return parsed
+  if (!Number.isSafeInteger(record.seq) || (record.seq as number) < 0) {
+    throw new TypeError('stored session event seq must be a non-negative safe integer')
+  }
+  return { ...record, sourceEventSeqs: decodeSeqRanges(record.sourceEventSeqs, record.seq as number) }
 }
 
 interface SessionLogScan {
   meta: SessionHeader
+  inheritedEventCount: SessionLogOffsetType
   events: SessionEvent[]
   committedBytes: number
 }
@@ -233,8 +298,8 @@ interface SessionLogScan {
 /**
  * Refuse a header carrying a format version this build does not read BEFORE
  * validating the current header shape or decoding any event row: a future
- * format need not satisfy today's structural checks at all, and its user must
- * see "upgrade the harness", never "corrupt session log".
+ * format need not satisfy this build's structural checks at all, and its user
+ * must see "upgrade the harness", never "corrupt session log".
  * @param parsed - the JSON-parsed first line of a session artifact.
  */
 function refuseForeignFormatVersion(parsed: unknown): void {
@@ -246,7 +311,7 @@ function refuseForeignFormatVersion(parsed: unknown): void {
   )
 }
 
-function parseHeaderRecord(record: Buffer): SessionHeader {
+function parseHeaderRecord(record: Buffer): ReturnType<typeof fromHeaderLine> {
   if (record.length === 0 || record.at(-1) !== 0x0A || record.indexOf(0x0A) !== record.length - 1) {
     throw new Error('empty or header-less session log')
   }
@@ -271,6 +336,7 @@ function parseHeaderRecord(record: Buffer): SessionHeader {
  */
 export class SessionLogScanner {
   private readonly meta: SessionHeader
+  private readonly inheritedEventCount: SessionLogOffsetType
   private readonly events: SessionEvent[] = []
   private fragments: Buffer[] = []
   private fragmentBytes = 0
@@ -285,7 +351,9 @@ export class SessionLogScanner {
    * @param headerRecord - the complete first JSONL record, including its newline.
    */
   constructor(headerRecord: Buffer) {
-    this.meta = parseHeaderRecord(headerRecord)
+    const parsed = parseHeaderRecord(headerRecord)
+    this.meta = parsed.meta
+    this.inheritedEventCount = parsed.inheritedEventCount
     this.inputBytes = headerRecord.length
     this.committedBytes = headerRecord.length
   }
@@ -326,11 +394,15 @@ export class SessionLogScanner {
    * Snapshot progress before appending a recoverable torn-frame prefix.
    * @returns byte, committed-prefix, and expanded-event cursors.
    */
-  checkpoint(): { inputBytes: number; committedBytes: number; eventCount: number } {
+  checkpoint(): {
+    inputBytes: number
+    committedBytes: number
+    eventCount: SessionLogOffsetType
+  } {
     return {
       inputBytes: this.inputBytes,
       committedBytes: this.committedBytes,
-      eventCount: this.events.length,
+      eventCount: SessionLogOffset(this.events.length),
     }
   }
 
@@ -340,7 +412,12 @@ export class SessionLogScanner {
    */
   finish(): SessionLogScan {
     this.finished = true
-    return { meta: this.meta, events: this.events, committedBytes: this.committedBytes }
+    return {
+      meta: this.meta,
+      inheritedEventCount: this.inheritedEventCount,
+      events: this.events,
+      committedBytes: this.committedBytes,
+    }
   }
 
   /** Decode one complete event row and update the contiguous prefix. */
@@ -348,7 +425,7 @@ export class SessionLogScanner {
     this.eventLine += 1
     let decoded: SessionEvent[]
     try {
-      decoded = decodeStorageRecord(JSON.parse(line.toString('utf8')))
+      decoded = decodeStorageRecord(expandProvenanceFromStorage(JSON.parse(line.toString('utf8'))))
     } catch {
       this.issue ??= new Error(`corrupt session log: unparsable committed event at line ${this.eventLine}`)
       return
@@ -394,20 +471,28 @@ export function scanLog(buffer: Buffer): SessionLogScan {
 }
 
 /**
- * Parse just the header line of a log into a {@link SessionHeader}, or
- * `undefined` if it is missing/not a header. Used by `list()` to read session
- * metadata WITHOUT parsing the whole log: a session picker scales with the
- * number of sessions, not the total size of every conversation.
+ * Parse just the header line of a log into logical metadata plus its exact
+ * inherited cut, or `undefined` if it is missing/not a header.
  * @param firstLine - the first line of a log file (without its trailing newline).
- * @returns the parsed header, or `undefined` when the line is not a well-formed session header.
+ * @returns parsed storage metadata, or `undefined` for a malformed header.
  */
-export function parseHeaderMeta(firstLine: string): SessionHeader | undefined {
+export function parseHeader(firstLine: string): SessionStorageMetadata | undefined {
   let parsed: unknown
   try {
     parsed = JSON.parse(firstLine)
   } catch {
     return undefined
   }
+  refuseForeignFormatVersion(parsed)
   if (!isHeaderLine(parsed)) return undefined
   return fromHeaderLine(parsed)
+}
+
+/**
+ * Parse only the logical header fields needed by lightweight listing.
+ * @param firstLine - first JSONL line without its trailing newline.
+ * @returns the logical Session header, or `undefined` for a malformed line.
+ */
+export function parseHeaderMeta(firstLine: string): SessionHeader | undefined {
+  return parseHeader(firstLine)?.meta
 }

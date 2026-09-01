@@ -799,6 +799,28 @@ describe('boot', () => {
     )
   })
 
+  it('expands a stackless aggregate at the deepest activation cause', async () => {
+    const dir = tmp()
+    const aggregate = new AggregateError([
+      new Error('first aggregate member'),
+      'second aggregate member',
+    ], 'aggregate activation failure')
+    delete (aggregate as { stack?: string }).stack
+    try {
+      await boot(NAME, join(dir, 'cordis.yml'), undefined, () => {
+        throw new Error('wrapped aggregate failure', { cause: aggregate })
+      })
+      expect.fail('boot should reject the aggregate activation failure')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      const message = (error as Error).message
+      expect(message).toContain(`${NAME}: host preparation failed: wrapped aggregate failure`)
+      expect(message).toContain('aggregate activation failure')
+      expect(message).toContain('first aggregate member')
+      expect(message).toContain('second aggregate member')
+    }
+  })
+
   it('reports a pending real Loader fiber and the service unresolved in its own context', async () => {
     const dir = tmp()
     writeFileSync(join(dir, 'waiting.mjs'), 'export const inject = ["neverProvided"]\nexport function apply() {}\n')
@@ -823,8 +845,8 @@ describe('addHarnessSourceSection', () => {
       const systemPrompt = ctx.get('systemPrompt')!
       const rendered = renderPrompt(await systemPrompt.assemble())
       expect(rendered).toContain(EXPECTED)
-      // Harness-owned opener (-100) → source (-99) → persona (0). The >= 0 guards
-      // keep a drifted opener/persona string from a false pass through `-1 < n`.
+      // The >= 0 guards keep a drifted opener/persona string from a false pass
+      // through `-1 < n`.
       const identityAt = rendered.indexOf('You are an AI agent powered by DeepSeek Harness.')
       const sourceAt = rendered.indexOf(EXPECTED)
       const personaAt = rendered.indexOf('You are a coding agent.')

@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-位于 `packages/goal/command-goal/` 的 `@deepseek-ai/dsh-command-goal` 是构建在 `ctx.commands` 与 `ctx.goals` 之上的命令生产方。它注册一个全局 `goal` 定义，因此组合中的每个命令适配器都会发现同一个命令；不兼容的应用应省略该生产方，而不是在适配器处屏蔽其注册。处理器从命令分发接收准确的目标 agent（智能体），通过领域服务读取或改变该 agent 的目标，并返回直接的纯文本 UI 输出。它不导入任何适配器或具体 agent loop（智能体循环）。
+位于 `packages/goal/command-goal/` 的 `@deepseek-ai/dsh-command-goal` 是构建在 `ctx.commands` 与 `ctx.goals` 之上的命令生产方。它在自身挂载的 Cordis scope 中注册一个 `goal` 定义，因此读取目标 agent scope 的每个命令适配器都会发现同一个命令；不兼容的应用或 agent preset 应省略该生产方，而不是在适配器处屏蔽其注册。处理器从命令分发接收准确的目标 agent（智能体），通过领域服务读取或改变该 agent 的目标，并返回直接的纯文本 UI 输出。它不导入任何适配器或具体 agent loop（智能体循环）。
 
 该命令遵循 [OpenAI Codex 公共仓库 `678157a` 提交中的 TUI 分发实现](https://github.com/openai/codex/blob/678157acaa819d5510adfe359abb5d0392cfe461/codex-rs/tui/src/chatwidget/slash_dispatch.rs#L750-L805)所呈现的紧凑形态：无参数状态查询、自由形式目标描述，以及 `clear`、`edit`、`pause` 或 `resume` 控制。固定到提交的链接使调研所得语法在 Codex 后续演进时仍可核验。本仓库保留自身的事件溯源状态、Round 计数策略与恢复后激活规则，而不复制 Codex 的 SQLite、token 预算或自动恢复行为。
 
@@ -38,13 +38,13 @@ Status: implemented
 
 ### 应用组合
 
-`agent-spine-demo` 接受可选的 `goals` 组合对象，其中包含目标领域与模型工具的所有者配置。省略或设为 `false` 时不会挂载该栈。对无头单次调用方而言，明确选择加入非常重要：它们的结果 API 会在与调用关联的一个物理轮次后结束，不能静默变成长时间运行的逻辑目标操作。
+`dsh-base` 将 goal 领域与模型工具所有者作为显式配置行挂载，独立的 `sdk-minimal` 配置树则省略完整栈。这项显式组合选择对 SDK 单次调用方很重要：它们的结果 API 会在与调用关联的一个物理轮次后结束，不能静默变成长时间运行的逻辑目标操作。
 
-TUI 应用包作出相反的产品选择。它默认让 `goals` 使用所有者默认值，并挂载目标领域、模型工具、同会话驱动器、命令注册表与本生产方；`goals: false` 会一致地移除整个栈。[ACP（Agent Client Protocol）自动化应用](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)也默认挂载目标领域与模型工具，但有意省略命令服务。Python SDK 运行时闭包交付本生产方、命令与目标栈，使外部 `cordis.yml` 能组合相同命令。
+TUI 应用包作出相反的产品选择。它默认让 `goals` 使用所有者默认值，并挂载目标领域、模型工具、同会话驱动器、命令注册表与本生产方；`goals: false` 会一致地移除整个栈。Web 组合包把 goal 领域与驱动器保留在 host 中以供远程访问，停用 host 命令生产方，并在 `standard`、`code` 与 `cordis` agent preset 中挂载该生产方；`minimal` 会同时省略命令与模型 goal 工具。切换 preset 不会改变 host 所拥有的 goal 状态，Web GoalBar 仍保留直接 edit、pause、resume 与 clear 控制。[ACP（Agent Client Protocol）自动化应用](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)也默认挂载目标领域与模型工具，但有意省略命令服务。Python SDK 运行时闭包交付本生产方、命令与目标栈，使外部 `cordis.yml` 能组合相同命令。
 
 ## 测试
 
-生产方测试套件使用真实命令注册表、目标服务、agent 注册表与会话日志。它覆盖 Loader 安全导出、注册表发现、dispose（资源释放）、空状态、目标描述解析、拒绝未完成目标替换、行内编辑、已完成目标替换、无目标状态下的所有控制命令、暂停/恢复/清除、每个持久阶段、阻塞代码/说明展示、已激活/未激活展示、经净化的领域错误、意外失败与持久变更记录。应用组合测试覆盖显式主干选择加入、TUI 默认值、一致停用、转发的领域/工具配置、命令发现、打包运行时闭包与扩展后的模型工具组装。ACP 后端快照继续固定目标工具 schema，与这项面向人类的命令无关。
+生产方测试套件使用真实命令注册表、目标服务、agent 注册表与会话日志。它覆盖 Loader 安全导出、注册表发现、dispose（资源释放）、空状态、目标描述解析、拒绝未完成目标替换、行内编辑、已完成目标替换、无目标状态下的所有控制命令、暂停/恢复/清除、每个持久阶段、阻塞代码/说明展示、已激活/未激活展示、经净化的领域错误、意外失败与持久变更记录。应用组合测试覆盖显式主干选择加入、TUI 默认值、一致停用、转发的领域/工具配置、命令发现、打包运行时闭包与扩展后的模型工具组装。Web 组合测试覆盖 preset scope 中的命令发现、Minimal 省略、切换 preset 时的 dispose，以及组装后浏览器中的命令列表。ACP 后端快照继续固定目标工具 schema，与这项面向人类的命令无关。
 
 ## 考虑过的替代方案
 
@@ -57,7 +57,7 @@ TUI 应用包作出相反的产品选择。它默认让 `goals` 使用所有者�
 
 ## 后果
 
-- TUI 暴露由可移除插件提供的 Codex 形态 `/goal` 命令。
+- TUI 与非 Web 基础组合暴露由可移除插件提供的 Codex 形态 `/goal` 命令；Web preset 仅在挂载生产方时暴露该命令。
 - 人类状态会区分持久阶段与实时激活态，并报告准确的目标 Round 上限。
 - 直接暂停、恢复、清除、创建与编辑不消耗模型轮次，而其已接受变更仍可从会话日志重建。
 - 恢复后的会话等待人类决策；`/goal resume` 是字面命令路径，任何语言的普通提示词则可以授权模型工具路径。

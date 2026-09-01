@@ -1,6 +1,6 @@
 /**
- * AclWriteGrant failure-path tests with stub binding tables (the
- * failure-paths.spec.ts pattern): create fails closed on SID-parse failure,
+ * AclWriteGrant failure-path tests with minimal stub binding tables: create
+ * fails closed on SID-parse failure,
  * dispose aggregates revocation and SID-free failures into an
  * AggregateError. Pure stubs — no real Win32 calls, so these run on every
  * platform; the real-FFI round-trip lives in grant.spec.ts (win32 only).

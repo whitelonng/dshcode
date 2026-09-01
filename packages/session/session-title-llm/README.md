@@ -1,30 +1,97 @@
+---
+description: "Shared model-backed title generation policy for users and maintainers configuring title providers or debugging auxiliary LLM requests."
+kind: "package-library"
+---
+
 # @deepseek-ai/dsh-session-title-llm
 
 English | [中文](README.zh.md)
 
-Shared implementation policy for model-backed session-title providers. It resolves the auxiliary route, frames exact selected human messages as JSON, records the exact dispatchable request, applies a language-aware title instruction, enforces input and output budgets, composes timeout and caller cancellation, assembles the stream, and returns normalized text with exact source seqs plus the provider/model route used to generate it.
+## Summary
 
-This package is a library, not a Cordis plugin. The provider plugins call `registerSessionTitleLlmProvider()` with their cadence and message selector; it validates shared config and delegates each revision to `generateSessionTitleWithLlm()`, so registration, route, prompt, cancellation, and validation behavior cannot drift between them.
+`dsh-session-title-llm` runs model-backed title generation through one shared policy: it resolves the auxiliary route, frames the exact selected human messages as JSON, enforces input and output budgets, composes timeout and caller cancellation, and validates the model's output before a title is accepted. It is a library, not a Cordis plugin — the shipped provider plugins call `registerSessionTitleLlmProvider()` with their cadence and message selector, and the helper validates shared config and delegates every revision to one generation path, so registration, route, prompt, cancellation, and validation behavior cannot drift between them. Deployments configure it through the provider plugins, which require every limit. The route, failure, and configuration contracts come first; the request internals live in a collapsible developer section below.
 
-## Route and failure contract
+## Table of Contents
 
-`provider` and `model` overrides are optional but must be supplied together as non-empty strings. Without that pair, the helper uses the exact provider/model route captured from the current session's logged `request/header`; an explicit refresh before any route exists therefore needs overrides. The helper measures the final JSON-framed user prompt, including seq fields, wrappers, and JSON escaping, against `maxInputBytes` before logging or dispatch instead of truncating it. Timeout and caller cancellation are rechecked while consuming the stream and after it completes, so a late successful result cannot be accepted even if an interceptor or adapter ignores abort. Malformed or empty output, tool calls, and non-stop finish reasons also reject; the session-title service decides whether that rejection is an automatic warning or an explicit caller failure.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-After route and input validation, the helper appends a log-only `session/title-llm-request` event directly through `Session` before model dispatch. It contains the title-provider id, exact source seqs, route, system prompt, message list, and output-token cap used by the call. Persistence observes the record eagerly; the append does not need a title-specific marker, cast, settlement queue, or flush. The dispatched envelope is deep-frozen, carries `purpose: 'session-title'`, and deliberately lacks dsh-agent-loop's process-local request identity. Interceptors stay aligned with the record while loop-only reconstruction observers do not compare it with the conversation header. The DeepSeek adapter maps that purpose to thinking-disabled so the small output budget is reserved for visible title text; other adapters own their purpose-specific behavior. A later model failure leaves the request record intact; validation failures that never become dispatchable requests do not create one. The event stays outside derived model history.
+-----
 
-## Configuration
+<a id="use-this-package"></a>
+## Use this package
+
+As a deployment, configure this policy through the [first-prompt](../session-title-first-prompt-llm/README.md) or [all-prompts](../session-title-all-prompts-llm/README.md) provider plugin. As a provider author, register through the shared helper instead of hand-rolling generation.
+
+### Registering a provider
+
+A provider plugin calls `registerSessionTitleLlmProvider(ctx, config, id, automatic, selectMessages)`; the helper validates the shared config, registers the provider on `ctx.sessionTitle`, and runs every generation through the shared policy. The two shipped plugins register the `first-prompt` and `all-prompts` cadences with their message selectors, and a second registration on the service throws.
+
+### Route and failure contract
+
+`provider` and `model` overrides are optional but must be supplied together as non-empty strings. Without that pair, the helper uses the exact provider/model route captured from the current session's logged `request/header`, so an explicit refresh before any route exists needs overrides. The helper measures the final JSON-framed user prompt against `maxInputBytes` before logging or dispatch instead of truncating it, and rechecks timeout and caller cancellation while consuming the stream and after it completes, so a late successful result cannot be accepted even if an interceptor or adapter ignores abort. Malformed or empty output, tool calls, and non-stop finish reasons reject; the session-title service decides whether that rejection is an automatic warning or an explicit caller failure.
+
+### Configuration
+
+<a id="configuration"></a>
 
 Every field is required except the paired route override; there are no library defaults.
 
-| Key | Contract |
-|---|---|
-| `targetWords` | Positive target word count for non-CJK titles. |
-| `targetCjkCharacters` | Positive target character count for Chinese, Japanese, or Korean titles. |
-| `maxInputBytes` | Positive UTF-8 byte ceiling for the final JSON-framed user prompt. |
-| `maxOutputTokens` | Positive auxiliary generation token cap. |
-| `timeoutMs` | Positive end-to-end deadline within the runtime timer limit. |
-| `provider`, `model` | Optional explicit route; both or neither. |
+| Key | Default | Meaning |
+|---|---|---|
+| `targetWords` | required | Target word count for non-CJK titles |
+| `targetCjkCharacters` | required | Target character count for Chinese, Japanese, or Korean titles |
+| `maxInputBytes` | required | UTF-8 byte ceiling for the final JSON-framed user prompt |
+| `maxOutputTokens` | required | Auxiliary generation token cap |
+| `timeoutMs` | required | End-to-end deadline within the runtime timer limit |
+| `provider`, `model` | optional | Explicit route; both or neither |
 
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the generation path; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design concept
+
+One shared policy so provider plugins cannot drift: config validation, route resolution, prompt framing, budget enforcement, cancellation, and output validation all live here, parameterized only by the provider's cadence and message selector.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Config schema and validation, provider registration helper, request framing, dispatch, and output validation |
+
+### Request flow
+
+A generation validates the config once at registration; each revision frames the selected messages as JSON, measures the framed prompt's UTF-8 bytes against `maxInputBytes`, resolves the route (the explicit pair or the logged `request/header`), appends a log-only `session/title-llm-request` event carrying the exact dispatchable request, then streams through `ctx.llm` under a composed timeout and cancellation deadline. The dispatched envelope carries `purpose: 'session-title'` and deliberately lacks the agent loop's process-local request identity; the DeepSeek adapter maps that purpose to thinking-disabled so the small output budget is reserved for visible title text, and other adapters own their purpose-specific behavior. Output assembles into text blocks only; tool calls, malformed or empty output, and non-stop finish reasons reject, and a later model failure leaves the request record intact.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the generation policy is not enough. They move from the service it plugs into to the provider plugins that consume it.
+
+- [Session title service](../session-title/README.md) — the title service, fallback behavior, and provider registration contract.
+- [Session title subsystem](../../../docs/subsystems/session-title.md) — durable title state and the auxiliary request record.
+- [First-message title provider](../session-title-first-prompt-llm/README.md) — titles from the first eligible human message.
+- [All-messages title provider](../session-title-all-prompts-llm/README.md) — titles from every eligible human message.
+- [Session package map](../README.md) — adjacent persistence, projection, title, and telemetry packages.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Auxiliary title request
@@ -43,5 +110,22 @@ No main-request invalidation. Auxiliary cache reuse is provider-specific; the fi
 
 ## Known Limitations and Deferred Work
 
-- The helper accepts text output only and rejects tool calls; structured-output adapters and provider-specific prompt variants are not exposed.
-- It enforces a byte ceiling for the whole framed user prompt rather than clipping individual messages or applying a retention policy.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define the accepted generation shapes. They are current package constraints.
+
+- **Text output only** — the helper accepts text output and rejects tool calls; structured-output adapters and provider-specific prompt variants are not exposed.
+- **Whole-prompt byte ceiling** — it enforces a byte ceiling for the whole framed user prompt rather than clipping individual messages or applying a retention policy.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published. This stateless helper validates and freezes each auxiliary request before dispatch; deadline, stream, cited message seqs, and provider/model fields are checked synchronously and by tests.

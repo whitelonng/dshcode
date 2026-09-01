@@ -26,4 +26,4 @@ Stray blank sessions remain visible in Ungrouped (the user can still open them) 
 
 ## Testing
 
-`packages/client/runtime/tests/workspaces-service.client.spec.ts` covers the four outcomes: a member blank session is reused (no create RPC); a stray blank with matching cwd is **not** reused and a fresh accounted session is created (regression case); an archived blank is not reused; a rejected first prompt keeps a member blank eligible. The full client suite (`pnpm run test:gui`) stays green.
+`packages/client/ui-workspace/tests/workspaces-service.client.spec.ts` covers the four outcomes: a member blank session is reused (no create RPC); a stray blank with matching cwd is **not** reused and a fresh accounted session is created (regression case); an archived blank is not reused; a rejected first prompt keeps a member blank eligible. The full client suite (`pnpm run test:gui`) stays green.

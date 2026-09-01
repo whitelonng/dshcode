@@ -19,7 +19,7 @@ Why entry-level mounting is the load-bearing mechanism: the client module table 
 - **Boot-glue resolution in `AppCLIEntry`** (ship both rows with static `disabled`, patch `disabled` from a `--directory-picker=auto|native|browse` flag). Works — `PatchOptions` patches metadata, and the modules scan skips disabled rows — but leaves the decision app-private where every future composition re-implements it; the chooser plugin gives any `cordis.yml` the same one-row adaptivity. Reintroduce the flag only when a deployment needs to *force* a backend without editing its yml.
 - **One merged plugin branching per call** (client tries `pick`, falls back to the browse dialog on `directory-picker-unavailable`). Rejected: the client would need both flows in one bundle — the bundle-purity gate forbids cross-plugin value imports and jscpd forbids copying the dialog — and per-call probing pays a doomed RPC on every open of a browse host.
 - **Resurrecting the wire advertisement** so both client flows mount and branch on the host's kind. Rejected: reverses the seam note's deletion for no consumer the chooser doesn't already serve, and collides with the `single` directory-flow holes.
-- **Per-connection adaptivity** (native for a loopback browser, browse for a remote one, same server). Deferred: needs a per-client capability, the advertisement above, and both flows mounted; no deployment serves both operator shapes at once today.
+- **Per-connection adaptivity** (native for a loopback browser, browse for a remote one, same server). Deferred: needs a per-client capability, the advertisement above, and both flows mounted; no shipped deployment serves both operator shapes at once.
 
 ## Consequences
 

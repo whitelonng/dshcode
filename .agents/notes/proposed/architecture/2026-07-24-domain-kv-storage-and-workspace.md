@@ -6,7 +6,7 @@ English | [中文](2026-07-24-domain-kv-storage-and-workspace.zh.md)
 
 ## Problem
 
-The host's only persistence surface is the session event log (`packages/session/session-persistence`: append-only, one file per session). Anything that does not belong to a single session has nowhere to live, and two real needs exist today:
+The host's only persistence surface is the session event log (`packages/session/session-persistence`: append-only, one file per session). Anything that does not belong to a single session has nowhere to live, and two shipped needs exist:
 
 - **The workspace entity.** The GUI needs workspace as a real object: path, title, and the list of owned sessions. Ownership belongs to the workspace — "which sessions belong to this workspace" is not any single session's fact, so writing it into the session log is semantically wrong. Before this design, workspace was only a sidebar visual grouping derived from cwd, with no entity.
 - **Dynamic session metadata** (the foreseeable second consumer). Cold session listings read only the first log line (an immutable creation-time snapshot); title, terminal status, and anything that evolves with the session is unavailable. The fix direction is a sidecar metadata table — exactly a KV table with high-frequency per-key updates.
@@ -75,7 +75,7 @@ Config is `root` only (required, no default, schemastery); apply registers backe
 
 Config is `path` (required, `':memory:'` allowed) plus `journalMode` (enum, default `wal`); apply mirrors json, registering backend `sqlite`.
 
-- `node:sqlite` `DatabaseSync`; the open sequence follows session-persistence-sqlite: mkdir 0o700 → `open(path,'wx',0o600)` exclusive create when missing → `PRAGMA foreign_keys=ON` → journal_mode → version check → create tables.
+- `node:sqlite` `DatabaseSync`; the open sequence is mkdir 0o700 → `open(path,'wx',0o600)` exclusive create when missing → `PRAGMA foreign_keys=ON` → journal_mode → version check → create tables.
 - Physical layout version `STORAGE_SQLITE_SCHEMA_VERSION = 1` in `PRAGMA user_version`: 0 → stamp; ≠ → `version-mismatch`.
 - DDL (all STRICT; table names concatenated from the restricted character set with the `u_` prefix, no external input ever reaches DDL):
 
@@ -83,9 +83,9 @@ Config is `path` (required, `':memory:'` allowed) plus `journalMode` (enum, defa
 CREATE TABLE IF NOT EXISTS units (name TEXT PRIMARY KEY, version INTEGER NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS unit_globals (
   unit TEXT PRIMARY KEY REFERENCES units(name), value TEXT NOT NULL) STRICT;
--- 每 unit 每表：
+-- One table per unit/table pair:
 CREATE TABLE IF NOT EXISTS "u_<unit>_<table>" (
-  key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;             -- value = 记录 JSON 文档
+  key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;             -- value = record JSON document
 ```
 
 - Unit versions live in `units` rows; a descriptor mismatch → `version-mismatch`. Row granularity is document-per-row, preserving precise per-key durable updates (the path left open for high-frequency point-update tables like the session sidecar); when query needs appear, JSON1 reads the value column directly.
@@ -97,8 +97,8 @@ A single implementation, not abstracted; consumers depend on this layer only and
 
 ```ts ignore-check
 export const Config = z.object({
-  backend: z.string().required(),                // 默认后端名，必填
-  routes: z.dict(z.string()).default({}),        // per-domain 覆盖：{ workspace: 'sqlite' }
+  backend: z.string().required(),                // required default backend name
+  routes: z.dict(z.string()).default({}),        // per-domain override: { workspace: 'sqlite' }
 })
 
 export function apply(ctx: Context, config: Config) {
@@ -135,21 +135,21 @@ export function domainTable<K extends string, V>(schema: ZodType<V>): DomainTabl
 6. Construct the `Domain` and register `ctx.effect()`: the disposer drains the write chain → `unit.close()`.
 
 ```ts ignore-check
-export interface Domain</* 由 spec 推导 */> {
+export interface Domain</* inferred from spec */> {
   readonly name: string
-  readonly global: { get(): G; set(value: G): Promise<void> }   // 仅当 spec.global 声明
+  readonly global: { get(): G; set(value: G): Promise<void> }   // only when spec.global exists
   table<N extends keyof S['tables']>(name: N): KvTable<KeyOf<N>, ValueOf<N>>
 }
 
 export interface KvTable<K extends string, V> {
-  get(key: K): V | undefined                     // 内存快照，同步
+  get(key: K): V | undefined                     // synchronous in-memory snapshot
   entries(): IterableIterator<[K, V]>
   keys(): IterableIterator<K>
   readonly size: number
   put(key: K, value: V): Promise<void>
-  delete(key: K): Promise<boolean>               // false = 本就不存在
+  delete(key: K): Promise<boolean>               // false when already absent
   /** Atomic read-modify-write on the domain's single write chain; fn is sync-pure. */
-  update(key: K, fn: (current: V) => V): Promise<V>   // 缺 key → DomainError('missing-key')
+  update(key: K, fn: (current: V) => V): Promise<V>   // missing key -> DomainError('missing-key')
 }
 ```
 
@@ -178,7 +178,7 @@ export abstract class SessionPersistence extends Service {
 ```
 
 - JSONL backend: unlink the session's file (including the `.zstd` variant); neither file nor intent → reject.
-- SQLite backend: one transaction `DELETE FROM events…; DELETE FROM sessions…`; zero rows hit and no intent → reject.
+- An out-of-tree backend deletes atomically in its own medium and preserves the same unknown-id and canceled-intent results; this proposal defines no other first-party physical path.
 - After a successful delete, emit `'session-persistence/deleted'(id: SessionId)` (`@mode emit`; the session-persistence event surface, unrelated to `domain/changed`). Derived data (the session-query full-text index and the like) subscribes and cleans itself; the persistence layer never reaches into indexes, and the crash window is covered by derived indexes being droppable-and-rebuildable.
 
 Orchestration rules (implemented together with the cascade; the `session.delete` RPC and the workspace cascade reuse the same rules):
@@ -256,7 +256,7 @@ Consistency doctrine (the ledger = the only ownership authority; the implementat
 
 ### Reuse and the session-backend migration outlook
 
-**Long-term direction**: the pure medium operations inside session-persistence's JSONL/SQLite backends sink into `dsh-storage` backends (the session packages stay; the `SessionPersistence` seam and coordinator semantics do not move — only the file/db operation layer beneath them does). The motive for reuse: the medium layer is all filesystem operations, database calls, and cross-platform grit (Windows permission and atomic-publish variants, fsync semantics, exclusive file creation…), which should be written once; business semantics (how a session appends, when, and what) stay above — while "did this append complete correctly underneath" (durability/atomicity/platform correctness) is the lower layer's responsibility, and the responsibility boundary is the facet primitive contract. The backend interface is therefore designed as **medium owner + data-shape facets**: a session log is an append-only stream, a different shape from KV — forcing them into one set of primitives would deform both, so facets split them (`kv` this phase, `log` at migration) while sharing the medium and its lifecycle.
+**Long-term direction**: the pure medium operations inside the Session-persistence JSONL provider may sink into a `dsh-storage` log facet (the Session packages stay; the `SessionPersistence` seam and coordinator semantics do not move — only the file operation layer beneath them does). The motive for reuse: the medium layer owns filesystem operations and cross-platform work such as Windows atomic publication, fsync semantics, and exclusive file creation; business semantics (how a Session appends, when, and what) stay above. A Session log is an append-only stream, a different form from KV, so the interface keeps **medium owner + data-form facets** rather than forcing both through one primitive set.
 
 The current reuse audit (an account already legible before the migration):
 
@@ -264,12 +264,10 @@ The current reuse audit (an account already legible before the migration):
 | --- | --- | --- |
 | JSONL: temp write + fsync + link/unlink atomic publish, 0o700/0o600 permissions, Windows variant (win32.ts) | pure medium | copied by `dsh-storage-json` this phase (whole-file atomic rewrite is the same protocol); becomes the shared implementation at migration |
 | JSONL: line-append, first-line header fast read, zstd per-frame compression | log shape | stays put; moves into the `log` facet at migration |
-| SQLite: openDatabase (mkdir/exclusive create/PRAGMA sequence/user_version check) | pure medium | copied by `dsh-storage-sqlite` this phase — the two openDatabase copies are already near line-identical and this group is the third user; copy now, extract at migration |
-| SQLite: events/sessions schema, same-transaction materialization | log shape | stays put; moves into the `log` facet at migration |
 | coordinator (per-id write chain, lazy materialization, crash repair, flush barrier) | session semantics | never sinks — event-log domain logic whose counterpart here is the domain layer's write chain; each owns its own |
 | encodeSegment (id-to-path escaping) | medium utility | unused on the domain side (keys never reach paths); sinks together with the `log` facet (one file per session) at migration |
 
-**This phase does not touch session-persistence's medium code** (only the delete primitive is added); the table above is the migration-phase work list and the design evidence that the backend interface must accommodate the log shape.
+**This phase does not touch Session-persistence medium code** (only the delete primitive is added). A future log-facet change needs its own consumer and evidence; the table records the remaining JSONL reuse boundary without promising that extraction.
 
 ### Test matrix
 
@@ -279,7 +277,7 @@ The current reuse audit (an account already legible before the migration):
 | registry/mount | duplicate registration, unmounted access, disposer removal | — |
 | domain layer | the six open steps, schema rejection, update serialization (concurrent interleaving stress), `domain/changed` per record, global initial-value lazy materialization, routing and `facet-unsupported` | either (json) |
 | workspace | create/uniqueness/realpath, attach checks (including rejection when sessionPersistence is absent), the four consistency-doctrine cases | mock domain or json |
-| session delete contract (future work, joins runPersistenceContract at implementation) | unknown id, deleted-id reuse, un-materialized intent, serialization with in-flight appends, the deleted event | jsonl, sqlite |
+| session delete contract (future work, joins runPersistenceContract at implementation) | unknown id, deleted-id reuse, un-materialized intent, serialization with in-flight appends, the deleted event | jsonl |
 
 Snapshots: no model-visible or assembly surface this phase, none added; next phase's RPC wiring brings them with the `workspace.*` domain.
 
@@ -288,7 +286,7 @@ Snapshots: no model-visible or assembly surface this phase, none added; next pha
 | Not doing | Trigger | Rework point | Groundwork |
 | --- | --- | --- | --- |
 | Session deletion (`SessionPersistence.delete`, the deleted event, recursive delete, running checks) | a destructive Session-delete product flow starts | implement the session primitive plus `session.delete`; keep it independent from Workspace registration deletion | orchestration rules and rejection table above remain groundwork; Workspace deletion preserves Sessions and logs |
-| The `log` facet and the session-backend migration | any phase after this one | sink the medium operations (the reuse audit table is the work list) | the facet structure is in place; both backends' medium code is organized in sinkable shape already |
+| The `log` facet and Session-provider migration | any phase after this one | sink JSONL medium operations when a real consumer justifies the facet | the facet organization leaves the option open without committing to extraction |
 | Multi-process write protection | two host processes writing one medium | JSON backend file locks; SQLite WAL is natively multi-process | all writes already funnel through the domain's single point; locking touches backends only |
 | Cross-process change observation | GUI reconnect awareness | the revision pattern (copy session-persistence) | `domain/changed` already exists in-process |
 | Data migration | model changes after the first tagged release | version-driven per-domain migration | versions are on the medium from day one |

@@ -62,7 +62,7 @@ The DeepSeek native `web_search` probe is registered but skipped. The live Anthr
 
 The repository's first CI secret requires a recorded threat model because access differs between same-repository, fork, and Dependabot pull requests and changes when the repository becomes public.
 
-### Who can reach the secret today (private repo)
+### Who can reach the secret in a private repository
 
 - **No write access (fork PRs): cannot.** Two independent facts block it. First, the workflow uses `pull_request`, **not** `pull_request_target` — GitHub does not pass repo secrets to fork-PR runs of `pull_request`, so `secrets.DEEPSEEK_API_KEY_EXTERNAL` resolves to empty on a fork runner. Second, the `if:` gate skips fork PRs entirely. The withholding is the real boundary; the gate is defense-in-depth and UX.
 - **Write (push) access: can.** A same-repo branch PR receives secrets, so a write-access author could modify test code (or an install lifecycle script, or the workflow YAML on their branch) to exfiltrate the key. This is **inherent to GitHub Actions, not introduced here**: anyone with push access to any repo can already exfiltrate any of its Actions secrets by authoring a workflow. Write access ⇒ secret access, always. The mitigation lives in who is granted write and in branch protection, not in this file.
@@ -79,7 +79,7 @@ The secret stays protected from the public **through this workflow**: `pull_requ
 
 What gets worse is the *surrounding* model, and these are the things to address before flipping visibility:
 
-- **Logs become world-readable.** A careless secret echo that today leaks to org members would leak to the entire internet and be scraped within minutes. Secret-handling discipline (no value/length echoes — already done) matters far more.
+- **Logs become world-readable.** A careless secret echo that leaks to organization members would leak to the entire internet and be scraped within minutes. Secret-handling discipline (no value/length echoes — already done) matters far more.
 - **The `pull_request_target` footgun becomes catastrophic.** If anyone ever "fixes" PR runs by switching the trigger to `pull_request_target`, the workflow would run untrusted fork code in the base-repo context **with** secrets — a full key-leak vector. This is benign-ish on a private repo and disastrous on a public one. A `SECURITY —` comment on the trigger in e2e.yml forbids the change and points here.
 - **Rotate on flip.** The key lived in a private repo's CI; treat going-public as "assume exposed" and rotate `DEEPSEEK_API_KEY_EXTERNAL` at that moment.
 - **Settle the secret behind controls.** Confirm Settings → Actions → *"Send secrets to workflows from fork pull requests"* stays **off** (the one setting that would actually break the fork boundary), and consider moving the key into a GitHub **Environment** with required reviewers so even merged code uses it only under controlled conditions and rotation has a single home.

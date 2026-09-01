@@ -1,6 +1,6 @@
 /**
- * Restricted-token failure-path tests with stub binding tables (the
- * failure-paths.spec.ts pattern): every checked Win32 call in the token
+ * Restricted-token failure-path tests with minimal stub binding tables: every
+ * checked Win32 call in the token
  * pipeline — open, logon-SID scan, well-known SID creation, default-DACL
  * merge, restricted-token creation — has a failing counterpart, and each
  * failure closes or frees what it created before throwing. Pure stubs — no
@@ -8,12 +8,12 @@
  * lives in acl.spec.ts (win32 only).
  */
 
+import { Win32Error } from '@deepseek-ai/dsh-win32-process'
 import { describe, expect, it, vi } from 'vitest'
 import koffi from 'koffi'
 
 import { allocBytes, isNullPtr } from '../src/ffi.ts'
 import type { NativePtr, Win32Bindings } from '../src/ffi.ts'
-import { Win32Error } from '../src/errors.ts'
 import {
   createRestrictedToken, findLogonSid, makeWellKnownSid, openCurrentProcessToken, setTokenDefaultDaclGrant,
 } from '../src/token.ts'

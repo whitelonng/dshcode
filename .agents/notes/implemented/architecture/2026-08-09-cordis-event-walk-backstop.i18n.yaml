@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-09-cordis-event-walk-backstop.md
-2026-08-09-cordis-event-walk-backstop.md: c031b7c444a4d9bdfb0792523ba50e297f53b56a
-2026-08-09-cordis-event-walk-backstop.zh.md: 316a79d774491b723c85ed65402d724e169ca66f
+2026-08-09-cordis-event-walk-backstop.md: 5a85c5df2705c69f7a045e04a32345149135c427
+2026-08-09-cordis-event-walk-backstop.zh.md: 17660d90bd60c770b63eec95c42b0aeacf269d43

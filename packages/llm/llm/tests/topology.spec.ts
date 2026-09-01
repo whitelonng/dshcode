@@ -250,6 +250,54 @@ describe('model discovery registry', () => {
     ])
   })
 
+  it('carries cancellation into Remote discovery and maps provider failures', async () => {
+    const ctx = await setup()
+    const discover = vi.fn()
+      .mockResolvedValueOnce([
+        { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
+        { id: '' },
+        { id: 'keep' },
+        { id: 'bare' },
+      ])
+      .mockRejectedValueOnce(new Error('endpoint offline'))
+      .mockRejectedValueOnce('provider refused')
+    ctx.llm.registerModelDiscovery('llm-example', discover)
+    const signal = new AbortController().signal
+
+    await expect(ctx.llm.remoteDiscoverModels(
+      'llm-example',
+      { baseURL: 'https://gateway.example/v1' },
+      signal,
+    )).resolves.toEqual([
+      { id: 'keep', name: 'Keep', contextWindow: 1024, maxTokens: 256 },
+      { id: 'bare' },
+    ])
+    expect(discover).toHaveBeenNthCalledWith(
+      1,
+      { baseURL: 'https://gateway.example/v1' },
+      signal,
+    )
+
+    await expect(ctx.llm.remoteDiscoverModels(
+      'llm-example',
+      { baseURL: 'https://gateway.example/v1' },
+      signal,
+    )).rejects.toMatchObject({
+      code: 'llm/model-discovery-rejected',
+      message: 'endpoint offline',
+      details: { settingsNs: 'llm-example', baseURL: 'https://gateway.example/v1' },
+    })
+    await expect(ctx.llm.remoteDiscoverModels(
+      'llm-example',
+      { provider: 'known-route' },
+      signal,
+    )).rejects.toMatchObject({
+      code: 'llm/model-discovery-rejected',
+      message: 'provider refused',
+      details: { settingsNs: 'llm-example' },
+    })
+  })
+
   it('refuses a namespace nothing serves and a draft with no endpoint', async () => {
     const ctx = await setup()
     ctx.llm.registerModelDiscovery('llm-example', () => Promise.resolve([]))
@@ -264,5 +312,29 @@ describe('model discovery registry', () => {
       .rejects.toMatchObject({ code: 'INVALID_DISCOVERY' })
     // Naming a route alone is enough: the adapter may know it without an endpoint.
     await expect(ctx.llm.discoverModels('llm-example', { provider: 'known-route' })).resolves.toEqual([])
+  })
+})
+
+describe('imageRequestPricing resolution', () => {
+  it('resolves the owning adapter declaration and degrades everywhere else to undefined', async () => {
+    const ctx = await setup()
+    const pricing = { priceImages: () => [] }
+    class PricingAdapter extends NoopAdapter {
+      override imageRequestPricing(provider: string, model: string): typeof pricing | undefined {
+        return provider === 'a' && model === 'vision' ? pricing : undefined
+      }
+    }
+    const dispose = ctx.llm.registerAdapter(['a'], new PricingAdapter())
+    ctx.llm.registerAdapter(['plain'], new NoopAdapter())
+
+    expect(ctx.llm.imageRequestPricing('a', 'vision')).toBe(pricing)
+    expect(ctx.llm.imageRequestPricing('a', 'other')).toBeUndefined()
+    // The base adapter declares none.
+    expect(ctx.llm.imageRequestPricing('plain', 'vision')).toBeUndefined()
+    // Unregistered providers degrade instead of throwing: callers price
+    // durable history whose route may no longer be mounted.
+    expect(ctx.llm.imageRequestPricing('missing', 'vision')).toBeUndefined()
+    dispose()
+    expect(ctx.llm.imageRequestPricing('a', 'vision')).toBeUndefined()
   })
 })

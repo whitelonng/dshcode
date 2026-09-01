@@ -30,7 +30,7 @@ The child's working directory is an explicit resolution, never the harness proce
 
 ### StopReason mapping
 
-ACP `StopReason` → harness `SubagentStopReason`: `end_turn`→`completed`, `max_tokens`→`max-tokens`, `refusal`→`refusal`, `cancelled`→`aborted`, `max_turn_requests`→`error` (no clean equivalent — the task did not finish), unknown→`error`. A spawn/transport/RPC failure resolves `error` (or `aborted` if a cancel was requested); `result` never rejects on a child-level failure, per the seam contract.
+ACP `StopReason` → harness `SubagentStopReason`: `end_turn`→`completed`, `max_tokens`→`max-tokens`, `refusal`→`refusal`, `cancelled`→`aborted`, `max_turn_requests`→`error` (no clean equivalent — the task did not finish), unknown→`error`. Spawn, initialize, and session-creation failures reject `start()` before publication after provider-owned cleanup; prompt/RPC/transport failures after publication settle `result` as `error` (or `aborted` after local cancellation), and `result` never rejects on a child-level failure. Non-completed and lifecycle failures add only the bounded provider stage, coarse category, closed permission decision, and observed process facts defined by the [out-of-process diagnostics decision](2026-08-21-out-of-process-subagent-minimal-diagnostics.md); raw ACP errors and stderr remain Host-only.
 
 ### Security: scrubbed child environment
 
@@ -41,7 +41,8 @@ The child is a separate process, so it inherits an environment. Credential-shape
 - **Keyless unit/integration:** A scripted ACP subprocess exercises real stdio for prompt/output flow, every stop-reason mapping, signal and disposal cancellation (including pre-abort, pre-session race, and torn-pipe cases), both permission policies, ignored non-message updates, missing-command cleanup, provider reload, and namespace exports.
 - **Keyless Loader composition:** A test-only cordis.yml boots the stdio app through the real Loader with the backend's `cwd` omitted; a scripted model delegates once and the scripted child proves it ran in — and was announced — the parent session's workspace (the cwd-inheritance branch end to end).
 - **With-key e2e:** The backend spawns the real ACP example; its model answers `PONG`, writes `proof.txt`, and the parent verifies the file.
-- **Snapshot gap:** Each ACP child is a separate process with its own replay session, unlike in-process per-session replay. Deterministic mock-server coverage exists, while `TODO(acp-subagent-replay)` tracks parent replay against a replaying child.
+- **Keyless snapshot:** The ACP example boots the real provider and scripted child through Loader-backed replay, pinning foreground and one-shot background diagnostics while keeping the child process, permission decision, partial output, and cleanup lifecycle deterministic.
+- **Snapshot gap:** Each ACP child still has its own replay session; `TODO(acp-subagent-replay)` continues to track parent replay against a replaying child harness rather than the scripted protocol child used by the diagnostic scenario.
 
 ## Alternatives considered
 

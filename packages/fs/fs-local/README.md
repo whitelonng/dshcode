@@ -1,33 +1,119 @@
+---
+description: "The host-filesystem backend for ctx.fs for deployments and maintainers choosing or debugging local file access."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-fs-local
 
 English | [中文](README.zh.md)
 
-The **local-filesystem implementation** of the `ctx.fs` provider contract ([`@deepseek-ai/dsh-fs`](../fs)). Backs the twelve `FileSystem` primitives with the host filesystem; loading it as a plugin populates `ctx.fs`.
+## Summary
 
-```ts ignore-check
-import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
+`dsh-fs-local` implements the `ctx.fs` filesystem contract ([`dsh-fs`](../fs/README.md)) on the host filesystem: loading it as a plugin populates `ctx.fs` with real file access — resolve, read, list, atomic write, and literal edit against the local machine's files. Relative paths resolve from a configurable base directory, and the same file reached through different paths or symlinks shares one identity. Because this backend shares the host filesystem, it can also map an absolute host path into the process path used by this execution world. Writes are atomic and preserve file permissions; the optional version guard makes stale overwrites fail instead of clobbering. Choose it when a process needs direct, unconfined access to host files; choose `fs-sandbox` when mutations must be confined, or `fs-e2b` when file state belongs in a remote execution world.
 
-await ctx.plugin(LocalFileSystem, { cwd: process.cwd() })
-// ctx.fs uses the local backend; load @deepseek-ai/dsh-fs-observation-policy for the
-// freshness policy gate and @deepseek-ai/dsh-tool-fs to expose read/write/edit.
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Mount this backend when a composition needs `ctx.fs` backed by the real host filesystem and accepts a process-local implementation. The common path is explicit: load the backend, give it a base directory, and the model-facing tools (`dsh-tool-fs`) or your own plugins can read, write, and edit files.
+
+### When to choose it
+
+Choose `fs-local` for ordinary host-file access in a single process. Choose [`fs-sandbox`](../fs-sandbox/README.md) when a session's writes and edits must be confined to its workspace and temp roots — it extends this backend and adds only the mode fence. Choose [`fs-e2b`](../../e2b/fs-e2b/README.md) when files must live in a remote execution world shared with subprocesses. `config.cwd` is a resolution default, not a containment boundary: absolute paths and `..` escape it.
+
+### Minimal configuration
+
+Load the backend with a base directory; relative paths resolve against it, and absolute paths ignore it.
+
+```yaml
+- name: '@deepseek-ai/dsh-fs-local'
+  config:
+    cwd: /absolute/path/to/workspace
 ```
 
-## Behavior
+| Field | Default | Meaning |
+|---|---|---|
+| `cwd` | `process.cwd()` | Base directory for relative paths |
+| `diffBasisMaxBytes` | `10 MiB` | UTF-8 byte limit per overwrite-diff side; larger overwrites return `before: null` |
 
-- **`resolve(path, opts?)`** — a relative `path` resolves against `opts.cwd` when the caller supplies one (the model-facing tools pass the calling agent's session cwd — see [the per-session cwd Agent Note](../../../.agents/notes/implemented/architecture/2026-07-02-fs-per-session-cwd.md)), else `config.cwd` (default `process.cwd()`); an absolute `path` ignores both. `opts.signal` is checked before and after local resolution, while a remote sibling backend may use it to abort its round-trip. The `targetKey` is the file's `realpath`, so two input paths reaching the same file through symlinks share one identity, and writes/edits land on the link target (preserving the link). A not-yet-existing path uses the realpathed parent directory plus basename when the parent exists; only an unresolvable parent falls back to the absolute path. `displayPath` is the absolute (un-resolved) path.
-- **Execution-world coordinates** — `processPath` exposes the target's canonical host path, `fileUrl` encodes that path through Node's platform-aware URL conversion, and `contains` uses platform path semantics to test identity or descendant containment without consumers parsing `targetKey`.
-- **`stat` / `lstat`** — return target metadata or `undefined` when absent. `stat` reports `FsInfo` for an already resolved target (`version` = an opaque token derived from bigint `dev:ino:size:mtimeNs:ctimeNs`, `type` of `file`/`directory`/`other`, byte `size`); path-shaped `lstat` reports `FsPathInfo` without following the final symlink and can therefore return `symlink`. Both check cancellation before and after their asynchronous metadata probe, so an abort that lands in flight reports `FS_ABORTED` rather than stale absence.
-- **`readText` / `streamText`** — UTF-8 only. `readText` reads the whole file; `streamText` decodes chunks so a huge file need not be held whole in memory and consumers can enforce their own retention bounds. Both reject invalid UTF-8 and NUL-byte binary samples (`FS_NOT_TEXT`) and non-regular targets. The `read` tool (`@deepseek-ai/dsh-tool-fs`) owns line windowing.
-- **`readBytes`** — raw whole-file bytes with no decoding or binary rejection (the `read_image` tool validates content through the attachment service). The required byte cap short-circuits on the stat size before any content I/O; the subsequent stream reads at most one byte beyond the cap, so a file growing after stat still fails `FS_TOO_LARGE` without unbounded buffering.
-- **`listDir`** — lists one directory level in stable `name.localeCompare()` order. Each entry carries the child basename, type, resolved child target (`displayPath` under the listed directory, `targetKey` as the realpath identity), and cheap stat metadata (`version`, plus `size` for regular files). It never opens or decodes file contents. Missing targets report `FS_NOT_FOUND`, file/special-file targets report `FS_NOT_DIRECTORY`, aborted calls report `FS_ABORTED`, permission failures report `FS_PERMISSION_DENIED`, and other listing or child metadata I/O failures report `FS_IO_ERROR`. Broken/disappeared children are returned as `other` without metadata, but permission/IO failures while resolving a child fail the whole listing with a structured `FsError`.
-- **`writeText`** — atomic: writes to a temp file opened exclusively (`wx`, `0o600`) inside a randomly-named private staging dir (`0o700`) next to the target, then fsyncs and publishes. An existing file's mode is preserved, while new files default to `0o600`; on Windows a new file inherits the destination directory's DACL, while replacement copies the target DACL onto the empty temp before writing and publishes through `ReplaceFileW` so the original access policy survives ([Windows DACL preservation Agent Note](../../../.agents/notes/implemented/bug-fix/2026-07-19-windows-atomic-write-dacl-preservation.md)). The `expected` guard is OPTIONAL: omitting it unconditionally creates-or-overwrites; `createIfAbsent` hard-links the staged file into place as an atomic no-replace publication, so a regular file created after the initial probe is preserved and rejected with `FS_NOT_OBSERVED`, while a non-regular path entry is preserved and rejected with `FS_NOT_REGULAR_FILE`; `replaceIfVersion` replaces only at the observed version (a missing target or mismatch is `FS_STALE_VERSION`). An overwrite returns the prior text as its contextual diff basis only when both the opened prior file and UTF-8 replacement are strictly below `config.diffBasisMaxBytes` (default 10 MiB). The descriptor read enforces that limit even if an external writer replaces or changes the file size after the initial probe. Otherwise the provider returns `before: null`, so presentation uses its whole-file fallback.
-- **`editText`** — atomic literal read-modify-write over the same primitive, serialized per target by a mutation lock. The `expected` guard is OPTIONAL: when supplied it verifies the version BEFORE literal matching (a stale edit reports `FS_STALE_VERSION`, never `FS_EDIT_NOT_FOUND`/`FS_AMBIGUOUS_EDIT` against newer content); omitting it edits the current content unconditionally. A missing target reports `FS_STALE_VERSION` either way. LF-normalizes for matching, restores the file's dominant CRLF/LF style, and rejects empty `oldString` / zero matches (`FS_EDIT_NOT_FOUND`) or ambiguous multi-matches without `replace_all` (`FS_AMBIGUOUS_EDIT`).
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-fs-local) is the exhaustive source for every accepted field and its JSDoc.
 
-The package-root SDK API is the default/named `LocalFileSystem` class plus `Config`. Raw I/O lives in `src/fsio.ts` (Cordis-free, independently unit-tested); `src/index.ts` is the thin service wiring.
+### What you can do
 
+Read any regular UTF-8 text file whole or as a stream, read raw bytes up to a cap you choose, and list one directory level in stable name order. Create or replace a file atomically, and apply a literal text edit atomically; both mutations serialize per file, so concurrent writers never interleave. The version guard is optional: omit it for unconditional create-or-overwrite, or supply it to fail when the file changed since you last observed it.
+
+Failures are typed `FsError`s with stable codes — `FS_NOT_FOUND`, `FS_NOT_TEXT` (binary content), `FS_STALE_VERSION` (changed since observation), `FS_EDIT_NOT_FOUND` or `FS_AMBIGUOUS_EDIT` (no unique literal match), and others — so callers branch on the code, never on message text. A missing target on a guarded edit reports `FS_STALE_VERSION` either way.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design decisions behind the local backend and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The backend builds on three ideas:
+
+- **Realpath identity.** The `targetKey` is the file's `realpath`, so two input paths reaching the same file through symlinks share one identity, and writes land on the link target while preserving the link.
+- **Atomic publication.** Writes stage into an exclusive temp file inside a private staging directory next to the target, fsync, then publish; an existing file's mode is preserved and Windows DACLs survive replacement.
+- **One mutation critical section.** A per-target FIFO lock serializes read→guard→write windows, so concurrent writes and edits are deterministically ordered — one wins, the rest see the new version and reject as stale.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Service wiring: `LocalFileSystem`, `Config`, per-target mutation lock |
+| [`src/fsio.ts`](src/fsio.ts) | Cordis-free raw I/O: probe, reads, atomic write, literal edit, line-ending handling |
+| [`src/win32.ts`](src/win32.ts) | Windows-specific DACL preservation for atomic replacement |
+
+### Write path
+
+Each write probes the target, enforces the optional guard (`createIfAbsent` or `replaceIfVersion`), captures a bounded `before` diff basis when both sides are small enough, stages the new content next to the target, fsyncs, and publishes atomically. Guarded creation uses a hard-link publication that never replaces a concurrent creator, rejecting it with `FS_NOT_OBSERVED` instead.
+
+### Edit path
+
+Each edit probes, verifies the version guard before literal matching (so stale edits report `FS_STALE_VERSION`, never a misleading no-match), reads the file, applies the literal replacement with LF normalization, restores the file's dominant line-ending style, and republishes — all inside the per-target lock.
+
+### Ownership and invariants
+
+Raw I/O is Cordis-free and independently unit-tested in `src/fsio.ts`; `src/index.ts` stays thin wiring. `config.cwd` is a resolution default only — containment is the job of `fs-sandbox` or a `tools/execute` permission plugin. Cancellation is a best-effort `AbortSignal` checked before and after each asynchronous probe.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the contract to the adjacent backends, tools, and policies.
+
+- [Filesystem subsystem](../../../docs/subsystems/filesystem.md) — exhaustive provider contract, policy events, and error taxonomy.
+- [dsh-fs](../fs/README.md) — the `ctx.fs` contract this backend implements.
+- [fs-sandbox](../fs-sandbox/README.md) — the sandbox-enforcing backend that extends this one.
+- [tool-fs](../tool-fs/README.md) — the model-facing tools that consume `ctx.fs`.
+- [fs-observation-policy](../fs-observation-policy/README.md) — the policy plugin that guards mutations through the `fs/*` events.
+- [Windows DACL preservation note](../../../.agents/notes/implemented/bug-fix/2026-07-19-windows-atomic-write-dacl-preservation.md) — why atomic replacement copies the target's access policy.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-Indirectly, through [`dsh-tool-fs`](../tool-fs/README.md), which renders this provider's line-windowed UTF-8 content, mutation acknowledgements, and exact provider messages in capped retained results while versions, atomic-write mechanics, and directory metadata remain internal.
+Indirectly, through `dsh-tool-fs`, which renders this provider's line-windowed UTF-8 content, mutation acknowledgements, and exact provider messages in capped retained results while versions, atomic-write mechanics, and directory metadata remain internal.
 
 #### KV Cache effect
 
@@ -35,11 +121,28 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **`config.cwd` is not a sandbox** — it is a resolution default, not containment: absolute paths and `..` escape it. Enforce containment with a stricter `ctx.fs` backend or a permission plugin on the `tools/execute` waterfall ([capability-seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-17-filesystem-capability-seam.md#consequences)).
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the local backend is a poor fit or needs special operational care. They are current package constraints, not a general filesystem comparison or a task backlog.
+
+- **`config.cwd` is not a sandbox** — it is a resolution default, not containment: absolute paths and `..` escape it. Enforce containment with a stricter `ctx.fs` backend or a permission plugin on the `tools/execute` waterfall ([capability-seam note](../../../.agents/notes/implemented/architecture/2026-06-17-filesystem-capability-seam.md)).
 - **Version tokens depend on filesystem metadata** — they combine device, inode, size, nanosecond mtime, and nanosecond ctime; a storage layer that cannot update any of those facts for a rewrite can still defeat the stale guard.
 - **`editText` holds the whole file (plus the edited copy) in memory** — streaming exists only on the read path.
-- **A sub-limit overwrite still buffers a contextual basis** — `writeText` may retain up to just below `config.diffBasisMaxBytes` of prior text in addition to the caller-owned replacement; the bound does not cap the returned `after` value or presentation's whole-file fallback.
+- **A sub-limit overwrite still buffers a contextual basis** — `writeText` may retain up to just below `config.diffBasisMaxBytes` of prior text in addition to the caller-owned replacement; the bound does not cap the returned `after` value or the whole-file presentation fallback.
 - **Binary detection is asymmetric** — reads NUL-sample only the first 8192 bytes while edits scan the whole buffer, so a file with a late NUL reads fine but rejects edits.
-- **The per-target mutation lock is in-process only** — guarded create still uses an atomic no-replace publication across processes, but replacement writers in another process are caught only when the optional version guard observes their metadata change; they are never serialized.
-- **Guarded creation requires hard-link support** — filesystems or mounts that reject hard-link publication cannot serve `createIfAbsent`; the provider preserves the missing target and reports `FS_IO_ERROR`.
+- **The per-target mutation lock is in-process only** — guarded creation still uses an atomic no-replace publication across processes, but replacement writers in another process are caught only when the optional version guard observes their metadata change; they are never serialized.
+- **Guarded creation requires hard-link support** — filesystems or mounts that reject hard-link publication cannot serve `createIfAbsent`; the backend preserves the missing target and reports `FS_IO_ERROR`.
 - **Post-commit cleanup is best effort** — a successful publication remains successful if removal of its owner-only staging directory fails, leaving private residue for later operator cleanup.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published. This package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam.

@@ -30,7 +30,7 @@ interface InsertedRow {
 }
 
 const root = resolve(import.meta.dirname, '../../..')
-const exampleDir = resolve(root, 'examples/mcp-memory')
+const exampleDir = resolve(root, 'apps/cli/config/examples/mcp-memory')
 const baseConfig = resolve(import.meta.dirname, 'fixtures/memory-mcp-base.cordis.yml')
 const fixtureServer = resolve(root, 'packages/mcp/mcp-client/tests/fixture-server.ts')
 

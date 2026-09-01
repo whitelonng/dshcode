@@ -1,7 +1,7 @@
 /** Request-header canonicalization, equality, snapshot folding, and format rejection. */
 
 import { describe, expect, it } from 'vitest'
-import { Session, SessionId, canonicalHeader, foldRequestHeader, headerEquals } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionSeq, canonicalHeader, foldRequestHeader, headerEquals } from '@deepseek-ai/dsh-session'
 import type { EpochHeader, SessionEvent } from '@deepseek-ai/dsh-session'
 import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
@@ -68,7 +68,7 @@ describe('foldRequestHeader', () => {
   it('returns the supplied baseline when no snapshot follows', () => {
     const from: EpochHeader = { config: CONFIG, system: 'baseline' }
     const unrelated: SessionEvent[] = [
-      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+      { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
     ]
     expect(foldRequestHeader(unrelated)).toBeUndefined()
     expect(foldRequestHeader(unrelated, from)).toBe(from)
@@ -82,7 +82,7 @@ describe('foldRequestHeader', () => {
       content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     session.append('request/header', { header: { config: { provider: 'mock', model: 'other' }, tools: [] }, reason: 'change' })
-    expect(foldRequestHeader(session.events)).toEqual({ config: { provider: 'mock', model: 'other' } })
+    expect(foldRequestHeader(session.snapshotEvents())).toEqual({ config: { provider: 'mock', model: 'other' } })
   })
 })
 
@@ -97,7 +97,7 @@ describe('legacy request-header format', () => {
     const appendLegacy = session.append.bind(session) as (type: string, data: unknown) => SessionEvent
     expect(() => appendLegacy('request/header-delta', { config: CONFIG }))
       .toThrow(/unsupported legacy request\/header-delta/)
-    expect(session.events).toHaveLength(0)
+    expect(session.snapshotEvents()).toHaveLength(0)
   })
 
   it('rejects the removed fallback reason in seeds and untyped appends', () => {
@@ -111,7 +111,7 @@ describe('legacy request-header format', () => {
     const appendLegacy = session.append.bind(session) as (type: string, data: unknown) => SessionEvent
     expect(() => appendLegacy('request/header', { header: { config: CONFIG }, reason: 'fallback' }))
       .toThrow('unsupported legacy request/header reason "fallback"')
-    expect(session.events).toHaveLength(0)
+    expect(session.snapshotEvents()).toHaveLength(0)
   })
 })
 
@@ -121,10 +121,10 @@ describe('Session.requestContext', () => {
   /** A turn-enclosed capacity record; the invariant rejects one outside a turn. */
   function seedWith(...records: { provider: string; model: string; contextWindow?: number }[]): SessionEvent[] {
     const events: SessionEvent[] = [{
-      type: 'turn/start', seq: 0, time: 1, data: { turn: 1 },
+      type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 },
     }]
     for (const data of records) {
-      events.push({ type: 'request/context', seq: events.length, time: 1, data })
+      events.push({ type: 'request/context', seq: SessionSeq(events.length), time: 1, data })
     }
     return events
   }
@@ -146,7 +146,9 @@ describe('Session.requestContext', () => {
   it('advances incrementally across appends and skips unrelated events', () => {
     const session = Session.create(SessionId('incremental-capacity'), seedWith(CAPACITY))
     expect(session.requestContext()).toEqual(CAPACITY)
-    session.append('todo/write', { todos: [] })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'unrelated' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
     expect(session.requestContext()).toEqual(CAPACITY)
     session.append('request/context', { ...CAPACITY, model: 'next', contextWindow: 64_000 })
     expect(session.requestContext()).toEqual({ provider: 'mock', model: 'next', contextWindow: 64_000 })
@@ -158,7 +160,9 @@ describe('Session.requestContext', () => {
     const session = Session.create(SessionId('batched-capacity'), seedWith(CAPACITY))
     expect(session.requestContext()).toEqual(CAPACITY)
     session.append('request/context', { ...CAPACITY, contextWindow: 200_000 })
-    session.append('todo/write', { todos: [] })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'unrelated' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
     session.append('request/context', { ...CAPACITY, contextWindow: 300_000 })
     expect(session.requestContext()?.contextWindow).toBe(300_000)
   })

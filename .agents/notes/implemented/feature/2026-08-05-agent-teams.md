@@ -10,7 +10,7 @@ The subagent seam supplies fresh/fork providers, durable child Sessions, FIFO fo
 
 All same-process Agents also share one checkout. Filesystem edit tools can reject an observed stale version, but Bash, formatters, generators, and external writers bypass that fence. Treating a teammate name or task owner as a file lock would hide rather than solve this concurrency boundary.
 
-The model-visible Team tools remain opt-in so the default tool catalog and simple-task behavior do not change. An explicitly requested Team must survive child Activation settlement and mailbox delivery races long enough for the Lead to aggregate the result before process teardown.
+Agent Teams needs an explicit source-checkout composition before its public contracts are stable enough for released CLI or Web bundles. The default tool catalog and simple-task behavior must remain unchanged, while an explicitly requested Team must survive child Activation settlement and mailbox delivery races long enough for the Lead to aggregate the result before process teardown.
 
 ## Decision
 
@@ -54,7 +54,7 @@ Worktree isolation is not a harness runtime behavior. A deployment or prompt may
 
 **Create isolated worktrees automatically.** Rejected because worktree creation, branch naming, merge policy, ignored files, build artifacts, and cleanup are deployment choices. It also changes the same-world behavior existing subagents and sandboxes expose.
 
-**Enable Teams in the default catalog.** Rejected because scoped Team controls would shadow same-named legacy globals and unsolicited delegation would add latency and token cost to simple tasks. Explicit composition keeps model-visible ownership unambiguous without changing shipped requests.
+**Enable Teams in the default catalog.** Rejected because scoped Team controls would shadow same-named legacy globals and unsolicited delegation would add latency and token cost to simple tasks. A private profile bundle inserts Team and disables the legacy controls without adding Team packages to shipped dependency graphs.
 
 **Use an in-memory board and mailbox.** Rejected because child settlement, HMR, and process interruption would lose accepted coordination state and make retries ambiguous.
 
@@ -62,7 +62,7 @@ Worktree isolation is not a harness runtime behavior. A deployment or prompt may
 
 ## Testing
 
-Package tests cover identity, name and authority checks, provider selection, reserved-id persistence collisions, child-before-Lead flush ordering, durable provisioning failure and pending-inbox JSONL/SQLite reconciliation, concurrent target-local ordering, pending/history de-duplication, mailbox limits, post-flush notification, bounded disposal with in-flight creation and dispatch cancellation, failed-member cleanup, task CAS and DAG validation, write-scope warnings, wait cancellation/timeout, inbox-preserving interruption, ordinary-fork isolation, legacy-control shadowing, compact declared-schema result rendering, and scoped registration HMR at per-file 100% coverage. A keyless headless Loader snapshot assembles the real Team plugins and records teammate creation, peer mail, dependent tasks, waiting, and Lead aggregation.
+Package tests cover identity, name and authority checks, provider selection, reserved-id persistence collisions, child-before-Lead flush ordering, durable provisioning failure and pending-inbox JSONL reconciliation, concurrent target-local ordering, pending/history de-duplication, mailbox limits, post-flush notification, bounded disposal with in-flight creation and dispatch cancellation, failed-member cleanup, task CAS and DAG validation, write-scope warnings, wait cancellation/timeout, inbox-preserving interruption, ordinary-fork isolation, legacy-control shadowing, compact declared-schema result rendering, and scoped registration HMR at per-file 100% coverage. A keyless product snapshot loads the private Agent Teams profile bundle through `dsh --profile headless` and pins its complete model-visible tool list, Team policy, and durable workflow projection for two teammates, dependent tasks, peer delivery, waiting, completion, and aggregation. A CLI e2e reuses the same deterministic adapter and verifies normal process exit with persisted Team and child logs.
 
 ## Consequences
 

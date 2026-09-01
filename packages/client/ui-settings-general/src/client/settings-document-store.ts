@@ -1,7 +1,9 @@
 /** State owner for the optional local settings-document action. */
 
-import type { IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
-import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// Type-only: pulls the ctx.remote merge into this program.
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsDescribeFace } from '@deepseek-ai/dsh-client-ui-settings/client'
 
 /** Browser state of the Host-owned settings document. */
@@ -14,10 +16,6 @@ export interface SettingsDocumentState {
   error: string | null
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /** Derives local-document availability from the shared mirror and invokes the pathless Host-owned open operation. */
 export class SettingsDocumentStore {
   /** uSES-safe state source shared by the registered header action. */
@@ -28,11 +26,12 @@ export class SettingsDocumentStore {
   private following: (() => void) | undefined
 
   /**
-   * @param api - loopback settings wire face that opens the provider document.
+   * @param ctx - the plugin's context, whose loopback `remote.settings`
+   * namespace opens the provider document.
    * @param describeFace - the shared mirror's describe face (`hasDocument` source).
    */
   constructor(
-    private readonly api: Pick<IApiClient, 'settings'>,
+    private readonly ctx: ClientContext,
     private readonly describeFace: SettingsDescribeFace,
   ) {}
 
@@ -63,10 +62,11 @@ export class SettingsDocumentStore {
       state.error = null
     })
     try {
-      const response = await this.api.settings.openDocument({})
-      if (!response.result.ok) throw new Error(response.result.error.message)
-    } catch (error) {
-      this.store.update((state) => { state.error = messageOf(error) })
+      const result = await this.ctx.remote.settings.openSettingsDocument()
+      if (!result.ok) {
+        const { message } = result.error
+        this.store.update((state) => { state.error = message })
+      }
     } finally {
       this.store.update((state) => { state.opening = false })
     }

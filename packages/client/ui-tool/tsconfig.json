@@ -12,16 +12,19 @@
       "path": "../../api/remotes/tsconfig.client.json"
     },
     {
+      "path": "../../api/workspace-controller/tsconfig.client.json"
+    },
+    {
       "path": "../../../vendor/cordis"
     },
     {
       "path": "../connection/tsconfig.client.json"
     },
     {
-      "path": "../runtime"
+      "path": "../locale"
     },
     {
-      "path": "../locale"
+      "path": "../ui-chat"
     },
     {
       "path": "../ui-conversation"
@@ -30,10 +33,19 @@
       "path": "../ui-primitives"
     },
     {
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-session"
+    },
+    {
       "path": "../ui-slots"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../util/workspace-path"
     }
   ]
 }

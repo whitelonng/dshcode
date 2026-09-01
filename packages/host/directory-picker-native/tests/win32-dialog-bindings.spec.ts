@@ -180,6 +180,15 @@ describe('loadWin32DialogBindings over the fake COM world', () => {
     expect(world.uninitialized).toBe(1)
   })
 
+  it('reads a UTF-16 path whose BMP code unit has a zero low byte (U+5F00 开)', async () => {
+    // 开 = U+5F00 → UTF-16LE bytes 00 5F. A scan that treats any zero low
+    // byte as NUL truncates here and returns the nonexistent ...\安卓.
+    const world = comWorld({ path: 'C:\\fixture\\安卓开发' })
+    installFakeKoffi(world)
+    const bindings = await (await loadBindingsModule()).loadWin32DialogBindings()
+    expect(runFolderDialog(bindings, 'Pick', vi.fn())).toBe('C:\\fixture\\安卓开发')
+  })
+
   it('maps dismissal and the S_FALSE CoInitializeEx', async () => {
     const world = comWorld({ showHr: HRESULT_CANCELLED, coInitHr: 1 })
     installFakeKoffi(world)

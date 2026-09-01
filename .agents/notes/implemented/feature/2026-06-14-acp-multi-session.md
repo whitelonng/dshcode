@@ -12,7 +12,7 @@ An ACP automation client can keep several conversations alive over one agent sub
 
 ## Decision
 
-The ACP bridge stores live sessions in `Map<SessionId, SessionRecord>`. Agent-scoped callbacks use `ownedRecord`: look up `agent.session.id` in that forward map and accept the record only when it owns the exact agent object, so a foreign same-id object cannot claim the session. A record owns its agent, exact disposer, and optional in-flight prompt with the durable turn number that eventually settles it. The session header owns its cwd; the bridge keeps no parallel workspace or client-capability state.
+The ACP bridge stores live sessions in `Map<SessionId, AcpSession>`. Agent-scoped callbacks use `ownedRecord`: look up `agent.session.id` in that forward map and accept the module only when it owns the exact agent object, so a foreign same-id object cannot claim the session. The module owns its Agent handle, MCP mounts, model selection, ordered updates, memoized close, and optional in-flight prompt with the durable turn number that eventually settles it. The session header owns its cwd; the bridge keeps no parallel workspace or client-capability state.
 
 Every `session/event` callback resolves the owning record before sending or settling anything. Each session permits one in-flight prompt independently. The prompt captures its own user-sourced message `turn/start` and settles only on the matching `turn/end`; injection turns, autonomous plugin or goal turns, and a late end from a cancelled prior turn cannot resolve it. `session/cancel` addresses one record and calls only that agent's queue-aware cancel path.
 
@@ -20,13 +20,13 @@ Permission ownership uses the same exact-agent check against the forward map. Th
 
 Background bash tasks carry an opaque owner token equal to the owning session id. `job_output` and `job_kill` compare the caller's token with the executor's job ownership before reading or killing; a predictable job id alone grants no access. Ownership is stored with the executor task, so a tool plugin reload does not erase it.
 
-Connection teardown clears the live map, settles each pending prompt as cancelled, and disposes all `AgentHandle`s in parallel. Each handle stops and awaits its loop, flushes the session while attached, unregisters the agent, and removes the session. Teardown is memoized and shared by client disconnect and plugin disposal.
+Per-session close, connection teardown, and plugin disposal share each `AcpSession`'s memoized close. The bridge retains the live map while events and updates drain, settles each pending prompt as cancelled, drains continuable descendants, flushes the session while attached, and disposes Agent scopes in parallel. Exact records leave the map only after their close operation settles.
 
 ## Protocol and workspace scope
 
 [ACP v1 expressly permits several concurrent sessions on one connection](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/get-started/architecture.mdx#L16-L24), and each new session carries its own primary `cwd`. This bridge implements that session-level multiplexing, including different primary workspaces as recorded by the [per-session cwd decision](../architecture/2026-07-02-fs-per-session-cwd.md); it does not create one agent subprocess per session.
 
-A multi-root project inside one session is a separate optional capability: ACP defines the [effective roots as the primary `cwd` plus `additionalDirectories`](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/session-setup.mdx#L313-L367). The automation bridge advertises no multi-root capability and rejects non-empty `additionalDirectories`; each fresh session has exactly one workspace, as recorded in the [package contract](../../../../packages/acp/acp/README.md#protocol-contract).
+A multi-root project inside one session is a separate optional capability: ACP defines the [effective roots as the primary `cwd` plus `additionalDirectories`](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/session-setup.mdx#L313-L367). The automation bridge advertises no multi-root capability and rejects non-empty `additionalDirectories`; each session has exactly one workspace, as recorded in the [package contract](../../../../packages/acp/acp/README.md#standard-acp-v1-surface).
 
 [The standard transport is one agent subprocess per stdio connection](https://github.com/agentclientprotocol/agent-client-protocol/blob/01beb5fb5eec60e9f516a80d85eb03594bac61e3/docs/protocol/v1/transports.mdx#L17-L42); multiple connections therefore require multiple subprocesses or a custom transport, while this decision guarantees multiple sessions within one connection. Within that connection, `ctx.sandboxPolicy` resolves every session's `cwd` as its own `workspace-write` root, so the shared bash and filesystem services can serve concurrent projects without granting cross-project writes. This does not add ACP `additionalDirectories`; it removes the process-wide root limit from the already-supported one-primary-root-per-session path.
 
@@ -42,7 +42,7 @@ A multi-root project inside one session is a separate optional capability: ACP d
 
 N sessions can return committed answers, prompt, request permission, and run background jobs concurrently without interleaving or cross-settling. A cancel in one session does not affect its neighbors. The bridge pays for explicit maps and isolation tests, but it does not add one listener set per session and therefore avoids listener fan-out during long-lived connections.
 
-The bridge exposes no protocol method to close one live session independently. Records leave together on connection teardown; navigation and resume belong to host APIs rather than this automation protocol.
+Standard `session/close` independently quiesces one live session and leaves its durable state resumable. `session/list` omits active records, and `session/resume` rejects an id that is still live, so an automation client cannot create two Agent objects for one durable session.
 
 ## Verification
 

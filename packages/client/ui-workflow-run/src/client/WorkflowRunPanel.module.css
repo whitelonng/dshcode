@@ -24,8 +24,8 @@
 .runLeading {
   display: inline-flex;
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: calc(16px + var(--dsh-content-font-delta, 0px));
+  height: calc(16px + var(--dsh-content-font-delta, 0px));
   align-items: center;
   justify-content: center;
   margin-right: 0;
@@ -37,9 +37,9 @@
   flex: none;
   max-width: 42%;
   color: var(--dsw-alias-label-secondary);
-  font-size: 14px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
   font-weight: 510;
-  line-height: 24px;
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -49,8 +49,8 @@
   flex: 1;
   min-width: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(18px + var(--dsh-content-font-delta-secondary, 0px));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -88,8 +88,8 @@
 .phaseLeading {
   display: inline-flex;
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: calc(16px + var(--dsh-content-font-delta, 0px));
+  height: calc(16px + var(--dsh-content-font-delta, 0px));
   align-items: center;
   justify-content: center;
   margin-right: 0;
@@ -102,8 +102,8 @@
   min-width: 0;
   max-width: 42%;
   color: var(--dsw-alias-label-secondary);
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -113,8 +113,8 @@
   flex: 1;
   min-width: 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -122,10 +122,12 @@
 .phaseStatus {
   overflow: hidden;
   flex: none;
-  width: 132px;
+  /* Column width scales with the text (~132/13 ≈ 10px per font-size px) so
+     larger sizes keep the same status text visible instead of truncating. */
+  width: calc(132px + var(--dsh-content-font-delta-secondary, 0px) * 10);
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -136,6 +138,7 @@
   width: 2px;
   height: 2px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-label-tertiary);
 }
 
@@ -166,7 +169,7 @@
   gap: 12px;
   width: 100%;
   min-width: 0;
-  min-height: 24px;
+  min-height: calc(24px + var(--dsh-content-font-delta, 0px));
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -190,7 +193,7 @@
   display: inline-flex;
   flex: none;
   width: 16px;
-  height: 24px;
+  height: calc(24px + var(--dsh-content-font-delta, 0px));
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -210,7 +213,7 @@
   overflow: hidden;
   flex: 1;
   min-width: 0;
-  height: 24px;
+  height: calc(24px + var(--dsh-content-font-delta, 0px));
   align-items: center;
   padding: 0 2px;
   border-radius: 4px;
@@ -221,8 +224,11 @@
   flex: 1;
   min-width: 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 14px;
-  line-height: 24px;
+  /* Body size, not the secondary tier: the member label is the panel's
+     content (an agent's task), while the run/phase headers, counts, and
+     statuses around it are chrome one step down. */
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -232,8 +238,8 @@
   overflow: hidden;
   width: 64px;
   color: var(--dsw-alias-label-secondary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -241,8 +247,8 @@
 
 .empty {
   color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
   padding: 0;
 }
 

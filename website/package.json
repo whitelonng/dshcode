@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vitepress dev . --host 127.0.0.1 --port 5173",
-    "build": "vitepress build .",
+    "build": "tsx build.ts",
     "preview": "vitepress preview . --host 127.0.0.1 --port 4173"
   },
   "devDependencies": {

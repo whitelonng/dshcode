@@ -8,7 +8,8 @@ import { Context } from '@deepseek-ai/cordis'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { turnBoundaryProjectionDefinition } from '@deepseek-ai/dsh-agent-loop'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { type ToolResult } from '@deepseek-ai/dsh-tools'
 import { FileSystem, FsError, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
@@ -31,6 +32,8 @@ import { sessionCwd } from '../src/session-cwd.ts'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
+import { SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 const testToolSignal = new AbortController().signal
 
@@ -113,7 +116,7 @@ let callCounter = 0
 function call(ctx: Context, name: string, args: unknown, agent?: object) {
   return ctx.tools.execute({
     signal: testToolSignal,
-    callId: CallId(`call-${++callCounter}`),
+    callId: ToolCallId(`call-${++callCounter}`),
     name,
     arguments: args,
     ...agent ? { agent: agent as never } : {},
@@ -158,11 +161,11 @@ describe('registration', () => {
 
   it('declares read parallel-safe while write/edit remain exclusive', async () => {
     const { ctx } = await setup()
-    expect(ctx.tools.executionMode({ signal: testToolSignal, callId: CallId('read-safe'), name: 'read', arguments: { file_path: 'a.txt' } }))
+    expect(ctx.tools.executionMode({ signal: testToolSignal, callId: ToolCallId('read-safe'), name: 'read', arguments: { file_path: 'a.txt' } }))
       .toEqual({ kind: 'parallel' })
-    expect(ctx.tools.executionMode({ signal: testToolSignal, callId: CallId('write-exclusive'), name: 'write', arguments: { file_path: 'a.txt', content: 'x' } }))
+    expect(ctx.tools.executionMode({ signal: testToolSignal, callId: ToolCallId('write-exclusive'), name: 'write', arguments: { file_path: 'a.txt', content: 'x' } }))
       .toEqual({ kind: 'exclusive' })
-    expect(ctx.tools.executionMode({ signal: testToolSignal, callId: CallId('edit-exclusive'), name: 'edit', arguments: { file_path: 'a.txt', old_string: 'x', new_string: 'y' } }))
+    expect(ctx.tools.executionMode({ signal: testToolSignal, callId: ToolCallId('edit-exclusive'), name: 'edit', arguments: { file_path: 'a.txt', old_string: 'x', new_string: 'y' } }))
       .toEqual({ kind: 'exclusive' })
   })
 
@@ -792,6 +795,8 @@ describe('sandbox escalation API (write/edit)', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
     await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write' })
     await ctx.plugin(SandboxingFakeFs)
     await ctx.plugin(FsPolicy)
@@ -801,13 +806,45 @@ describe('sandbox escalation API (write/edit)', () => {
   }
 
   /** A fake agent whose session records appends (the approval audit trail), mid-turn, carrying the given events for the fold. */
-  function escalationAgent(events: Array<{ type: string; data?: Record<string, unknown> }> = []): object {
+  function escalationAgent(records: Array<{ type: string; data?: Record<string, unknown> }> = []): object {
+    const id = SessionId('sess-fs-esc')
+    const events: Array<{
+      type: string
+      seq: ReturnType<typeof SessionSeq>
+      time: number
+      data: Record<string, unknown>
+    }> = [
+      { type: 'turn/start', seq: SessionSeq(0), time: 0, data: { turn: 1 } },
+      ...records.map((record, index) => ({
+        type: record.type,
+        seq: SessionSeq(index + 1),
+        time: index + 1,
+        data: record.data ?? {},
+      })),
+    ]
     return {
-      id: 'agent-fs-esc',
+      id,
       session: {
-        header: { version: 0, id: 'sess-fs-esc', createdAt: 0, cwd: '/session-project' },
-        events: [{ type: 'turn/start' }, ...events],
-        append: (type: string, data: Record<string, unknown>) => { events.push({ type, data }) },
+        id,
+        header: { version: 0, id, createdAt: 0, cwd: '/session-project', isSeeded: false },
+        inheritedEventCount: SessionLogOffset(0),
+        firstLiveSeq: SessionLogOffset(0),
+        get seq() { return SessionLogOffset(events.length) },
+        eventAt: (seq: ReturnType<typeof SessionSeq>) => events[seq],
+        snapshotEvents: (
+          fromSeq = SessionLogOffset(0),
+          toSeqExclusive = SessionLogOffset(events.length),
+        ) => events.slice(fromSeq, toSeqExclusive),
+        append: (type: string, data: Record<string, unknown>) => {
+          const event = {
+            type,
+            seq: SessionSeq(events.length),
+            time: events.length,
+            data,
+          }
+          events.push(event)
+          return event
+        },
       },
     }
   }
@@ -848,13 +885,21 @@ describe('sandbox escalation API (write/edit)', () => {
   it('a plain write stamps the default mode with the calling session root', async () => {
     const { ctx, fs } = await setupConfining()
     await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent())
-    expect(fs.stamped).toEqual([{ mode: 'workspace-write', workspaceRoot: resolve('/session-project') }])
+    expect(fs.stamped).toEqual([{
+      mode: 'workspace-write',
+      workspaceRoot: resolve('/session-project'),
+      sessionId: SessionId('sess-fs-esc'),
+    }])
   })
 
   it('a standing session override folds onto the stamp', async () => {
     const { ctx, fs } = await setupConfining()
     await call(ctx, 'write', { file_path: 'a.txt', content: 'x' }, escalationAgent([{ type: 'sandbox/mode', data: { mode: 'read-only' } }]))
-    expect(fs.stamped).toEqual([{ mode: 'read-only', workspaceRoot: resolve('/session-project') }])
+    expect(fs.stamped).toEqual([{
+      mode: 'read-only',
+      workspaceRoot: resolve('/session-project'),
+      sessionId: SessionId('sess-fs-esc'),
+    }])
   })
 
   it('a denied write maps to the shared marker plus the escalation hint (isError)', async () => {
@@ -881,13 +926,17 @@ describe('sandbox escalation API (write/edit)', () => {
     // Pass a signal so the escalation ask forwards it to the approval request
     // (the request rides the tool-execution abort signal).
     await ctx.tools.execute({
-      callId: CallId('call-fs-esc-grant'),
+      callId: ToolCallId('call-fs-esc-grant'),
       name: 'write',
       arguments: { file_path: 'a.txt', content: 'x', sandbox_permissions: 'danger-full-access', justification: 'the test needs it' },
       agent: escalationAgent() as never,
       signal: new AbortController().signal,
     })
-    expect(fs.stamped).toEqual([{ mode: 'danger-full-access', workspaceRoot: resolve('/session-project') }])
+    expect(fs.stamped).toEqual([{
+      mode: 'danger-full-access',
+      workspaceRoot: resolve('/session-project'),
+      sessionId: SessionId('sess-fs-esc'),
+    }])
   })
 
   it('a rejected escalation fails closed with its own text and never mutates', async () => {

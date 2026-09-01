@@ -5,7 +5,6 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, syml
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { FileSettingsProvider, resolveSpec } from '../src/index.ts'
 
 interface ThemeConfig {
@@ -51,7 +50,7 @@ describe('boot and reads', () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema, {
+    const scope = ctx.settings.register('ui-theme', ThemeSchema, {
       base: { fontSize: 16 },
     })
     expect(scope.get()).toEqual({ theme: 'dark', fontSize: 16 })
@@ -63,7 +62,7 @@ describe('boot and reads', () => {
     const dir = await tempDir()
     const path = join(dir, 'nested', 'settings.yaml')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
 
     await expect(ctx.settings.prepareDocument()).resolves.toBe(path)
     expect(await readFile(path, 'utf8')).toBe('')
@@ -87,7 +86,7 @@ describe('boot and reads', () => {
     const path = join(dir, 'settings.yaml')
     await writeFile(path, 'ui-theme:\n  theme: light\n')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     expect(scope.get()).toEqual({ theme: 'light', fontSize: 14 })
   })
 
@@ -96,7 +95,7 @@ describe('boot and reads', () => {
     const path = join(dir, 'settings.json')
     await writeFile(path, JSON.stringify({ 'ui-theme': { fontSize: 18 } }))
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     expect(scope.get()).toEqual({ theme: 'dark', fontSize: 18 })
   })
 
@@ -104,7 +103,7 @@ describe('boot and reads', () => {
     const dir = await tempDir()
     const ctx = await boot({ dshHome: dir, watch: false })
     expect(ctx.settings.documentPath).toBe(join(dir, 'settings.yaml'))
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'light' })
     const written = await readFile(join(dir, 'settings.yaml'), 'utf8')
     expect(written).toContain('theme: light')
@@ -115,7 +114,7 @@ describe('boot and reads', () => {
     const path = join(dir, 'settings.yaml')
     await writeFile(path, '')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     expect(scope.get()).toEqual({ theme: 'dark', fontSize: 14 })
   })
 
@@ -124,7 +123,7 @@ describe('boot and reads', () => {
     const path = join(dir, 'settings.json')
     await writeFile(path, '')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     expect(scope.get()).toEqual({ theme: 'dark', fontSize: 14 })
   })
 
@@ -170,7 +169,7 @@ describe('persist', () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'light' })
 
     const written = await readFile(path, 'utf8')
@@ -184,8 +183,8 @@ describe('persist', () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.yaml')
     const ctx = await boot({ path, watch: false })
-    const alpha = ctx.settings.register(settingsNamespace('alpha'), ThemeSchema)
-    const beta = ctx.settings.register(settingsNamespace('beta'), ThemeSchema)
+    const alpha = ctx.settings.register('alpha', ThemeSchema)
+    const beta = ctx.settings.register('beta', ThemeSchema)
     await Promise.all([
       alpha.update({ theme: 'light' }),
       beta.update({ fontSize: 20 }),
@@ -205,7 +204,7 @@ describe('persist', () => {
     // A hostile sibling plants the historic fixed temp name as a symlink.
     await symlink(victim, `${path}.tmp`)
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'light' })
 
     expect(await readFile(victim, 'utf8')).toBe('precious')
@@ -227,7 +226,7 @@ describe('persist', () => {
       '',
     ].join('\n'))
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ fontSize: 18 })
 
     const written = await readFile(path, 'utf8')
@@ -249,7 +248,7 @@ describe('persist', () => {
       '',
     ].join('\n'))
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ fontSize: 18 })
     const written = await readFile(path, 'utf8')
     expect(written).toContain('# chosen during onboarding')
@@ -267,7 +266,7 @@ describe('persist', () => {
       '',
     ].join('\n'))
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'dark' })
     const written = await readFile(path, 'utf8')
     expect(written).toContain('# chosen during onboarding')
@@ -285,7 +284,7 @@ describe('persist', () => {
       '',
     ].join('\n'))
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.replace({ theme: 'light' })
     const written = await readFile(path, 'utf8')
     expect(written).toContain('# chosen during onboarding')
@@ -309,7 +308,7 @@ describe('persist', () => {
       '',
     ].join('\n'))
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('workspace'), TagsSchema)
+    const scope = ctx.settings.register('workspace', TagsSchema)
     await scope.update({ label: 'final' })
     const untouched = await readFile(path, 'utf8')
     expect(untouched).toContain('# pinned by hand')
@@ -327,7 +326,7 @@ describe('persist', () => {
     // Parses to a null root: the document exists but holds no sections yet.
     await writeFile(path, '# reserved for future settings\n')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'light' })
     const written = await readFile(path, 'utf8')
     expect(written).toContain('# reserved for future settings')
@@ -338,7 +337,7 @@ describe('persist', () => {
     const dir = await tempDir()
     const path = join(dir, 'settings.json')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'light' })
     const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
     expect(written).toEqual({ 'ui-theme': { theme: 'light' } })
@@ -350,7 +349,7 @@ describe('persist', () => {
     const backup = join(dir, 'settings.committed.yaml')
     await writeFile(path, 'ui-theme:\n  theme: light\n')
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await rename(path, backup)
     await mkdir(path)
     await expect(scope.update({ theme: 'dark' })).rejects.toThrow()
@@ -368,7 +367,7 @@ describe('persist', () => {
     const path = join(dir, 'settings.json')
     await writeFile(path, JSON.stringify({ other: { keep: true } }, null, 2))
     const ctx = await boot({ path, watch: false })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'light' })
     const written = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
     expect(written).toEqual({ other: { keep: true }, 'ui-theme': { theme: 'light' } })
@@ -381,7 +380,7 @@ describe('watch', () => {
     const path = join(dir, 'settings.yaml')
     await writeFile(path, 'ui-theme:\n  theme: light\n')
     const ctx = await boot({ path, debounceMs: 10 })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     expect(scope.get().theme).toBe('light')
 
     await writeFile(path, 'ui-theme:\n  theme: dark\n  fontSize: 20\n')
@@ -395,7 +394,7 @@ describe('watch', () => {
     const path = join(dir, 'settings.yaml')
     await writeFile(path, 'ui-theme:\n  theme: light\n')
     const ctx = await boot({ path, debounceMs: 10 })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
 
     // Replace the external edit atomically so this case observes one complete
     // invalid document instead of a transient empty file during truncation.
@@ -415,7 +414,7 @@ describe('watch', () => {
     const path = join(dir, 'settings.yaml')
     await writeFile(path, 'ui-theme:\n  theme: light\n')
     const ctx = await boot({ path, debounceMs: 10 })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
 
     await rm(path)
     await vi.waitFor(() => {
@@ -431,7 +430,7 @@ describe('watch', () => {
     ctx.on('settings/updated', (ns, _next, _prev, source) => {
       events.push({ ns, source })
     })
-    const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
+    const scope = ctx.settings.register('ui-theme', ThemeSchema)
     await scope.update({ theme: 'light' })
     await new Promise(resolve => setTimeout(resolve, 300))
     expect(events).toEqual([{ ns: 'ui-theme', source: 'update' }])

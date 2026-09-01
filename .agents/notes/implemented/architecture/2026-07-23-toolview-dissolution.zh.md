@@ -18,7 +18,7 @@ Status: implemented
 
 ## 接受的语义变化
 
-四项行为增量是刻意接受而非疏漏。跨视图出场最初采用逐视图注册；后续 Note 记录了为何 root/subcall 编排后来证明由一个 Tool 级展示所有者统一负责是合理的。同 key 重复注册从注册表的 later-wins 静默覆盖变为 loud throw——纪律修正而非损失。会话维分发若行需要，归组件内部（标配 kit 已带 `useSessions`），不走注册表谓词——今天没有已落地的会话变体样例。第三方在 registry 级覆盖形态（scoped 注册压过 global）不复存在；真出现的未来需求走 key 命名空间约定或组件内小 resolver，永不复活平行注册表。
+四项行为增量是刻意接受而非疏漏。跨视图出场最初采用逐视图注册；后续 Note 记录了为何 root/subcall 编排后来证明由一个 Tool 级展示所有者统一负责是合理的。同 key 重复注册从注册表的 later-wins 静默覆盖变为 loud throw——纪律修正而非损失。会话维分发若行需要，归组件内部（标配 kit 已带 `useSessions`），不走注册表谓词——没有已交付的会话变体样例。第三方在 registry 级覆盖形态（scoped 注册压过 global）不复存在；真出现的未来需求走 key 命名空间约定或组件内小 resolver，永不复活平行注册表。
 
 ## Alternatives considered
 

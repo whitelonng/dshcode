@@ -8,17 +8,17 @@ The two halves live in one package — the Host half under `src/`, the browser h
 
 ## 1. Register the namespace (Host half)
 
-The namespace is the join key, so pick it once and spell it in both halves. A consumer that already has a `cordis.yml` entry should register through `installSettingsSection`, which layers the entry under the user document and keeps working when no settings provider is mounted:
+The namespace is the join key, so pick it once and spell it in both halves. A consumer that already has a `cordis.yml` entry should register through `ctx.settings.installSection()`, which layers the entry under the user document and keeps working when no settings provider is mounted:
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 
 declare function assertReachable(endpoint: string | undefined): void
 declare function rebuildFromSettings(config: Config): void
 
-export const MY_PLUGIN_NS = settingsNamespace('my-plugin')
+export const MY_PLUGIN_NS = 'my-plugin'
 
 export interface Config {
   endpoint?: string
@@ -32,11 +32,13 @@ export const Config: z<Config> = z.object({
 
 export function apply(ctx: Context, config: Config) {
   let source = () => config
-  installSettingsSection(ctx, MY_PLUGIN_NS, Config, config, {
-    // Constraints the schema cannot express refuse the write, not the next use.
-    validate: value => void assertReachable(value.endpoint),
-    setSource: (current) => { source = current },
-    onChange: () => { rebuildFromSettings(source()) },
+  ctx.inject(['settings'], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, MY_PLUGIN_NS, Config, config, {
+      // Constraints the schema cannot express refuse the write, not the next use.
+      validate: value => void assertReachable(value.endpoint),
+      setSource: (current) => { source = current },
+      onChange: () => { rebuildFromSettings(source()) },
+    })
   })
 }
 ```
@@ -48,7 +50,7 @@ export function apply(ctx: Context, config: Config) {
 The card registers into `settings.plugin.item` under its namespace and owns everything inside it — chrome, controls, and copy. It reads and writes through `ctx.settingsScope`, which fences each write with the revision it read:
 
 ```ts ignore-check
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: the keyed slot's declaration. Cross-plugin collaboration goes
 // through cordis services; a value import fails the client bundle-purity gate.
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
@@ -97,4 +99,4 @@ import { clientBundle } from '../tsdown.client.ts'
 export default clientBundle('@deepseek-ai/dsh-client-my-plugin', ['lib/types/index.js', 'lib/types/invariant.js'])
 ```
 
-That preset is not published today, so a package outside this repository has to reproduce the same output format itself. The bundle-purity gate also rejects value imports across plugins, so a card cannot import this section's card chrome or its staged-form model — it renders its own, and owns its own staging and revision fencing. Both limits are recorded under [the section's known limitations](../../packages/client/ui-settings-plugins/README.md#known-limitations-and-deferred-work).
+No published preset exposes this package, so a package outside this repository has to reproduce the same output format itself. The bundle-purity gate also rejects value imports across plugins, so a card cannot import this section's card chrome or its staged-form model — it renders its own, and owns its own staging and revision fencing. Both limits are recorded under [the section's known limitations](../../packages/client/ui-settings-plugins/README.md#known-limitations-and-deferred-work).

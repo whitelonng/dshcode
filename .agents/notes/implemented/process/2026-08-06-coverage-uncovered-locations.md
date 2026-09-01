@@ -21,7 +21,7 @@ Output conventions:
 - An implicit branch arm (such as a missing else) may carry no location; the reporter falls back to the branch's own span so the record stays clickable; branch records are annotated with the branch type and `path k/n`.
 - Records within a file are sorted by line, then column; there is no cap on the count.
 
-Two companion changes: the root `package.json` adds `istanbul-lib-report` as a devDependency (under pnpm's strict layout, `scripts/` cannot reach nested dependencies); the root workspace's entry/project globs in `knip.json` gain `scripts/**/*.cjs`, making the file and its dependencies visible to the hygiene gate.
+The root `package.json` declares `istanbul-lib-report` as a devDependency because pnpm's strict layout prevents `scripts/` from reaching nested dependencies.
 
 CJS is a forced shape, and a justified exception to the ESM-everywhere discipline: istanbul loads custom reporters via a bare `require()` outside the tsx/Vite pipeline, where TypeScript cannot participate; the namespace object `require(esm)` returns also fails its `new Cons(cfg)` construction — CommonJS is the only reliable shape.
 

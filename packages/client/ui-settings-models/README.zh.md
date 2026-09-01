@@ -1,39 +1,121 @@
+---
+description: "dsh Web 客户端的模型设置与产品引导插件：提供方行、API 密钥管理、模型列表与 DeepSeek 首次运行弹窗。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-ui-settings-models
 
 [English](README.md) | 中文
 
-模型设置与产品引导插件。同一个 client Cordis 插件注册「模型」页与两个有序首启对话框：带版本的内测通知与条件性的官方 DeepSeek 凭据步骤。两者共用同一弹窗外壳，由 `settings.onboarding` 排序。模型平面把三个线域并入同一共享快照——`llm.providers`（可配置 provider 目录，含每个路由的活动/休眠状态）、`settings.describe`（序列化 schema、分层脱敏值、密钥槽）与 `credentials.describe`（不含值的已配置/来源/可写徽标）——每次渲染一个 provider 行加一个编辑器卡片，不把路由活跃度呈现为 provider 状态。
+## 概述
 
-行是*已配置*的 provider（其 profile 在所属命名空间中解析）；整段 provider 的密钥在任何地方都未配置时，以打开的设置卡片而非行呈现——但仅限首启姿态——直到用户关闭该卡片，之后它变回带缺失密钥圆点的普通行。每种卡片自持打开状态，关闭一个不会丢弃另一个中的草稿。添加流程是携带休眠目录 provider 选择的卡片——裸挂载的 `llm-pi-ai` 在任何路由存在前就提供其整个已安装 catalog。pi-ai 卡片还编辑该路由的**模型列表**，并可询问 provider 提供什么。行只在引用凭据确认已配置时显示绿色实心点，只在命名引用确认缺失时显示红色实心点；引用无关的 provider 原生认证与不可用的凭据富化保持无标记。编辑器按适配器家族手写：主字段是单个 **API key** 输入——页面从不询问环境变量名；键入的密钥经 `credentials.set` 以 profile 的引用**只写**存储，profile 无引用时派生 `<ROUTE>_API_KEY`，pi-ai profile 把该派生记录为 `apiKeyEnv`，因此 `settings.yaml` 永不携带密钥值。新 pi-ai provider 的密钥留空会保存无引用 profile，从而保留 provider 原生认证（如 Bedrock 凭据链或 Vertex ADC）。成功的 Apply 发出本地可访问状态消息，不回显密钥材料。折叠的「自定义设置」承载精选扩展——两个家族的 `baseURL`（deepseek 占位符显示公共端点）、各适配器的模型 catalog，以及适配器不内置的 pi-ai 路由的**显示名称**与 **API 协议**。Provider ID 保持不变：它是 settings 键、其他命名空间与每个已记录会话引用的名称，也是页面无法读回迁移的凭据引用之干。推理等级刻意不在其中：它是每模型能力，同一 provider 下的模型对接受的等级意见不一，provider 级控制只能设为其中一些模型拒绝的值。作曲器的模型选择器为每个模型提供各自等级，那里的切换把 provider、模型与等级一起记录为下个会话的默认。DeepSeek 每行编辑 `id`、可选显示 `name` 与可选 `contextWindow`/`maxTokens`；该精选集合之外的既有字段在编辑中保留。行仅在用户层单独持有时可删除（删除恢复组合基线），其本地化确认对话框在标题、描述与最终动作中命名 provider。目录条目说明所属适配器在该键下未内置任何东西时，行标记 **Custom**。
+`dsh-client-ui-settings-models` 是 dsh Web 客户端的 Models 设置页面：用户可以配置 API 密钥（以只写方式存入 profile 的凭据引用之下）、编辑每个提供方的模型列表，并手工声明自定义 pi-ai 路由；页面以提供方行展示，一次只展开一张编辑卡片。该页面把提供方目录、设置文档与凭据描述合并为一个共享快照，因此行的状态在三个方面始终一致。它还会带首次运行的用户走两个有序弹窗——版本化内测声明，以及按条件显示的官方 DeepSeek 凭据步骤。
 
-通知步骤在 `src/onboarding-copy.ts` 持有其精确文案与版本。在回环上通过既有 settings API 比较并写入 `ui-onboarding.welcomeNoticeVersion`；只有显式 Continue 记录当前版本。非回环浏览器无法使用该 Host 专属命名空间，因此确认仅进程内，通知在重载后再次出现。DeepSeek 步骤从同一合并快照投影首启就绪：任何已可达 provider 都不渲染地结束它；只有全无的用户才被询问官方 DeepSeek 密钥。
+## 目录
 
-每一次编辑都以 `settings.mutate` 的路径 op 落到已存分节上——每个变更字段一条 set、每个清空字段一条 unset、删除提供方行则是单独一条 unset。页面自始至终只持有**脱敏后**的 descriptor，因此它只修改自己看得见的字段，而不重建分节。DeepSeek 的 `models` 是一个按值整体替换的数组：编辑器会显示继承而来的生效模型行，直到第一次模型编辑将完整数组具化到用户层；重置则会取消该覆盖。每个模型行承载模型 ID 与显示名称，其上下文窗口与最大输出 token 数则收在该行自己的折叠区里，使用与 pi-ai 提供方表单相同的字段。两项容量都按数值键入，可带十进制的 `K` 或 `M` 后缀（`256K`、`1M`；`1M` 即 1000K），存储为纯数值，回显时写成能够往返的最短形式。空 ID、重复 ID、显式填写的空名称，以及无法读取、非正数或非整数的容量都会在写入前失败。键入的 API 密钥同样在它自己的字段上被判定：trim 之后必须非空，且每个字符都是可打印 ASCII（`[\x21-\x7E]`）——这正是 HTTP 标头值所能承载的范围，是 `@deepseek-ai/dsh-llm` 中 `normalizeApiKey` 的孪生体，因源码平面分割禁止直接引入而在此镜像。与整行粘贴的 `NAME=value` 环境变量匹配或首尾成对引号包裹的值，会以同一条格式失败被拒绝；这项粘贴行检查只在浏览器中运行，因为 resolver 中的一次误判会连带让环境变量这条路也拒绝该密钥。只含空白的输入框会失败而不是被静默丢弃；留空则完全不是失败：在编辑卡片上意味着保持已存储的密钥，在新建卡片上则意味着以其他方式鉴权。被拒绝的密钥会同时拦截写入与端点探测，因此页面不会白花一次往返去换取字段上已经写明的答案。每次 settings 写入都携带卡片当前的 `revision`，因此来自另一个标签页或对 `settings.yaml` 的外部编辑所产生的并发写入会以 `settings-conflict` 被拒绝；settings 提交成功后，卡片会在存储凭据前采用响应返回的脱敏用户子树与 revision，因此凭据阶段失败时，重试只会重复该阶段。删除操作只会在 profile 指向页面派生的 `<ROUTE>_API_KEY` 目标时清除已配置且可写的凭据，随后取消设置 profile；两项操作都具备幂等性，部分失败会停留在点名目标的确认对话框中供重试。环境凭据、自定义引用和无法识别目标的凭据保持不变。页面加载完成后会直接订阅转发的 owner 事件 `settings/document-updated`、`credentials/reference-updated`、`llm/adapters-updated`，以及本地 `connection/reset`，因此外部的 `settings.yaml` 编辑、第二个标签页或 settings 新生的路由都无需轮询即可收敛。
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
-## 模型列表与端点询问
+-----
 
-pi-ai profile 的 `models` 列表在卡片上编辑：每行一个模型，显示 id 与显示名，上下文窗口与输出上限位于行级展开区，右侧两个无标签动作——展开与删除。空列表表示「服务该路由的内置 catalog」，行只会被刻意添加；清空容量即丢弃它；适配器的路由级回退为配置留空的部分定尺寸——空容量把回退数量显示为占位符（提示而非镜像，因为字段按 1000 计 `K`）。非正整数的容量不存储。
+<a id="use-this-package"></a>
+## 使用本包
 
-**获取可用模型** 询问 `llm.discoverModels` 关于表单**当前显示**的端点——包括已编辑未保存的 baseURL 与已键入未存储的密钥。回复打开选择器而非直接写入：已配置的候选默认未选中。无法询问的 provider 是绕路而非死路——适配器自身消息出现在行旁，行仍可手编。
+从设置导航打开 Models 页面，即可看到每个已配置的提供方都有一行。其配置键未在任何位置配置的整分节提供方会渲染为其展开的设置卡片而非一行，但仅限首次运行姿态，且仅持续到用户关闭该卡片为止。每一类卡片各自持有自己的展开状态，因此关掉其中一张绝不会丢弃另一张里的草稿。
 
-**添加自定义 provider** 声明 pi-ai 不内置的路由。它是独立卡片：路由 id 在此选定，settings 地址此前不存在——一次 `settings.mutate` 在 `providers.<route>` 设置整个 profile。无法默认的门槛拦住创建按钮——唯一 **Provider ID**、端点、协议与至少一个唯一标识模型。id 必须以小写字母开头，因为它也是派生凭据引用的干。容量不设门槛。协议选择从命名空间自身 schema 读出，不会与适配器接受的漂移。profile 写入成功但密钥写入失败时，provider 已存在：卡片落定描述字段，单独重试凭据，并报告已创建的 provider。
+### API 密钥
 
-**推理等级声明** 让手工声明的第三方模型在作曲器的模型选择器中提供思考等级。每个模型行的展开区带一组复选框拼写声明——pi-ai 编辑器列出全部 pi-ai 等级（`off` 至 `max`），DeepSeek 编辑器列出直接 DeepSeek 协议可分派的三个——外加「禁用推理」复选框（`false`）。勾选一个等级即以既有线上拼写加入，或在新勾选时用协议默认拼写（等级名本身；`off` 保持为空——「支持、不发送」）；取消则移除该等级，取消最后一个等级即得 `false`。什么都没声明的模型行预勾 `off` / `low` / `max` 默认 offer（仅显示——存储值在勾动等级前保持 `undefined`），与适配器对手工声明且未声明模型的默认一致。pi-ai 组旁还会显示协议族提示（例如 OpenAI-completions 建议 `minimal` 至 `high`），仅供参考。声明写入适配器读取的同一 `providers.<route>.models[].reasoningEfforts`。「高级」折叠保留原文本输入（`high: high, max: ultra`——「等级: 拼写」对，逗号分隔），自定义线上拼写的部署不会丢失；不可读文本停靠为无效哨兵，共享模型校验在任何写入前拒绝。留空则把模型的推理能力交给已安装 catalog（没有 catalog 条目的模型为 `off` / `low` / `max` 默认）。
+编辑卡片上的主字段是单独一个 **API 密钥**输入框——页面从不询问环境变量名。键入的密钥经 `credentials.set` 以**只写**方式存入 profile 的引用之下，profile 没有引用时便派生 `<ROUTE>_API_KEY`，pi-ai profile 会把这次派生记录为 `apiKeyEnv`，因此 `settings.yaml` 从不携带密钥值。为新的 pi-ai 提供方留空密钥会保存一个不带引用的 profile，从而保留提供方原生认证（例如 Bedrock 凭据链或 Vertex ADC）。只有确认引用的凭据已配置时，行才会以绿色实心点标示 API 密钥状态；只有确认具名引用缺失时，才会以红色实心点标示。「应用」成功后会发出本地无障碍状态消息，且绝不回显任何机密内容。
 
-**能力复选框**（仅 pi-ai 模型行）声明模型选择器加徽标的三种主张：**图片输入**切换条目 `input` 中的 `image`（以 `text` 为下限），**生图**切换新 `output` 数组中的 `image`，**识图**切换 `capabilities.imageUnderstanding`——并且，因为能理解图片内容的模型必然要收到图片，同时让 `input` 保留 `image`。生图保持独立：会画图的模型不必接受图片。取消生图或识图会整体删除对应字段；直接 DeepSeek 编辑器不渲染能力复选框，因为其协议线只支持文本、图片走 note 策略且由适配器硬编码。
+### 编辑提供方
 
+收起的「自定义设置」折叠区承载精选的额外字段：两个家族都有 `baseURL`（deepseek 的占位符显示公共端点）、各适配器自己的模型目录，以及适配器未提供的 pi-ai 路由的**显示名称**与 **API 协议**。Profile `headers` 仍是 `settings.yaml` 或 Cordis 配置中的部署配置，Models 页面不提供编辑器。Provider ID 保持固定：它是 settings 的键、其他每个 namespace 与每一条已记录会话引用的名字，也是页面读不回、因而搬不走的凭据引用词干。推理等级刻意不在可编辑字段之列：它是按模型的能力，提供方级的控件只可能被设成某些模型会拒绝的值。每个 DeepSeek 行编辑 `id`、可选显示 `name` 与可选 `contextWindow`/`maxTokens`；该精选集之外的现有字段在编辑后仍会保留。
+
+### 新增与删除提供方
+
+「新增」流程是一张承载休眠目录提供方选择框的卡片——裸挂载的 `llm-pi-ai` 在任何路由存在之前就能提供其完整的已安装 catalog。**添加自定义提供方**声明一条 pi-ai 不提供的路由；创建卡片会索要唯一的 **Provider ID**、端点、协议与至少一个可唯一识别的模型，因为没有东西能为它们兜底。**获取可用模型**通过 `llm/discoverModels` Remote 查询表单显示的端点，因此新增提供方一次即可完成，而非先保存再返回；回复打开的是可搜索选择器而非直接写入，只有点击**添加所选**才会写入。搜索会匹配模型 id 与可选显示名称，且不会清除隐藏项的勾选状态；**全选**与**取消全选**只影响可见结果。只有用户层单独携带某行时，该行才可删除（删除会恢复组合基线），其确认对话框会指名该提供方。
+
+### 首次运行弹窗
+
+版本化声明步骤完成后，DeepSeek 步骤从同一份合并快照投影首次运行就绪状态。用户已经能够到达的**任何**提供方都会直接结束该步骤、不做渲染；只有没有任何提供方的用户才会被询问官方 DeepSeek 密钥。「稍后配置」只完成这次协调器遍历；适配器缺失、路由不活动、合并失败、只读部署或能力不可用时，该步骤不渲染即完成——Models 仍是诊断界面。
+
+### 扩展插槽
+
+本分区为仓库外分发的插件声明两个席位，类型定义在 [`src/client/slot-contract.ts`](src/client/slot-contract.ts) 并从 `./client` 导出。`settings.models.provider-card`（keyed）渲染在每张展示目录行的卡片内部——已保存行的卡片、其首次运行 setup 形态、以及「添加提供方」草稿卡——以 `entryKey = settingsNs` 分发，owner props 携带该行的 `ConfigurableProviderView`、其 configured 状态与已确认的 api-key 凭据状态，因此以某适配器家族的 namespace 注册一次即可收到该家族的全部卡片，含手工声明的路由；手工声明的草稿卡尚无目录行，保存之前不分发。`settings.models.footer`（list）渲染在行列表与新增控件之后。注册方通过 `ctx.slots.inject` 激活，并以 type-only import 引入本包 `/client` 入口；没有注册方时两个席位均不渲染任何内容。
+
+-----
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>实现细节——点击展开</summary>
+
+页面只持有脱敏后的描述符，从不持有完整设置分区：因此每次编辑都以 `settings.mutate` 路径操作落到已存分区上——每个改动字段一次 set、每个清除字段一次 unset、删除提供方行则一次 unset。
+
+### 校验
+
+键入的 API 密钥按其自身字段判定：去除首尾空白后必须非空，且每个字符都必须是可打印 ASCII（`[\x21-\x7E]`），这正是 HTTP 头值能够携带的字符集——与 `@deepseek-ai/dsh-llm` 中的 `normalizeApiKey` 互为镜像，此处复刻是因为源平面拆分禁止导入它。与粘贴的 `NAME=value` 环境行一致或包裹在匹配引号内的值，会作为同样的格式失败被拒绝。空 id、重复 id、空显式名称以及不可读、非正数或小数的容量都会在任何写入之前失败。DeepSeek 的 `models` 是一个按值整体替换的数组：编辑器先显示继承的有效行，直到第一次模型编辑把完整数组物化进用户层，重置则取消该覆盖。
+
+### 并发与凭据
+
+每次 settings 写入都携带卡片当前的 `revision`，因此来自另一个标签页或外部 `settings.yaml` 编辑的并发写入会以 `settings/conflict` 被拒绝。settings 提交后，卡片会在存储凭据前采纳返回的脱敏用户子树与 revision，因此失败的凭据阶段只重试该阶段。删除只会在 profile 指名本页派生的 `<ROUTE>_API_KEY` 目标时移除已配置且可写的凭据，然后 unset 该 profile；两个操作都幂等。加载完成后，页面订阅转发的 `settings/document-updated`、`credentials/reference-updated` 与 `llm/adapters-updated` 属主事件，以及本地 `connection/reset`，因此外部编辑无需轮询即可收敛。
+
+### 引导协调器
+
+声明步骤在 `src/client/locales.ts` 中持有精确文案，并在 `src/onboarding-copy.ts` 中持有确认版本；回环时它通过既有 settings API 比较并写入 `ui-onboarding.welcomeNoticeVersion`，且只有显式点击「继续」才会记录当前版本。非回环浏览器无法使用这个仅限宿主的 namespace，因此确认只保留在进程内，刷新后声明会再次出现。DeepSeek 步骤在共享引导模态框内以仅凭据模式渲染既有 `ProviderEditor`；`credentials.set` 仍是唯一的机密写入，且不改变任何提供方设置。
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 进一步探索
+
+以下页面覆盖设置底座、本页所合并的 seam 与设计依据。
+
+- [ui-settings](../ui-settings/README.zh.md)——本页所依赖 scope 与 schema 服务所在的领域底座。
+- [settings](../../settings/README.zh.md)——持久化用户设置 seam 及其文件提供方。
+- [credentials](../../credentials/README.zh.md)——本页写入密钥所经的凭据引用 seam。
+- [llm](../../llm/README.zh.md)——本页所配置提供方所在的适配器注册表。
+- [Web 配置平面](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md)——手写编辑器的设计依据。
+
+-----
+
+<a id="model-experience"></a>
 ## 模型体验
 
-无。本 section 渲染浏览器配置 UI；不触及模型请求。
+无。该包是浏览器端 UI 插件层，不注册任何面向模型的内容。
 
-#### KV 缓存影响
+#### KV Cache 影响
 
-无。本包既不组装也不发送 provider 请求。
+无；该包既不组装也不发送提供方请求。
 
-## 已知限制与暂缓事项
+## 已知限制与延期工作
 
-- **卡片上可编辑的只有 API 密钥与精选折叠区字段**：手写编辑器用 schema 通用的字段覆盖面换来了设计稿上的布局（[Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md)）。两个家族都公开 `baseURL` 与模型的 `id`/`name`/`contextWindow`/`maxTokens`；手工声明的 pi-ai 路由还公开 `displayName` 与 `api`。重试策略、超时、DeepSeek 模型说明及其他进阶字段仍留在 `settings.yaml` 中；编辑器未展示的现有模型字段会予以保留。不带这些约定字段的 profile schema 只渲染该提示，两套精选布局则以 `llm-deepseek`/`llm-pi-ai` 这两个 namespace 的名字为键。
-- **凭据清理范围刻意保持狭窄**：删除一行时，仅当其引用与页面派生的 `<ROUTE>_API_KEY` 目标完全一致，才会清除已配置且可写的凭据。自定义引用、环境凭据和无法识别的目标会保留，因为该行无法证明自己拥有它们。
+<a id="known-limitations-and-deferred-work"></a>
+
+
+这些限制定义编辑器的字段覆盖范围与本页的触达范围；它们是当前包约束，不是设置路线图。
+
+- **卡片上只有 API 密钥与精选折叠字段可编辑**：手写编辑器以 schema 通用字段覆盖换取了 mockup 布局。重试策略、超时、DeepSeek 模型说明及其他进阶字段仍留在 `settings.yaml` 中；编辑器未展示的现有模型字段会予以保留。
+- **凭据清理范围刻意保持狭窄**：删除一行时，仅当其引用与页面派生的 `<ROUTE>_API_KEY` 目标完全一致，才会清除已配置且可写的凭据。自定义引用、环境凭据与无法识别的目标会保留，因为该行无法证明自己拥有它们。
 - **只有 pi-ai 路由可以手工声明**：自定义提供方卡片写入 `llm-pi-ai`——唯一一个其 profile 描述整个提供方的 namespace。`llm-deepseek` 路由是组合面的事实，不是本页能创建的东西。
 - **询问只覆盖 OpenAI 兼容端点**：适配器只读这种模型列表响应格式，因此讲其他协议的网关会报告自己无法被询问，其模型需手工填写。
 - **未声明的存活路由无处渲染**：未附带可配置提供方声明即注册的路由没有 settings 地址；它在各选择器中仍然可见，但不会出现在本页的行里。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+无。
+
+</details>
+
+**运行时不变式：** 不发布伴生入口。这是只贡献 nav entry 的 section 插件，渲染固定空 content column，不发出 Cordis 事件，也不持有跨插件可变关系。

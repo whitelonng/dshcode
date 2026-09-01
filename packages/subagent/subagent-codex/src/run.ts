@@ -11,8 +11,9 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import {
   settleRunResult,
   subprocessRunHandle,
@@ -74,9 +75,11 @@ type CodexFailureStage =
   | 'process'
   | 'teardown'
 
+type CodexFailureCategory = CodexWireFailureFacts['category'] | 'process'
+
 interface CodexFailureFacts {
   readonly stage: CodexFailureStage
-  readonly category: string
+  readonly category: CodexFailureCategory
   readonly httpStatus?: number | undefined
   readonly outcome?: SubprocessOutcome | undefined
 }
@@ -137,6 +140,8 @@ export function codexAppServerArgv(): string[] {
 export interface CodexRunSpec {
   /** Parent Session workspace, also supplied to `thread/start`. */
   readonly cwd: string
+  /** Profile-selected native model; omitted to preserve Codex settings. */
+  readonly model?: string
   /** Profile-selected native non-interactive permission mode. */
   readonly permissionMode: CodexPermissionMode
   /** Explicit deployment/test environment layered after the shared scrub. */
@@ -251,10 +256,10 @@ export async function startCodexRun(
     child.stdout as NonNullable<SubprocessHandle['stdout']>,
     child.stdin as NonNullable<SubprocessHandle['stdin']>,
     spec.permissionMode,
+    spec.model,
   )
   const onStderr = (chunk: Buffer | string): void => {
     const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk
-    wire.observeStderr(bytes.toString())
     try {
       // Synchronous fd forwarding preserves byte order without owning a
       // backpressure queue. A slow host sink can block this event-loop turn.
@@ -272,8 +277,8 @@ export async function startCodexRun(
   const disposeProcess = async (): Promise<void> => {
     try {
       await disposeCodexChild(wire, child)
-      // Let stderr already queued by the process close reach both bounded
-      // diagnostic consumers before their listeners are detached.
+      // Let stderr already queued by the process close reach the Host before
+      // its forwarding listeners are detached.
       await new Promise<void>((resolve) => { setImmediate(resolve) })
     } finally {
       child.stderr?.off('data', onStderr)
@@ -286,7 +291,7 @@ export async function startCodexRun(
     (outcome) => {
       processFailureFacts = {
         stage: 'process',
-        category: 'process-exit',
+        category: 'process',
         outcome,
       }
       throw new CodexRunFailure(processFailureFacts)
@@ -385,14 +390,14 @@ export async function startCodexRun(
           publishedProcessFailure,
         ])
         if (terminal.stopReason === 'completed') return terminal
-        // Let stderr already queued with the terminal frame contribute its
-        // fixed permission fact before the non-completed result is snapshotted.
+        // Let stderr already queued with the terminal frame reach the Host
+        // before the non-completed result settles.
         await new Promise<void>((resolve) => { setImmediate(resolve) })
         const facts = withProcessOutcome(wire.collectFailure())
         return { ...terminal, diagnostic: recordFailureDiagnostic(facts) }
       } catch (error: unknown) {
-        // Give stderr data already queued in Node one turn to reach the wire
-        // before settlement snapshots the diagnostic.
+        // Give stderr data already queued in Node one turn to reach the Host
+        // before error settlement.
         await new Promise<void>((resolve) => { setImmediate(resolve) })
         const endedBeforeTerminal = wire.endedBeforeTerminal()
         if (
@@ -429,7 +434,7 @@ export async function startCodexRun(
   })
 
   return subprocessRunHandle({
-    id: SessionId(randomUUID()),
+    id: brandString<SessionId>(randomUUID()),
     result,
     signal: request.signal,
     onAbort,

@@ -10,7 +10,7 @@
 
 ## 概述
 
-ACP 服务器（`examples/acp-agent`、`@deepseek-ai/dsh-acp`）在真实编辑器（Zed）连接的瞬间崩溃：第一个 `session/new` 请求返回 `Internal error: cannot get property "agents" without inject`，`session/load` 对 `sessionPersistence` 返回同样的错误。尽管有 178 个绿色单元测试和 100% 行覆盖率，bridge 在生产环境中完全无法工作。两个独立的 bug 隐藏在同一个错误字符串背后，测试套件之所以两个都没捕获，原因也相同：所有测试都通过一条不会触及插件真实加载方式和服务真实解析方式的路径来挂载插件。
+ACP 服务器（`dsh --profile acp`、`@deepseek-ai/dsh-acp`）在真实编辑器（Zed）连接的瞬间崩溃：第一个 `session/new` 请求返回 `Internal error: cannot get property "agents" without inject`，`session/load` 对 `sessionPersistence` 返回同样的错误。尽管有 178 个绿色单元测试和 100% 行覆盖率，bridge 在生产环境中完全无法工作。两个独立的 bug 隐藏在同一个错误字符串背后，测试套件之所以两个都没捕获，原因也相同：所有测试都通过一条不会触及插件真实加载方式和服务真实解析方式的路径来挂载插件。
 
 ## 影响
 
@@ -101,7 +101,7 @@ if (!ctx.fiber.runtime) return ctx.reflect.get(prop, false)   // ← direct glob
 
 - **删除 `export default apply`**（`packages/acp/acp/src/index.ts`）——Bug #1 的修复。
 - **`AgentLoop.resume` 使用 `this.ctx.get('sessionPersistence')`**（`packages/core/agent-loop/src/index.ts`）——Bug #2 的修复，附注释说明 shadow 遍历陷阱。
-- **无需 key 的 `session/new` e2e，通过真实 stdio 运行**（`examples/acp-agent/tests/acp.e2e.ts`）：以子进程方式通过真实 Loader 启动示例，并断言 `session/new` 正常返回。无需 API key 即可明确暴露 Bug #1。已验证恢复 `export default apply` 时测试失败。
+- **无需 key 的 `session/new` e2e，通过真实 stdio 运行**（`apps/cli/tests/profiles/acp/tests/acp.e2e.ts`）：以子进程方式通过真实 Loader 启动 profile，并断言 `session/new` 正常返回。无需 API key 即可明确暴露 Bug #1。已验证恢复 `export default apply` 时测试失败。
 - **e2e spawn 中设置 `TSX_TSCONFIG_PATH`**：子进程从临时 cwd 运行，tsx 无法通过向上搜索找到仓库根的 tsconfig `paths` 映射——因此 dsh-* 的 import 静默回退到已构建的 `lib/`。将 tsx 指向仓库 tsconfig 使解析不依赖 cwd，确保测试运行的是*源码*而非可能陈旧的构建产物。
 - **[docs/testing.md](../testing.zh.md) 规则**：「测试真实入口路径」，行覆盖率不等于行为覆盖率——将这一教训编纂为所有未来插件的规则。
 

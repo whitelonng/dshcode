@@ -18,7 +18,7 @@ skill 注册表最初将发现操作视为模型目录：`ctx.skills.list()` 会
 
 本地提供方只接受拼写完全一致的 kebab-case frontmatter 键 `disable-model-invocation` 和 `user-invocable`。它接受 YAML 布尔值，以及不区分大小写的 `true`/`false`、`yes`/`no`、`on`/`off` 和 `1`/`0`，与 Claude skills 实际支持的布尔写法一致。它将 `disable-model-invocation` 映射为相反的正向字段，即使两个键都不存在，也会根据默认值填充两个正向字段。若使用外部驼峰式拼写或提供非布尔调用值，发现流程会丢弃整个 skill，并给出有针对性的警告；本仓库尚处于发布前阶段，因此不为磁盘格式保留兼容别名。调用数据校验遵循失败时默认拒绝原则，因为忽略这类数据会默认授予权限，可能使 skill 暴露在已禁用的接口上；与之不同，类型错误的可选 `whenToUse` 和 `metadata` 值会被省略，因为它们不参与调用判定。
 
-面向模型的 `dsh-tool-skill` 目录和 loader 执行 `isModelInvocable`。TUI 的 `/skill:` 自动补全与精确名称 loader 在本地执行用户字段，因此仅允许用户调用的 skill 即使不出现在模型发现结果中，仍会在此处显示并可加载，同时不会将可选的 skill 对等依赖（peer dependency）变成运行时导入。由 launcher 预置、供引导式 `dsh migrate` 和 `dsh upgrade` 会话使用的初始 skill 沿用同一条 TUI 路径，因此必须保持允许用户调用。浏览器的 `skill.list` RPC 提供的是由用户选择、但仍要求模型加载的引用，因此只公开同时允许模型和用户调用的 skill；本次改动不新增让浏览器直接加载 skill 的 RPC。
+面向模型的 `dsh-tool-skill` 目录和 loader 执行 `isModelInvocable`。TUI 的 `/skill:` 自动补全与精确名称 loader 在本地执行用户字段，因此仅允许用户调用的 skill 即使不出现在模型发现结果中，仍会在此处显示并可加载，同时不会将可选的 skill 对等依赖（peer dependency）变成运行时导入。由 launcher 预置、供引导式 `dsh migrate` 和 `dsh upgrade` 会话使用的初始 skill 沿用同一条 TUI 路径，因此必须保持允许用户调用。浏览器的 `skills/list` RPC 提供的是由用户选择、但仍要求模型加载的引用，因此只公开同时允许模型和用户调用的 skill；本次改动不新增让浏览器直接加载 skill 的 RPC。
 
 这些规则允许以下四种组合：
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-18-rail-search-outside-click-self-dismissal.md
-2026-08-18-rail-search-outside-click-self-dismissal.md: 9893b3a2456b9a592e1feb107d21404e043dee78
-2026-08-18-rail-search-outside-click-self-dismissal.zh.md: 91e343b8843dc02ca9c1be2b145e79beb84e17b7
+2026-08-18-rail-search-outside-click-self-dismissal.md: b9f3aa33658919aa9061c0ec988878fea194de47
+2026-08-18-rail-search-outside-click-self-dismissal.zh.md: 72f19157dbef23c1109f799eca9686931a58156f

@@ -18,7 +18,7 @@ The stats line reuses the same step reading in its window fold: `deriveStats` ac
 
 ## Alternatives considered
 
-**A durable session projection (token-meter shape).** A `ProjectionDefinition` folding step timings host-side would survive compaction and window paging and cover the whole log. Deferred, not rejected: projection state must stay O(1) (averages, not percentiles), it needs a host change plus a schema, and the chat stats line is already documented as window-scoped for its duration facts — the new group joins that scope. A later PR can add the durable projection without moving these readings.
+**A durable session projection (token-meter shape).** A `ProjectionDefinition` folding step timings host-side would survive compaction and window paging and cover the whole log. Deferred, not rejected: projection state must stay O(1) (averages, not percentiles), it needs a host change plus a schema, and the chat stats line is documented as window-scoped for its duration facts. A durable projection can be added without moving these readings.
 
 **Per-step footer chrome.** Showing each assistant message its own TTFT would attach chrome to mid-turn narration nodes, which the footer design deliberately keeps chrome-free; the trajectory view already exposes per-step timing detail.
 

@@ -35,7 +35,7 @@ The live-controller map is also the retirement registry. Successful retirement d
 ## Verification
 
 - Focused controller tests use a fake clock to prove the non-resetting fixed window, gate the first append, admit another event during that write, and observe an automatic second durable batch without calling `session/flush`.
-- The shared coordinator contract still covers live adoption, collisions, crash repair, and session/backend disposal over the in-memory, JSONL, and SQLite backends.
+- The shared coordinator contract still covers live adoption, collisions, crash repair, and Session/provider disposal over the in-memory reference and JSONL provider.
 - Failure and teardown tests keep rejected batches pending, retry them before close, and prove an in-flight controller delays backend close.
 - The shared backend contract persists an open live turn, proves `load` rejects without writing synthetic closers, completes and retires the owner, then reloads the exact completed turn.
 - An AgentLoop regression races `resume()` against a live open turn and proves the original agent can still durably complete it without an injected `interrupted` boundary.

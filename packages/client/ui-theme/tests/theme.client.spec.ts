@@ -26,10 +26,52 @@ describe('ThemeRuntime', () => {
     const { theme } = make()
     const snapshot = theme.getTheme()
     expect(snapshot.preference).toBe('system')
+    expect(snapshot.fontSize).toBe(14)
     // jsdom matchMedia is absent; system resolves to light.
     expect(snapshot.active.id).toBe('light')
     expect(snapshot.active.colorScheme).toBe('light')
     expect(snapshot.themes.map(t => t.id)).toEqual(['light', 'dark'])
+  })
+
+  it('seeds the initial font size from the boot-script body variable, ignoring junk', () => {
+    // The Host boot script writes the durable size on body before any plugin
+    // runs; the first snapshot must match it so activation never flashes 14.
+    document.body.style.setProperty('--dsh-content-font-size', '16px')
+    try {
+      expect(make().theme.getTheme().fontSize).toBe(16)
+      document.body.style.setProperty('--dsh-content-font-size', '99px')
+      expect(make().theme.getTheme().fontSize).toBe(14)
+    } finally {
+      document.body.style.removeProperty('--dsh-content-font-size')
+    }
+  })
+
+  it('setFontSize switches, writes through the scope, and republishes; same value is a no-op', () => {
+    const { theme, events, host } = make()
+    theme.setFontSize(17)
+    expect(theme.getTheme().fontSize).toBe(17)
+    expect(host.set).toHaveBeenCalledWith('fontSize', 17)
+    expect(events).toHaveLength(1)
+    theme.setFontSize(17)
+    expect(events).toHaveLength(1)
+    expect(host.set).toHaveBeenCalledOnce()
+  })
+
+  it('rejects out-of-range and fractional font sizes', () => {
+    const { theme, events, host } = make()
+    for (const px of [11, 18, 14.5, Number.NaN]) {
+      expect(() => { theme.setFontSize(px) }).toThrow('outside 12..17')
+    }
+    expect(events).toHaveLength(0)
+    expect(host.set).not.toHaveBeenCalled()
+  })
+
+  it('adopts a published Host font size without writing it back', () => {
+    const { theme, events, host } = make()
+    host.publish({ status: 'ready', value: { preference: 'system', fontSize: 12 }, revision: 1, writable: true })
+    expect(theme.getTheme().fontSize).toBe(12)
+    expect(events).toHaveLength(1)
+    expect(host.set).not.toHaveBeenCalled()
   })
 
   it('setTheme switches, writes through the scope, republishes, and keeps DOM untouched', () => {
@@ -50,17 +92,17 @@ describe('ThemeRuntime', () => {
 
   it('adopts a published Host section without writing it back', () => {
     const { theme, events, host } = make()
-    host.publish({ status: 'ready', value: { preference: 'dark' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { preference: 'dark', fontSize: 14 }, revision: 1, writable: true })
     expect(theme.getTheme().preference).toBe('dark')
     expect(events).toHaveLength(1)
     expect(host.set).not.toHaveBeenCalled()
-    host.publish({ value: { preference: 'dark' }, revision: 2 })
+    host.publish({ value: { preference: 'dark', fontSize: 14 }, revision: 2 })
     expect(events).toHaveLength(1)
   })
 
   it('adopts a section already standing at construction', () => {
     const host = stubSettingsScope<ThemeSettings>()
-    host.publish({ status: 'ready', value: { preference: 'dark' }, revision: 1, writable: true })
+    host.publish({ status: 'ready', value: { preference: 'dark', fontSize: 14 }, revision: 1, writable: true })
     const { theme } = make(host)
     expect(theme.getTheme().preference).toBe('dark')
   })

@@ -1,60 +1,47 @@
+---
+description: "Workspace-instruction context for users and maintainers enabling, sizing, or debugging AGENTS.md/CLAUDE.md loading and refresh."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-agent-instructions
 
 English | [中文](README.zh.md)
 
-Per-session workspace instruction loading for `AGENTS.md`-compatible files. The plugin injects the initial user-global and project instruction chain into durable history, then discovers nested files and reports later changes or removals after successful filesystem tool calls.
+## Summary
 
-## Lifecycle
+`dsh-agent-instructions` loads `AGENTS.md`-compatible workspace instruction files into model context: the user-global file and the project chain reach the first request as one durable baseline, and successful `read`, `write`, or `edit` calls bring newly relevant nested files, changes, and removals into later requests. `dsh-base` includes it by default, and a profile patch can disable it. Everything is bounded by a byte budget: broader files are omitted before the most specific file is truncated, and an empty chain contributes nothing. There is no file watcher — external edits become visible on the next successful filesystem touch or when a resumed session reconciles its baseline.
 
-The first eligible `agent/pre-step` of each live session composes the baseline. When the downstream decision enters a nonempty first-step batch, the plugin folds the baseline into that final batch right after the claimed prompt, so the direct prompt and the durable baseline enter step 1 and reach the first request together. A rejected or empty first-step decision leaves the baseline in the agent's `next-step` inbox for a later wakeup. The loader reads `$DSH_HOME/AGENTS.md` followed by, in each directory from the project root to `agent.session.header.cwd`, every existing base candidate and then every existing local-overlay candidate. Within one directory, candidates whose content is byte-identical after trimming leading and trailing whitespace collapse to the earliest candidate in configured order, so a `CLAUDE.md` that merely duplicates its sibling `AGENTS.md` is rendered once. If a previously queued workspace context is still pending, the plugin removes and replaces that exact inbox item instead of accumulating duplicates. A resumed session retains one compatible visible baseline and appends only current-file transitions; a changed discovery, precedence, project-root, or budget identity instead folds one explicitly superseding complete baseline into the entering batch.
+## Table of Contents
 
-The plugin also observes immutable `tools/result` outcomes for successful first-party `read`, `write`, and `edit` calls. Each accepted touch checks newly reached descendant scopes and every previously loaded scope. Each configured candidate name is an independent scope in its directory: a newly present file queues an addition in the agent inbox; a changed file queues a replacement; a file that disappears or becomes a per-directory duplicate of an earlier candidate queues a removal notice. Native calls and Code Mode sub-dispatches share this path: nested touches bubble through opaque parent execution tokens until the top-level result settles, and touches produced inside an agent-loop step do not begin their asynchronous projection until the durable `step/end`. Direct tool executions outside an open step project immediately. This preserves tool-call/result/step adjacency without depending on filesystem timing. Discovery follows structured filesystem activity rather than shell `cd`, because each local bash call starts a fresh shell and parsing arbitrary shell syntax would be unreliable.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-Instruction reads use the optional `ctx.fs` provider. The plugin does not statically inject `fs`, so providerless product trees still boot and instruction loading becomes a no-op until a provider is present. It resolves each candidate and stats the result, so a final-component symlink is followed to its target: a link to a regular file loads that target's content, while a missing path or a non-file target (including a link to a directory) is a confirmed absence. A resolve or stat exception instead marks that candidate's scope temporarily unavailable. Prefix cancellation and dynamic tool cancellation propagate through resolution, metadata probes, and streaming reads. A provider failure after a file was loaded is treated as temporarily unavailable, not as proof that the file was deleted.
+-----
 
-## Prompt Shape
+<a id="use-this-package"></a>
+## Use this package
 
-Baseline instructions are durable user-role messages framed with the familiar system-reminder pattern:
+Mount this plugin when agents should work from the workspace's own instruction files. `dsh-base` already includes it with a 65,536-byte budget, so base-backed profiles only need to replace the row when they want another `maxBytes`; providerless trees load nothing until a filesystem provider is present.
 
-```md
-<system-reminder>
-The following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.
+### What the agent gets
 
-Instructions from: ~/.dsh/AGENTS.md
+The first request includes one durable baseline message with the user-global `$DSH_HOME/AGENTS.md` followed by the project chain — every existing candidate file from the project root down to the session working directory, in broad-to-specific order. Sibling files whose content matches after trimming render once, so a `CLAUDE.md` that duplicates its `AGENTS.md` is not repeated. After a successful `read`, `write`, or `edit` call reaches a deeper directory, the next request includes the newly applicable instruction file; a changed file replaces its content, and a file that disappears or duplicates an earlier candidate produces a removal notice.
 
-...
+### Configuration
 
-Instructions from: AGENTS.md
+The defaults suit a typical checkout: `.git` marks the project root, `AGENTS.md` and `CLAUDE.md` are the base candidates, and `AGENTS.local.md` and `CLAUDE.local.md` are additive local overlays. Only `maxBytes` is required — it caps the complete rendered baseline so each deployment chooses its prompt budget explicitly.
 
-...
-</system-reminder>
+```yaml
+- name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
 ```
 
-Newly reached scopes use a durable sourced `user/message`:
-
-```md
-<system-reminder>
-Additional instructions from: packages/app/AGENTS.md
-
-These instructions apply to work under `packages/app`. Use them as guidance when relevant; more specific instructions take precedence. They do not override system, developer, or direct user instructions.
-
-...
-</system-reminder>
-```
-
-A same-file edit starts with `Updated instructions from: <path>` and says to use the new content instead of the previously loaded content. When a candidate disappears or becomes a per-directory duplicate of an earlier candidate, the message is `Instructions removed: <path>` followed by `The previously loaded instructions from this file no longer apply.` Literal `</system-reminder>` text anywhere in instruction content or model-visible path, scope, and budget metadata is escaped so repository-controlled text cannot close the plugin-owned frame.
-
-The plugin owns the complete `<system-reminder>` framing, and every injected `user/message` reaches the model verbatim with no core wrapper.
-
-## State And Refresh
-
-Model-visible text contains no hidden state markers. Each baseline or dynamic context event instead carries a typed `agent-instructions` source with a list of `{ action, scope, path, digest? }` changes; a complete baseline also carries `baseline: true` and a `baselineIdentity` derived from normalized discovery, precedence, project-root, and budget configuration. A matching durable `user/message` confirms a queued baseline and its candidate versions. An entering pre-step waits for every queued projection, folds newly composed context into its final batch immediately after the claimed messages, and removes the pending inbox copy; rejection keeps the current context queued. If a listener rewrites away a claimed workspace message without entering its replacement, a later boundary recomposes the current context. Nested results aggregate successful file touches under their parent execution token, including when a later composite result is blocked; the top-level result transfers those touches either to the currently open session step or directly to the per-agent projection queue. A `step/end` releases its staged touches only after that boundary is in durable history, and serialized projections reconcile against visible session events plus the current inbox before replacing the single pending workspace context.
-
-An unchanged path and SHA-1 content digest is not injected again. A per-session, per-scope provider cache stores only `{ path, version, digest, trimmedDigest }`: when the provider's opaque `FsVersion` and the effective visible state both match, reconciliation skips the content read; a changed version triggers a bounded read and SHA-1 confirmation before any model-visible update. The `trimmedDigest` — SHA-1 over the whitespace-trimmed content — is the per-directory duplicate key, so an unchanged file can still be removed when an earlier candidate converges on its content. Resume works because SHA-1 state is persisted in the typed source, while an empty in-memory version cache merely causes one confirming read. Compaction re-arms a scope after its context event leaves the visible surface even when the cached version is unchanged. A removal is a tombstone, so a later candidate reappearance is loaded again. A model-visible change enters the source, pending state, and version cache only when its file-specific section retains at least one content byte, or when its original content is genuinely empty. Partial truncation records the complete-content digest once any content byte survives; truncation to zero remains eligible for a later touch, while a same-digest version refresh updates only the provider cache. A baseline may still publish its budget diagnostic with an empty change list. A dynamic batch with no committed change is not injected at all, and a later touch retries it.
-
-The initial baseline event itself is not rewritten. Its typed changes remain authoritative only while that event is in the visible session surface. When compaction shadows the event, the next entering pre-step composes the current baseline and records it in the same request; a successful filesystem touch can instead re-add an unchanged baseline scope or append its replacement or removal. The in-memory scope marker and provider-version cache only select and accelerate probes. At the first pre-step after resume or hot remount, a compatible visible baseline is retained and compared with the files retained by the current complete rendering. Unchanged and budget-omitted files append nothing; offline additions, edits, removals, and files leaving the retained budget set append `set`, `replace`, or `remove` transitions. An incompatible visible baseline is superseded by one complete current baseline, including an explicit empty baseline when no candidate remains. There is no file watcher, so an on-disk change becomes visible at the next successful `read`, `write`, or `edit` touch, when a resumed session reconciles its baseline, or when an entering pre-step restores a shadowed baseline.
-
-## Configuration
+The accepted fields, at a glance:
 
 ```ts
 export interface Config {
@@ -67,16 +54,72 @@ export interface Config {
 }
 ```
 
-`maxBytes` is required so each deployment makes its prompt-budget choice explicitly. `maxSourceBytes` limits each source instruction file before rendering and defaults to 1 MiB. `projectRootMarkers` defaults to `['.git']`, and `instructionFileCandidates` defaults to `['AGENTS.md', 'CLAUDE.md']`. In each project directory every existing candidate loads, and candidates whose content matches an earlier one after trimming surrounding whitespace are dropped, so with the defaults an `AGENTS.md` and a `CLAUDE.md` that share content render once (as `AGENTS.md`) while genuinely distinct siblings both apply. `localInstructionFileCandidates` defaults to `['AGENTS.local.md', 'CLAUDE.local.md']` and loads its existing overlays alongside the base files of the same directory (rendered after them) under the same per-directory dedup; an empty list disables the overlay. Candidate entries in both lists must be same-directory file names, so empty entries, `.`/`..`, and entries containing `/` or `\` are ignored.
+| Field | Default | Meaning |
+|---|---|---|
+| `maxBytes` | required | Cap on the complete rendered baseline message, in bytes |
+| `maxSourceBytes` | `1048576` | Cap on one source instruction file before rendering |
+| `projectRootMarkers` | `['.git']` | Directory names that mark the project root |
+| `instructionFileCandidates` | `['AGENTS.md', 'CLAUDE.md']` | Base file names loaded in each project directory |
+| `localInstructionFileCandidates` | `['AGENTS.local.md', 'CLAUDE.local.md']` | Local overlay file names loaded after the base files |
+| `dshHome` | `$DSH_HOME` or `~/.dsh` | Directory containing the user-global `AGENTS.md` |
 
-The user-global file is always `$DSH_HOME/AGENTS.md` with no local overlay; both candidate lists only control project scopes. `$DSH_HOME` defaults to `~/.dsh`, and configured `~`, `~/...`, and Windows-style `~\...` prefixes are expanded against the operating-system home directory. A non-positive or non-finite render budget disables both baseline and dynamic loading; configured `maxSourceBytes` must be a positive integer.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-agent-instructions) is the exhaustive source for every accepted field and its JSDoc.
 
-## Budgeting And Bounded Reads
+### Observing the budget
 
-Rendering preserves the most specific instruction files first. It drops whole broader files before truncating the most-specific file and emits a visible `Workspace instruction budget ...` notice naming omitted and truncated paths. The rendered bytes never exceed `maxBytes`.
+Rendering keeps the most specific files first: it drops whole broader files before truncating the most-specific file, and emits a visible `Workspace instruction budget ...` notice naming the omitted and truncated paths. The rendered bytes never exceed `maxBytes`. An over-budget broad file is ignored; during refresh it is treated as temporarily unavailable rather than removed.
 
-Instruction content is read through `streamText()` under `maxSourceBytes`, even when provider metadata omits size or a file grows after its metadata probe. An oversized file is ignored; during dynamic reconciliation it is temporarily unavailable rather than removed. The plugin keeps no process-wide cache and never caches instruction prose. Its session-local scope cache uses provider versions only as a fast invalidation signal; after invalidation, SHA-1 over the bounded read remains the cross-provider content identity stored in the structured message source.
+-----
 
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design decisions behind the plugin; the observable behavior is covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The plugin is built on one principle: workspace instructions are durable conversation content, owned per agent and per session. Baseline and refresh messages are ordinary sourced `user/message` events, so they replay, compact, and resume exactly like other history, and model-visible state is always reconstructable from the session log. The plugin owns the complete `<system-reminder>` framing and every injected message reaches the model verbatim.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: pre-step listener, `tools/result` touch tracking, inbox composition |
+| [`src/config.ts`](src/config.ts) | `Config` schema, budget resolution, baseline identity |
+| [`src/files.ts`](src/files.ts) | Candidate discovery, project-root search, bounded streaming reads |
+| [`src/render.ts`](src/render.ts) | Instruction rendering, budget truncation, change records |
+| [`src/state.ts`](src/state.ts) | Durable message sources, version/digest cache, reconciliation |
+| [`src/digest.ts`](src/digest.ts) | SHA-1 content identity and per-directory duplicate keys |
+| — | No runtime invariant companion is published; replay intentionally tolerates unknown or malformed workspace sources, while focused pipeline tests own its private pending/cache state transitions. |
+
+### Main flow
+
+At the first eligible `agent/pre-step` of a session, the plugin composes the baseline and folds it into the entering batch right after the claimed messages. Successful first-party `read`, `write`, and `edit` calls contribute touches that bubble up through parent execution tokens; once the enclosing step is durable, a projection reconciles the visible session state against the inbox and queues additions, replacements, or removals. An unchanged path with an unchanged digest is never injected again. Discovery follows structured filesystem activity rather than shell navigation, because each local shell call starts a fresh process and parsing arbitrary shell syntax is not a reliable filesystem seam.
+
+### Invariants
+
+Every injected message carries a typed source with its change list; a complete baseline also carries an identity derived from normalized discovery, precedence, project-root, and budget configuration, and a matching durable message confirms a queued baseline. Model-visible text contains no hidden state markers, and literal `</system-reminder>` text anywhere in instruction content or model-visible metadata is escaped so repository-controlled text cannot close the plugin-owned frame.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the instruction-file format to the design decision and the exhaustive configuration.
+
+- [Documentation standard](../../../docs/AGENTS.md) — what `AGENTS.md` instruction files contain and how they are maintained.
+- [Workspace-context decision record](../../../.agents/notes/implemented/feature/2026-06-24-workspace-context.md) — per-agent/session isolation and lifecycle rationale.
+- [Context group map](../README.md) — sibling request-context packages.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-agent-instructions) — every accepted config field and its source declaration.
+
+-----
+
+<a id="model-experience"></a> <a id="prompt-shape"></a>
 ## Model Experience
 
 ### Baseline context
@@ -129,7 +172,7 @@ These instructions apply to work under `packages/app`. Use them as guidance when
 
 #### Token effect
 
-Each discovered scope adds bounded history tokens until compaction. Unchanged content is suppressed by visible session state plus version/digest comparison, and Code Mode defers the same message until after the outer `run_code` result and its enclosing durable step.
+Each discovered scope adds bounded history tokens until compaction. Unchanged content is suppressed by visible session state plus version/digest comparison, and PTC mode defers the same message until after the outer `run_code` result and its enclosing durable step.
 
 #### KV Cache effect
 
@@ -161,9 +204,24 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when instruction loading is a poor fit or needs operational awareness. They are current package constraints, not a task backlog.
+
 - **Discovery follows structured fs tools, not shell navigation** — a `bash` command that changes directories does not trigger nested instruction discovery because shell syntax and per-call shell state are not a reliable filesystem seam.
 - **Refresh is touch-driven** — there is no watcher; external edits become visible on the next successful first-party `read`, `write`, or `edit`, when resume reconciles a visible baseline, or when an entering pre-step restores a shadowed baseline.
 - **Candidate semantics stay intentionally small** — lowercase names, `.claude/rules/`, and `@path` imports are not interpreted; project scopes load `AGENTS.local.md`/`CLAUDE.local.md` overlays by default, but the user-global `$DSH_HOME` scope has no local overlay and other custom names require explicit candidate configuration.
 - **Per-directory dedup is content-based** — sibling candidates collapse only when byte-identical after trimming leading and trailing whitespace; a `CLAUDE.md` that symlinks its sibling `AGENTS.md` resolves to the same content and collapses like any duplicate, while a distinct real copy that has drifted from `AGENTS.md` loads in full alongside it.
 - **Symlinked instruction files are followed across the trust boundary** — a candidate whose final component is a symlink is resolved and its target loaded, so a cloned repository can surface off-tree file content as lower-authority workspace guidance (it never overrides system, developer, or direct user instructions). Confine `ctx.fs` with the filesystem policy gate or an OS sandbox when loading untrusted repositories.
 - **Instruction content is bounded, not summarized** — over-budget broad files are omitted and the most-specific file may be truncated; the plugin never asks a model to compress instruction prose.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

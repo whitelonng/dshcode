@@ -1,11 +1,9 @@
-// View-ring type-chain samples. This spec pins the conversation-owned SlotMap
-// row, list-kind registration shape, composed view props, and the runtime
-// ledger projection consumed by ConversationRoot.
+// Target-neutral View-ring type chain and runtime ledger projection.
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import type { ReactNode } from 'react'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ChatViewSlotProps, ConvViewProps } from '../src/client/contract/slots.ts'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { ConvViewProps } from '../src/client/contract/slots.ts'
 
 describe('view-ring type negatives (compile-time; body never runs)', () => {
   it('holds the negative samples as expect-error sites', () => {
@@ -31,24 +29,6 @@ describe('view-ring type negatives (compile-time; body never runs)', () => {
         return null
       }
       void renderless
-      // 5. The chat entry's face is its own: openDetails does not exist on the
-      //    base view props (store-less riders never see it).
-      const baseOnly = (props: ConvViewProps): ReactNode => {
-        // @ts-expect-error openDetails lives on ChatViewSlotProps, not the base
-        void props.openDetails
-        return null
-      }
-      void baseOnly
-      // 6. ChatViewSlotProps carries the full composition (standard kit +
-      //    store + inject face) — a handler with a wrong signature is red.
-      const chatProps = (props: ChatViewSlotProps): ReactNode => {
-        // @ts-expect-error openDetails takes a SelectionTarget, not a string
-        props.openDetails('nope')
-        // @ts-expect-error openFile takes a path string, not a SelectionTarget
-        void props.openFile({ turnSeq: 1, callId: 'c' })
-        return null
-      }
-      void chatProps
       return null as ReactNode
     }
     expect(negatives).toBeTypeOf('function')

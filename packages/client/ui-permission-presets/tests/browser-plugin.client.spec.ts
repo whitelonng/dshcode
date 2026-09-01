@@ -10,9 +10,10 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { SlotRegistry, type SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { TestRemote, scriptedSettingsRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { CommandDecoration } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { PermissionSelect } from '@deepseek-ai/dsh-permission-presets/client'
@@ -20,7 +21,7 @@ import {
   PermissionRow, type PermissionRowInjected,
 } from '../src/client/PermissionRow.tsx'
 import { apply, inject } from '../src/client/index.ts'
-import { accessEn } from '../src/client/locales.ts'
+import { accessEn, accessZh } from '../src/client/locales.ts'
 
 const sid = (k: string): SessionId => k as SessionId
 
@@ -39,26 +40,14 @@ async function bench() {
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('en')
   ctx.provide('locale', locale)
-  // The plugin injects `remote`; forwarded events reach it through the same
-  // `$dispatch` handoff the connection sink makes.
-  new TestRemote(ctx)
+  const settingsRemote = scriptedSettingsRemote()
+  const remote = new TestRemote(ctx, { settings: settingsRemote.settings })
   ctx.slots.register({
     name: 'root',
     children: {
       'settings.general.item': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
-  ctx.provide('connection', {
-    api: {
-      settings: {
-        describe: () => Promise.resolve({
-          rpcId: 'describe',
-          result: { ok: true as const, value: { writable: true, hasDocument: false, namespaces: [] } },
-        }),
-        mutate: () => Promise.reject(new Error('settings mutation is not exercised')),
-      },
-    },
-  } as never)
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
   let decoration: CommandDecoration | undefined
   ctx.provide('commandUi', {
@@ -81,7 +70,7 @@ async function bench() {
       commands.push(line)
       return Promise.resolve(commandResult.ok
         ? { ok: true as const, value: { matched: commandResult.matched ?? true } }
-        : { ok: false as const, error: { code: 'internal', message: 'boom' } })
+        : { ok: false as const, error: { code: 'gateway/internal', message: 'boom' } })
     },
   })
   ctx.provide('sessions', {
@@ -90,7 +79,7 @@ async function bench() {
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   return {
-    ctx, fiber, values, commands,
+    ctx, fiber, locale, values, commands, remote,
     setResult: (r: { ok: boolean; matched?: boolean }) => { commandResult = r },
     decoration: () => decoration,
     permissionRow: () => ctx.slots.entries('settings.general.item')
@@ -128,7 +117,7 @@ describe('ui-permission browser plugin', () => {
     const again = await c.ui.options(proj, new AbortController().signal)
     expect(again.find(option => option.id === 'workspace-write')?.active).toBe(true)
     expect(again.find(option => option.id === 'read-only')?.detail).toBe('Reads only.')
-    // Kebab-case names title-case; non-kebab host-configured names pass through.
+    // English built-ins use product labels; other kebab-case names title-case.
     expect(again.map(option => option.label)).toEqual(['Read Only', 'Workspace Write', 'Full access'])
     expect(again.find(option => option.id === 'danger-full-access')?.confirmation).toEqual({
       title: 'Enable Full access?',
@@ -137,9 +126,27 @@ describe('ui-permission browser plugin', () => {
       cancelLabel: 'Cancel',
       confirmLabel: 'Enable Full access',
     })
-    b.values.set(sid('s1'), { ...SELECT, options: [{ value: 'plain', name: 'Ask Every Time' }] })
+    b.locale.setLocale('zh')
+    const localized = await c.ui.options(proj, new AbortController().signal)
+    expect(localized.map(option => option.label)).toEqual(['仅可查看', '工作区内修改', '完全权限'])
+    expect(localized.find(option => option.id === 'danger-full-access')?.confirmation).toEqual({
+      title: '确认启用完全权限？',
+      description: accessZh['confirm.description'],
+      acknowledgeLabel: '我已了解风险，并愿意继续',
+      cancelLabel: '取消',
+      confirmLabel: '启用完全权限',
+    })
+    b.values.set(sid('s1'), { ...SELECT, options: [
+      { value: 'workspace-write', name: 'Project Files' },
+      { value: 'danger-full-access', name: 'Operator Mode' },
+      { value: 'custom-mode', name: 'custom-mode' },
+      { value: '__proto__', name: '__proto__' },
+      { value: 'plain', name: 'Ask Every Time' },
+    ] })
     const passthrough = await c.ui.options(proj, new AbortController().signal)
-    expect(passthrough[0]?.label).toBe('Ask Every Time')
+    expect(passthrough.map(option => option.label)).toEqual([
+      'Project Files', 'Operator Mode', 'Custom Mode', '__proto__', 'Ask Every Time',
+    ])
     // A projection that vanished between availability and open throws.
     expect(() => c.ui.options({ sessionId: sid('ghost') }, new AbortController().signal))
       .toThrow(/not available on this host/)
@@ -164,8 +171,8 @@ describe('ui-permission browser plugin', () => {
   it('disposal removes the decoration (HMR safety)', async () => {
     const b = await bench()
     expect(b.decoration()).toBeDefined()
-    b.ctx.remote.$dispatch('settings/document-updated', ['another', 1])
-    b.ctx.remote.$dispatch('settings/document-updated', ['permission', 1])
+    b.remote.emit('settings/document-updated', ['another', 1])
+    b.remote.emit('settings/document-updated', ['permission', 1])
     b.ctx.emit('connection/reset')
     await b.fiber.dispose()
     expect(b.decoration()).toBeUndefined()

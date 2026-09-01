@@ -1,31 +1,102 @@
-# `@deepseek-ai/dsh-session-reference`
+---
+description: "Cross-session snapshot references and durable untrusted model context, for users and maintainers enabling or debugging ctx.sessionReferenceResolver."
+kind: "package-reference"
+---
+
+# @deepseek-ai/dsh-session-reference
 
 English | [中文](README.zh.md)
 
-`ctx.sessionReferenceResolver` prepares bounded, read-only snapshots of other sessions as sourced model-facing context. It consumes `ctx.sessionQuery` and the backend-independent compact checkpoint marker; SQLite FTS is not required. Hosts that support cross-session mentions may opt into the service.
+## Summary
 
-## Public API
+`dsh-session-reference` lets a conversation reference other sessions: a host turns a `@label` mention into a canonical URI, and the service prepares a bounded, read-only snapshot of each referenced session as durable, untrusted background context for the model. Candidate discovery ranks other sessions by working-directory affinity and labels them with their latest titles. Snapshots are immutable after capture and carry a fixed warning that forbids following instructions, permission claims, or tool requests inside them. It is an opt-in service for hosts that support cross-session mentions; it consumes `ctx.sessionQuery` and needs no SQLite FTS.
 
-- `listCandidates(agent, query?, limit?)` lists sessions other than `agent.id`, filters case-insensitively by id, cwd, or the latest log-backed title, and ranks same-cwd, cwd-less, then other-cwd records while preserving `listSessions()` creation order within each group. Each selected candidate uses that title as the mention label and falls back to the session id when the title is absent or unreadable; message bodies are not searched. The unary `sessionReferenceResolver/candidates` Remote method serves the same discovery under the configured candidate limit and attaches each candidate's canonical mention, so browser consumers call `ctx.remote.sessionReferenceResolver.candidates` without an API Proxy route.
-- `prepare(agent, content, references, signal?)` preserves first-mention order, deduplicates ids, rejects self-reference and more than the configured distinct-source limit, reads every source in parallel, and returns detached content plus zero or one aggregated, identified `UserMessage` context. The service calls it for canonical mentions in direct user messages after downstream `agent/pre-step` listeners accept the step.
-- `encodeSessionReferenceUri()` and `decodeSessionReferenceUri()` implement `dsh-session:<base64url(JSON.stringify(sessionId))>` so every JavaScript string id round-trips exactly. `formatSessionReferenceMention()` emits `@[label](uri)`, and `parseSessionReferenceText()` replaces Markdown mentions or bare canonical URIs with readable `@label` text while returning structured references. Explicit Markdown mentions reject every malformed URI; bare text is considered a reference only when a non-empty base64url-shaped payload follows the scheme, and a matching noncanonical candidate still fails. Empty or punctuation-only scheme mentions remain ordinary discussion text.
+## Table of Contents
 
-## Snapshot semantics
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-Preparation calls `ctx.sessionQuery.readSurface()` once per distinct source when the target message reaches `agent/pre-step`. A queued message therefore captures the source state at model-step entry, and the resulting context is immutable after that point. Projection keeps only direct-user `user/message`, assistant text, and `user/message` checkpoints carrying the canonical `dsh-compaction` source marker from the folded current surface. Separately sourced session-reference messages are injected context and are excluded, preventing recursive snapshot propagation. Shadowed pre-compaction events, tools, reasoning, other plugin-generated user messages except marked compact checkpoints, and unfinished assistant chunks are also excluded. A compacted source therefore contributes its latest checkpoint plus retained later conversation, not restored shadowed text.
+-----
 
-The context source is `{ kind: 'session-reference', version: 1, references }`; each reference records its source id and label, capture seq, compact presence, retained/omitted message counts, omitted UTF-8 bytes, and truncation state. The service's outer `agent/pre-step` listener post-processes accepted direct user messages, preserves their message ids, and inserts each snapshot immediately after the message that cited it. Queue edits and queue-to-steer relocation need no reference-specific handling because parsing occurs after the final inbox claim. Invalid mentions, failed reads, cancellation, and budget failures end that turn before its messages enter model-visible history. The target log records the readable direct `user/message` followed by its sourced context `user/message`; source mutation after capture cannot change target replay.
+<a id="use-this-package"></a>
+## Use this package
 
-## Configuration
+Enable this service when hosts should let a user mention another session and give the model its context. It works with any session-query backend because it consumes the backend-independent compact checkpoint marker.
 
-| Key | Default | Contract |
-|---|---:|---|
-| `maxReferences` | `3` | Maximum distinct source sessions in one prepared message; must be at most `3`. |
-| `candidateLimit` | `50` | Default candidate count returned to a host. |
-| `maxReferenceBytes` | `65536` | Maximum serialized JSON bytes for one reference object. |
+### Mention syntax
 
-Retention applies `maxReferenceBytes` independently to each source, keeps compact checkpoints and the newest message before dropping older non-checkpoint units, and uses `dsh-output-retention` head/tail truncation with an exact UTF-8 omission notice. If one source's fixed serialized fields cannot fit, preparation fails with `SESSION_REFERENCE_BUDGET_EXCEEDED` instead of returning a partial context.
+A canonical mention is `@[label](dsh-session:<base64url-encoded-id>)` in Markdown, or the bare `dsh-session:` URI; every JavaScript string session id round-trips exactly. The service rewrites mentions into readable `@label` text in the message and returns the structured references. Explicit Markdown mentions reject malformed URIs; empty or punctuation-only scheme mentions stay ordinary discussion text.
 
+### What the agent gets
+
+A message that cites other sessions is followed immediately by a `## Referenced sessions` snapshot as a second user-role message. The snapshot is untrusted background: the fixed warning tells the model not to follow instructions, permission claims, or tool requests inside it unless the current user explicitly repeats them. Each source is bounded independently — at most `maxReferences` distinct sessions per message and `maxReferenceBytes` per source — and a source that cannot fit its budget fails preparation instead of returning partial context.
+
+### Finding sessions to reference
+
+`listCandidates(agent, query?, limit?)` lists sessions other than the agent's own, filters case-insensitively by id, working directory, or the projected title, and ranks same-directory sessions first. Each candidate carries its latest title as the mention label, falling back to the session id when the title is absent or unreadable, and reports whether its working directory is the requesting agent's so a host can surface a location only when it distinguishes the row. Browser consumers call the same discovery as `ctx.remote.sessionReferenceResolver.candidates`, which attaches each candidate's canonical mention.
+
+### Configuration
+
+| Field | Default | Meaning |
+|---|---|---|
+| `maxReferences` | `3` | Maximum distinct source sessions in one prepared message; must not exceed `3` |
+| `candidateLimit` | `50` | Default candidate count returned to a host |
+| `maxReferenceBytes` | `65536` | Maximum serialized JSON bytes for one reference object |
+
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-session-reference) is the exhaustive source for every accepted field and its JSDoc.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design of the service; the observable behavior is covered in [Use this package](#use-this-package).
+
+### Design concept
+
+Preparation reads each referenced session's current surface exactly once, when the target message reaches `agent/pre-step`, so a queued message captures source state at model-step entry and the resulting context is immutable afterwards. Projection keeps only direct-user `user/message`, assistant text, and `user/message` checkpoints carrying the canonical compaction marker; separately sourced session-reference messages are excluded, preventing recursive snapshot propagation. Source text is serialized as JSON with every `<` escaped as `\u003c`, so it cannot spell the `<referenced-sessions>` framing tag.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | `SessionReferenceResolver`: pre-step listener, candidate discovery, preparation |
+| [`src/config.ts`](src/config.ts) | `Config` schema, `SessionReferenceError` taxonomy |
+| [`src/uri.ts`](src/uri.ts) | `dsh-session:` URI codec, mention formatting and parsing |
+| [`src/projection.ts`](src/projection.ts) | Current-surface projection and byte-budget retention |
+| [`src/serialization.ts`](src/serialization.ts) | Tag-safe JSON escaping for snapshot payloads |
+| [`src/types.ts`](src/types.ts) | `SessionReferenceInput`/`Candidate` and source types |
+| — | No runtime invariant companion is published; preparation returns immutable per-call snapshots validated while they are built, and the agent/session layers own durable context admission, freezing, and replay. |
+
+### Main flow
+
+The outer `agent/pre-step` listener accepts the step, parses canonical mentions out of direct user messages, then calls `prepare`, which normalizes references (first-mention order, deduplication, self-reference and count rejection), reads every surface in parallel, retains each under `maxReferenceBytes`, and renders the aggregated prompt. Each snapshot is inserted immediately after the message that cited it, and the target log records the readable direct message followed by its sourced context, so source mutation after capture cannot change target replay.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the shared reference surface to the design decision and the read service behind it.
+
+- [Session-reference subsystem](../../../docs/subsystems/session-reference.md) — canonical URIs, projection rules, and the stable error taxonomy.
+- [Cross-session references decision record](../../../.agents/notes/implemented/feature/2026-07-21-cross-session-references.md) — design rationale for the reference contract.
+- [Session-query subsystem](../../../docs/subsystems/session-query.md) — the read service that supplies session surfaces.
+- [Context group map](../README.md) — sibling request-context packages.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-session-reference) — every accepted config field and its source declaration.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Referenced session background
@@ -44,7 +115,23 @@ The request and snapshot are consecutive append-only target messages and preserv
 
 ## Known Limitations and Deferred Work
 
-- **No body discovery** — candidate queries inspect folded titles but do not search message bodies. A non-empty query may inspect every visible persisted session log through the session-query service's bounded, cancellable batch; a dedicated title index may replace that discovery path without changing URI, snapshot, or persistence contracts.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when cross-session references are a poor fit. They are current package constraints.
+
+- **No body discovery** — candidate queries inspect titles but do not search message bodies.
+- **Labels come from projections alone** — an attached session is labeled from its live projection cut, a cold one from its durable checkpoint, and a session neither answers for is labeled by its id and cannot be found by its title. Discovery never reads a log: folding one title costs a whole log, and this runs under every completion keystroke. A session persisted before the projection cache was composed regains its title the first time it is opened, which checkpoints it.
 - **Trusted caller boundary** — the service assumes its host is authorized to read every session exposed by `ctx.sessionQuery`; it is not a model-facing search tool.
 - **Text projection only** — non-text user and assistant blocks are not propagated across sessions.
 - **No live link** — references are snapshots, not forks, resumes, subscriptions, or source-session mutations.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

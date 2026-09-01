@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-18-tool-row-file-open-failure.md
-2026-08-18-tool-row-file-open-failure.md: e36552395b992e688fad35b3163b92c9f6189e43
-2026-08-18-tool-row-file-open-failure.zh.md: f09c41585a538b408f6258f64583f63c0fa57b0d
+2026-08-18-tool-row-file-open-failure.md: c1887c834933199d5acf9035632cc83d470777d7
+2026-08-18-tool-row-file-open-failure.zh.md: 8a851b4b1bd40c66de92316967df612f828c8b38

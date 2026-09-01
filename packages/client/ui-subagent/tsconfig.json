@@ -9,19 +9,31 @@
   ],
   "references": [
     {
+      "path": "../../api/session-controller/tsconfig.client.json"
+    },
+    {
       "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../connection/tsconfig.client.json"
     },
     {
       "path": "../locale"
     },
     {
-      "path": "../runtime"
-    },
-    {
       "path": "../ui-conversation"
     },
     {
+      "path": "../ui-input-trigger"
+    },
+    {
       "path": "../ui-primitives"
+    },
+    {
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-session"
     },
     {
       "path": "../ui-slots"
@@ -30,10 +42,10 @@
       "path": "../../llm/token-meter"
     },
     {
-      "path": "../../subagent/subagent"
+      "path": "../../core/session"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../subagent/subagent"
     }
   ]
 }

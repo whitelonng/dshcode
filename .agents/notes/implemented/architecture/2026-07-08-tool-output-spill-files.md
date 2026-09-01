@@ -35,7 +35,7 @@ interface SpillStore {
 
 interface SpillSource {
   toolName: string
-  callId: CallId
+  callId: ToolCallId
   label: string
 }
 
@@ -57,7 +57,7 @@ interface SpillRef {
 
 `SpillLocator` is a [branded](../../../../packages/util/brand) model-facing handle returned by the backend. The local backend renders it as a filesystem path; a remote or database backend can render a URI, key, or command token. Consumers treat it as opaque and render it with `retrievalHint` instead of assuming `read` is always the right retrieval mechanism. `SpillOwner.sessionId` is the save-time storage namespace: forked sessions inherit existing spill locators from the seeded log without copying or re-owning them, and new spills after the fork use the child session id. A retention-period cleanup may expire old locators with other old session artifacts; the spill seam does not define a per-session cleanup policy.
 
-`dsh-spill-local` owns only storage details: session-scoped directory selection, safe names, path-traversal protection, the write, and returning `{ locator, bytes, retrievalHint }`. It does not own retention policy, tool-result replacement, search, or file inspection. Files land at `<root>/session-<hash>/<random>-<safeName>`, where `root` is a configured path or a lazily-created private (0700) per-process temp dir, the session subdir is a short `sha256(sessionId)` prefix, and the leaf is a random hex prefix plus the caller's `suggestedName` sanitized to one path segment (mirrors the JSONL backend's `encodeSegment`). The write is `open(path, 'wx', 0o600)` — exclusive and owner-only, so a planted symlink cannot redirect it. The locator is the path, and the retrieval hint tells the model it can use `read` or `grep` on that path.
+`dsh-spill-local` owns storage details: session-scoped directory selection, safe names, path-traversal protection, the write, local artifact lifetime, and returning `{ locator, bytes, retrievalHint }`. It does not own tool-result replacement, model-facing preview policy, search, file inspection, or a seam-wide/per-session retention policy. Files land at `<root>/session-<hash>/<random>-<safeName>`, where `root` is a configured path or a lazily-created private (0700) per-process temp dir, the session subdir is a short `sha256(sessionId)` prefix, and the leaf is a random hex prefix plus the caller's `suggestedName` sanitized to one path segment (mirrors the JSONL backend's `encodeSegment`). The write is `open(path, 'wx', 0o600)` — exclusive and owner-only, so a planted symlink cannot redirect it. The locator is the path, and the retrieval hint tells the model it can use `read` or `grep` on that path. Its one-shot startup cleanup applies the backend-specific artifact lifetime described in the [local spill cleanup note](./2026-07-17-local-spill-startup-cleanup.md).
 
 ### Spill policy
 
@@ -147,8 +147,8 @@ Those cases can consume `ctx.spillStore` directly in later work. They are not pa
 
 ## Non-goals
 
-- No new model-facing `artifact_read` or `artifact_search` tool in v1.
-- No per-tool retention configuration in v1.
+- This decision adds no model-facing `artifact_read` or `artifact_search` tool.
+- This decision adds no per-tool retention configuration.
 - No model-facing timeout/truncation arguments.
 - No migration of `read` output into spill files.
 - No replacement for provider/resource caps such as `web-fetch-http.maxBodyChars`.
@@ -160,7 +160,8 @@ Those cases can consume `ctx.spillStore` directly in later work. They are not pa
 - Tool-owned spill for subagent rollouts (`await run.result`, read in-process child session before `run.dispose()`, save JSONL).
 - Per-tool opt-out or per-tool policy declarations if the built-in `read` skip is insufficient.
 - Remote or database storage backends for ACP or remote environments where a local path is not meaningful.
-- Cleanup and retention policy for old spill files, likely tied to session cleanup.
+
+Cleanup shipped for the local backend as a one-shot startup sweep, not tied to session deletion — see the [startup-cleanup Agent Note](./2026-07-17-local-spill-startup-cleanup.md). The seam still defines no per-session cleanup policy; retention is a backend concern.
 
 ## Testing
 
@@ -174,9 +175,9 @@ Those cases can consume `ctx.spillStore` directly in later work. They are not pa
 
 The default policy only sees final formatted text. It cannot preserve provider-internal content that was already capped or runtime artifacts that were never part of the result. This is acceptable for the first cut because the showcase is final-result spill, not early spill; tool-owned early spill remains deferred work.
 
-Returning real paths from the local backend keeps v1 simple and matches proven agent-tool behavior, while the seam itself only promises an opaque locator plus retrieval hint so remote backends can return non-file locators.
+Returning real paths keeps the local backend simple and matches proven agent-tool behavior, while the seam itself only promises an opaque locator plus retrieval hint so remote backends can return non-file locators.
 
-The local-backend value proposition depends on the existing `read`/`grep` tools being able to inspect the returned local path, even when the spill directory is outside the session cwd. That holds today because the filesystem policy records observations and write guards but does not confine reads to the workspace. A future workspace-confinement policy must either allow local spill paths explicitly or use a non-file spill backend whose retrieval hint points at a supported reader.
+The local-backend value proposition depends on the existing `read`/`grep` tools being able to inspect the returned local path, even when the spill directory is outside the session cwd. That holds because the filesystem policy records observations and write guards but does not confine reads to the workspace. A future workspace-confinement policy must either allow local spill paths explicitly or use a non-file spill backend whose retrieval hint points at a supported reader.
 
 **Snapshot gap.** No ACP snapshot scenario covers the transcript-visible `web_fetch` spill notice yet. The ACP snapshot harness replays keyless and cannot hit the live web, and a `web_fetch` spill requires a real over-cap HTTP body; a deterministic scenario would need a seeded loopback fetch target the replay tree does not currently wire (the examples do not load `tool-web` at all). The behavior is covered instead by the `dsh-tool-web` integration test against a loopback server. Closing the gap is follow-up work: wire `tool-web` + a seeded fetch target into the ACP example, then record a `web-fetch-spill` scenario.
 
@@ -184,7 +185,7 @@ The policy can become too large if it starts owning tool-specific semantics. It 
 
 ## Alternatives considered
 
-**Require each tool to opt in with a retention declaration.** Rejected for v1: the goal is a default behavior similar to Claude Code's generic tool-result persistence. A single `maxInlineBytes` deployment knob is enough to prove the shape.
+**Require each tool to opt in with a retention declaration.** Rejected: the goal is a default behavior similar to Claude Code's generic tool-result persistence. A single `maxInlineBytes` deployment knob is enough to prove the shape.
 
 **Make `tool-results` a broad tool-result platform.** Rejected: a broad package name invites retention policy, result replacement, preview wording, search, and early spill into one seam. The shared storage part is smaller: save text and return a locator plus retrieval hint.
 

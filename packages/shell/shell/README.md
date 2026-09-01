@@ -1,44 +1,116 @@
+---
+description: "The bash executor seam for developers and maintainers choosing, composing, or implementing command execution over ctx.shell."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-shell
 
 English | [中文](README.zh.md)
 
-The **`ShellExecutor`** (`ctx.shell`) defines WHAT a bash backend does — run foreground commands and start background processes — without saying HOW. Job ids, ownership, collection, cancellation, and notices belong to the generic `ctx.jobs` runtime.
+## Summary
 
-This package owns the Service Definition role of the bash capability, split so each role can evolve (and be swapped) independently:
+`dsh-shell` defines the executor service (`ctx.shell`) that runs shell commands for the harness: foreground commands that resolve with bounded output when they finish, and background processes that return a handle immediately. Every shell executor in the repository — local Bash, sandboxed Bash, local PowerShell, sandboxed PowerShell — implements this one contract, so the model-facing `bash` and `pwsh` tools work unchanged over any of them. Callers pass a request and receive a fully-resolved spec with explicit defaults and caps before any command runs. The service itself never renders anything to a model; the shell tools own all model-visible output and sandbox guidance.
 
-| Package | Role |
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Use `ctx.shell` when an agent or an in-process plugin needs to run a shell command and read its output, or start a background process and poll it. It is the contract every shell executor and the model-facing `bash`/`pwsh` tools build on, so code written against it works over any executor implementation.
+
+### Foreground commands
+
+Call `run` with a resolved spec to execute a command in the foreground. The promise resolves when the command finishes: a nonzero exit, an executor timeout kill, or a caller abort kill is a result, never a rejection. `run` rejects only for infrastructure failures such as an unusable working directory or a missing shell. The result carries the exit code or signal, whether a timeout or an abort cut the run short, and the collected stdout/stderr with spill-file paths when a stream overflowed its budget.
+
+```text
+const result = await ctx.shell.run(ctx.shell.resolve({ command: 'ls -la' }))
+console.log(result.exitCode, result.stdout.text)
+```
+
+### Background processes
+
+Call `start` with a resolved spec to launch a background process; it returns a handle immediately and no timeout applies. Read output incrementally with `readOutput()` — consecutive reads never repeat output, and lossy reads point at full-stream spill files. Kill the process group with `kill()` (returns `false` once it has finished) and await `done` for settlement. Job ids, ownership, polling, and notices belong to the generic `ctx.jobs` runtime, where the tool layer registers the handle.
+
+### Requests and resolved specs
+
+Every execution starts from a `ShellExecRequest` with optional fields; the executor's `resolve()` turns it into a fully-resolved `ShellExecSpec` with explicit defaults and caps before anything runs. This request/spec split is the repository's template for explicit resolution at package boundaries: callers never rely on hidden defaults inside `run` or `start`. `resolve()` fills the working directory and timeout from the executor's configuration, caps per-call overrides, and carries optional inputs — `stdin`, ordinary `env`, and the trusted `DSH_*` snapshot — through verbatim.
+
+### Choosing and composing an executor
+
+The seam is not an executor: mount exactly one provider per composition, and the tools work unchanged. On POSIX, `dsh-bash-local` runs commands as fresh `bash -c` processes and `dsh-bash-sandbox` confines every command through the sandbox capability; on Windows, `dsh-pwsh-local` and `dsh-pwsh-sandbox` are the counterparts. The `bash` and `pwsh` tools advertise escalation fields only while a sandboxing executor is mounted. The smallest composition is the executor alone:
+
+```yaml
+- id: bash
+  name: '@deepseek-ai/dsh-bash-local'
+  config:
+    cwd: /path/to/workspace
+```
+
+### The shared exit-status contract
+
+Tool results end with a machine-readable exit marker — `[exit code: N]` or `[killed by signal: X]` — so the model can always tell how a command ended. The seam owns that marker format and the `parseExitStatus` helper that splits a rendered result back into its output body and structured exit status, keeping the `bash` and `pwsh` tools from drifting on it.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design of the seam and points at the code that realizes it; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design philosophy
+
+The package is one role of a standard capability seam: the Service Definition that names the executor contract, with Service Providers and Consumers split so each role evolves independently (see the [capability-seams note](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md)). Two decisions anchor the contract:
+
+- **Explicit resolution at the boundary.** `resolve(request)` is the single place defaults and caps are applied; `run` and `start` accept only resolved specs and never re-default, so no hidden fallback lives inside an implementation.
+- **Task-free background handles.** `start` returns a `ShellProcess` with no id or owner; job identity, ownership, and lifecycle belong to the generic `ctx.jobs` runtime, keeping executors independent of sessions.
+
+### Source map
+
+| File | Role |
 |---|---|
-| `@deepseek-ai/dsh-shell` (this) | Service Definition: abstract service + vocabulary types |
-| `@deepseek-ai/dsh-bash-local` | Service Provider: local subprocesses |
-| `@deepseek-ai/dsh-bash-sandbox` | Service Provider: `dsh-bash-local`'s mechanics with every spawn confined via [`ctx.sandbox`](../../sandbox/sandbox/), denials reported as result facts |
-| `@deepseek-ai/dsh-tool-bash` | the model-facing tool schemas over `ctx.shell` |
+| [`src/index.ts`](src/index.ts) | Plugin entry: abstract `ShellExecutor` service and the shared settings namespace |
+| [`src/types.ts`](src/types.ts) | Request/spec vocabulary, `ShellRunResult`, `ShellProcess`, and sandbox facts |
+| [`src/render.ts`](src/render.ts) | `parseExitStatus`: the exit-status marker contract the shell tools share |
+| — | No runtime invariant companion is published; this stateless Service Definition owns request/result types, while executors and policy own observations. |
 
-The split is a standard capability seam ([capability-seams Agent Note](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md)): `dsh-bash-sandbox` is a sandboxing executor behind the same Service Definition — the Consumer detects its `sandboxMode` capability and adds escalation fields without importing the provider — and a containerized or remote executor slots in the same way.
+### Settings namespace
 
-## Service API (`ctx.shell`)
+`SHELL_SETTINGS_NAMESPACE` is exported here rather than by a provider because it names the capability, not an implementation: a host composes exactly one provider of `ctx.shell`, so the providers share one namespace without colliding, and a settings document carried between platforms keeps resolving on both.
 
-| Member | Semantics |
-|---|---|
-| `run(spec)` | Foreground execution. Resolves when the command finishes. **Rejects only for infrastructure failures** (unusable workdir, missing shell, pre-aborted signal); nonzero exits, timeout kills, and abort kills resolve with a descriptive `ShellRunResult`. |
-| `start(spec)` | Background execution. Returns a task-free `ShellProcess` handle immediately; **no timeout applies**. The caller may adapt it into `ctx.jobs`. |
-| `sandboxMode` | The capability fact for the tool layer: the default mode a SANDBOXING executor confines under (`undefined` in the base class — "this executor does not sandbox"). `dsh-tool-bash` reads it at registration to advertise the escalation fields only when the composition honors them. |
-| `ShellProcess.readOutput()` | **Incremental** output read — consecutive reads never re-deliver. Reads that lost data to buffer bounds flag `lossy` and point at full-stream spill files. |
-| `ShellProcess.kill()` | Kill the process group. Returns `false` when it already finished. |
+### Background lifecycle and ownership
 
-Implementations subclass `ShellExecutor` and implement the abstract methods. Disposal must kill every running process and await its exit.
+A background process belongs to the subprocess service, not to the executor: it survives an executor-only reload and is killed and joined when the composition tears down. Implementations must honor the seam's semantics — `run` rejects only for infrastructure failures; `start` returns immediately with no timeout and its `done` never rejects (spawn failures settle as `killed` with the error on stderr); `readOutput` is consuming and lossy reads report spill files.
 
-`SHELL_SETTINGS_NAMESPACE` (`bash`) is exported here rather than by a provider because it names the capability, not an implementation. A host composes exactly one provider of `ctx.shell` — the win32 layer swaps the POSIX rows for the pwsh ones, and mounting both fails loud on a duplicate service registration — so every provider can register this one namespace with its own schema and composition entry without two of them ever colliding, and a `settings.yaml` carried between platforms keeps resolving on both.
+</details>
 
-## Vocabulary
+-----
 
-`ShellExecRequest` (command, workdir?, timeoutMs?, stdoutMaxBytes?, signal?, stdin?, env?, dshEnv?, sandboxPolicy?) resolves to `ShellExecSpec` (command, workdir, timeoutMs, stdoutMaxBytes, signal?, stdin?, env?, dshEnv?, sandboxPolicy) before execution. `stdoutMaxBytes` is a trusted foreground-run capture budget for consumers that must parse complete bounded stdout; the model-facing bash tool does not expose it. `sandboxPolicy` is optional on the request and required-but-nullable on the resolved spec: it carries the complete per-call mode and workspace root. The sandbox tool path resolves it from the calling session through `ctx.sandboxPolicy`; a direct sandbox-executor caller falls back to deployment policy, while a non-sandboxing executor carries the field and confines nothing.
+<a id="further-exploration"></a>
+## Further Exploration
 
-The per-session sandbox-mode override vocabulary (the `'sandbox/mode'` event, the `effectiveSandboxMode(events)` fold, and the `setSandboxMode(session, mode)` write path) is NOT here — it is policy state shared by every enforcing family, owned by [`@deepseek-ai/dsh-sandbox-policy`](../../sandbox/sandbox-policy/). `run()` returns `ShellRunResult`; `start()` returns `ShellProcess`, whose incremental read and kill methods are adapted by `dsh-tool-bash` into a generic task registration. A sandboxing executor stamps `ShellSandboxInfo` on foreground results and settled process handles. See `src/types.ts` and [subsystems/shell.md](../../../docs/subsystems/shell.md).
+Read these pages when the seam contract is not enough. They move from the shared subsystem reference to the concrete executors and the model-facing tools.
 
-`stdin` and ordinary `env` are set by in-process plugins (the hooks bridges, native plugins) to feed a hook command its JSON payload and `CLAUDE_PROJECT_DIR`/`CLAUDE_PLUGIN_ROOT` values. `dshEnv` is a separate trusted overlay restricted by type to managed keys; the exported `DSH_ENV_PREFIX` is the single source for that namespace, its `DshEnvironmentKey` template type, executor scrubbing, registry validation, derived built-in names, and model guidance. Model bash uses the current snapshot collected by `ctx.shellEnv`. Implementations remove inherited managed keys, then merge `dshEnv` after ordinary `env`, so an omitted current fact cannot fall back to stale ambient state and an `env` entry cannot displace a managed value. The model-facing tool exposes none of these as parameters. All three remain optional on the resolved spec; absent means no input/overlay. See [the bash-stdin-env Agent Note](../../../.agents/notes/implemented/architecture/2026-06-30-bash-stdin-env-trusted-plugin-api.md) and [the session environment Agent Note](../../../.agents/notes/implemented/feature/2026-07-10-agent-session-identity-and-log-location.md).
+- [Bash executor subsystem](../../../docs/subsystems/shell.md) — the request/spec vocabulary, results, and service contract in full.
+- [bash-local](../bash-local/README.md) — the default POSIX executor: fresh `bash -c` processes, budgets, and deadlines.
+- [bash-sandbox](../bash-sandbox/README.md) — the confining executor: sandbox modes, denials, and escalation.
+- [tool-bash](../tool-bash/README.md) — the model-facing `bash` tool over this seam.
+- [Capability seams note](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md) — the Service Definition / Provider / Consumer split this seam follows.
 
-The exported `parseExitStatus` (with `ParsedExitStatus`) is the shared rendering contract half of the shell tools: the inverse of the `[exit code: N]` / `[killed by signal: X]` markers `dsh-tool-bash`'s `renderResult` and `dsh-tool-pwsh`'s `renderPwshResult` append. Both tools' `presentResult` use it to split the rendered text into the terminal card's output body and its exit-status pill; it lives with the Service Definition so the two tools never drift on the marker contract.
+-----
 
+<a id="model-experience"></a>
 ## Model Experience
 
 Indirectly, through `dsh-tool-bash`, which turns executor output and sandbox facts into guidance and retained tool-result tokens.
@@ -49,5 +121,20 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define what the seam does not provide. They are current package constraints, not a roadmap.
+
 - **No interactive-input vocabulary** — `stdin` is written once at spawn and closed; the seam has no channel to feed a running task and no PTY session concept.
-- **Foreground timeouts are always executor-owned** — a caller-owned-deadline mode on the seam is explicitly deferred by [the tool-call timeout-policy Agent Note](../../../.agents/notes/implemented/architecture/2026-07-07-tool-call-timeout-policy.md).
+- **Foreground timeouts are always executor-owned** — a caller-owned-deadline mode on the seam is explicitly deferred by the [tool-call timeout-policy note](../../../.agents/notes/implemented/architecture/2026-07-07-tool-call-timeout-policy.md).
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

@@ -33,4 +33,4 @@ The classification uses the existing loop machinery — `finishError` → `agent
 
 - A transiently misbehaving provider consumes a bounded retry instead of a turn with no output; a persistently empty model produces an actionable `EMPTY_RESPONSE` turn failure.
 - A model that genuinely intends to say nothing (rare, but possible after a tool result) is retried and, if consistently empty, fails the turn. This trade was accepted deliberately: an empty assistant message is indistinguishable from the provider defect and has no value to the user.
-- The `empty-response-retry` ACP snapshot (an authored keyless scenario with a deterministic 1 ms zero-jitter retry overlay, `examples/acp-agent/retry.cordis.yml`) pins the product-visible behavior: a durable `llm/retry` event, no ACP output for the discarded attempt, the recovered reply, and a clean completed turn.
+- The [`empty-response-retry` headless snapshot](../../../../snapshots/session/empty-response-retry/) is an authored keyless scenario with a deterministic 1 ms zero-jitter retry overlay. It pins a durable `llm/retry` event, no output for the discarded attempt, the recovered reply, and a clean completed turn.

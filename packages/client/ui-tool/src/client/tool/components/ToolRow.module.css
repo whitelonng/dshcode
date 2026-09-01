@@ -1,5 +1,10 @@
-/* Tool summary row (figma 122:9479): 24px single line —
-   [16 leading] gap6 [title 14/24] gap8 [2x2 dot] gap8 [summary FILL truncate]. */
+/* Tool summary row (figma 122:9479): 24px single line at the default size —
+   [16 leading] gap6 [title 13/24] gap8 [2x2 dot] gap8 [summary FILL truncate].
+   The Settings font-size preference rides the body-published axis: the shared
+   DisclosureRow chrome scales the row height and leading glyph by the body px
+   delta; the title and the summary texts here read the secondary tier
+   (--dsh-content-font-size-secondary: one step under the body — setting −1 at
+   ≤14, setting −2 above), matching think text. */
 
 .root {
   display: flex;
@@ -79,8 +84,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -93,14 +98,33 @@
   flex: none;
   margin-left: 4px;
   white-space: nowrap;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* File-tool path: same geometry as .summary, with a persistent link affordance. */
+/* Diff-row +/- totals: the code font, matching the diff body the numbers
+   summarize; a wider gap keeps the digits from reading as part of the path.
+   Two px under the secondary tier (still riding the axis): mono digits read
+   optically larger than the sans path at the same size. Caption, one step
+   dimmer than the suffix's tertiary, so the digits stay behind the path. The
+   half-pixel nudge closes the baseline gap the size difference leaves under
+   the row's box-centering (a transform, so flex layout is untouched). */
+.diffStat {
+  margin-left: 10px;
+  font-family: var(--ds-font-family-code);
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 2px);
+  color: var(--dsw-alias-label-caption);
+  transform: translateY(0.5px);
+}
+
+/* File-tool path: same type as .summary, with a persistent link affordance.
+   Dotted dimmed underline: visible enough to say "clickable", light enough
+   that a long path doesn't read as one heavy rule under the row. Shrink-to-fit
+   (flex 0): the click target ends where the path text ends — the row's empty
+   remainder stays the expand/collapse toggle. */
 .fileLink {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -111,11 +135,12 @@
   background: none;
   font: inherit;
   text-align: left;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-secondary);
-  text-decoration: underline;
-  text-decoration-color: var(--dsw-alias-label-quaternary);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--dsw-alias-label-tertiary);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   cursor: pointer;
 }
@@ -147,8 +172,9 @@
   gap: 4px;
   margin: 4px 0 2px 4px;
   padding: 2px 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: 999px;
+  corner-shape: round;
   /* Base background, not bg-overlay: the overlay token is a raised dark
      surface and reads too heavy for a quiet in-flow affordance. */
   background: var(--dsw-alias-bg-base);
@@ -187,7 +213,7 @@
   display: flex;
   flex-direction: column;
   margin: 4px 0 4px 4px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   background: var(--dsw-alias-markdown-code-block);
   font: var(--dsw-font-markdown-code-block-small);
@@ -235,7 +261,7 @@
    (it sits between the padded sections, not inside their grid). */
 .ioDivider {
   flex: none;
-  height: 1px;
+  height: 0.5px;
   background: var(--dsw-alias-border-l2);
 }
 
@@ -292,7 +318,7 @@
   --dsl-terminal-font: var(--dsw-font-markdown-code-block-small);
   --dsl-terminal-line-height: 18px;
   --dsl-terminal-output-max-height: 224px;
-  border: 1px solid var(--dsw-alias-border-l1);
+  border: 0.5px solid var(--dsw-alias-border-l1);
 }
 
 /* Visually hidden run-state label for assistive technology: the StateDot and

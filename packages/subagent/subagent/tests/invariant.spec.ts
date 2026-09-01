@@ -10,9 +10,13 @@ import type {
 } from '@deepseek-ai/dsh-subagent'
 import * as SubagentInvariant from '@deepseek-ai/dsh-subagent/invariant'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
 async function setup(): Promise<Context> {
   const ctx = new Context()
+  // The registry is a required injection of SubagentRuntime (its projection
+  // units register in the constructor).
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(InvariantRegistry)
   await ctx.plugin(SubagentInvariant)
@@ -21,7 +25,7 @@ async function setup(): Promise<Context> {
 
 const provider = (name: string): SubagentProvider => ({
   name,
-  capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+  capabilities: { agentOptions: false, outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
   inheritsParentContext: false,
   start: async () => { throw new Error('not used') },
 })

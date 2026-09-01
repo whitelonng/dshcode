@@ -1,6 +1,10 @@
 /** React-free contracts between the slot host and an installed renderer. */
+import type { Context } from '@deepseek-ai/cordis'
 import type { ReactNode } from 'react'
-import type { SlotEntryDef, SlotSpec, StoredEntry, Translate } from './index.ts'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import type {
+  SessionAreaProps, SlotEntryDef, SlotScope, SlotSpec, StoredEntry, Translate,
+} from './index.ts'
 
 /**
  * The locale face the render machinery consumes: namespace binding plus an
@@ -9,7 +13,7 @@ import type { SlotEntryDef, SlotSpec, StoredEntry, Translate } from './index.ts'
  * active-locale or registry change; the renderer re-derives each entry's `t`
  * from (namespace, revision), so a locale switch hands out NEW function
  * references and memoized components re-render naturally. Implemented by the
- * locale plugin, installed through the runtime SlotRegistry (installLocale).
+ * locale plugin, installed through the `ui-renderer` SlotRegistry.
  * Install before the first render that needs the seat: outlets bind their
  * revision subscription at mount, and a face appearing later has no channel
  * to notify already-mounted outlets (the locale plugin is immediately-tier
@@ -27,10 +31,16 @@ export interface LocaleFace extends HostObservable<{ revision: number }> {
   bind(ns: string): Translate
 }
 
-/** Minimal observable API for host-provided standard-kit data sources. */
-export interface HostObservable<T> {
-  getSnapshot(): T
-  subscribe(fn: () => void): () => void
+/** Observable currency shared by domain sources, stores, and the renderer. */
+export type HostObservable<T> = ObservableSnapshot<T>
+
+/**
+ * Convert one standard source name to its rendered Hook prop name.
+ * @param name - registered fixed or keyed source name.
+ * @returns the `use<Name>` prop exposed to Slot components.
+ */
+export function standardHookPropName(name: string): string {
+  return `use${name[0]?.toUpperCase() ?? ''}${name.slice(1)}`
 }
 
 /**
@@ -51,41 +61,57 @@ export interface StoreInstanceLike {
   readonly actions: Record<string, (...params: never[]) => void>
 }
 
+/** Resolve one member of an open-key standard hook family. */
+export type KeyedStandardSource = (key: string) => HostObservable<unknown> | undefined
+
 /**
- * Per-session standard props resolved per session id (identity-stable per
- * session scope; a recreated scope yields a new info). Plugins contribute
- * members through the runtime `sessions.provide` contract; the render side binds
- * every `hooks` source into a `use<Name>` selector hook (hooks never appear
- * on the host contract) and spreads `props` verbatim. The runtime itself
- * contributes the first entry (`'session'` → `useSession`).
+ * Framework-neutral inputs from which the renderer materializes standard
+ * props. A scope adapter keeps member names present while its binding is
+ * absent so optional slots retain a stable Hook call order.
  */
-export interface SessionMaybeProvideInfo {
-  /** Current session id, absent while the application is in no-session mode. */
-  sessionId: string | undefined
-  /**
-   * Static hook roster. Each value is absent with the session; keys remain so
-   * session-maybe entries always receive the same hook-shaped standard kit.
-   */
-  hooks: Record<string, HostObservable<unknown> | undefined>
-  /** Static plain-member roster; values are undefined with the session. */
-  props: Record<string, unknown>
-  /**
-   * Key-addressed projection value sources (the useProjection framework seat;
-   * session-projection subsystem page: docs/subsystems/session-projection.md).
-   * Unlike `hooks`, the key space is open — values
-   * arrive from host-computed push frames — so the render side binds per
-   * resolved key instead of per static roster member. Faces are always
-   * defined per key (absence is an `undefined` snapshot); the whole member is
-   * absent with the session.
-   */
-  projections?: { faceOf(key: string): HostObservable<unknown> } | undefined
+export interface StandardSourceBinding {
+  /** Scope identity; absent for root data and an optional scope with no selection. */
+  readonly key: string | undefined
+  /** Fixed-name sources; each `name` becomes a `useName` selector Hook. */
+  readonly hooks: Readonly<Record<string, HostObservable<unknown> | undefined>>
+  /** Open-key source families; each `name` becomes a `useName(key, selector)` Hook. */
+  readonly keyedHooks: Readonly<Record<string, KeyedStandardSource | undefined>>
+  /** Stable plain values copied into standard props. */
+  readonly props: Readonly<Record<string, unknown>>
 }
 
-/** Definite per-session standard props resolved for strict session slots. */
-export interface SessionProvideInfo extends SessionMaybeProvideInfo {
-  sessionId: string
-  /** Bare observable sources, keyed by hook base name ('session' → useSession). */
-  hooks: Record<string, HostObservable<unknown>>
+/** Materialized binding for one live non-root scope. */
+export interface ScopedStandardSourceBinding extends StandardSourceBinding {
+  readonly key: string
+  readonly ctx: Context
+}
+
+/** One installed source of bindings for a non-root Slot scope. */
+export interface SlotScopeAdapter {
+  /** Binding that follows the current selection, including its absent projection. */
+  readonly current: HostObservable<StandardSourceBinding>
+  /**
+   * Resolve an already-materialized binding.
+   * @param key - scope identity.
+   * @returns the binding, or `undefined` when the identity is unavailable.
+   */
+  resolve(key: string): ScopedStandardSourceBinding | undefined
+  /**
+   * Render the scope owner's area seat over the current binding. The renderer
+   * binds this function to the standard `SessionProvider` prop without owning
+   * Session selection semantics.
+   * @param binding - current scope binding, including its absent projection.
+   * @param props - render-prop body and empty branch.
+   * @returns rendered scope area.
+   */
+  renderArea?(binding: StandardSourceBinding, props: SessionAreaProps): ReactNode
+}
+
+/** Root standard-source contribution installed by one domain UI package. */
+export interface RootStandardSourceContribution {
+  readonly hooks?: Readonly<Record<string, HostObservable<unknown>>>
+  readonly keyedHooks?: Readonly<Record<string, KeyedStandardSource>>
+  readonly props?: Readonly<Record<string, unknown>>
 }
 
 /** renderSlot dispatch options at the machinery level. */
@@ -97,7 +123,7 @@ export interface RenderOpts {
   hookContext?: unknown
 }
 
-/** Host API the runtime SlotRegistry presents to the installed renderer. */
+/** Host API the `ui-renderer` SlotRegistry presents to its React renderer. */
 export interface SlotRendererHost {
   /**
    * Subscribe to a key's registration changes (microtask-batched).
@@ -155,28 +181,21 @@ export interface SlotRendererHost {
    * Resolve (create or return cached) the store instance for an entry's
    * declared handle under a scope key; lifecycle rides the ledger axis.
    * @param entry - entry whose declaration carries the handle.
-   * @param scopeKey - session id for session-scope slots, undefined for root scope.
+   * @param scopeBinding - exact Session binding for scoped slots, undefined for root scope.
    * @returns the instance, or undefined when the entry declares no store.
    */
-  storeOf(entry: StoredEntry, scopeKey: string | undefined): StoreInstanceLike | undefined
-  /** Session-side standard-kit sources. */
-  sessions: {
-    /** Session list source backing the useSessions standard hook. */
-    list: HostObservable<unknown>
-    /**
-     * Atomic current-session provide projection used by SessionProvider:
-     * selection changes and provider-roster changes publish through this one
-     * source, so a stable current id cannot strand mounted entries on an
-     * obsolete hook/prop schema. Carries the static roster with sessionId
-     * undefined while no current session resolves.
-     */
-    provideInfo: HostObservable<SessionMaybeProvideInfo>
-  }
-  /** Workspace-side standard-kit sources. */
-  workspaces: {
-    /** Workspace list source backing the useWorkspaces standard hook. */
-    list: HostObservable<unknown>
-  }
+  storeOf(entry: StoredEntry, scopeBinding: ScopedStandardSourceBinding | undefined): StoreInstanceLike | undefined
+  /** Root standard data assembled from domain-owned contributions. */
+  readonly root: HostObservable<StandardSourceBinding>
+  /** Monotonic source updated whenever the installed scope-adapter roster changes. */
+  readonly scopeRevision: HostObservable<number>
+  /**
+   * Resolve the adapter installed for one non-root scope.
+   * `session` and `session-maybe` intentionally resolve the same adapter.
+   * @param scope - Slot scope.
+   * @returns adapter, or `undefined` when the composition omitted its owner.
+   */
+  scope(scope: Exclude<SlotScope, 'root'>): SlotScopeAdapter | undefined
   /**
    * Installed locale face backing the `t` standard seat (absent until the
    * locale plugin installs one; rendering an entry that declared `locale:`
@@ -185,7 +204,7 @@ export interface SlotRendererHost {
   locale?: LocaleFace | undefined
 }
 
-/** The installation contract: runtime owns install()/renderSlot(); ui-renderer implements rendering. */
+/** The installation contract between the `ui-renderer` SlotRegistry and its React renderer. */
 export interface SlotRenderer {
   /**
    * Render the root slot tree over the host API (the only ctx-level entry).

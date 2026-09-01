@@ -14,14 +14,17 @@ import type {
 export { AttachmentId, ImageVariantId } from './brand.ts'
 export { AttachmentError, isImageAdmissionError } from './error.ts'
 export type { AttachmentErrorCode, ImageAdmissionErrorCode } from './error.ts'
-export { admitEncodedImages } from './admission.ts'
+export { admitEncodedImages, admitPromptContent } from './admission.ts'
+export { requestImageDimensions } from './request-projection.ts'
 export type {
   AttachmentId as AttachmentIdType,
+  AdmittedPromptContentPart,
   EncodedImageAttachment,
   ImageAttachmentLimits,
   ImageAttachmentRef,
   ImageRequestPolicy,
   ImageMediaType,
+  PromptContentPart,
   RequestImageAttachment,
   SaveImageAttachment,
   StoredImageAttachment,
@@ -108,9 +111,20 @@ export abstract class AttachmentStore extends Service {
   abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>
 
   /**
+   * Locate the provider-owned normalized object in the harness host filesystem.
+   * @param ref - durable normalized attachment reference.
+   * @returns an absolute host path, or undefined when this backend is not host-file-backed.
+   * @throws an AttachmentError when the durable reference is invalid.
+   */
+  imageHostPath(ref: ImageAttachmentRef): string | undefined {
+    void ref
+    return undefined
+  }
+
+  /**
    * Generate or read one deterministic model-request version from the stored normalized image.
    * @param ref - durable provider-independent normalized attachment reference.
-   * @param policy - exact route pixel and encoded-byte budget.
+   * @param policy - exact route pixel budget and encoded-byte target; a target no ladder quality meets yields the smallest ladder output.
    * @param signal - optional cancellation.
    * @returns request bytes and the cache/upload identity covering every transform input.
    */

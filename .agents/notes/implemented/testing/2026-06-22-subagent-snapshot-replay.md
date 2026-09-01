@@ -35,7 +35,7 @@ Child fixtures sort by `createdAt`, which matches call order while siblings run 
 
 ## Alternatives considered
 
-The alternative considered and rejected was a **call-ordered merge of the parent and child logs** into one global script (sound only because in-process subagent execution is strictly nested — the parent blocks on the child). It is simpler for today's synchronous cut but bakes in the parent-blocks-on-child invariant that a future backgrounded/concurrent subagent would break; per-session keying does not.
+The alternative considered and rejected was a **call-ordered merge of the parent and child logs** into one global script (sound only because in-process subagent execution is strictly nested — the parent blocks on the child). It is simpler for the synchronous execution model but bakes in the parent-blocks-on-child invariant that a future backgrounded/concurrent subagent would break; per-session keying does not.
 
 ### 3. The harness harvests every log, primary-first
 

@@ -7,10 +7,12 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { resolve } from 'node:path'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { admitEncodedImages, type EncodedImageAttachment, type ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import { createUserMessage, ReasoningEffortId, type ContentBlock, type LlmRuntime } from '@deepseek-ai/dsh-llm'
 import { carrierKeyOf, type Scoped } from '@deepseek-ai/dsh-scope'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import type SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentRunEndInfo } from '@deepseek-ai/dsh-subagent'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
@@ -21,12 +23,32 @@ import type {
   SessionEventNotification,
   SessionPromptParams,
   SessionPromptResult,
+  SdkEncodedImageBlock,
   SubagentFinishedNotification,
   SubagentStartedNotification,
 } from '@deepseek-ai/dsh-sdk-protocol'
 
 interface SessionRecord {
   handle: AgentHandle
+}
+
+function encodedImage(block: SessionPromptParams['contentBlocks'][number]): block is SdkEncodedImageBlock {
+  return block.type === 'image' && 'data' in block
+}
+
+async function durablePromptContent(ctx: Context, blocks: SessionPromptParams['contentBlocks']): Promise<ContentBlock[]> {
+  const images = blocks.filter(encodedImage)
+  if (images.length === 0) return blocks as ContentBlock[]
+  const attachments = ctx.get('attachments')
+  if (attachments === undefined) throw new Error('SDK image prompt requires an attachment store')
+  const refs = await admitEncodedImages(attachments, images.map((image): EncodedImageAttachment => ({
+    data: image.data,
+    mediaType: image.mimeType,
+  })))
+  let next = 0
+  return blocks.map(block => encodedImage(block)
+    ? { type: 'image', attachment: refs[next++] as ImageAttachmentRef }
+    : block)
 }
 
 /** Recover the delegating parent from the service-owned scoped carrier. */
@@ -54,6 +76,7 @@ export class HarnessSdkJsonRpcServer {
   private cwd = process.cwd()
   private provider = 'deepseek-official'
   private model = 'deepseek-official'
+  private reasoningEffort: ReturnType<typeof ReasoningEffortId> | undefined
   private maxTokens: number | undefined
   private llmFiber: { dispose(): Promise<void> } | undefined
   private readonly sessions = new Map<string, SessionRecord>()
@@ -61,6 +84,7 @@ export class HarnessSdkJsonRpcServer {
   private readonly disposers: (() => void)[] = []
   private shutdownTask: Promise<Record<string, never>> | undefined
   private shuttingDown = false
+  private initialized = false
 
   constructor(
     private readonly ctx: Context,
@@ -104,23 +128,43 @@ export class HarnessSdkJsonRpcServer {
   }
 
   /**
-   * Configure the SDK route, mounting the DeepSeek fallback only when unowned.
+   * Validate and configure the SDK route, mounting the DeepSeek fallback only when unowned.
    * @param params - SDK handshake parameters.
    * @returns server identity for the handshake.
    */
   async initialize(params: InitializeParams): Promise<InitializeResult> {
+    if (params.reasoningEffort !== undefined
+      && (typeof params.reasoningEffort !== 'string' || params.reasoningEffort.length === 0)) {
+      throw new TypeError('initialize reasoningEffort must be a non-empty string')
+    }
     if (params.maxTokens !== undefined
       && (!Number.isSafeInteger(params.maxTokens) || params.maxTokens <= 0)) {
       throw new TypeError('initialize maxTokens must be a positive safe integer')
     }
-    this.cwd = resolve(params.cwd)
-    this.provider = params.provider
-    this.model = params.model
-    this.maxTokens = params.maxTokens
-    if (!this.hasAdapterFor(this.provider)) {
-      if (this.provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${this.provider}"`)
+    const cwd = resolve(params.cwd)
+    const provider = params.provider
+    const model = params.model
+    const reasoningEffort = params.reasoningEffort === undefined
+      ? undefined
+      : ReasoningEffortId(params.reasoningEffort)
+    if (!this.hasAdapterFor(provider)) {
+      if (provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${provider}"`)
       this.llmFiber = await this.ctx.plugin(LlmDeepSeek, {})
     }
+    // Adapter presence was read from this service above; a successful fallback mount also requires it.
+    const llm = this.ctx.get('llm') as LlmRuntime
+    await llm.resolveCallConfig({
+      provider,
+      model,
+      ...reasoningEffort === undefined ? {} : { reasoningEffort },
+      ...params.maxTokens === undefined ? {} : { maxTokens: params.maxTokens },
+    })
+    this.cwd = cwd
+    this.provider = provider
+    this.model = model
+    this.reasoningEffort = reasoningEffort
+    this.maxTokens = params.maxTokens
+    this.initialized = true
     return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } }
   }
 
@@ -130,16 +174,28 @@ export class HarnessSdkJsonRpcServer {
    * @returns the durable message identity.
    */
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
+    if (!this.initialized) throw new Error('SDK server is not initialized')
     const rec = await this.getOrCreateSession(params.sessionId)
     // An agent-loop-only reload disposes the loop's agents while this record
     // survives; a retained agent accepts followup() silently, so validate the
-    // record against the live registry before delivery (as the ACP bridge does).
-    if (this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
-      throw new Error(`session agent was disposed outside the server: ${params.sessionId}`)
-    }
-    const message = createUserMessage({ content: params.contentBlocks, source: { kind: 'user' } })
+    // record against the live registry before delivery.
+    this.assertLiveAgent(rec, params.sessionId)
+    const content = await durablePromptContent(this.ctx, params.contentBlocks)
+    // Attachment admission crosses an async boundary where shutdown or an
+    // agent-loop reload may detach the retained handle.
+    this.assertLiveAgent(rec, params.sessionId)
+    const message = createUserMessage({
+      content,
+      source: { kind: 'user' },
+    })
     rec.handle.agent.followup(message)
     return { messageId: message.id }
+  }
+
+  private assertLiveAgent(rec: SessionRecord, sessionId: string): void {
+    if (this.ctx.agents.get(rec.handle.agent.id) !== rec.handle.agent) {
+      throw new Error(`session agent was disposed outside the server: ${sessionId}`)
+    }
   }
 
   /**
@@ -221,11 +277,12 @@ export class HarnessSdkJsonRpcServer {
     // deployment that configures a roster has to join one here first
     // (@deepseek-ai/dsh-agent-presets README, "Composing a child agent").
     const handle = await this.ctx.agents.create({
-      sessionId: SessionId(sessionId),
+      sessionId: brandString<SessionId>(sessionId),
       meta: { cwd: this.cwd },
       agentOptions: {
         provider: this.provider,
         model: this.model,
+        ...this.reasoningEffort === undefined ? {} : { reasoningEffort: this.reasoningEffort },
         ...this.maxTokens === undefined ? {} : { maxTokens: this.maxTokens },
       },
     })

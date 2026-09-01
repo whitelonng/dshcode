@@ -1,23 +1,13 @@
 // @vitest-environment jsdom
-// DOM-parity contract for MarkdownText: every corpus document's rendered DOM
-// is pinned as a file snapshot. The fixtures were recorded from the
-// react-markdown implementation this renderer replaced; the custom mdast
-// renderer must reproduce them byte-for-byte (after whitespace
-// normalization), so a fixture diff means a user-visible markdown style
-// change and must be reviewed as such — never re-record to silence a
-// refactor.
-//
-// The fixture source is reproducible: the replaced pipeline last lived at commit
-// 9e8101b800 (origin/master before the renderer swap merged). Checking out
-// that ref in a worktree, copying this spec, and running it records all
-// fixtures from react-markdown byte-identical to the ones committed here:
-//   git worktree add /tmp/parity origin/master --detach && cd /tmp/parity
-//   pnpm install && cp <this spec> packages/client/ui-primitives/tests/
-//   npx vitest run packages/client/ui-primitives/tests/markdown-dom-parity.spec.tsx
-//   diff -r <recorded fixtures> <this branch's fixtures>   # byte-identical
+// The fixture corpus is a DOM compatibility baseline; review diffs as
+// user-visible Markdown changes rather than regenerating them for refactors.
+// One intentional divergence from the original react-markdown recording:
+// streaming fences highlight (with their banner language visible) since the
+// incremental fence-highlight decision, so `*.streaming.txt` fixtures with
+// fenced code pin shiki span trees where react-markdown had the plain arm.
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
+import { MarkdownText } from './markdown-test-components.tsx'
 
 afterEach(cleanup)
 
@@ -62,7 +52,6 @@ function serializeChildren(element: Element, indent: string, inPre: boolean): st
   return out
 }
 
-/** Render one markdown source through MarkdownText and serialize the DOM. */
 function renderCase(text: string, streaming: boolean): string {
   const { container, unmount } = render(<MarkdownText text={text} streaming={streaming} />)
   const out = [...container.childNodes].map(child => serialize(child, '', false)).join('')

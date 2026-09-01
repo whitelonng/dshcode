@@ -51,7 +51,7 @@ interface SettingsRegisterOptions<T> {
 
 `validate` runs after the schema admits a value, so it sees defaults and the composition base exactly as the owner will. `dsh-llm-pi-ai` uses it to refuse a provider profile it could not serve at the write that produced it, rather than storing one that would disable every route in its namespace.
 
-`applies` is a UI hint, not a mechanism: a `restart` owner simply never watches, so its value is read once at construction and configuration surfaces can badge the pending change.
+`applies` is a UI hint, not a mechanism: a `restart` owner never watches, so its value is read once at construction and configuration surfaces can badge the pending change.
 
 ```ts type-equiv
 /** When a namespace's changes take effect for its owner. */
@@ -161,6 +161,10 @@ Every committed change — an in-process write or an externally observed provide
 type SettingsUpdateSource = 'update' | 'provider'
 ```
 
+## Native document operations
+
+`SettingsDocumentOpenValue` confirms that `settings/openSettingsDocument` prepared the provider-owned document and handed it to the native text editor. `AgentPresetDirectoryOpenValue` reports either a completed native handoff or the resolved user-preset directory when desktop opening is unavailable. Neither operation accepts a browser-selected Host path.
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -193,8 +197,22 @@ prepareDocument(): Promise<string | undefined>
  * @param schema - schemastery schema resolving this namespace's value.
  * @param options - composition `base` layer and effect timing.
  * @returns the owner scope for reads, observation, and updates.
+ * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
  */
-register<T>(ns: SettingsNamespace, schema: z<T>, options?: SettingsRegisterOptions<T>): SettingsScope<T>
+register<const Namespace extends string, T>( ns: Namespace & SettingsNamespaceInput<Namespace>, schema: z<T>, options?: SettingsRegisterOptions<T>, ): SettingsScope<T>
+
+/**
+ * Attach one optional-settings consumer to this provider. The consumer
+ * registers its composition entry as the base layer while this provider is
+ * present, then falls back to that entry if the provider detaches.
+ * @param owner - consumer context whose unload suppresses fallback work.
+ * @param ns - consumer-owned settings namespace.
+ * @param schema - schema resolving the namespace.
+ * @param entry - composition entry used as the base and fallback value.
+ * @param hooks - source sink, change notification, and optional validation.
+ * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
+ */
+installSection<const Namespace extends string, T>( owner: Context, ns: Namespace & SettingsNamespaceInput<Namespace>, schema: z<T>, entry: T, hooks: SettingsSectionHooks<T>, ): void
 
 /**
  * Describe every registered namespace for configuration surfaces, including
@@ -209,8 +227,9 @@ describe(options?: SettingsDescribeOptions): SettingsDescriptor[]
  * Read one registered namespace's resolved value.
  * @param ns - the namespace to read.
  * @returns the resolved value, or `undefined` while unregistered.
+ * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
  */
-get(ns: SettingsNamespace): unknown
+get<const Namespace extends string>(ns: Namespace & SettingsNamespaceInput<Namespace>): unknown
 
 /**
  * Merge a patch into one registered namespace's user layer, validate the
@@ -222,8 +241,9 @@ get(ns: SettingsNamespace): unknown
  * @param patch - plain-object patch over the user section.
  * @param expectedRevision - the descriptor `revision` the caller read; a
  *   namespace that moved past it rejects with {@link SettingsConflictError}.
+ * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
  */
-async update(ns: SettingsNamespace, patch: object, expectedRevision?: number): Promise<void>
+async update<const Namespace extends string>( ns: Namespace & SettingsNamespaceInput<Namespace>, patch: object, expectedRevision?: number, ): Promise<void>
 
 /**
  * Replace one registered namespace's user section wholesale, validate,
@@ -234,8 +254,9 @@ async update(ns: SettingsNamespace, patch: object, expectedRevision?: number): P
  * @param section - the complete next user section.
  * @param expectedRevision - the descriptor `revision` the caller read; a
  *   namespace that moved past it rejects with {@link SettingsConflictError}.
+ * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
  */
-async replace(ns: SettingsNamespace, section: object, expectedRevision?: number): Promise<void>
+async replace<const Namespace extends string>( ns: Namespace & SettingsNamespaceInput<Namespace>, section: object, expectedRevision?: number, ): Promise<void>
 
 /**
  * Apply path-addressed edits to one registered namespace's user section,
@@ -248,11 +269,85 @@ async replace(ns: SettingsNamespace, section: object, expectedRevision?: number)
  * @param ops - ordered path edits; later ops observe earlier ones.
  * @param expectedRevision - the descriptor `revision` the caller read; a
  *   namespace that moved past it rejects with {@link SettingsConflictError}.
+ * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
  */
-async mutate(ns: SettingsNamespace, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void>
+async mutate<const Namespace extends string>( ns: Namespace & SettingsNamespaceInput<Namespace>, ops: readonly SettingsPathOp[], expectedRevision?: number, ): Promise<void>
 ```
 
 Source: [`packages/settings/settings/src/index.ts`](../../packages/settings/settings/src/index.ts)
+
+<a id="ctxsettingscontroller--settingscontroller"></a>
+
+### `ctx.settingsController` — `SettingsController`
+
+Host service backing the generated `ctx.remote.settings` namespace. Every remote read uses `redactSecrets: true`, so a `role('secret')` field cannot ride a response. Writes expose the settings service's merge, replacement, and path-addressed operations, and classify every provider refusal as `settings/conflict` or `settings/rejected` with the service's message.
+
+```ts cordis-catalog
+/**
+ * Describe every registered namespace for a configuration page: redacted
+ * layered values plus the serialized schema the page renders its form from.
+ * @returns provider writability, local-document presence, and one view per namespace.
+ * @throws RemoteError when no settings provider is mounted.
+ */
+@Remote describe(): SettingsDescribeValue
+
+/**
+ * Report whether this deployment can open an authored Agent preset directory natively.
+ * @returns true when the matching open operation is available.
+ */
+@Remote canOpenAgentPresetDirectory(): boolean
+
+/**
+ * Merge a patch into one namespace's stored user section.
+ * @param ns - namespace key to write.
+ * @param patch - fields to merge into the user section.
+ * @param expectedRevision - revision the caller read; `undefined` writes unconditionally.
+ * @returns the namespace's redacted view after the write.
+ * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
+ */
+@Remote update( ns: string, patch: Record<string, JsonValue>, expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>
+
+/**
+ * Replace one namespace's stored user section wholesale.
+ * @param ns - namespace key to write.
+ * @param section - complete replacement user section.
+ * @param expectedRevision - revision the caller read; `undefined` writes unconditionally.
+ * @returns the namespace's redacted view after the write.
+ * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
+ */
+@Remote replace( ns: string, section: Record<string, JsonValue>, expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>
+
+/**
+ * Apply path-addressed edits to one namespace's user section, resolved against
+ * the section as stored rather than against whatever the caller last read,
+ * then answer with that namespace's new redacted view.
+ * @param ns - namespace key to write.
+ * @param ops - the edits to apply, in order.
+ * @param expectedRevision - revision the caller read; `undefined` writes unconditionally.
+ * @returns the namespace's redacted view after the write.
+ * @throws RemoteError when the request is invalid, no provider is mounted, or the provider refuses the write.
+ */
+@Remote async mutate( ns: string, ops: SettingsPathOpView[], expectedRevision: number | undefined, ): Promise<SettingsNamespaceView>
+
+/**
+ * Materialize the provider-owned settings document and open it in a native text editor.
+ * @param signal - caller lifetime; abort terminates preparation or the native command.
+ * @returns confirmation after the native opener accepts the document.
+ * @throws RemoteError when no document exists, preparation fails, or opening fails.
+ */
+@Remote async openSettingsDocument(signal: AbortSignal): Promise<SettingsDocumentOpenValue>
+
+/**
+ * Open one user-authored Agent preset directory or return its path when no native opener exists.
+ * @param agentPreset - preset id resolved against Host-owned roots.
+ * @param signal - caller lifetime; abort terminates the native command.
+ * @returns an opened confirmation or the resolved directory for text display.
+ * @throws RemoteError when the preset is missing, read-only, invalid, or cannot be opened.
+ */
+@Remote async openAgentPresetDirectory( agentPreset: string, signal: AbortSignal, ): Promise<AgentPresetDirectoryOpenValue>
+```
+
+Source: [`packages/api/settings-controller/src/index.ts`](../../packages/api/settings-controller/src/index.ts)
 
 <a id="settings-events"></a>
 

@@ -20,14 +20,14 @@ Status: proposed
 | ACP 的 `agentOptions` 根导出 | 该辅助函数只有同文件和 ACP 测试消费方；唯一的包外生产消费方挂载的是插件命名空间。 | 保留 `name`、`inject`、`Config`、`AcpConfig` 和 `apply`；将 `agentOptions` 改为源码私有，通过桥接层行为测试。 |
 | `providerWording` 与 `completedTurnPrefix` 根导出 | 各有一个同包生产调用者；只有 balanced-prefix 辅助函数有一个同包白盒测试。 | 改为源码私有，测试提供方行为。 |
 | `depthOf`、`SubagentDepthError`、`waitForExit` 与 `exitsWithin` 根导出 | 生产 subagent 后端消费的是进程内 runner 和子进程构造/dispose（资源释放）辅助函数，而非这些强制机制和测试内部实现。`SENSITIVE_ENV_PATTERN` 不在其中，因为 SDK helper 会将它应用于调用方传入的环境。 | 保留深度与退出行为，但将剩余辅助函数和 error 改为源码私有；通过 spawn 和 dispose 测试。保持共享凭据正则公开。 |
-| `PersistenceCoordinator.inits`、后端 `inits` 访问器、`seedCoversPrefix` 与 `assertSerializable` | 访问器为白盒测试而存在；`seedCoversPrefix` 没有包外生产导入者；`assertSerializable` 没有生产调用者，且与 coordinator append 边界的无损快照重复。 | 通过 `session/flush` 观察初始化，将 `seedCoversPrefix` 改为源码私有，删除 `assertSerializable`。保留两个后端、`SessionHeader` 和 SQLite 的版本约定。 |
+| `PersistenceCoordinator.inits`、provider `inits` 访问器、`seedCoversPrefix` 与 `assertSerializable` | 访问器为白盒测试而存在；`seedCoversPrefix` 没有包外生产导入者；`assertSerializable` 没有生产调用者，且与 coordinator append 边界的无损快照重复。 | 通过 `session/flush` 观察初始化，将 `seedCoversPrefix` 改为源码私有，删除 `assertSerializable`。保留 JSONL provider 与 `SessionHeader`。 |
 | `LlmError.status` 与回放 status | 适配器/回放填充它，但生产分支基于稳定的错误码/消息判断，从不读取原始 status。 | 移除未读字段和回放管道，保留错误分类。 |
 | `BlockAssembler.push()` 返回值 | 两个生产调用者都忽略返回的已完成块。 | 返回 `void`；保留有意公开的 `blocks()`/`message()` 约定。 |
 | `compactRegion` 的独立 `session` 参数 | 固定调用方传入的对象就是 `agent.session` 中已有的对象；模型可见的 mount API 也可以调用该方法，但同时接受两个独立对象，会让挂载的插件传入不一致的组合。 | 保留手动 region API，同时有意将其收窄为以 `agent.session` 为唯一真源。 |
 | `CompactionResult.startSeq`、`summarySeq`、`endSeq` 与 `summary` | 生产消费方只读取 shadowed range/seq/token 统计；持久日志拥有 summary 和事件标识。 | 移除四个结果回显，保留两个共享的 transcript（文本记录）渲染器。 |
 | `BasicCompactionEngine` 的估算/摘要方法可见性 | 没有包外生产调用者调用这五个方法；已实现的 Agent Note 只将 `estimateContentTokens()` 和 `summarize()` 命名为子类钩子。 | 将这两个方法改为 `protected`，其余三个编排专用的估算器改为 private。 |
 | `CodeLogEntry.source`/`level` 与 `RunCodeMeta.dispatches` | 每个生产消费方都将日志映射为文本；没有 presenter/模型路径读取其他字段或持久化的 dispatch 计数。 | 将 code-runtime 日志改为字符串（或纯文本条目），移除 result-meta 的 dispatch 管道；保留用于生成确定性 dispatch id 的本地计数器。 |
-| `CodeRuntime.language` 与 `CodeRuntime.isolation` | worker 后端提供唯一的生产值，而 Code Mode 及其他所有生产调用方只调用 `run()`。 | 移除未读描述符，同时保留 worker 的语言、隔离、预算、取消与资源释放行为。 |
+| `CodeRuntime.language` 与 `CodeRuntime.isolation` | worker 后端提供唯一的生产值，而 PTC mode 及其他所有生产调用方只调用 `run()`。 | 移除未读描述符，同时保留 worker 的语言、隔离、预算、取消与资源释放行为。 |
 | `ToolNotFoundError.toolName`、`SystemPrompt.config` 与 `BashTask.command` | 每个存储的公开值都没有生产读取者。 | 移除未读字段，保留错误消息、已解析的配置行为和任务生命周期。 |
 | 后端包根实现辅助函数 | 下方精确清单仅通过相对路径的同包导入调用。生产命名空间导入挂载的是保留的插件约定，不读取这些属性；包根命名导入的消费方都是测试。 | 保留每个适配器/提供方/服务及其配置/错误约定；停止在包根导出所列辅助函数/常量。 |
 | 消费方包根实现辅助函数 | 下方精确清单只有同包生产调用者。生产命名空间导入挂载的是插件约定，不读取辅助属性；包根命名导入的消费方都是测试。 | 保留插件约定和稳定的错误码；将测试迁移到包内模块或公开行为，停止在包根导出所列辅助函数。 |
@@ -43,11 +43,11 @@ Status: proposed
 
 ## 提案
 
-以一次有界的、协调的公开接口清理，移除或降级上述每一行。同步更新包 README、JSDoc、生成的 API/事件 catalog、type-equiv 记录、必要的 exports map 以及测试，使测试通过所属的公开约定验证行为，而非保留仅为测试而存在的入口。不折叠任何能力 seam、LLM（大语言模型）适配器、持久化后端或生命周期完全停稳约定。
+以一次有界的、协调的公开接口清理，移除或降级上述每一行。同步更新包 README、JSDoc、生成的 API/事件 catalog、type-equiv 记录、必要的 exports map 以及测试，使测试通过所属的公开约定验证行为，而非保留仅为测试而存在的入口。不折叠任何能力 seam、LLM（大语言模型）适配器、持久化 provider 或生命周期完全停稳约定。
 
 ## 曾考虑的替代方案
 
-**保留测试便利函数和自包含的结果字段为公开。** 公开辅助函数可以让白盒测试更方便，自包含的结果字段看起来更易用，未来的嵌入者可能需要具体循环类或枚举方法。这些好处是假设性的；当前它们让每处实现和文档都要解释没有已交付调用者能观察到的状态。真正的消费方可以引入它所需的最小约定，其所有权和失败语义明确。
+**保留测试便利函数和自包含的结果字段为公开。** 公开辅助函数可以让白盒测试更方便，自包含的结果字段看起来更易用，未来的嵌入者可能需要具体循环类或枚举方法。这些好处是假设性的；保留它们会让每处实现和文档都要解释没有已交付调用者能观察到的状态。真正的消费方可以引入它所需的最小约定，其所有权和失败语义明确。
 
 **保留所有 catalog 成员以供模型编写的 mount 使用。** 自引用工具集是一条真实的通用消费路径，而非生成文档的噪音。然而，它的价值来自准确、可组合的服务接口，而非无限期保留重复字段或不一致的参数对；上述每一项 catalog 收缩都移除了在同一次执行、同一个 agent（智能体）或同一结果中其他位置已可获得的事实，并在同一变更中更新 API 参考。
 
@@ -55,7 +55,7 @@ Status: proposed
 
 - 精确符号搜索显示：在本 Agent Note 及任何对已实现 Agent Note 的修正之外，没有被移除的接口。
 - 本 Agent Note 列出的每个接口均按指定方式移除或降级；清单之外有意保留的扩展/测试约定不变。
-- 工具执行、上下文压缩（context compaction）、两个 LLM 适配器、两个持久化后端、工作流隔离以及 agent 创建/恢复保持其已交付行为。
+- 工具执行、上下文压缩（context compaction）、两个 LLM 适配器、持久化 provider、工作流隔离以及 agent 创建/恢复保持其已交付行为。
 - 类型检查、覆盖率、快照、doc-sync（文档同步门禁）、module-graph 校验、构建和 hygiene 通过。
 
 ## 风险

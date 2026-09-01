@@ -1,11 +1,11 @@
 /**
- * Code Mode codegen — Python flavor. The pure projection from registered tool schemas to the
+ * PTC mode codegen — Python flavor. The pure projection from registered tool schemas to the
  * Python SDK text the model programs against under `runtime.language === 'python'`. Sibling of
  * {@link ./ts-types.ts | ts-types.ts}; the two files are two projections of the same registry
  * store, keyed by the loaded {@link @deepseek-ai/dsh-code-runtime#CodeRuntime.language | code
  * runtime's language}.
  *
- * Under `mode: 'code'` the native tool schemas are omitted from the request, so this generated
+ * Under `mode: 'ptc'` the native tool schemas are omitted from the request, so this generated
  * SDK is the model's ONLY source for each tool's argument names, required fields, types,
  * descriptions, and canonical output shapes; under `mode: 'both'` the native schemas ship
  * alongside it and it is one of two. Object-shaped arguments and outputs therefore render as one
@@ -32,7 +32,7 @@ const IDENTIFIER = /^[\p{XID_Start}_]\p{XID_Continue}*$/u
  * Python identifiers are not ASCII: `路径` is as legal a field name as `path`,
  * and rejecting it would degrade the whole enclosing object, dropping every
  * field's name, requiredness, and type — information whose only source under
- * `mode: 'code'` is this generated text.
+ * `mode: 'ptc'` is this generated text.
  *
  * NFKC stability is a second and separate condition, because CPython
  * normalizes identifiers at compile time while JSON keys are compared as
@@ -163,7 +163,7 @@ interface RenderState {
  * (`SyntaxError: source code string cannot contain null bytes`), whether it
  * sits in a docstring or in a comment, so one such byte anywhere in a schema
  * description would make the whole generated SDK unparseable — under
- * `mode: 'code'`, the model's only declaration of the tools. The rest are
+ * `mode: 'ptc'`, the model's only declaration of the tools. The rest are
  * legal but invisible; escaping them with the same rule keeps the emitted text
  * readable and the treatment uniform.
  *
@@ -236,7 +236,7 @@ function describe(schema: object): string | undefined {
  * Backslashes are doubled first, every quote is escaped, and a trailing
  * backslash cannot survive: a description ending in `"` or an odd backslash
  * would otherwise merge with (or escape) the closing triple quote and make
- * the generated block — Code Mode's only SDK — syntactically invalid Python.
+ * the generated block — PTC mode's only SDK — syntactically invalid Python.
  */
 function docLines(description: unknown, indent: number): string[] {
   const collapsed = describe({ description })
@@ -579,7 +579,7 @@ function renderType(schema: unknown, className: string, state: RenderState): str
           }
         }
         // TypedDict syntax cannot express openness, so an open object states it
-        // in-band: the annotation is advisory either way, and `mode: 'code'`
+        // in-band: the annotation is advisory either way, and `mode: 'ptc'`
         // omits the native schemas, making this line the model's only signal
         // that extra keys are accepted.
         if (node.additionalProperties !== false) {
@@ -778,7 +778,7 @@ export function renderToolsSdkPy(schemas: ToolSdkSchema[]): string {
       // of that method's body. Emitted before the `async def` it would instead
       // become the `Tools` class docstring (for the first tool) or a dead
       // expression (for every later one), leaving every method undocumented —
-      // and under `mode: 'code'` this SDK is the model's only description of
+      // and under `mode: 'ptc'` this SDK is the model's only description of
       // what a tool does. A docstring is a complete body, so the `...` stub is
       // only for the description-less case.
       const doc = docLines(schema.description, 2)

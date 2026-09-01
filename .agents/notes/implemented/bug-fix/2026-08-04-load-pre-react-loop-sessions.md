@@ -26,11 +26,11 @@ The importer does not synthesize inbox splices. A resumed pre-react-loop agent b
 
 **Assign coarse aborted records to an existing caller.** Mapping them to `user`, `parent`, or `hook` would invent a caller that the old record did not name. A dedicated `legacy` cause keeps the stop classification without making a false audit claim.
 
-**Rewrite stored JSONL and SQLite records.** A rewrite would violate the append-only contract and require backend-specific atomic migration machinery for a read compatibility boundary.
+**Rewrite stored JSONL records.** A rewrite would violate the append-only contract and require atomic migration machinery for a read compatibility boundary.
 
 ## Consequences
 
-Sessions written in the refactor's base format resume through the current AgentLoop with their steering content, turn boundaries, error facts, and stop classification intact. The shared coordinator contract covers in-memory, JSONL, and SQLite `load`/`inspect`/`readFrom`, including the SQLite suffix fallback; an assembled JSONL Agent resume verifies that the historical transcript is visible while both new inbox lists start empty.
+Sessions written in the refactor's base format resume through the current AgentLoop with their steering content, turn boundaries, error facts, and stop classification intact. The shared coordinator contract covers in-memory and JSONL `load`/`inspect`/`readFrom`; an assembled JSONL Agent resume verifies that the historical transcript is visible while both new inbox lists start empty.
 
 This exception supports the base format, not intermediate formats produced during development of the refactor. In particular, it defines no migration for earlier experimental `agent/inbox/spliced` payloads. Exact-shape recognition keeps malformed current-looking records on their rejection path instead of guessing them into validity.
 

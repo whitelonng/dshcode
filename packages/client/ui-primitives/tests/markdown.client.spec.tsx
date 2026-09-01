@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { JsonBlock, MarkdownText, MessageText } from '@deepseek-ai/dsh-client-ui-primitives'
+import { MessageText } from '@deepseek-ai/dsh-client-ui-primitives'
+import { JsonBlock, MarkdownText } from './markdown-test-components.tsx'
 import { cjkFriendlyStrong } from '../src/markdown/cjkFriendlyStrong.ts'
 import { mathCompatibility } from '../src/markdown/mathCompatibility.ts'
 
@@ -223,14 +224,46 @@ describe('MarkdownText', () => {
     expect(plain.container.querySelector('pre code')?.textContent).toContain('no language here')
   })
 
-  it('streaming renders fences plain; the finalize swap highlights them', () => {
+  it('streaming highlights a registered-grammar fence; the finalize swap keeps it highlighted', () => {
     const fence = '```ts\nconst answer = 42\n```'
     const live = render(<MarkdownText text={fence} streaming />)
+    const pre = live.container.querySelector('pre.shiki')
+    expect(pre).not.toBeNull()
+    expect(pre?.textContent).toContain('const answer = 42')
+    expect(pre?.querySelectorAll('span[style]').length).toBeGreaterThan(1)
+    live.rerender(<MarkdownText text={fence} />)
+    expect(live.container.querySelector('pre.shiki')).not.toBeNull()
+  })
+
+  it('a growing unclosed fence extends highlighting; completed lines keep their DOM nodes', () => {
+    const live = render(<MarkdownText text={'```ts\nconst a = 1\nlet partial'} streaming />)
+    const lines = live.container.querySelectorAll('pre.shiki .line')
+    expect(lines).toHaveLength(2)
+    const firstLine = lines[0]
+    live.rerender(<MarkdownText text={'```ts\nconst a = 1\nlet partial = 2\n// tail\n```'} streaming />)
+    const grown = live.container.querySelectorAll('pre.shiki .line')
+    expect(grown).toHaveLength(3)
+    expect(grown[0]).toBe(firstLine)
+    expect(grown[2]?.textContent).toBe('// tail')
+    expect(live.container.querySelector('pre.shiki')?.textContent).toBe('const a = 1\nlet partial = 2\n// tail')
+  })
+
+  it('a fence whose info string is still mid-chunk has no content to color, so no wrong grammar ever paints', () => {
+    // '```t' could complete to ts, toml, … — but until its line ends, the
+    // fence has no content and keeps the stock empty pre.
+    const live = render(<MarkdownText text={'```t'} streaming />)
+    expect(live.container.querySelector('pre')?.outerHTML).toBe('<pre><code class="language-t"></code></pre>')
+    live.rerender(<MarkdownText text={'```ts\nconst answer = 42'} streaming />)
+    expect(live.container.querySelector('pre.shiki')?.textContent).toBe('const answer = 42')
+  })
+
+  it('streaming keeps unknown and language-less fences on the plain arm, and ```math literal until settle', () => {
+    const live = render(
+      <MarkdownText text={'```cobol\nDISPLAY "X".\n```\n\n```\nno language\n```\n\n```math\n\\sqrt{2}\n```'} streaming />,
+    )
     expect(live.container.querySelector('pre.shiki')).toBeNull()
-    expect(live.container.querySelector('pre code')?.textContent).toContain('const answer = 42')
-    live.unmount()
-    const done = render(<MarkdownText text={fence} />)
-    expect(done.container.querySelector('pre.shiki')).not.toBeNull()
+    expect(live.container.querySelector('.katex')).toBeNull()
+    expect(live.container.textContent).toContain('\\sqrt{2}')
   })
 
   it('forwards localized labels to fenced code blocks', () => {

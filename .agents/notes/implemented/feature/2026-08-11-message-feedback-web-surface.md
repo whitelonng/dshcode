@@ -46,7 +46,7 @@ Toggle semantics keep the two verbs honest: re-clicking the recorded rating call
 
 The Web GUI records per-message ratings and notes. #1326's user-visible half now exists; the issue was reopened because the backend merge had closed it while no entry point existed.
 
-`AssistantMessageNode.messageId` is optional, so every existing reader compiles unchanged, but any future consumer must handle absence rather than assume a finalized message. The two parallel materializers remain a duplication hazard: a third view that builds this node must remember to copy the id, and nothing enforces it. Only the chat view renders controls today, even though trajectory and waterfall nodes now carry the same id.
+`AssistantMessageNode.messageId` is optional, so every existing reader compiles unchanged, but any future consumer must handle absence rather than assume a finalized message. The two parallel materializers remain a duplication hazard: a third view that builds this node must remember to copy the id, and nothing enforces it. Only the chat view renders controls, even though trajectory and waterfall nodes now carry the same id.
 
 Feedback stays invisible to the model — the sidecar reaches neither the Session log, model context, nor telemetry — so the package's Model Experience is an audited `none` entry rather than a structured block.
 

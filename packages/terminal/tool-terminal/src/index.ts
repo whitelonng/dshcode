@@ -155,7 +155,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   }
   ctx.systemPrompt.section({
     name: 'tool:pty',
-    order: 106,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_PTY'),
     text: 'Use a terminal session only when work needs persistent terminal state or interactive stdin; prefer shell/read/write/edit for bounded one-shot operations. Track every terminal session id and close sessions that no longer matter. An inferred_idle or timeout result does not prove the foreground command exited.',
   })
 
@@ -284,6 +284,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (parsed.run_in_background === true) {
         return { card: 'generic', title: `Send to terminal ${parsed.sessionId as string} in background`, kind: 'execute', rawInput: parsed.text }
       }
+      // Keep these Host-only fallbacks aligned with the conversation locale
+      // keys `terminal.sendInput` and `terminal.session` used by Web.
       return { card: 'terminal', title: parsed.text || '(send input)', description: `Terminal ${parsed.sessionId as string}` }
     },
     presentResult(args, result) {

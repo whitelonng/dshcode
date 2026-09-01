@@ -28,11 +28,10 @@ export const STORAGE_SQLITE_SCHEMA_VERSION = 1
  */
 export type JournalMode = 'wal' | 'delete' | 'truncate' | 'persist'
 
-/* jscpd:ignore-start -- deliberately mirrors the session-persistence-sqlite /
-   session-query-sqlite open sequence; this group is the third user, and the
-   shared medium helper is deferred to the log-facet migration so the session
-   packages stay untouched this phase (see the domain KV storage Agent Note's
-   reuse audit). */
+/* jscpd:ignore-start -- deliberately mirrors the session-query-sqlite open
+   sequence. Each package owns a distinct database identity and schema, so a
+   shared helper would couple otherwise independent storage providers (see the
+   domain KV storage Agent Note's reuse audit). */
 /**
  * Exclusively create a missing database file with owner-only permissions.
  * Existing files retain their modes, and errors other than `EEXIST` propagate.

@@ -40,9 +40,9 @@ import {
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/markdown-wide-table', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/markdown-wide-table', import.meta.url))
 const GEOMETRY_EXPECTED = fileURLToPath(
-  new URL('./snapshots/markdown-wide-table/geometry.expected.md', import.meta.url),
+  new URL('./expected/markdown-wide-table/geometry.expected.md', import.meta.url),
 )
 const MODE = webSnapshotMode()
 const SEED_ID = 'markdown-wide-table-web-e2e'
@@ -139,7 +139,7 @@ function wideTableFixture(): string {
   return [
     JSON.stringify(header),
     // Spaced event times, as the sibling markdown fixtures pin them.
-    ...session.events.map(event => JSON.stringify({
+    ...session.snapshotEvents().map(event => JSON.stringify({
       ...event,
       time: eventTimeOrigin + event.seq * 1_000,
     })),
@@ -253,7 +253,7 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     const groupRow = page.locator('[role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
@@ -423,7 +423,7 @@ describe('web e2e: markdown tables fill the column, wide ones break out and scro
     const hidpiTripwire = watchConsole(hidpiPage)
     try {
       onTestFailed(() => saveFailureShot(hidpiPage, 'web-e2e-markdown-wide-table-hidpi'))
-      await hidpiPage.goto(scaffold.baseUrl, { waitUntil: 'load' })
+      await hidpiPage.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
       await hidpiPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       const groupRow = hidpiPage.locator('[role="treeitem"]').first()
       await groupRow.waitFor({ timeout: 15_000 })

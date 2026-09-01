@@ -2,19 +2,19 @@
 
 English | [中文](python-sdk.zh.md)
 
-This tutorial is the programmatic alternative to the Web UI. It installs the published Python SDK, runs a checked-in agent composition, and shows how to call the same API from your own program.
+This tutorial installs the published Python SDK, runs the shipped standalone minimal profile, and shows how to customize the same `dsh` profile from your own program.
 
 ## Prerequisites
 
 - Python 3.10 or newer
 - Git
-- Linux x64, Linux arm64, or macOS 14 or newer on arm64
+- Linux x64, Linux arm64, macOS 14 or newer on arm64, or Windows x64
 - A DeepSeek-compatible API endpoint and credential
-- An isolated workspace that the agent may modify
+- An isolated workspace and an isolated Harness home
 
 ## Install the SDK
 
-Clone the repository for its runnable example, create a virtual environment, and install the SDK with its same-version bundled runtime:
+### Linux and macOS
 
 ```sh
 git clone https://github.com/deepseek-ai/deepseek-harness.git
@@ -24,51 +24,76 @@ python -m venv .venv
 python -m pip install deepseek-harness-sdk
 ```
 
-The installed runtime needs no system Node.js. Repository contributors who need to build the runtime or wheels from source should use the [Python contributor workflows](../../../python/development.md).
+### Windows PowerShell
+
+```powershell
+git clone https://github.com/deepseek-ai/deepseek-harness.git
+Set-Location deepseek-harness
+py -3.10 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install deepseek-harness-sdk
+```
+
+The installation includes a matching native runtime wheel and the `dsh` command. Normal SDK execution needs no system Node.js. Repository contributors who build the artifacts should use the [Python contributor workflow](../../../python/development.md).
 
 ## Run the checked-in example
 
-Set the credential in the environment. Set `DEEPSEEK_BASE_URL` as well when the model is served by an OpenAI-compatible proxy rather than the default DeepSeek endpoint.
+Export the credential and, when needed, a compatible proxy endpoint:
+
+### Linux and macOS
 
 ```sh
 export DEEPSEEK_API_KEY=sk-your-key-here
 # export DEEPSEEK_BASE_URL=http://127.0.0.1:8000/v1
-# export DSH_MODEL=deepseek-v4-flash
-# export DSH_SYSTEM_PROMPT='You are a helpful software engineer assistant.'
 ```
 
-Run one task against an isolated workspace and session directory:
+### Windows PowerShell
+
+```powershell
+$env:DEEPSEEK_API_KEY = "sk-your-key-here"
+# $env:DEEPSEEK_BASE_URL = "http://127.0.0.1:8000/v1"
+```
+
+Run one task with explicit workspace and home paths:
+
+### Linux and macOS
 
 ```sh
-python examples/jsonrpc-agent/minimal.py \
-  --workspace /absolute/path/to/workspace \
-  --session-root /absolute/path/to/sessions \
+python python/sdk/examples/minimal.py \
+  --workspace /absolute/path/to/disposable-workspace \
+  --dsh-home /absolute/path/to/example-dsh-home \
   --session-id example-001 \
   "Inspect the repository and fix the failing tests."
 ```
 
-The script prints the final assistant response. The session directory receives a JSONL log containing the assembled model requests and tool calls.
+### Windows PowerShell
 
-## Use the SDK in your own program
+```powershell
+python python/sdk/examples/minimal.py `
+  --workspace C:\work\disposable-workspace `
+  --dsh-home C:\work\example-dsh-home `
+  --session-id example-001 `
+  "Inspect the repository and fix the failing tests."
+```
 
-The checked-in example is a thin wrapper around this SDK call:
+The script prints the final assistant response. The selected home receives the generated `sdk-minimal` profile, installed plugins, and uncompressed JSONL session logs under `sessions/`. The example and SDK never silently read `~/.dsh`.
+
+## Use the SDK in your program
 
 ```python
 from pathlib import Path
 
 from deepseek_harness import DeepSeekHarness
 
-config = Path("examples/jsonrpc-agent/minimal.cordis.yml").resolve()
-workspace = Path("/absolute/path/to/workspace").resolve()
-sessions = Path("/absolute/path/to/sessions").resolve()
-
+workspace = Path("/absolute/path/to/disposable-workspace").resolve()
+dsh_home = Path("/absolute/path/to/example-dsh-home").resolve()
 with DeepSeekHarness(
     provider="deepseek-official",
     model="deepseek-v4-flash",
     max_tokens=49_152,
     cwd=str(workspace),
-    session_root=str(sessions),
-    cordis=str(config),
+    dsh_home=str(dsh_home),
+    profile="sdk-minimal",
 ) as harness:
     result = harness.run(
         "Inspect the repository and fix the failing tests.",
@@ -78,27 +103,48 @@ with DeepSeekHarness(
 print(result.final_response)
 ```
 
-`DeepSeekHarness` starts the bundled runtime lazily and reuses it until the context manager exits. Reusing the same harness and session id preserves the session-owned Bash process, including its working directory, exported variables, and shell functions. Use a fresh session id for an independent task; reuse an id only when the next call should continue the same durable conversation.
+The SDK starts the bundled `dsh --profile sdk-minimal` process lazily and reuses it until context-manager exit. The profile, its persistent patch, the home patch, and any ordered `patches` tuple form the application configuration. There is no separate Python runtime bin or complete-config option.
 
-## Understand the example composition
+## Install or define plugins
+
+Use `dsh plugin` for dependencies and bundle layers that should persist in this home:
+
+### Linux and macOS
+
+```sh
+export DSH_HOME=/absolute/path/to/example-dsh-home
+dsh --profile sdk-minimal --dump-default-config >/dev/null
+dsh plugin --profile sdk-minimal add file:/absolute/path/to/my-plugin-bundle
+```
+
+### Windows PowerShell
+
+```powershell
+$env:DSH_HOME = "C:\work\example-dsh-home"
+dsh --profile sdk-minimal --dump-default-config | Out-Null
+dsh plugin --profile sdk-minimal add file:C:/work/my-plugin-bundle
+```
+
+The first command initializes the shipped standalone profile. The second forwards package management to `pnpm`, then records any installed package that exports a `dsh.bundle` layer. Install `pnpm` only for this management command; launching the installed SDK does not need it. Edit `$DSH_HOME/profiles/sdk-minimal/cordis.patch.yml` for persistent row changes, or pass patch files from Python for per-launch changes.
+
+Another `profile` is valid when it includes `@deepseek-ai/dsh-sdk-app` or another JSON-RPC server row. Missing server rows, unresolved plugins, and invalid patches fail during startup instead of falling back to another composition.
+
+## Understand the minimal profile
 
 | Property | Value |
 |---|---|
 | System prompt | `DSH_SYSTEM_PROMPT`, falling back to `You are a helpful software engineer assistant.` |
 | Model in `minimal.py` | `--model`, then `DSH_MODEL`, then `deepseek-v4-flash` |
-| Model-facing tools | Persistent `bash` and `str_replace_editor` only |
-| Bash timeout | 300 seconds |
+| Model-facing tools | Persistent `bash` on Linux/macOS or `pwsh` on Windows, plus `str_replace_editor` |
+| Shell timeout | 300 seconds |
 | Editor output limit | 16,000 characters |
-| Context compaction | Disabled |
-| Filesystem | Bare local backend; absolute editor paths may address any path visible to the runtime process |
-| Session persistence | Uncompressed JSONL under `DSH_SESSION_ROOT` |
+| Runtime context and compaction | Absent |
+| Session persistence | Uncompressed JSONL under `<dsh_home>/sessions` |
 
-The composition omits harness identity, workspace prompt text, skills, one-shot Bash, task tools, compaction, and every other model-facing plugin. Sandbox-policy facts are logged as runtime user context rather than appended to the system prompt.
+The profile's sole bundle inserts the complete tree over an empty root and does not include `dsh-base`; later base-profile tools therefore cannot appear implicitly. It contains the SDK protocol, one environment-configured DeepSeek adapter, local execution, and persistence, while settings, managed credentials, telemetry, Web tools, subagents, local instruction discovery, and compaction are absent. It pins `danger-full-access`, so the platform-selected persistent shell and editor can modify any path visible to the runtime; use a disposable checkout or container.
 
-## Choose workspace and session IDs
+The installed wheel still packages the full `web` profile and frontend assets. Run `dsh web` against an explicit `DSH_HOME` when a Python SDK deployment also needs the browser application; `web` is a separate CLI application and cannot serve a Python SDK client.
 
-`cwd` selects the workspace available to the agent, while `session_root` stores session logs and state. Use a fresh session id for an independent task; reuse an id only when the next call should continue the same conversation and persistent shell state.
+Use a fresh home when profiles, plugins, credentials, settings, and sessions must be isolated. Use a fresh session id for independent work; reuse a harness, home, and id only to continue the same durable conversation and session-owned resources.
 
-The composition uses `danger-full-access`. Run it only inside a disposable checkout or container: Bash and the editor can modify any path allowed to the runtime process. The persistent PTY backend requires a POSIX terminal substrate, so this composition does not support Windows agents.
-
-The [`jsonrpc-agent` example reference](../../../examples/jsonrpc-agent/README.md) owns the exact composition. The [Python SDK reference](../../../python/sdk/README.md) covers lifecycle, results, notifications, runtime selection, and configuration; the [Cordis primer](../../cordis-primer.md) covers composition syntax.
+The [bundle reference](../../../packages/bundle/sdk-minimal/README.md) owns the exact tree, and the [example reference](../../../python/sdk/examples/README.md) owns the runnable program. The [Python SDK reference](../../../python/sdk/README.md) covers lifecycle, results, notifications, and low-level behavior; the [dsh CLI reference](../../../apps/cli/reference/README.md) covers profile layering.

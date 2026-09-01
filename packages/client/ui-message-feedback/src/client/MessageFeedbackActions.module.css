@@ -1,22 +1,25 @@
-/* Per-message feedback controls. The rating buttons mirror the shared message
-   IconActions chrome so the strip reads as one row. The note editor is a
-   popover portaled to document.body and fixed from the note trigger's rect,
-   so it neither competes with the row for inline width nor gets cropped by the
-   conversation column's overflow clip. Surface recipe follows the Menu card:
-   r12, inverted hairline border, shadow-lv3. */
-
 .action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  /* Rides the Settings font-size axis like the host row's own actions
+     (ui-chat MessageIconActions), so slot-injected buttons match their
+     siblings at every size. */
+  width: calc(28px + var(--dsh-content-font-delta, 0px));
+  height: calc(28px + var(--dsh-content-font-delta, 0px));
   padding: 6px;
   border: none;
   border-radius: 28px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
+}
+
+/* The 15px glyphs follow the same px delta as the text they serve; the CSS
+   edge overrides each svg's own width/height attributes. */
+.action svg {
+  width: calc(15px + var(--dsh-content-font-delta, 0px));
+  height: calc(15px + var(--dsh-content-font-delta, 0px));
 }
 
 .action:hover {
@@ -43,8 +46,8 @@
   border-radius: 14px;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 13px;
-  line-height: 28px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(28px + var(--dsh-content-font-delta, 0px));
   white-space: nowrap;
   text-overflow: ellipsis;
   cursor: pointer;
@@ -75,10 +78,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid var(--dsw-alias-border-inverted);
+  border: 0;
   border-radius: 12px;
   background: var(--dsw-specific-menu);
-  box-shadow: var(--dsw-shadow-lv3);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+  box-shadow: var(--dsw-elevation-prominent);
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
@@ -87,7 +91,7 @@
   width: 100%;
   box-sizing: border-box;
   padding: 6px 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);

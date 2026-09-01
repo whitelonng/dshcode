@@ -23,7 +23,7 @@ import { createJavaScriptRegexEngine, defaultJavaScriptRegexConstructor } from '
 import langTs from '@shikijs/langs/typescript'
 import langBash from '@shikijs/langs/shellscript'
 import langJson from '@shikijs/langs/json'
-import type { HighlighterCore } from 'shiki/core'
+import type { GrammarState, HighlighterCore, ThemedToken } from 'shiki/core'
 import type { CSSProperties } from 'react'
 
 /** A shiki grammar module's default export (a `LanguageRegistration[]`), taken
@@ -131,6 +131,15 @@ const LANG_ALIASES = new Map<string, string>([
   ['xml', 'xml'],
   ['lua', 'lua'],
 ])
+
+/**
+ * Whether a language hint can use the shared syntax highlighter.
+ * @param lang - Language hint from a code surface.
+ * @returns Whether the hint resolves to a supported grammar.
+ */
+export function supportsHighlighting(lang: string | undefined): boolean {
+  return lang !== undefined && LANG_ALIASES.has(lang.toLowerCase())
+}
 
 /** All token colors resolve through `--shiki-*` custom properties (theme package sheets). */
 const cssVariablesTheme = createCssVariablesTheme({
@@ -278,6 +287,172 @@ export interface HighlightSpan {
   style: CSSProperties
 }
 
+/** vscode-textmate FontStyle bits shiki folds into `text-decoration` values. */
+const DECORATION_BITS: readonly (readonly [number, string])[] = [[4, 'underline'], [8, 'line-through']]
+
+/**
+ * The inline style shiki's HTML arm assigns one token (`getTokenStyleObject`
+ * mirrored onto React style keys): the css-variables color plus the
+ * vscode-textmate font-style bits the theme lets through — italic (1), bold
+ * (2), and the {@link DECORATION_BITS} decorations (the theme injects bold,
+ * italic, and underline rules for markup scopes, so markdown fences carry
+ * them). The theme has no per-scope backgrounds, so `background-color` never
+ * occurs; the arm-parity tests fail loud if a shiki upgrade changes that.
+ */
+function spanStyle(token: ThemedToken): CSSProperties {
+  const style: CSSProperties = { color: token.color }
+  /* v8 ignore next -- fontStyle is optional in ThemedToken's type; tokenizeWithTheme always stamps it. */
+  const bits = token.fontStyle ?? 0
+  if ((bits & 1) !== 0) style.fontStyle = 'italic'
+  if ((bits & 2) !== 0) style.fontWeight = 'bold'
+  const decorations = DECORATION_BITS.filter(([bit]) => (bits & bit) !== 0)
+  if (decorations.length > 0) style.textDecoration = decorations.map(([, value]) => value).join(' ')
+  return style
+}
+
+/**
+ * Narrow one tokenized line to the runs a `<span style>` renders, folding a
+ * whitespace-only run into the token that follows it — shiki's default
+ * `mergeWhitespaces` HTML behavior — with each run styled through
+ * {@link spanStyle}, so the streaming spans and the settled `codeToHtml`
+ * swap render one identical span tree. shiki exempts underlined/struck
+ * whitespace from the fold; under the css-variables theme that case cannot
+ * occur — its only underline rule styles inline-link scopes, whose spaced
+ * text tokenizes as one run, and it injects no strikethrough rule — so the
+ * unconditional fold here stays equivalent (the markdown arm-parity test
+ * pins it). A line-trailing whitespace-only run has no follower and keeps
+ * its own span, as in shiki.
+ */
+function lineSpans(line: ThemedToken[]): HighlightSpan[] {
+  const spans: HighlightSpan[] = []
+  let pendingWhitespace = ''
+  for (const [index, token] of line.entries()) {
+    if (/^\s+$/.test(token.content) && index + 1 < line.length) {
+      pendingWhitespace += token.content
+      continue
+    }
+    spans.push({ text: pendingWhitespace + token.content, style: spanStyle(token) })
+    pendingWhitespace = ''
+  }
+  return spans
+}
+
+/**
+ * Incremental highlighter for one growing streaming fence. TextMate
+ * tokenization is line-based and forward-only — a line's tokens depend only on
+ * its own text and the grammar state entering it — so appended text never
+ * changes a completed line's tokens. The session caches the spans of every
+ * completed line together with the grammar state after them;
+ * {@link updateFrame} reports only newly completed lines plus the still-growing
+ * last line, while {@link update} materializes the complete compatibility
+ * result. Per-call tokenization cost therefore excludes the completed prefix,
+ * and the result equals a from-scratch tokenization of the same code.
+ * Non-append input and a change of resolved grammar reset the cache and
+ * re-tokenize fully, so any input stays correct.
+ */
+export class StreamingHighlightSession {
+  /** Grammar id the cache was built with; a different resolution resets it. */
+  private resolved: string | undefined
+  /** Newline-terminated source prefix covered by {@link spans}. */
+  private prefix = ''
+  /** Cached spans, one entry per completed line of {@link prefix}. */
+  private spans: HighlightSpan[][] = []
+  /** Grammar state after {@link prefix}; undefined = the grammar's initial state. */
+  private state: GrammarState | undefined
+  private lastCode: string | undefined
+  private lastLang: string | undefined
+  private lastResult: HighlightSpan[][] | undefined
+  private generation = 0
+  private lastFrame: StreamingHighlightFrame | undefined
+
+  private reset(resolved: string | undefined): void {
+    this.resolved = resolved
+    this.prefix = ''
+    this.spans = []
+    this.state = undefined
+    this.generation += 1
+    this.lastFrame = undefined
+  }
+
+  /** Tokenize `text` with `resolved`, resuming from the cached grammar state when one exists. */
+  private tokenize(resolved: string, text: string): ThemedToken[][] {
+    return highlighter().codeToTokensBase(text, {
+      lang: resolved,
+      theme: 'css-variables',
+      ...(this.state === undefined ? {} : { grammarState: this.state }),
+    })
+  }
+
+  /**
+   * Tokenize one update as a delta for a retained renderer.
+   * @param code - the fence text accumulated so far.
+   * @param lang - the language hint.
+   * @returns Newly completed lines plus the current tail, or `undefined` for the plain arm.
+   */
+  updateFrame(code: string, lang: string | undefined): StreamingHighlightFrame | undefined {
+    if (code === this.lastCode && lang === this.lastLang && this.lastFrame !== undefined) {
+      return this.lastFrame
+    }
+    this.lastCode = code
+    this.lastLang = lang
+    this.lastResult = undefined
+    const resolved = lang === undefined ? undefined : LANG_ALIASES.get(lang.toLowerCase())
+    if (resolved === undefined || !ensureGrammar(resolved)) {
+      this.reset(undefined)
+      return undefined
+    }
+    if (resolved !== this.resolved || !code.startsWith(this.prefix)) this.reset(resolved)
+    const firstNewLine = this.spans.length
+    const rest = code.slice(this.prefix.length)
+    const lastNewline = rest.lastIndexOf('\n')
+    if (lastNewline >= 0) {
+      const grownEnd = rest[lastNewline - 1] === '\r' ? lastNewline - 1 : lastNewline
+      const tokens = this.tokenize(resolved, rest.slice(0, grownEnd))
+      for (const line of tokens) this.spans.push(lineSpans(line))
+      this.state = highlighter().getLastGrammarState(tokens)
+      this.prefix = code.slice(0, this.prefix.length + lastNewline + 1)
+    }
+    this.lastFrame = {
+      generation: this.generation,
+      appended: this.spans.slice(firstNewLine),
+      tail: this.tokenize(resolved, rest.slice(lastNewline + 1)).map(lineSpans),
+    }
+    return this.lastFrame
+  }
+
+  /**
+   * Tokenize the fence's current text into per-line highlighted runs;
+   * `undefined` means the caller renders its plain fallback. Idempotent per
+   * (`code`, `lang`) input — repeated calls return the identical result array —
+   * and a retained line keeps its span-array identity across growing calls, so
+   * a React caller can reuse cached line elements. A lazy grammar not yet
+   * loaded returns `undefined` and loads in the background exactly as
+   * {@link highlightToHtml} does; the next call after it registers highlights.
+   * @param code - the fence text accumulated so far (display-trimmed, no synthetic trailing newline).
+   * @param lang - the language hint (a markdown fence info string).
+   * @returns one entry per line of `code` (each an array of runs), or `undefined` for unknown or not-yet-loaded languages.
+   */
+  update(code: string, lang: string | undefined): readonly HighlightSpan[][] | undefined {
+    if (code === this.lastCode && lang === this.lastLang && this.lastResult !== undefined) {
+      return this.lastResult
+    }
+    const frame = this.updateFrame(code, lang)
+    if (frame === undefined) return undefined
+    this.lastResult = [...this.spans, ...frame.tail]
+    return this.lastResult
+  }
+}
+
+/** One retained-renderer update from {@link StreamingHighlightSession.updateFrame}. */
+export interface StreamingHighlightFrame {
+  /** Changes whenever prior completed lines must be discarded. */
+  readonly generation: number
+  /** Completed lines added since the preceding frame in this generation. */
+  readonly appended: readonly HighlightSpan[][]
+  /** The still-growing final line or lines, replaced by the next frame. */
+  readonly tail: readonly HighlightSpan[][]
+}
+
 /**
  * Tokenize `code` into per-line highlighted runs when `lang` maps to a
  * registered grammar; `undefined` means the caller renders its plain fallback.
@@ -286,8 +461,9 @@ export interface HighlightSpan {
  * so this returns shiki's own 2D line/token structure narrowed to what a run
  * renders. Each run's color is a `--shiki-*` custom property, keeping token
  * colors on the theme package's sheets exactly as the HTML path does; the
- * css-variables theme carries no font-style bits, matching that path's
- * color-only output. The trailing newline shiki appends as a final empty line
+ * markup font-style bits the theme lets through (bold/italic/underline in
+ * markdown scopes) are dropped — the line-numbered file view renders
+ * color-only runs. The trailing newline shiki appends as a final empty line
  * is dropped so the run count matches the caller's own line array.
  * @param code - the source text.
  * @param lang - the language hint (a file-extension-derived language id).

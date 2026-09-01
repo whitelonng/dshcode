@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { TypertAnalysisError, WorkspaceAnalyzer } from './analyzer.ts'
+import { TypertAnalysisError, WorkspaceAnalyzer, WorkspaceCaches } from './analyzer.ts'
 import type { DiscoveredTypertPackage } from './analyzer.ts'
 import { FaceModelEmitter } from './emitter.ts'
 import type { ModelEmitResult } from './emitter.ts'
@@ -16,13 +16,32 @@ export interface WorkspaceEmitResult extends ModelEmitResult {
   readonly packageRoot: string
 }
 
+/** Behavior switches for one {@link WorkspaceTypertGenerator}. */
+export interface WorkspaceTypertGeneratorOptions {
+  /**
+   * Run the per-package syntactic/semantic diagnostic pass before analysis
+   * (default true). Pass false only when the same orchestration already
+   * verified the workspace with tsc; the Typert-specific analysis checks
+   * (annotation coverage, private cross-package references, unretainable
+   * merges) run regardless.
+   */
+  readonly checkDiagnostics?: boolean
+}
+
 /** Discover, analyze, and emit package reflection from independent faces. */
 export class WorkspaceTypertGenerator {
+  /** Parsed-config and program-host state shared by every analyzer this generator creates. */
+  private readonly caches = new WorkspaceCaches()
+
   /**
    * Bind generation to one workspace root.
    * @param root - directory containing face aggregate tsconfigs.
+   * @param options - behavior switches applied to every pass of this generator.
    */
-  constructor(private readonly root: string) {}
+  constructor(
+    private readonly root: string,
+    private readonly options: WorkspaceTypertGeneratorOptions = {},
+  ) {}
 
   /**
    * Find public package faces that contribute Cordis services/events or
@@ -33,6 +52,7 @@ export class WorkspaceTypertGenerator {
   discover(faces?: readonly TypertFace[]): DiscoveredTypertPackage[] {
     return new WorkspaceAnalyzer({
       root: this.root,
+      caches: this.caches,
       ...(faces === undefined ? {} : { faces }),
     }).discoverPackages()
   }
@@ -48,7 +68,9 @@ export class WorkspaceTypertGenerator {
     const workspace = new WorkspaceAnalyzer({
       root: this.root,
       packages: selected,
+      caches: this.caches,
       ...(faces === undefined ? {} : { faces }),
+      ...(this.options.checkDiagnostics === undefined ? {} : { checkDiagnostics: this.options.checkDiagnostics }),
     }).analyze()
     const artifacts: WorkspaceEmitResult[] = []
     for (const face of workspace.faces) {

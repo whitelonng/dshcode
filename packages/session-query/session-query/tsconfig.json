@@ -27,10 +27,16 @@
       "path": "../../session/session-title"
     },
     {
+      "path": "../../todo/tool-todo"
+    },
+    {
       "path": "../../session/session-persistence"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../session/session-projection"
+    },
+    {
+      "path": "../../session/session-projection-cache"
     }
   ]
 }

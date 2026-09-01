@@ -12,7 +12,7 @@ pi-ai recorded one opaque replay blob per response, projected from the provider'
 
 Two changes, one per side of the durable boundary.
 
-**Write side — one keep/drop decision.** The finish chunk's `replayState` becomes a typed `ReplayEnvelope`: an opaque `response` half plus optional opaque per-block entries aligned with the emitted block sequence. `BlockAssembler` computes its keep/drop decision once and applies it to blocks and envelope entries together, so any transformation assembly performs — today's max-token tool-call drop or a future one — prunes the matching metadata by construction. Retained blocks keep their entries, so a truncated response keeps signatures for the reasoning and text it kept. An envelope whose entries do not match the emitted block count is discarded whole (a misemitting adapter must not publish misattributed metadata). pi-ai splits its former flat state into a version-2 response half and per-block signature entries.
+**Write side — one keep/drop decision.** The finish chunk's `replayState` becomes a typed `ReplayEnvelope`: an opaque `response` half plus optional opaque per-block entries aligned with the emitted block sequence. `BlockAssembler` computes its keep/drop decision once and applies it to blocks and envelope entries together, so any transformation assembly performs — the max-token tool-call drop or a future one — prunes the matching metadata by construction. Retained blocks keep their entries, so a truncated response keeps signatures for the reasoning and text it kept. An envelope whose entries do not match the emitted block count is discarded whole (a misemitting adapter must not publish misattributed metadata). pi-ai splits its former flat state into a version-2 response half and per-block signature entries.
 
 **Read side — durable content is authoritative.** `toPiAssistant` treats replay state as fidelity metadata, not as a load-bearing input: any state the reading build cannot use — another adapter's kind, another version (including the flat version-1 form already on disk), malformed metadata, or a block shape that no longer matches the content — degrades that one message to the existing foreign provider-neutral conversion and reports the `INVALID_REPLAY_STATE` diagnostic through the plugin's `onReplayDegrade` hook (a logger warning). The request proceeds. This is what lets sessions poisoned before this change continue instead of erroring forever, and it bounds every future divergence source to a fidelity loss on one message.
 
@@ -22,7 +22,7 @@ Assembler unit tests prove pruning, misalignment discard, and pass-through for u
 
 ## Alternatives considered
 
-**Suppress the whole replay state when assembly drops a tool call.** Works for today's one transformation, but re-derives the drop condition beside `blocks()` (the two drift silently), discards valid signatures for the retained blocks, and leaves read-time divergence — legacy sessions on disk foremost — a hard error.
+**Suppress the whole replay state when assembly drops a tool call.** Works for the one shipped transformation, but re-derives the drop condition beside `blocks()` (the two drift silently), discards valid signatures for the retained blocks, and leaves read-time divergence — legacy sessions on disk foremost — a hard error.
 
 **Keep the state and relax pi-ai's block-count validation to attach what fits.** Rejected: index-aligned signatures attached to a different block list would present false native history to the provider. Degrading attaches nothing.
 

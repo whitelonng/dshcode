@@ -12,7 +12,7 @@ The process-local job registry already owns the exact job owner and the authorit
 
 ## Decision
 
-`LocalJobRegistry` owns a `maxConcurrentJobsPerOwner` configuration field. It accepts positive safe integers, defaults to `10`, and is available through the provider's Cordis schema, the typed `agent-spine-demo` bundle, and the ACP app configuration. The bundle transports the value; the process-local provider owns its meaning.
+`LocalJobRegistry` owns a `maxConcurrentJobsPerOwner` configuration field. It accepts positive safe integers, defaults to `10`, and is available through the provider's Cordis schema and the ACP app configuration. Profile compositions configure the provider row directly; the process-local provider owns the value's meaning.
 
 The [generic job runtime decision](../architecture/2026-06-20-generic-long-running-tool-runtime.md) owns the shared Task lifecycle and control API; this note owns the process-local admission policy.
 

@@ -8,11 +8,14 @@ import SessionStore, {
   SESSION_FORMAT_VERSION,
   Session,
   SessionId,
+  SessionLogOffset,
   type SessionEvent,
   type SessionHeader,
+  type SessionLogOffset as SessionLogOffsetType,
 } from '@deepseek-ai/dsh-session'
 import SessionPersistence, {
   SessionPersistenceRevision,
+  type SessionEventSuffix,
   type SessionInspection,
   type SessionLocation,
   type SessionPersistenceSnapshot,
@@ -101,6 +104,7 @@ export function messageFixture(
     version: SESSION_FORMAT_VERSION,
     id,
     createdAt: options.createdAt ?? 1_700_000_000_000,
+    isSeeded: false,
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
   }
   const session = Session.create(id, [], header)
@@ -127,7 +131,7 @@ class TestPersistence extends SessionPersistence {
   delete(_id: SessionId): Promise<void> { return Promise.resolve() }
 
   load(id: SessionId): Promise<SessionInspection> {
-    return this.readFrom(id, 0)
+    return this.readFrom(id, SessionLogOffset(0))
   }
 
   inspect(id: SessionId): Promise<SessionInspection> {
@@ -136,23 +140,38 @@ class TestPersistence extends SessionPersistence {
     const explicit = this.logical.get(id)
     if (explicit !== undefined) return Promise.resolve(explicit)
     const live = this.ctx.sessions.get(id)
-    if (live !== undefined) return Promise.resolve({ meta: live.header, events: live.events })
+    if (live !== undefined) {
+      return Promise.resolve({
+        meta: live.header,
+        inheritedEventCount: live.inheritedEventCount,
+        events: live.snapshotEvents(),
+      })
+    }
     const stored = this.durable.get(id)
     return stored === undefined
       ? Promise.reject(new Error(`test persistence: session '${id}' not found`))
       : Promise.resolve(stored)
   }
 
+  borrowSession(_id: SessionId, _signal?: AbortSignal): ReturnType<SessionPersistence['borrowSession']> {
+    return Promise.reject(new Error('not used'))
+  }
+
   async readFrom(
     id: SessionId,
-    fromSeq: number,
-  ): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+    fromSeq: SessionLogOffsetType,
+  ): Promise<SessionEventSuffix> {
     this.readFromCalls += 1
     await this.onReadFrom?.()
     const stored = this.durable.get(id)
     return stored === undefined
       ? Promise.reject(new Error(`test persistence: session '${id}' not found`))
-      : { meta: stored.meta, events: stored.events.filter(event => event.seq >= fromSeq) }
+      : {
+        meta: stored.meta,
+        inheritedEventCount: stored.inheritedEventCount,
+        fromSeq,
+        events: stored.events.filter(event => event.seq >= fromSeq),
+      }
   }
 
   list(): Promise<SessionHeader[]> {
@@ -168,7 +187,11 @@ class TestPersistence extends SessionPersistence {
   }
 
   persist(session: Session): void {
-    this.durable.set(session.id, { meta: session.header, events: session.events })
+    this.durable.set(session.id, {
+      meta: session.header,
+      inheritedEventCount: session.inheritedEventCount,
+      events: session.snapshotEvents(),
+    })
   }
 
   setDurable(inspection: SessionInspection): void {

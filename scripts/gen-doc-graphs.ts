@@ -80,6 +80,7 @@ const GROUP_ORDER = [
   'tasks',
   'workflow',
   'web',
+  'webhook',
   'spill',
   'todo',
   'plan',
@@ -103,7 +104,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Durable binary attachment storage',
     mode: 'seam',
     implementations: ['attachment-local'],
-    consumers: ['host-runtime', 'llm-pi-ai'],
+    consumers: ['api-session-controller', 'tool-fs', 'llm-pi-ai', 'llm-deepseek'],
     note: 'The host commits accepted images before session events; provider adapters resolve authorized durable references into provider-native content.',
   },
   {
@@ -114,6 +115,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     implementations: ['llm-deepseek', 'llm-pi-ai', 'llm-replay'],
     consumers: ['agent-loop', 'compaction-basic'],
     note: 'Adapters register provider implementations; the loop and compaction call the provider-neutral stream service.',
+  },
+  {
+    key: 'deepseekLlmApiExtensions',
+    pkg: 'deepseek-llm-api-extensions',
+    title: 'Official DeepSeek request extensions',
+    mode: 'seam',
+    implementations: ['session-log-deepseek', 'plugin-package-inventory-deepseek'],
+    consumers: ['llm-deepseek'],
+    note: 'Plugins prepare independent top-level fields; the official adapter merges them and commits their delivery state after HTTP acceptance.',
   },
   {
     key: 'tokenMeter',
@@ -137,7 +147,57 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'In-memory session store',
     mode: 'core',
     consumers: ['agent-loop', 'agent', 'session-persistence', 'session-query', 'session-query-sqlite', 'subagent-inprocess', 'invariants'],
+    consumers: ['agent-loop', 'agent', 'session-persistence', 'session-query', 'session-query-sqlite', 'subagent-in-process-driver', 'invariants', 'message-feedback'],
     note: 'Owns append-only Session instances and emits the durable session event feed.',
+  },
+  {
+    key: 'sessionController',
+    pkg: 'api-session-controller',
+    title: 'Host Session Remote controller',
+    mode: 'core',
+    note: 'Owns Session commands, cold reads, durable-event following, live control state, model catalogs, workspace opening, and Agent activation policy.',
+  },
+  {
+    key: 'sessionFileReferences',
+    pkg: 'api-session-controller',
+    title: 'Session-addressed file-reference Remote adapter',
+    mode: 'core',
+    note: 'Delegates file-reference discovery through the Session Controller\'s established Agent lookup policy.',
+  },
+  {
+    key: 'sessionSkillCatalog',
+    pkg: 'api-session-controller',
+    title: 'Session-addressed skill Remote adapter',
+    mode: 'core',
+    note: 'Lists the Session composition\'s user-invocable skills without activating a cold Agent.',
+  },
+  {
+    key: 'credentialsController',
+    pkg: 'api-settings-controller',
+    title: 'Host credential-surface Remote controller',
+    mode: 'core',
+    note: 'Projects the credential-reference seam onto the generated Remote namespace: batch fan-out, view projection, and refusal mapping live here, not on the seam Definition.',
+  },
+  {
+    key: 'settingsController',
+    pkg: 'api-settings-controller',
+    title: 'Host settings-surface Remote controller',
+    mode: 'core',
+    note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
+  },
+  {
+    key: 'workspaceController',
+    pkg: 'api-workspace-controller',
+    title: 'Host Workspace Remote controller',
+    mode: 'core',
+    note: 'Owns Workspace commands and reconnect-safe Workspace state delivery through the generated Remote namespace.',
+  },
+  {
+    key: 'directoryPickerController',
+    pkg: 'api-workspace-controller',
+    title: 'Host directory-picking Remote controller',
+    mode: 'core',
+    note: 'Carries the picking seam onto the wire: capability gating, cancellation, and the seam-coded failures a browser directory flow discriminates on.',
   },
   {
     key: 'invariants',
@@ -170,6 +230,9 @@ const SERVICE_ROLES: ServiceRole[] = [
     implementations: ['session-persistence-jsonl', 'session-persistence-sqlite'],
     consumers: ['agent-loop', 'tool-bash', 'hooks-claude-code', 'hooks-codex', 'session-query', 'session-query-sqlite'],
     note: 'Backends persist the same SessionEvent vocabulary; apps choose a backend at composition time.',
+    implementations: ['session-persistence-jsonl'],
+    consumers: ['agent-loop', 'tool-bash', 'hooks-claude-code', 'hooks-codex', 'session-query', 'session-query-sqlite', 'message-feedback'],
+    note: 'The JSONL backend persists the SessionEvent vocabulary as one artifact per Session.',
   },
   {
     key: 'settings',
@@ -177,8 +240,16 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'User-settings seam',
     mode: 'seam',
     implementations: ['settings-file'],
-    consumers: ['llm-deepseek', 'llm-pi-ai', 'apiproxy'],
-    note: 'Plugins register namespace schemas and resolve layered values; providers store the raw document. The LLM adapters register their entry config as the composition base under the user section; the web gateway serves redacted layered descriptors and writes the user layer.',
+    consumers: ['api-settings-controller', 'llm-deepseek', 'llm-pi-ai'],
+    note: 'Plugins register namespace schemas and resolve layered values; providers store the raw document. The LLM adapters register their entry config as the composition base under the user section; the settings controller serves redacted layered descriptors and writes the user layer.',
+  },
+  {
+    key: 'subagentModelSelection',
+    pkg: 'tool-subagent',
+    title: 'Subagent model-selection preference',
+    mode: 'core',
+    consumers: ['tool-subagent'],
+    note: 'Owns the default-off settings namespace that Agent-scoped delegation tools sample when composing a new top-level Session.',
   },
   {
     key: 'credentials',
@@ -186,8 +257,8 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Credential seam',
     mode: 'seam',
     implementations: ['credentials-local'],
-    consumers: ['llm-deepseek', 'llm-pi-ai', 'apiproxy'],
-    note: 'Configuration carries references to secrets; providers own the values. Consumers resolve per operation, so a rotated credential reaches the very next request; the web gateway exposes value-free views and write-only storage.',
+    consumers: ['api-settings-controller', 'llm-deepseek', 'llm-pi-ai'],
+    note: 'Configuration carries references to secrets; providers own the values. Consumers resolve per operation, so a rotated credential reaches the very next request; the settings controller exposes value-free views and write-only storage.',
   },
   {
     key: 'authorization',
@@ -237,7 +308,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'workspace',
     title: 'Workspace entity registry',
     mode: 'core',
-    consumers: ['apiproxy'],
+    consumers: ['api-workspace-controller', 'api-session-controller'],
     note: 'Owns WorkspaceId-branded records over the domain facility; stable sessionIds accounts drive Host RPC and GUI projections.',
   },
   {
@@ -255,7 +326,8 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'File reference discovery',
     mode: 'seam',
     implementations: ['file-reference-local'],
-    note: 'The interface returns path-only completion candidates within the addressed Agent cwd through its unary Remote contract; providers own namespace access and ranking without reading file contents.',
+    consumers: ['api-session-controller'],
+    note: 'The interface returns path-only completion candidates within an Agent cwd; providers own namespace access and ranking without reading file contents.',
   },
   {
     key: 'sessionReferenceResolver',
@@ -286,7 +358,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Tool registry and guarded execution pipeline',
     mode: 'core',
     consumers: ['agent-loop', 'tool-ask-user', 'tool-bash', 'tool-cordis', 'tool-fs', 'tool-terminal', 'tool-skill', 'tool-subagent', 'tool-todo', 'tool-web'],
-    note: 'Registers capabilities, owns Code Mode transport, and routes calls through pre-policy, monotonic guards, around dispatch, post-policy, and final-result observation.',
+    note: 'Registers capabilities, owns PTC mode transport, and routes calls through pre-policy, monotonic guards, around dispatch, post-policy, and final-result observation.',
   },
   {
     key: 'userQuestions',
@@ -322,15 +394,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'session-projection',
     title: 'Session projection units',
     mode: 'core',
-    consumers: ['tool-todo', 'session-title', 'host-apiproxy'],
-    note: 'Domains register state-driven fold units; the eager drive keeps per-session watermark states and api-proxy serves baselines and pushes changed values.',
+    consumers: ['api-session-controller', 'tool-todo', 'session-title'],
+    note: 'Domains register state-driven fold units; the eager drive keeps per-session watermark states and the Session controller serves baselines and pushes changed values.',
   },
   {
     key: 'sessionProjectionCache',
     pkg: 'session-projection-cache',
     title: 'Persisted projection cache',
     mode: 'core',
-    consumers: ['host-apiproxy'],
+    consumers: ['api-session-controller', 'session-query', 'session-reference', 'subagent'],
     note: 'Durably checkpoints projection unit states per session (throttled + turn/end/detach mandatory points) and serves the cold-read ladder: cache row + persistence tail replay, so listings never load full logs.',
   },
   {
@@ -347,7 +419,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'agent',
     title: 'Agent service',
     mode: 'core',
-    consumers: ['agent-loop', 'acp', 'subagent-inprocess'],
+    consumers: ['agent-loop', 'acp', 'subagent-in-process-driver'],
     note: 'Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation.',
   },
   {
@@ -355,7 +427,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'agent-default-model',
     title: 'Default Agent model selection',
     mode: 'core',
-    consumers: ['headless', 'host-apiproxy'],
+    consumers: ['api-session-controller', 'headless'],
     note: 'Layers the default ModelSelection through settings so direct and Host-backed Agent entry points share one state owner.',
   },
   {
@@ -363,7 +435,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'agent-loop',
     title: 'Concrete loop driver',
     mode: 'bundle',
-    consumers: ['agent-spine-demo'],
+    consumers: ['base', 'sdk-minimal'],
     note: 'The one concrete loop plugin; extension packages depend on dsh-agent events and services, not on this package.',
   },
   {
@@ -436,11 +508,11 @@ const SERVICE_ROLES: ServiceRole[] = [
   },
   {
     key: 'approval',
-    pkg: 'approval',
+    pkg: 'user-approval',
     title: 'Approval seam',
     mode: 'seam',
-    implementations: ['acp'],
-    consumers: ['tools', 'tool-bash'],
+    implementations: [],
+    consumers: ['tools', 'tool-bash', 'acp'],
     note: 'One-shot permission decisions dispatched over the `approval/request` waterfall; answerers are listeners (the ACP bridge for its own agents), absence fails closed to `unavailable`.',
   },
   {
@@ -456,9 +528,9 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'code-runtime',
     title: 'Code-execution seam',
     mode: 'seam',
-    implementations: ['code-runtime-worker'],
+    implementations: ['code-runtime-worker-thread', 'experimental-code-runtime-python'],
     consumers: ['tools'],
-    note: 'Runs one model-written program against host-provided async bindings; backends differ by substrate and language (the tool registry consumes it for Code Mode).',
+    note: 'Runs one model-written program against host-provided async bindings; backends differ by substrate and language (the tool registry consumes it for PTC mode).',
   },
   {
     key: 'fs',
@@ -490,11 +562,18 @@ const SERVICE_ROLES: ServiceRole[] = [
   },
   {
     key: 'agentTeams',
-    pkg: 'agent-team',
+    pkg: 'experimental-agent-team',
     title: 'Agent Teams coordination domain',
     mode: 'core',
-    consumers: ['tool-agent-team'],
-    note: 'Owns the implicit-root roster, durable peer mailbox, shared task DAG, and continuable-child lifecycle; tool-agent-team contributes the scoped model policy and controls.',
+    consumers: ['experimental-tool-agent-team', 'experimental-client-ui-agent-team'],
+    note: 'Owns the implicit-root roster, durable peer mailbox, shared task DAG, continuable-child lifecycle, and generated Team Remote methods; tool-agent-team contributes model controls and client-ui-agent-team mounts the browser contribution.',
+  },
+  {
+    key: 'inspector',
+    pkg: 'inspector',
+    title: 'Cross-realm runtime inspection',
+    mode: 'core',
+    note: 'Owns the Worker-hosted CDP target and the transport-independent Host and Client observation and Cordis-tree query API.',
   },
   {
     key: 'jobs',
@@ -525,11 +604,11 @@ const SERVICE_ROLES: ServiceRole[] = [
   },
   {
     key: 'directoryPicker',
-    pkg: 'directory-picker',
+    pkg: 'host-directory-picker',
     title: 'Workspace-directory picking seam',
     mode: 'seam',
-    implementations: ['directory-picker-native', 'directory-picker-browse'],
-    consumers: ['apiproxy'],
+    implementations: ['host-directory-picker-native', 'host-directory-picker-browse'],
+    consumers: ['api-workspace-controller'],
     note: 'Discriminated interaction capability: the native backend opens one OS chooser on the host display, the browse backend serves listing/creation primitives for the in-app browser; dual-face backends fill ui-workspace directory-flow slots from their browser halves (no wire advertisement).',
   },
   {
@@ -543,18 +622,18 @@ const SERVICE_ROLES: ServiceRole[] = [
   },
   {
     key: 'webServer',
-    pkg: 'webserver',
+    pkg: 'host-webserver',
     title: 'HTTP route registration',
     mode: 'core',
-    consumers: ['connection', 'modules', 'hmr'],
+    consumers: ['client-connection', 'client-modules', 'client-hmr'],
     note: 'Plain node:http carrier: named-route registry, index transform taps, and the static dist fallback; web-transport plugins register their own routes.',
   },
   {
     key: 'clientModules',
-    pkg: 'modules',
+    pkg: 'client-modules',
     title: 'Client plugin graph host',
     mode: 'core',
-    consumers: ['hmr'],
+    consumers: ['client-hmr'],
     note: 'Composes the __DSH_BOOT__ entry graph from an incremental dsh.client scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers.',
   },
   {
@@ -567,21 +646,21 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'One engine per context, as in bash, with no named-provider registry; the general workflow and fixed Ralph consumers start runs whose agent() calls fan out through ctx.subagents.',
   },
   {
+    key: 'webhookRuntime',
+    pkg: 'webhook',
+    title: 'Webhook rule runtime',
+    mode: 'core',
+    consumers: ['webhook-github'],
+    note: 'Provider adapters dispatch authenticated deliveries; trusted plugins register independent process-local rules, and the runtime turns non-null results into ordinary Workspace-backed Sessions without delivery or completion state.',
+  },
+  {
     key: 'lsp',
     pkg: 'lsp',
     title: 'Language-server navigation seam',
     mode: 'seam',
-    implementations: ['lsp-local'],
+    implementations: ['lsp-stdio'],
     consumers: ['tool-lsp'],
     note: 'Provider registration and selection plus normalized query execution over exactly four operations; the seam offers no protocol escape hatch, so a backend translates into the normalized request and result.',
-  },
-  {
-    key: 'apiProxy',
-    pkg: 'apiproxy',
-    title: 'Host API dispatch',
-    mode: 'core',
-    consumers: ['connection'],
-    note: 'The transport-agnostic host gateway face: it dispatches browser API calls, and each open host stream subscribes to the events it forwards rather than being pushed to through a broadcast verb.',
   },
   {
     key: 'dynamicCordisRunner',
@@ -740,47 +819,15 @@ const APP_EXAMPLES = [
     title: 'DSH Base Composition',
     label: 'packages/bundle/base/cordis.patch.yml',
     config: 'packages/bundle/base/cordis.patch.yml',
-    summary: 'The dsh-base bundle patch every profile applies first; mode bundles (dsh-web-app, dsh-headless) and the user\'s profile layer patch over it.',
-  },
-  {
-    id: 'headless',
-    rel: 'examples/headless-agent/composition.md',
-    title: 'Headless Agent Snapshot Composition',
-    label: 'examples/headless-agent',
-    config: 'examples/headless-agent/cordis.yml',
-    summary: 'The headless snapshot composition combines the real DeepSeek adapter and coding capabilities with one explicitly configured persisted top-level agent; its JSONL driver is test-only.',
-  },
-  {
-    id: 'acp',
-    rel: 'examples/acp-agent/composition.md',
-    title: 'ACP Automation App Composition',
-    label: 'examples/acp-agent',
-    config: 'examples/acp-agent/cordis.yml',
-    summary: 'The ACP demo exposes fresh baseline-prompt agent sessions to programmatic clients over JSON-RPC stdio, with no stdout logger, human UI, or pre-created agent.',
+    summary: 'The dsh-base bundle patch shared by the web, headless, sdk, and acp profiles; their mode bundles and user layers patch over it, while sdk-minimal owns a separate standalone tree.',
   },
 ]
 
 type AppExample = typeof APP_EXAMPLES[number]
 
-function renderAppExpansion(lines: string[], appNode: string, pluginName: string): void {
-  const agentCore = nodeId('bundle', 'agent_core')
-  const jsonl = nodeId('bundle', 'jsonl')
-  lines.push(`  ${appNode} --> ${agentCore}["@deepseek-ai/dsh-agent-spine-demo"]`)
-  lines.push(`  ${appNode} --> ${jsonl}["@deepseek-ai/dsh-session-persistence-jsonl"]`)
-  if (pluginName === '@deepseek-ai/dsh-acp-demo') {
-    lines.push(`  ${appNode} --> ${nodeId('entrypoint', 'acp')}["@deepseek-ai/dsh-acp<br/>automation-only JSON-RPC stdio<br/>fresh sessions created by client"]`)
-  }
-  lines.push(
-    `  ${agentCore} --> ${nodeId('spine', 'llm')}["ctx.llm"]`,
-    `  ${agentCore} --> ${nodeId('spine', 'sessions')}["ctx.sessions"]`,
-    `  ${agentCore} --> ${nodeId('spine', 'tools')}["ctx.tools + tool-bash"]`,
-    `  ${agentCore} --> ${nodeId('spine', 'loop')}["ctx.agents + ctx.agentLoop"]`,
-  )
-}
-
 function renderAppComposition(example: AppExample): string {
   const plugins = parseExampleCordis(example.config)
-  const maintenance = 'hybrid: the leaf plugin list is parsed from its `cordis.yml`; app package expansion is curated from package source'
+  const maintenance = 'hybrid: the patch row list is parsed from its `cordis.yml`; app package expansion is curated from package source'
   const lines = generatedHeader(example.title)
   lines.push(
     example.summary,
@@ -793,9 +840,6 @@ function renderAppComposition(example: AppExample): string {
     const pluginNode = nodeId(`plugin_${example.id}`, plugin.id)
     lines.push(`  ${pluginNode}["${escLabel(plugin.id)}<br/>${escLabel(plugin.name)}"]`)
     lines.push(`  cfg --> ${pluginNode}`)
-    if (plugin.name === '@deepseek-ai/dsh-acp-demo') {
-      renderAppExpansion(lines, pluginNode, plugin.name)
-    }
   }
   lines.push(
     '```',
@@ -1336,7 +1380,7 @@ function renderLifecycle(): string {
     '',
     '`dsh-compaction-basic` uses `agent/pre-step` for pressure before request derivation and `agent/request-error` only for canonical context overflow. Once either trigger qualifies, optional tool-result pruning runs before summary selection. Recovery works between the closed failed step and failed turn close, and opens a fresh retry turn only when pruning or summarization advances the surface replacement generation; otherwise the original request error remains authoritative.',
     '',
-    'The returned `agent/pre-step` decision is authoritative; listeners wrapping `next()` preserve downstream messages unless replacement is intentional. Steering and injected context pass through the same waterfall after a later claim operation takes their next-step batch.',
+    'The returned `agent/pre-step` decision is authoritative; listeners wrapping `next()` preserve downstream messages and `startsRequestSeries` unless replacement is intentional. Steering and injected context pass through the same waterfall after a later claim operation takes their next-step batch.',
     '',
     'SDK users that need replayable transcript data should consume `session/event`; `agent/*` is the live coordination API for queue/status, prompt interception, request construction, steering, continuation, and errors.',
     '',
@@ -1402,7 +1446,7 @@ function renderToolPipeline(): string {
     '  allResults --> context',
     '```',
     '',
-    'Filesystem read-before-edit checks stay below `tool-fs` on `fs/*` events. Generic pre/post waterfalls host hooks and approval policy; `ctx.approval` resolves asks before monotonic guards, and owner policy that must not be reordered remains a registered guard. Around-dispatch concerns such as timeouts wrap `tools/execute`. The registry losslessly snapshots the candidate result and normalizes a snapshot failure before the visible definition\'s snapshotted `finalizeContent` callback enforces its synchronous content-only invariant. `tools/result` then observes the immutable, lossless-JSON outcome. This lets hooks span tool families without coupling the tools to one policy service. Code Mode sends both the reserved `run_code` transport and its serialized sub-calls through the pipeline; sub-calls carry the parent token, log `tool/code-dispatch`, return denials as binding rejections, and omit `additionalContexts` to preserve call/result adjacency.',
+    'Filesystem read-before-edit checks stay below `tool-fs` on `fs/*` events. Generic pre/post waterfalls host hooks and approval policy; `ctx.approval` resolves asks before monotonic guards, and owner policy that must not be reordered remains a registered guard. Around-dispatch concerns such as timeouts wrap `tools/execute`. The registry losslessly snapshots the candidate result and normalizes a snapshot failure before the visible definition\'s snapshotted `finalizeContent` callback enforces its synchronous content-only invariant. `tools/result` then observes the immutable, lossless-JSON outcome. This lets hooks span tool families without coupling the tools to one policy service. PTC mode sends both the reserved `run_code` transport and its serialized sub-calls through the pipeline; sub-calls carry the parent token, log `tool/code-dispatch`, return denials as binding rejections, and omit `additionalContexts` to preserve call/result adjacency.',
     '',
     ...maintenanceFooter(maintenance),
   ].join('\n')
@@ -1426,9 +1470,6 @@ function renderIndex(docs: GraphDoc[]): string {
   const labels: Record<string, string> = {
     'docs/capability-seams.md': 'capability seams and core services',
     'apps/cli/composition.md': 'dsh shared base composition',
-    'examples/headless-agent/composition.md': 'headless-agent app composition',
-    'examples/cordis-agent/composition.md': 'cordis-agent app composition',
-    'examples/acp-agent/composition.md': 'acp-agent app composition',
     'docs/event-producer-consumer.md': 'event producer/consumer matrix',
     'docs/agent-lifecycle.md': 'agent turn and step lifecycle',
     'docs/tool-execution-pipeline.md': 'tool execution pipeline',
@@ -1436,9 +1477,6 @@ function renderIndex(docs: GraphDoc[]): string {
   const modes: Record<string, string> = {
     'docs/capability-seams.md': 'hybrid generated',
     'apps/cli/composition.md': 'hybrid generated',
-    'examples/headless-agent/composition.md': 'hybrid generated',
-    'examples/cordis-agent/composition.md': 'hybrid generated',
-    'examples/acp-agent/composition.md': 'hybrid generated',
     'docs/event-producer-consumer.md': 'hybrid generated',
     'docs/agent-lifecycle.md': 'curated',
     'docs/tool-execution-pipeline.md': 'curated',

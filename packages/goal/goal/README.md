@@ -1,45 +1,144 @@
+---
+description: "The persisted same-session goal service for users and maintainers choosing, configuring, or debugging one durable completion objective per session."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-goal
 
 English | [中文](README.zh.md)
 
-Event-sourced same-session goal state. The service retains one current completion objective in an agent's existing session while keeping permission to continue as process-local activation. The [goal-domain Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-persisted-same-session-goal-domain.md) owns the design rationale; the [goal type catalog](../../../docs/subsystems/goal.md) records the literal data shapes.
+## Summary
 
-## Config
+`dsh-goal` keeps one durable completion objective per agent session: the goal's text, phase, round count, and revision history live in the session log, so they survive session resume, fork, and process restarts. You can create, edit, pause, resume, complete, block, and clear a goal, and every mutation is compare-and-set, so a stale view cannot clobber newer state. A goal carries a round cap (default 256) that bounds automatic continuation, and a blocked goal keeps a stable policy code plus a human explanation. It is state, not a scheduler: the service decides nothing about when work continues, and continuation permission is process-local and never persisted. Choose it when one long-running objective should span many turns; skip it for routine single-turn work.
+
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Mount `dsh-goal` whenever a session should remember one long-running completion objective across many turns and restarts. The package is a service: the model tools, the `/goal` command, and the continuation driver are separate packages that consume the same goal state, so mounting only this package stores and serves the goal without starting any work.
+
+### When to use it
+
+A goal suits one long-running completion objective that should continue across autonomous goal rounds — for example shipping a migration or fixing every failing documentation gate. Routine single-turn work should not create a goal. The service keeps at most one current goal per session: an unfinished goal must be edited, paused, resumed, blocked, or cleared before another takes its place, while a completed goal can be replaced directly.
+
+### Set up the service
+
+Load the package with a composition entry; the only deployment choice is the default round cap applied to creates that do not name their own.
 
 ```yaml
-- id: goal
-  name: '@deepseek-ai/dsh-goal'
+- name: '@deepseek-ai/dsh-goal'
   config:
     defaultMaxGoalRounds: 256
 ```
 
-`defaultMaxGoalRounds` must be a positive safe integer. `create()` materializes this deployment default internally before committing a goal; a request-level value overrides it.
+| Field | Default | Meaning |
+|---|---|---|
+| `defaultMaxGoalRounds` | `256` | Round cap applied when a create request omits its own |
 
-## Service contract
+`defaultMaxGoalRounds` must be a positive safe integer; a create request that names its own cap overrides it. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-goal) is the exhaustive source for every accepted field.
 
-`ctx.goals` accepts only the exact live `Agent` instance registered under its id. `get()` returns a detached `GoalView`; mutations use a `GoalRef { id, revision }` compare-and-set fence and reject stale refs. The service exposes create, edit, pause, resume, complete, block, and clear verbs through the generated region of [goal.md](../../../docs/subsystems/goal.md#cordis-surface). Creation default resolution is internal. `disarm()` is the lifecycle-only exception: it removes process-local continuation authority without writing a revision or emitting a mutation.
+### Session projection
 
-At most one goal is current. Creation produces an active revision-one goal and arms it. A non-complete goal must be edited, transitioned, or cleared; a completed goal may be replaced by a globally fresh id. Edits retain phase, blocker reason, and activation. Pause, completion, blocking, and clear disarm activation. A block records a policy-owned lower-kebab-case code plus a normalized free-form explanation; provider limits, configured budgets, execution errors, and requests for human input all use this one durable phase rather than multiplying lifecycle states. Resume accepts a stopped phase or a disarmed active goal only while the configured round cap has remaining capacity; it clears any former blocker reason. An active armed goal rejects the redundant operation.
+`GoalService` requires `ctx.sessionProjections` ([`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.md)) and registers the `goal` projection unit at startup; a composition that omits the projection registry cannot activate `ctx.goals`. The unit's version 6 host state retains the latest valid current goal, every previously used goal id, and the first strict replay failure. Its client view exposes the current goal or `null` before the first create and after a clear tombstone. The key merges into both `SessionProjectionStateMap` and `SessionProjectionMap`; carriers serve the client value on the history tail page and the `session/projection` push frame.
 
-Every mutation appends a durable `goal/change` event carrying the complete post-mutation snapshot; clear uses a revisioned tombstone. Goal state therefore does not depend on inbox placement, claim, admission, or discard. The session log is the only durable authority.
+### Drive the lifecycle
 
-Strict replay derives lifecycle mutations only from `goal/change` and rejects malformed shapes, discontinuous revisions, illegal lifecycle transitions, non-monotonic per-goal timestamps, and non-sequential admitted goal rounds. Positive rounds advance only on admitted goal-sourced `user/message` events. Mutation timestamps clamp against the preceding goal update when wall time moves backward. Incremental replay retains its cursor at the first corrupt event, and `goal/changed` fires after the durable event commits with listener failures contained.
+A goal moves through four durable phases — `active`, `paused`, `blocked`, `complete` — plus a process-local flag that says whether automatic continuation is armed. The verbs:
 
-Activation is never persisted. A fresh cache and every `agent/session-start` edge disarm it even when replay finds an active durable phase. A continuation driver also calls `disarm()` before unload or after durability uncertainty. Session resume, fork, and driver replacement therefore retain the objective, phase, revisions, and admitted-round count without initiating work; a later explicit resume mutation must arm continuation.
+| Operation | What it does |
+|---|---|
+| `create` | Starts an active goal with an objective and round cap |
+| `edit` | Changes the objective and/or round cap without changing the phase |
+| `pause` | Stops automatic continuation and keeps the state |
+| `resume` | Restarts continuation; also rearms an active goal after session resume or fork |
+| `complete` | Marks the goal achieved and stops continuation |
+| `block` | Records a stable blocker code and explanation |
+| `clear` | Removes the current goal; its history stays in the session log |
 
-The separately published `./invariant` companion maintains an independent fold of each attached session. It rejects malformed goal changes, discontinuous revisions, illegal lifecycle transitions, timestamp regressions, and non-sequential admitted rounds before the candidate event enters the durable log.
+Pause, completion, blocking, and clear all disarm continuation. Blocking is the one phase that keeps a policy-owned lower-kebab-case code and a free-form explanation, so provider limits, exhausted budgets, execution errors, and requests for human input share a single durable phase instead of multiplying lifecycle states. Resume accepts a stopped goal, or an active but disarmed one, only while the round cap has remaining capacity, and it clears any former blocker reason.
 
-## Extension points
+### What survives and what does not
 
-Policy plugins call the service verbs and react to the scoped `goal/changed` event. A continuation consumer admits rounds as `user/message` events with `GoalMessageSource`; ordinary human turns never increment `roundsStarted`. Consumers use the `Agent` interface and events rather than importing `dsh-agent-loop`.
+Every accepted change is recorded durably in the session log — the only store of goal state — so goal state never depends on transient message delivery. After session resume or fork, the goal, its phase, its revisions, and its admitted-round count are all still there. Automatic continuation is the exception: an active goal is disarmed after any session-start edge, so the agent does not continue on its own until someone explicitly resumes it.
 
+### Observing a goal
+
+Consumers read the current goal with `ctx.goals.get(agent)` and receive a detached view: objective, phase, rounds started versus the cap, blocker reason when blocked, and whether continuation is armed. Mutations must carry the exact `{ id, revision }` from that view, so a consumer holding older state receives a clear stale-revision error instead of silently overwriting newer state:
+
+```text
+const view = ctx.goals.get(agent)      // undefined when no goal is current
+view.phase                             // 'active' | 'paused' | 'blocked' | 'complete'
+view.roundsStarted, view.maxGoalRounds // continuation progress
+view.activation                        // 'armed' | 'disarmed' — not persisted
+```
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the service realizes the behavior above; the observable contract is covered in [Use this package](#use-this-package).
+
+### Design
+
+- **Event-sourced state.** Every mutation appends a durable `goal/change` event (version 1) carrying the complete post-mutation snapshot; `clear` writes a revisioned tombstone. The session log is the only durable authority.
+- **Compare-and-set mutations.** `ctx.goals` accepts only the exact live `Agent` registered under its id. `get()` returns a detached `GoalView`; mutations take a `GoalRef { id, revision }` and reject stale refs. Creation resolves the deployment default internally before committing.
+- **Activation is process-local.** `armed` and `disarmed` live in a per-session cache and are never persisted. A fresh cache and every `agent/session-start` edge disarm continuation even when replay finds an active durable phase; `disarm()` removes authority without writing a revision or emitting a mutation.
+- **Strict replay.** The fold derives lifecycle mutations only from `goal/change` and rejects malformed shapes, discontinuous revisions, illegal phase transitions, non-monotonic per-goal timestamps, and non-sequential admitted rounds. Positive rounds advance only on admitted goal-sourced `user/message` events, and mutation timestamps clamp against the preceding update when wall time moves backward.
+- **Projection unit.** The package requires the projection registry and registers a strict `goal` unit. Its host state retains replay validation data and the first failure, while its client view exposes the latest valid whole goal or `null`; `GoalService` rejects access after a retained replay failure.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: `GoalService`, config schema, mutations, activation cache, projection unit |
+| [`src/domain.ts`](src/domain.ts) | Durable change payloads, `goal/changed` event, goal message-source attribution |
+| [`src/types.ts`](src/types.ts) | Pure client-safe types: `GoalView`, `GoalSnapshot`, projection-key declaration |
+| [`src/fold.ts`](src/fold.ts) | Strict replay fold and decoder for durable goal changes |
+| [`src/runtime.ts`](src/runtime.ts) | `GoalId` brand, `GoalError` codes, change-version constant |
+| [`src/invariant.ts`](src/invariant.ts) | Invariant companion: independent incremental fold over every attached session |
+
+### Events and attribution
+
+`goal/changed` fires after the durable event commits, with listener failures contained; the payload carries the operation, the exact ref, and the fresh view (absent for a clear tombstone). Admitted continuation rounds are attributed through `GoalMessageSource { goalId, revision, round }` on the `user/message` event, which the strict fold validates as the next admitted round of the current goal.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+The package-level contract is enough for most consumers; read these when you need the surrounding domain and the design rationale.
+
+- [Goal subsystem](../../../docs/subsystems/goal.md) — the goal types, durable change payloads, and generated service API.
+- [Goal group map](../README.md) — the goal packages and how they compose.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-goal) — every accepted config field and its source declaration.
+- [Goal domain Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-persisted-same-session-goal-domain.md) — the domain design, alternatives, and decisions.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-### Goal-state mutation
+### Goal-state mutations
 
 #### What the model sees
 
-Goal mutations do not inject model context. Tools such as `get_goal` return the current state, and a continuation consumer may render the objective and round state when it schedules model work. A future always-visible goal context belongs in a separate context plugin rather than the persistence path.
+Goal mutations do not inject model context. Tools such as `get_goal` return the current state, and a continuation consumer may render the objective and round state when it schedules model work.
 
 #### Token effect
 
@@ -51,8 +150,23 @@ There is no KV-cache effect until another component exposes goal state in model-
 
 ## Known Limitations and Deferred Work
 
-- **State, not scheduling** — this package does not decide when an armed goal continues, retry abnormal failures, or cancel an active turn; those policies belong to agent-seam consumers.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the goal service is a poor fit or needs special care. They are current package constraints, not a task backlog.
+
+- **State, not scheduling** — this package does not decide when an armed goal continues, retry abnormal failures, or cancel an active turn; those policies belong to consumer packages such as `dsh-goal-round-driver`.
 - **Round-count budget only** — `maxGoalRounds` does not meter tokens, currency, wall time, or provider quotas.
 - **No independent evaluator** — the caller that records completion or blocking is authoritative; evaluator-backed certification is deferred to a separate policy layer.
 - **One current goal** — parallel objectives and a separate goal database are intentionally absent; history remains available in the session log after replacement or clear.
 - **Trusted in-process producers** — a plugin with direct `Session` access can append counterfeit `goal/change` data. Strict replay detects malformed or inconsistent records and leaves goal access failed at that record until the log is repaired; this is integrity detection, not plugin isolation.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers; it is explicitly non-authoritative. Open, undecided directions: an always-visible goal context plugin for deployments that want the objective in every model request, and evaluator-backed certification of completion and blocking claims.
+
+</details>

@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod'
-import { canonicalHeader } from '@deepseek-ai/dsh-session'
+import { canonicalHeader, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { estimateSystemTokens, estimateToolsTokens } from './estimate.ts'
 import { foldSurfaceProjection } from './surface-projection.ts'
@@ -21,6 +21,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
 
 /** Non-negative integer token count (the shared figure shape). */
 const tokenCount = z.number().int().nonnegative()
+const sessionSeq = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).transform(SessionSeq)
 
 /** The context-breakdown state schema and source of its inferred type. */
 const contextBreakdownStateSchema = z.object({
@@ -28,8 +29,8 @@ const contextBreakdownStateSchema = z.object({
   toolsTokens: tokenCount,
   messageTokens: tokenCount,
   claim: z.object({
-    start: tokenCount,
-    end: tokenCount,
+    start: sessionSeq,
+    end: sessionSeq,
     tokens: tokenCount,
   }).optional(),
 }).strict()
@@ -46,9 +47,11 @@ const breakdownSchema = z.object({
  *
  * Envelope figures are last-wins per `request/header`; the message figure
  * rides {@link foldSurfaceProjection} — the same O(1) fold the occupancy
- * projection uses — so fully metered logs equal `measure().surfaceTokens` at
- * every event boundary and compaction shrinks the figure by its logged shadow
- * price. A replacement without a claim preserves the previous total. The
+ * projection uses — so fully metered logs equal the sum of
+ * `measure().nodes[].heuristicTokens` at every event boundary and compaction
+ * shrinks the figure by its logged shadow price; the route-priced
+ * `measure().surfaceTokens` deliberately diverges by the routed model's image
+ * repricing. A replacement without a claim preserves the previous total. The
  * state is a fixed handful of numbers, so the persisted checkpoint stays
  * O(1) over the session's life.
  */

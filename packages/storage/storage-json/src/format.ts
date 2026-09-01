@@ -1,7 +1,11 @@
 /**
  * On-disk JSON unit format: the file is always the current net state, kept
  * human-readable (pretty-printed, stable key order from insertion) — that
- * legibility is this backend's reason to exist.
+ * legibility is this backend's reason to exist. `single`-layout units are
+ * one document with a unit header; `per-record`-layout units are a directory
+ * with one version-stamped document per record (`<table>/<key>.json`) plus a
+ * `global.json` for the global slot, so a write rewrites one record instead
+ * of the whole unit.
  * @module @deepseek-ai/dsh-storage-json/src/format
  */
 
@@ -81,4 +85,39 @@ export function parse(text: string, descriptor: KvUnitDescriptor): UnitState {
     state.tables.set(table, new Map(Object.entries(records as Record<string, unknown>)))
   }
   return state
+}
+
+/**
+ * Serialize one per-record document: the unit's version stamp plus the
+ * record value, pretty-printed like the whole-unit document.
+ * @param version - Unit format version, stamped into the header.
+ * @param value - The record value (or the global singleton value).
+ * @returns pretty-printed JSON document with a trailing newline.
+ */
+export function serializeRecord(version: number, value: unknown): string {
+  return `${JSON.stringify({ version, record: value }, null, 2)}\n`
+}
+
+/**
+ * Parse one per-record document, validating its version stamp. A document
+ * that is malformed or stamped with a different version is FOREIGN and reads
+ * as absent — the per-record contract: one bad or stale record file must not
+ * brick the whole unit, and a version bump discards stale records instead of
+ * migrating them (the whole-unit format rejects instead, because there is
+ * exactly one document).
+ * @param text - Raw per-record document content.
+ * @param version - Expected unit version; a mismatch discards the document.
+ * @returns the record value, or `undefined` for a foreign document.
+ */
+export function parseRecord(text: string, version: number): unknown {
+  let document: unknown
+  try {
+    document = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  if (typeof document !== 'object' || document === null) return undefined
+  const { version: stamped, record } = document as Record<string, unknown>
+  if (stamped !== version) return undefined
+  return record
 }

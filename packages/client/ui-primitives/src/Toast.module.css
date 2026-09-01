@@ -1,8 +1,7 @@
-/* Transient top-center banner (DeepSeek Chat toast look): contrast fill,
-   inverted label, slide-in, then hold-and-fade. The fade delay/duration MUST
-   agree with HOLD_MS/FADE_MS in Toast.tsx: the component unmounts at their
-   sum, so a mismatched sheet either cuts the fade or leaves an invisible
-   banner blocking nothing. */
+/* The fade delay comes from the component as `--dsh-toast-hold`, so one value
+   drives both the unmount timer and this animation; the fallback matches the
+   component's own default. The fade DURATION still has to agree with FADE_MS
+   in Toast.tsx, which no owner varies. */
 
 .toast {
   position: fixed;
@@ -11,9 +10,7 @@
   /* Above the 1000 the image lightbox backdrop uses: a failure reported while
      a preview is open must stay readable. */
   z-index: 1100;
-  /* Purely an announcement: it must never intercept clicks — in particular
-     after the CSS fade finished while a throttled background-tab timer has
-     not yet unmounted the still-hit-testable fixed element. */
+  /* Announcements never intercept clicks. */
   pointer-events: none;
   display: flex;
   align-items: center;
@@ -29,7 +26,7 @@
   transform: translateX(-50%);
   animation:
     dsh-toast-in 160ms ease-out,
-    dsh-toast-fade 1000ms ease 3000ms forwards;
+    dsh-toast-fade 1000ms ease var(--dsh-toast-hold, 3000ms) forwards;
 }
 
 .icon {
@@ -65,6 +62,6 @@
    not movement) still ends the banner before the timed unmount. */
 @media (prefers-reduced-motion: reduce) {
   .toast {
-    animation: dsh-toast-fade 1000ms ease 3000ms forwards;
+    animation: dsh-toast-fade 1000ms ease var(--dsh-toast-hold, 3000ms) forwards;
   }
 }

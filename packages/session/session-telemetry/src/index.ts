@@ -133,9 +133,8 @@ export interface SessionTelemetrySink {
 /**
  * Deployment-selected session-sharing policy disclosed by a mounted
  * {@link SessionTelemetryBackend} backend to human-facing acknowledgement surfaces (the
- * `/feedback` command's confirmation text). The seam owns the vocabulary so
- * any backend can disclose a policy without depending on the OTel package;
- * the values mirror the OTel backend's serialized `SessionTelemetryMode` choices.
+ * `/feedback` command's confirmation text). The Service Definition owns the
+ * vocabulary so consumers and backends do not depend on a specific provider.
  */
 export type SessionTelemetrySharingStatus = 'full' | 'feedback-only' | 'disabled'
 
