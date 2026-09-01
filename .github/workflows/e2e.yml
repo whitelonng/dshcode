@@ -55,15 +55,14 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     name: e2e
-    # Upstream repository only; forks run their own keyless CI (fork-ci.yml).
     # Run on every trusted event. Skip untrusted PRs (forks + Dependabot) where
     # the secret is withheld — they would otherwise hard-fail the preflight.
     if: >-
-      github.repository_owner == 'deepseek-ai'
-      && (github.event_name != 'pull_request'
-      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]'))
-    # Bounded file parallelism (DSH_E2E_MAX_WORKERS), 120s/test, retry 2. 45m
-    # still bounds retry storms against a slow API while the happy path fans out.
+      github.event_name != 'pull_request'
+      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')
+    # Profile e2e files can each own several complete dsh subprocess trees, so
+    # four file workers preserve process/PTY headroom. Tests retain 120s/test
+    # and retry 2; 45m still bounds retry storms against a slow API.
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
@@ -117,6 +116,6 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
           DEEPSEEK_BASE_URL: https://api.deepseek.com
-          DSH_E2E_MAX_WORKERS: 14
+          DSH_E2E_MAX_WORKERS: 4
           DSH_EXAMPLE_MODE: lib
         run: pnpm run test:e2e
