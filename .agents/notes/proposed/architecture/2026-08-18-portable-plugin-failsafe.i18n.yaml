@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-08-18-portable-plugin-failsafe.md
+2026-08-18-portable-plugin-failsafe.md: cfa80155322312bec4e55697e9962a6fbccf0a39
+2026-08-18-portable-plugin-failsafe.zh.md: dabff2bd9347bf534f1a57e6596b55de6f02f30f
