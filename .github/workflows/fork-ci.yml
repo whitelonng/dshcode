@@ -348,8 +348,10 @@ jobs:
           exit "$sandbox_status"
 
       - name: Run exhaustive coverage
-        run: |
-          pnpm run check:ci:coverage 2>&1 | tee coverage.log
+        # The tee keeps a log the annotation step below can re-emit when the
+        # per-file threshold fails; the command text must stay a superset of
+        # `pnpm run check:ci:coverage` for the workflow spec's step-run pin.
+        run: pnpm run check:ci:coverage 2>&1 | tee coverage.log
         shell: bash
 
       - name: Surface coverage failures as annotations
