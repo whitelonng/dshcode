@@ -108,7 +108,7 @@ function bench(
   ]
   const loader = target.create({
     boot: {
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries: entries.map(({ initialUrl: _initialUrl, inject, external, ...entry }) => ({
         ...entry,
         ...(inject.length === 0 ? {} : { inject }),
@@ -345,7 +345,7 @@ describe('failure modes', () => {
   it('double boot is loud', () => {
     const b = bench([])
     const options: ClientModuleCreateOptions = {
-      boot: { rev: 'graph', entries: [], batches: [] },
+      boot: { rev: 'graph', version: 'test', entries: [], batches: [] },
       staticModules: {},
     }
     expect(() => b.target.create(options)).toThrow('create called after module-system boot')
@@ -355,7 +355,7 @@ describe('failure modes', () => {
 describe('boot manifest wire', () => {
   it('normalizes absent shared-module fields and carries the declared ones', () => {
     const manifest = parseBootManifest({
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries: [
         { id: 'a', url: '/plugins/a/client.js', rev: '1', inject: ['b'] },
         { id: 'b', url: '/plugins/b/client.js', rev: '2', external: ['react'] },
@@ -370,29 +370,29 @@ describe('boot manifest wire', () => {
 
   it('rejects a non-array external', () => {
     expect(() => parseBootManifest({
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries: [{ id: 'a', url: '/a', rev: '1', external: 'react' }],
       batches: [{ phase: 'application', url: '/batch.js', rev: 'batch', entries: ['a'] }],
     })).toThrow('client-modules: boot manifest entry "a" external must be a string array')
   })
 
   it('requires the batch table', () => {
-    expect(() => parseBootManifest({ rev: 'graph', entries: [] }))
+    expect(() => parseBootManifest({ rev: 'graph', version: 'test', entries: [] }))
       .toThrow('client-modules: boot manifest batches must be an array')
   })
 
   it('rejects malformed batch phases', () => {
     const entry = { id: 'a', url: '/a.js', rev: '1' }
-    expect(() => parseBootManifest({ rev: 'graph', entries: [entry], batches: [null] }))
+    expect(() => parseBootManifest({ rev: 'graph', version: 'test', entries: [entry], batches: [null] }))
       .toThrow('client-modules: boot manifest batch is not an object')
     expect(() => parseBootManifest({
-      rev: 'graph', entries: [entry], batches: [{ phase: 'idle', url: '/b.js', rev: 'b', entries: ['a'] }],
+      rev: 'graph', version: 'test', entries: [entry], batches: [{ phase: 'idle', url: '/b.js', rev: 'b', entries: ['a'] }],
     })).toThrow('boot manifest batch phase must be "bootstrap" or "application"')
   })
 
   it('rejects duplicate batch URLs', () => {
     expect(() => parseBootManifest({
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries: [
         { id: 'a', url: '/a.js', rev: '1' },
         { id: 'b', url: '/b.js', rev: '2' },
@@ -406,7 +406,7 @@ describe('boot manifest wire', () => {
 
   it('allows several batches in one scheduling phase', () => {
     const manifest = parseBootManifest({
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries: [
         { id: 'a', url: '/a.js', rev: '1' },
         { id: 'b', url: '/b.js', rev: '2' },
@@ -422,10 +422,10 @@ describe('boot manifest wire', () => {
   it('requires complete batch fields and non-empty entries', () => {
     const entry = { id: 'a', url: '/a.js', rev: '1' }
     expect(() => parseBootManifest({
-      rev: 'graph', entries: [entry], batches: [{ phase: 'application', entries: ['a'] }],
+      rev: 'graph', version: 'test', entries: [entry], batches: [{ phase: 'application', entries: ['a'] }],
     })).toThrow('boot manifest application batch must carry string url/rev')
     expect(() => parseBootManifest({
-      rev: 'graph', entries: [entry], batches: [{ phase: 'application', url: '/b.js', rev: 'b', entries: [] }],
+      rev: 'graph', version: 'test', entries: [entry], batches: [{ phase: 'application', url: '/b.js', rev: 'b', entries: [] }],
     })).toThrow('boot manifest application batch entries must be a non-empty string array')
   })
 
@@ -435,12 +435,12 @@ describe('boot manifest wire', () => {
       { id: 'b', url: '/b.js', rev: '2' },
     ]
     expect(() => parseBootManifest({
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries,
       batches: [{ phase: 'application', url: '/batch.js', rev: 'b', entries: ['ghost'] }],
     })).toThrow('boot manifest application batch names unknown entry "ghost"')
     expect(() => parseBootManifest({
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries,
       batches: [
         { phase: 'bootstrap', url: '/boot.js', rev: 'boot', entries: ['a'] },
@@ -448,7 +448,7 @@ describe('boot manifest wire', () => {
       ],
     })).toThrow('boot manifest entry "a" belongs to more than one batch')
     expect(() => parseBootManifest({
-      rev: 'graph',
+      rev: 'graph', version: 'test',
       entries,
       batches: [{ phase: 'application', url: '/batch.js', rev: 'b', entries: ['a'] }],
     })).toThrow('boot manifest entry "b" belongs to no initial-load batch')

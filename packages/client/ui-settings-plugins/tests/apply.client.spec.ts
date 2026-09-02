@@ -30,7 +30,11 @@ async function bench(served?: string[]) {
   locale.setLocale('zh')
   ctx.provide('locale', locale)
   const describeCredentials = vi.fn(() => Promise.resolve({
-    ok: false, error: new RemoteError('gateway/internal', 'no provider', {}),
+    result: {
+      ok: false,
+      value: { credentials: {} },
+      error: new RemoteError('gateway/internal', 'no provider', {}),
+    },
   }))
   const models = vi.fn(() => Promise.resolve({
     ok: true as const, value: { groups: [], failures: [] },
@@ -133,8 +137,7 @@ describe('ui-settings-plugins apply', () => {
     await ctx.plugin({ inject: [...inject], apply }).await()
 
     expect(slots.entries('settings.plugin.item').map(entry => entry.options.key))
-      .toEqual(['shell', 'agent-loop', 'describe-image', 'web-search-deepseek'])
-      .toEqual(['shell', 'agent-loop', 'subagent-model-selection', 'web-search-deepseek'])
+      .toEqual(['shell', 'agent-loop', 'describe-image', 'subagent-model-selection', 'web-search-deepseek'])
   })
 
   it('dispatches the served namespaces its cards claim, and no others', async () => {
@@ -237,7 +240,7 @@ describe('ui-settings-plugins apply', () => {
     declareRoot(slots)
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(slots.entries('settings.plugin.item')).toHaveLength(4)
+    expect(slots.entries('settings.plugin.item')).toHaveLength(5)
 
     await fiber.dispose()
 

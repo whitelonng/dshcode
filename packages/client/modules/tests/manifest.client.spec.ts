@@ -10,6 +10,7 @@ const wire = (version?: unknown): Record<string, unknown> => ({
   rev: 'r',
   ...(version === undefined ? {} : { version }),
   entries: [{ id: 'a', url: '/plugins/a/client.js?rev=0', rev: '0' }],
+  batches: [{ phase: 'application', url: '/batch.js?rev=0', rev: '0', entries: ['a'] }],
 })
 
 describe('parseBootManifest version', () => {

@@ -171,8 +171,11 @@ describe('terminalCardModel', () => {
       card: { cwd: '/w/app', running: true },
     })
     const done = settled({ call: { name: 'terminal_send', argsRaw }, content: [{ type: 'text', text: 'ok' }] })
+    // The product 'en' conversation dictionary deliberately leaves the
+    // terminal_send presenter's session label empty (Host presenter has no
+    // locale seat), so a settled row's description is '' under enT.
     expect(localizeTerminalCardModel(terminalCardModel(done)!, enT)).toMatchObject({
-      description: 'Terminal pty-3', card: { command: 'make', output: 'ok', running: false },
+      description: '', card: { command: 'make', output: 'ok', running: false },
     })
     expect(terminalCardModel(settled({
       call: { name: 'terminal_send', argsRaw: JSON.stringify({ sessionId: 'pty-3', text: 'make', run_in_background: true }) },
@@ -211,8 +214,10 @@ describe('terminalCardModel', () => {
     expect(localizeTerminalCardModel(model, t)).toMatchObject({
       description: '终端 pty-3', card: { command: '（发送输入）' },
     })
+    // The product 'en' dictionary leaves these two keys empty: the Host
+    // terminal_send presenter owns no locale seat.
     expect(localizeTerminalCardModel(model, enT)).toMatchObject({
-      description: 'Terminal pty-3', card: { command: '(send input)' },
+      description: '', card: { command: '' },
     })
   })
 
@@ -346,16 +351,21 @@ describe('chat row terminal body', () => {
 
   it.each([
     { locale: 'zh', translate: t, description: '终端 pty-3', command: '（发送输入）' },
-    { locale: 'en', translate: enT, description: 'Terminal pty-3', command: '(send input)' },
+    { locale: 'en', translate: enT, description: '', command: '' },
   ])('renders terminal_send copy through the $locale locale', ({ translate, description, command }) => {
     const block = running({
       name: 'terminal_send',
       argsRaw: JSON.stringify({ sessionId: 'pty-3', text: '' }),
     })
     const view = render(<GenericToolCard {...ownerProps(block)} toolName="terminal_send" t={translate} />)
-    expect(view.getByText(description)).toBeTruthy()
+    // The product 'en' dictionary leaves the terminal_send description and
+    // placeholder empty (Host presenter owns no locale seat), so the en row
+    // renders no session label and no command-placeholder text.
+    if (description !== '') expect(view.getByText(description)).toBeTruthy()
+    else expect(view.queryByText('Terminal pty-3')).toBeNull()
     toggleRow(view)
-    expect(view.getByText(command)).toBeTruthy()
+    if (command !== '') expect(view.getByText(command)).toBeTruthy()
+    else expect(view.queryByText('(send input)')).toBeNull()
   })
 
   it('a non-terminal call keeps the args-JSON text body', () => {

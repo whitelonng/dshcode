@@ -22,6 +22,13 @@ const stabilize = async (fn: () => void | Promise<void>): Promise<void> => {
 
 async function bench() {
   const ctx = new Context()
+  // The assembled application reads the sessions list for the document title.
+  ctx.provide('sessions', {
+    list: {
+      getSnapshot: () => ({ current: undefined, byId: new Map() }),
+      subscribe: () => () => {},
+    },
+  })
   const fiber = ctx.plugin({ inject: [...UiRenderer.inject], apply: UiRenderer.apply })
   await fiber.await()
   const slots = ctx.get('slots') as SlotRegistry

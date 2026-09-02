@@ -340,7 +340,7 @@ describe('decorations: scanTextRefs', () => {
 
   it('recognizes directory paths independently of the dynamic lexicon', () => {
     const out = scanTextRefs('see @src/x/ now', new Map())
-    expect(out).toEqual([{ start: 4, end: 11, trigger: '@' }])
+    expect(out).toEqual([{ start: 4, end: 11, trigger: '@', appearance: 'folder' }])
   })
 
   it('names off the lexicon do not match; triggers are routed per lexicon list', () => {

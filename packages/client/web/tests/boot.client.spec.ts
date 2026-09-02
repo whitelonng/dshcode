@@ -82,6 +82,7 @@ describe('bootstrap failure rendering', () => {
       const duplicate = { id: 'duplicate', url: '/duplicate/client.js', rev: '1' }
       win.__DSH_BOOT__ = {
         rev: 'graph',
+        version: 'test',
         entries: [duplicate, duplicate],
         batches: [{ phase: 'application', url: '/batch.js', rev: 'batch', entries: ['duplicate'] }],
       }
@@ -109,6 +110,7 @@ describe('plugin activation', () => {
     const applicationUrl = '/application.js'
     win.__DSH_BOOT__ = {
       rev: 'graph',
+      version: 'test',
       entries,
       batches: [{ phase: 'application', url: applicationUrl, rev: 'batch', entries: entries.map(row => row.id) }],
     }
@@ -169,6 +171,7 @@ describe('plugin activation', () => {
     ]
     win.__DSH_BOOT__ = {
       rev: 'graph',
+      version: 'test',
       entries,
       batches: [{
         phase: 'application',

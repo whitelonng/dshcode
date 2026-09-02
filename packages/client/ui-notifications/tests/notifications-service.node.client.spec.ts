@@ -5,7 +5,9 @@
  * window focus, and the default clock uses Date.now.
  */
 import { describe, expect, it, vi } from 'vitest'
-import { createSnapshotStore, type ISessions, type SessionId, type SessionListState, type SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ISessions, SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh } from '../src/client/locales.ts'
 import type { NotificationSink } from '../src/client/notification-sink.ts'

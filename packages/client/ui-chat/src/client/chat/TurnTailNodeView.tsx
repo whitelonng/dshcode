@@ -18,6 +18,8 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const hasLaterChatNode = useChat(snapshot =>
     snapshot.locations.getTurn(data.turn).at(-1) !== node.key)
   const isLatestTurn = useChat(snapshot => snapshot.timeline.turnOrder.at(-1) === data.turn)
+  const anyOpenTurn = useChat(snapshot =>
+    [...snapshot.timeline.turns.values()].some(turn => turn.status === 'open'))
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
     ? node.location.turn
     : undefined

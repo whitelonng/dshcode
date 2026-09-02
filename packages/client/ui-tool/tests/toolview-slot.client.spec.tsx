@@ -68,6 +68,7 @@ async function bench(nodes: ToolResultNode[]) {
     connectWorkspace: vi.fn(async () => SID),
   } as never)
   const locale = new LocaleRuntime(runtime.ctx)
+  locale.setLocale('en')
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
   await runtime.sessions.add({
@@ -212,6 +213,7 @@ describe('registrant declaration injection', () => {
       connectWorkspace: vi.fn(async () => SID),
     } as never)
     const locale = new LocaleRuntime(runtime.ctx)
+    locale.setLocale('en')
     runtime.ctx.provide('locale', locale)
     runtime.slots.installLocale(locale)
     await runtime.root.declare(LAYOUT_CHILDREN, AppRoot)

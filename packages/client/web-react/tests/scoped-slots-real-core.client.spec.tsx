@@ -27,7 +27,19 @@ type FrameSlots = PropsRenderSlots<'spec.single' | 'spec.list'>
 
 /** Passthrough host over the real core (store/session seats unused here). */
 function hostOver(core: SlotCore): SlotRendererHost {
-  const absentInfo = { sessionId: undefined, hooks: {}, props: {} }
+  const noSessionBinding = { key: undefined, hooks: {}, keyedHooks: {}, props: {} }
+  const rootBinding = { key: undefined, hooks: {}, keyedHooks: {}, props: {} }
+  const root = { getSnapshot: () => rootBinding, subscribe: () => () => {} }
+  const scopeRevision = { getSnapshot: () => 0, subscribe: () => () => {} }
+  const current = { getSnapshot: () => noSessionBinding, subscribe: () => () => {} }
+  const sessionAdapter = {
+    current,
+    resolve: () => undefined,
+    renderArea: (binding: { key: string | undefined }, props: { empty?: () => unknown; children: unknown }) => {
+      if (binding.key === undefined) return props.empty?.() ?? null
+      return props.children
+    },
+  }
   return {
     subscribe: (key, fn) => core.subscribe(key, fn),
     getVersion: key => core.getVersion(key),
@@ -37,13 +49,9 @@ function hostOver(core: SlotCore): SlotRendererHost {
     specOf: key => core.specDynamic(key),
     isLive: entry => core.isLive(entry),
     storeOf: () => undefined,
-    sessions: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-      provideInfo: { getSnapshot: () => absentInfo, subscribe: () => () => {} },
-    },
-    workspaces: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-    },
+    root,
+    scopeRevision,
+    scope: () => sessionAdapter,
   }
 }
 

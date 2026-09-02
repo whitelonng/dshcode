@@ -121,6 +121,7 @@ async function bench(snapshot: ChatSnapshot) {
   ctx.provide('uiWorkspace', {} as never)
   new TestRemote(ctx, { session: { openWorkspacePath } })
   const locale = new LocaleRuntime(ctx)
+  locale.setLocale('en')
   ctx.provide('locale', locale)
   locale.register(CONVERSATION_NS, { zh: conversationZh, en: conversationEn })
   runtime.slots.installLocale(locale)

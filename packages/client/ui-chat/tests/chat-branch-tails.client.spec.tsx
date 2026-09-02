@@ -1074,12 +1074,10 @@ const props = (
   loadImage: vi.fn(),
   deleteAt: overrides.deleteAt ?? vi.fn(() => Promise.resolve(true)),
   editAt: overrides.editAt ?? vi.fn(() => Promise.resolve(true)),
-  useSession: ((selector: (snapshot: unknown) => unknown) => selector({
-    chat: {
-      timeline: { turns: overrides.turns ?? new Map() },
-      nodes: overrides.nodes ?? new Map(),
-    },
-  })) as ChatNodeViewProps['useSession'],
+  useChat: ((selector: (snapshot: unknown) => unknown) => selector({
+    timeline: { turns: overrides.turns ?? new Map(), turnOrder: [] },
+    nodes: { values: () => [...(overrides.nodes ?? new Map()).values()] },
+  })) as ChatNodeViewProps['useChat'],
 } as unknown as ChatNodeViewProps<'user'>)
 describe('message deletion actions', () => {
 

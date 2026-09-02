@@ -86,11 +86,13 @@ async function bench() {
   ctx.provide('workspaces', { create: createWorkspace, rename: renameWorkspace, connectWorkspace })
   const prompt = vi.fn().mockResolvedValue({ ok: true, value: { accepted: true } })
   const openSession = vi.fn()
+  const createSession = vi.fn().mockResolvedValue('s1')
   ctx.provide('sessions', {
     binding: vi.fn().mockReturnValue({ session: { prompt } }),
+    create: createSession,
     open: openSession,
   })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, call, inventoryList, createWorkspace, renameWorkspace, connectWorkspace, openSession, prompt }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, call, inventoryList, createWorkspace, renameWorkspace, connectWorkspace, createSession, openSession, prompt }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -185,7 +187,7 @@ describe('ui-settings-plugin-installer browser plugin', () => {
     await expect(injected.repairPlugin('/home/.dsh/profiles', 'fix it')).resolves.toBeUndefined()
     expect(b.createWorkspace).toHaveBeenCalledWith({ path: '/home/.dsh/profiles' })
     expect(b.renameWorkspace).toHaveBeenCalledWith('w1', 'DSH 插件')
-    expect(b.connectWorkspace).toHaveBeenCalledWith('w1')
+    expect(b.createSession).toHaveBeenCalledWith({ workspaceId: 'w1' })
     expect(b.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'fix it' }], 'queue')
     expect(b.openSession).toHaveBeenCalledWith('s1')
 

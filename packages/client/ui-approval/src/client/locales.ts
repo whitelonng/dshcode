@@ -7,6 +7,7 @@ export const zh = {
   escalation: '工具 {toolName} 请求越权执行',
   reject: '拒绝',
   allowOnce: '允许一次',
+  confirmShortcut: '⌘/Ctrl+Enter 允许一次',
 } satisfies Record<string, string>
 
 /** Approval dictionary key union. */
@@ -19,4 +20,5 @@ export const en = {
   escalation: 'Tool {toolName} requests privileged execution',
   reject: 'Reject',
   allowOnce: 'Allow once',
+  confirmShortcut: '⌘/Ctrl+Enter to allow once',
 } satisfies Record<ApprovalKey, string>

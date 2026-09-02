@@ -239,7 +239,7 @@ describe('loadProfile', () => {
     const stock = resolveProfileDir('web', home)
     initProfile(stock, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
     loadProfile('t', 'web', anchor, home)
-    expect(readProfileManifest('t', stock).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web)
+    expect(readProfileManifest('t', stock).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web?.bundles)
 
     // The former five-bundle template migrates down to the shipped one.
     const migratedHome = tmp()
@@ -252,7 +252,7 @@ describe('loadProfile', () => {
       '@linxin666/dsh-web-ui-all',
     ])
     loadProfile('t', 'web', anchor, migratedHome)
-    expect(readProfileManifest('t', migrated).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web)
+    expect(readProfileManifest('t', migrated).dsh?.profile?.bundles).toEqual(PROFILE_TEMPLATES.web?.bundles)
 
     const customHome = tmp()
     const custom = resolveProfileDir('web', customHome)

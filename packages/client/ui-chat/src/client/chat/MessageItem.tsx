@@ -272,18 +272,18 @@ export function PendingSubmissionBubble({ submission, renderMessageImages, t }: 
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderMessageImages, deleteAt, editAt, t, useSession,
+  node, renderMessageImages, deleteAt, editAt, t, useChat,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
   const isHuman = (data.source as { kind?: unknown } | undefined)?.kind === 'user'
-  const openTurn = useSession((snapshot) => {
+  const openTurn = useChat((snapshot) => {
     const location = node.location
     if (location.kind !== 'turn' && location.kind !== 'step') return false
-    return snapshot.chat.timeline.turns.get(location.turn.turn)?.status === 'open'
+    return snapshot.timeline.turns.get(location.turn.turn)?.status === 'open'
   })
-  const isLastUser = useSession((snapshot) => {
+  const isLastUser = useChat((snapshot) => {
     let last: number | undefined
-    for (const candidate of snapshot.chat.nodes.values()) {
+    for (const candidate of snapshot.nodes.values()) {
       if (candidate.kind !== 'user') continue
       last = last === undefined ? candidate.anchorSeq : Math.max(last, candidate.anchorSeq)
     }

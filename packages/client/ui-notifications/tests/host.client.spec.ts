@@ -1,7 +1,7 @@
 // @ts-nocheck -- alpha.4 sync: product test migration pending
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider, type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { apply } from '../src/index.ts'
 import { NOTIFICATIONS_SETTINGS_NAMESPACE } from '../src/notifications-settings.ts'
 
@@ -19,10 +19,11 @@ describe('ui-notifications host', () => {
     await ctx.plugin(MemorySettings).await()
     const fiber = ctx.plugin({ apply })
     await fiber.await()
-    const ns = settingsNamespace(NOTIFICATIONS_SETTINGS_NAMESPACE)
-    expect(ctx.settings.get(ns)).toEqual({ approvals: true, completions: true })
+    const ns = NOTIFICATIONS_SETTINGS_NAMESPACE
+    const descriptor = () => ctx.settings.describe().find(row => row.ns === ns)
+    expect(descriptor()?.value).toEqual({ approvals: true, completions: true })
     await ctx.settings.update(ns, { approvals: false })
-    expect(ctx.settings.get(ns)).toEqual({ approvals: false, completions: true })
+    expect(descriptor()?.value).toEqual({ approvals: false, completions: true })
     await expect(ctx.settings.update(ns, { approvals: 'sometimes' })).rejects.toThrow()
     await fiber.dispose()
     expect(ctx.settings.describe().map(row => row.ns)).not.toContain(ns)

@@ -20,9 +20,8 @@ async function bench() {
 }
 
 describe('buildRenderApp', () => {
-  it('fails loud when the slot registry is unavailable', () => {
-    const renderApp = buildRenderApp({ ctx: new Context() })
-    expect(() => renderApp()).toThrow()
+  it('fails loud when the sessions service is unavailable', () => {
+    expect(() => buildRenderApp({ ctx: new Context() })).toThrow('sessions service unavailable')
   })
 
   it('renders the root slot tree', async () => {

@@ -728,10 +728,13 @@ export class SessionManager {
   /**
    * Apply one Session removal forwarded through `ctx.remote.$on`.
    * @param sessionId - removed Session identity.
+   * @param force - permanent-deletion routing: evict even a durable
+   * subagent row, whose log no baseline can bring back.
    */
-  handleSessionRemoved(sessionId: SessionId): void {
+  handleSessionRemoved(sessionId: SessionId, force = false): void {
     const summary = this.summaries.find(candidate => candidate.sessionId === sessionId)
-    const durableSubagent = summary?.origin === 'subagent' || this.addresses.has(sessionId)
+    const durableSubagent = !force
+      && (summary?.origin === 'subagent' || this.addresses.has(sessionId))
     this.recordMutation(durableSubagent
       ? { kind: 'status', sessionId, running: false }
       : { kind: 'remove', sessionId })
@@ -755,6 +758,16 @@ export class SessionManager {
         this.sessions.get(childId)?.handleSubagentParentAvailable(false)
       }
     }
+  }
+
+  /**
+   * Apply a permanent-deletion frame: the log is gone, so the summary is
+   * evicted outright and a selected session loses the selection.
+   * @param sessionId - deleted Session identity.
+   */
+  handleSessionDeleted(sessionId: SessionId): void {
+    if (this.selected === sessionId) this.clearSelection()
+    this.handleSessionRemoved(sessionId, true)
   }
 
   /**

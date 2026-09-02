@@ -546,7 +546,7 @@
 /* The retained raw text editor lives behind its own disclosure so the
    checkbox groups stay the primary surface. */
 .modelAdvancedDetails {
-  border-top: 1px solid var(--dsw-alias-border-l2);
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
   padding-top: 8px;
 }
 

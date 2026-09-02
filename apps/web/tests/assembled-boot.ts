@@ -136,6 +136,7 @@ function bootGraph(plugins: readonly AssembledPlugin[]): WebBootGraph {
     .filter(id => !BOOTSTRAP_IDS.includes(id as typeof BOOTSTRAP_IDS[number]))
   return {
     rev: 'fx',
+    version: '0.0.0-test',
     entries: plugins.map(({ bundlePath: _bundlePath, ...plugin }) => plugin),
     batches: [
       ...(bootstrapEntries.length === 0 ? [] : [{

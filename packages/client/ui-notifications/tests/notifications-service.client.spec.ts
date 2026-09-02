@@ -9,12 +9,18 @@
  * the environment never enters the test.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { createSnapshotStore, type ISessions, type JobView, type PendingInteractionStatus, type SessionId, type SessionListState, type SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ISessions, SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { JobView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
 import { type NotificationsSettings } from '../src/notifications-settings.ts'
 import { zh } from '../src/client/locales.ts'
 import type { NotificationPermissionState, NotificationSink } from '../src/client/notification-sink.ts'
 import { NOTIFICATION_DEDUP_WINDOW_MS, NotificationsService } from '../src/client/notifications-service.ts'
+
+/** Session-list pending status string (was PendingInteractionStatus; flat in alpha.4). */
+type PendingInteractionStatus = 'approval' | 'plan-review' | 'question'
 
 const translate = makeTranslate(zh)
 
@@ -86,7 +92,7 @@ function sessionsDouble() {
         const binding = bindings.get(id)
         return binding === undefined
           ? undefined
-          : { session: { getSnapshot: () => ({ pending: [{ kind: 'approval', payload: { toolName: binding.toolName } }] }) } } as never
+          : { session: { getSnapshot: () => ({ pending: [{ kind: 'approval', toolName: binding.toolName }] }) } } as never
       },
     } as Pick<ISessions, 'list' | 'open' | 'binding'>,
   }
