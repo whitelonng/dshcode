@@ -878,6 +878,76 @@ export interface Config {
 
 来源：[`packages/host/frontend-static/src/index.ts:30`](../packages/host/frontend-static/src/index.ts)
 
+<a id="deepseek-aidsh-host-plugin-control"></a>
+
+## `@deepseek-ai/dsh-host-plugin-control`
+
+需要：`loader` · `connection`
+
+```ts config-catalog
+/** Plugin-control gateway configuration owned by the composing profile. */
+export interface Config {
+  /** Absolute user patch layer of the running profile. */
+  profilePatchPath: string
+  /** Logical products that this deployment permits the browser to control. */
+  controls: PluginControlSpec[]
+}
+
+/** One deployment-configured logical control and its Loader rows. */
+export interface PluginControlSpec {
+  /** Stable id used in the profile patch marker and mutation request. */
+  id: string
+  /** Human-readable product name shown in Settings. */
+  name: string
+  /** HTTP(S) source repository shown in Settings. */
+  repository: string
+  /** Complete Loader entry-id set controlled as one product. */
+  entryIds: string[]
+  /** Module specifier for each entry id, in the same order. */
+  packages: string[]
+}
+```
+
+来源：[`packages/host/plugin-control/src/index.ts:50`](../packages/host/plugin-control/src/index.ts)
+
+<a id="deepseek-aidsh-host-plugin-installer"></a>
+
+## `@deepseek-ai/dsh-host-plugin-installer`
+
+需要：`connection` · `tools`
+
+```ts config-catalog
+/** Plugin-installer gateway configuration owned by the composing profile. */
+export interface Config {
+  /** Explicit Harness home; omitted follows `DSH_HOME`, then `~/.dsh`. */
+  dshHome?: string
+  /** npm registry base; omitted follows `npm_config_registry`, then npmjs. */
+  registry?: string
+  /**
+   * Optional GitHub mirror prefix (an http(s) URL, for example
+   * `https://gh-proxy.com/`) prepended to the codeload and api.github.com
+   * URLs on restricted networks. A set non-http(s) value fails loud at load.
+   */
+  githubMirror?: string
+  /**
+   * Conflict rules: after a successful install or update, each rule whose
+   * `matches` substrings match the installed package name (case-insensitive)
+   * disables the named plugin-control product's patch rows, so a user
+   * install does not double-mount a built-in suite.
+   */
+  disableControlsOnInstall?: Array<{
+    /** The plugin-control product id whose patch rows the rule disables. */
+    id: string
+    /** Package-name substrings (case-insensitive) that trigger the rule. */
+    matches: string[]
+  }>
+  /** Absolute user patch layer of the running profile. */
+  profilePatchPath: string
+}
+```
+
+来源：[`packages/host/plugin-installer/src/index.ts:135`](../packages/host/plugin-installer/src/index.ts)
+
 <a id="deepseek-aidsh-host-webserver"></a>
 
 ## `@deepseek-ai/dsh-host-webserver`
@@ -1005,11 +1075,23 @@ export interface DeepSeekCatalogModel {
   maxTokens?: number
   /** Accepted request modalities; omission is text-only. */
   inputModalities?: ModelModality[]
+  /**
+   * Per-model reasoning override, when this model's offering differs from the
+   * route default. `false` declares a non-reasoning model; a map declares the
+   * offered levels (its keys) with their wire spellings, which for this wire
+   * route are fixed — `off` uses the empty spelling (thinking disabled), and
+   * `low`/`high`/`max` are the `reasoning_effort` literals. Absent keeps the route's
+   * `reasoningEffort` for this model.
+   */
+  reasoningEfforts?: false | Partial<Record<DeepSeekReasoningLevel, string | null>>
   /** Total-pixel budget for one deterministic request preview, or the 512-by-512 `low` preset. */
   imagePixelBudget?: number | 'low'
   /** Encoded-byte target for one deterministic request preview; the smallest quality-ladder output is used when no quality fits. */
   imageMaxBytes?: number
 }
+
+/** One reasoning level the direct DeepSeek wire route can dispatch. */
+export type DeepSeekReasoningLevel = 'off' | 'low' | 'high' | 'max'
 ```
 
 依赖：[`ModelModality`](../packages/llm/llm/src/index.ts) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts)
@@ -1155,6 +1237,24 @@ export interface PiAiModelProfile {
    */
   input?: PiAiModality[]
   /**
+   * Output modalities this model can produce; `image` declares image
+   * generation. Absent — or empty — means text-only output, the floor every
+   * chat-completions model carries. This adapter's text seam never invokes
+   * image generation, so the field is advisory metadata: it is what model
+   * selectors and capability surfaces display, not a request path.
+   */
+  output?: PiAiModality[]
+  /**
+   * Capability claims a modality list cannot express. `imageUnderstanding`
+   * means the model can reason about image content, which is a stronger claim
+   * than merely accepting image input (the latter is `input` containing
+   * `image`). A model declaring understanding is expected to also declare
+   * image input, but nothing here forces the combination: the two answers are
+   * independent, and a gateway that accepts images without understanding them
+   * is a legitimate configuration.
+   */
+  capabilities?: PiAiModelCapabilities
+  /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
    * entry's capability (a hand-declared model has none and does not reason);
    * `false` declares a non-reasoning model, which is how a profile strips
@@ -1263,6 +1363,12 @@ export interface PiAiCompatProfile {
 
 /** One request modality a pi-ai model may accept. */
 export type PiAiModality = Model<Api>['input'][number]
+
+/** Capability claims an entry may declare beyond its modality lists. */
+export interface PiAiModelCapabilities {
+  /** Whether the model can reason about image content, beyond accepting image input. */
+  imageUnderstanding?: boolean
+}
 
 /**
  * Selectable reasoning efforts for one model: each key is a level the model
@@ -2654,6 +2760,40 @@ export interface Config {
 
 来源：[`packages/shell/tool-bash-persistent/src/index.ts:432`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-describe-image"></a>
+
+## `@deepseek-ai/dsh-tool-describe-image`
+
+需要：`tools`
+
+```ts config-catalog
+/**
+ * Deployment configuration for the describe-image tool. The interface keeps every field optional so
+ * programmatic construction is re-judged by {@link resolveConfig}; the schema requires `baseURL` and
+ * `model` for composition entries.
+ */
+export interface Config {
+  /** Root of the OpenAI-compatible endpoint, e.g. `https://api.openai.com/v1`; trailing slashes are stripped. */
+  baseURL?: string
+  /** Vision model id for the configured endpoint. */
+  model?: string
+  /** Inline API key; prefer `apiKeyEnv` with the credential seam. Feed from the environment via `!!js process.env.VISION_API_KEY`. */
+  apiKey?: string
+  /** Credential reference (environment-variable name) for the API key; defaults to `VISION_API_KEY`. */
+  apiKeyEnv?: string
+  /** Instruction used when a call omits its `prompt`; defaults to a concise factual description. */
+  defaultPrompt?: string
+  /** Image byte bound; defaults to {@link DEFAULT_MAX_BYTES}. */
+  maxBytes?: number
+  /** Output-token cap sent to the vision model; defaults to {@link DEFAULT_MAX_OUTPUT_TOKENS}. */
+  maxOutputTokens?: number
+  /** Per-call request timeout; defaults to {@link DEFAULT_TIMEOUT_MS}. */
+  timeoutMs?: number
+}
+```
+
+来源：[`packages/vision/tool-describe-image/src/index.ts:42`](../packages/vision/tool-describe-image/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`
@@ -3360,6 +3500,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-layout`（[`packages/client/ui-layout/src/index.ts`](../packages/client/ui-layout/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-message-feedback`（[`packages/client/ui-message-feedback/src/index.ts`](../packages/client/ui-message-feedback/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-model-selection`（[`packages/client/ui-model-selection/src/index.ts`](../packages/client/ui-model-selection/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-notifications`（[`packages/client/ui-notifications/src/index.ts`](../packages/client/ui-notifications/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-permission-presets`（[`packages/client/ui-permission-presets/src/index.ts`](../packages/client/ui-permission-presets/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-plan`（[`packages/client/ui-plan/src/index.ts`](../packages/client/ui-plan/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-reference`（[`packages/client/ui-reference/src/index.ts`](../packages/client/ui-reference/src/index.ts)）
@@ -3367,8 +3508,10 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-schedule`（[`packages/client/ui-schedule/src/index.ts`](../packages/client/ui-schedule/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-session`（[`packages/client/ui-session/src/index.ts`](../packages/client/ui-session/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings`（[`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-archive`（[`packages/client/ui-settings-archive/src/index.ts`](../packages/client/ui-settings-archive/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-general`（[`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-models`（[`packages/client/ui-settings-models/src/index.ts`](../packages/client/ui-settings-models/src/index.ts)）
+- `@deepseek-ai/dsh-client-ui-settings-plugin-installer`（[`packages/client/ui-settings-plugin-installer/src/index.ts`](../packages/client/ui-settings-plugin-installer/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugin-inventory`（[`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-settings-plugins`（[`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-sidebar`（[`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts)）
@@ -3392,6 +3535,7 @@ export interface Config {
 - `@deepseek-ai/dsh-goal-round-driver` — 需要 `agents` · `goals` · `sessions`（[`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker-auto` — 需要 `webServer` · `loader`（[`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker-native`（[`packages/host/directory-picker-native/src/index.ts`](../packages/host/directory-picker-native/src/index.ts)）
+- `@deepseek-ai/dsh-host-file-picker-native`（[`packages/host/file-picker-native/src/index.ts`](../packages/host/file-picker-native/src/index.ts)）
 - `@deepseek-ai/dsh-host-plugin-inventory` — 需要 `loader`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
 - `@deepseek-ai/dsh-llm`（[`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts)）
 - `@deepseek-ai/dsh-lsp`（[`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts)）
@@ -3425,6 +3569,7 @@ export interface Config {
 - `@deepseek-ai/dsh-file-reference` — 抽象 `FileReferenceService`（[`packages/context/file-reference/src/index.ts`](../packages/context/file-reference/src/index.ts)）
 - `@deepseek-ai/dsh-fs` — 抽象 `FileSystem`（[`packages/fs/fs/src/index.ts`](../packages/fs/fs/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker` — 抽象 `DirectoryPicker`（[`packages/host/directory-picker/src/index.ts`](../packages/host/directory-picker/src/index.ts)）
+- `@deepseek-ai/dsh-host-file-picker` — 抽象 `FilePicker`（[`packages/host/file-picker/src/index.ts`](../packages/host/file-picker/src/index.ts)）
 - `@deepseek-ai/dsh-jobs` — 抽象 `JobRegistry`（[`packages/jobs/jobs/src/index.ts`](../packages/jobs/jobs/src/index.ts)）
 - `@deepseek-ai/dsh-sandbox` — 抽象 `SandboxProvider`（[`packages/sandbox/sandbox/src/index.ts`](../packages/sandbox/sandbox/src/index.ts)）
 - `@deepseek-ai/dsh-session-persistence` — 抽象 `SessionPersistence`（[`packages/session/session-persistence/src/index.ts`](../packages/session/session-persistence/src/index.ts)）
@@ -3444,11 +3589,13 @@ export interface Config {
 - `@deepseek-ai/dsh-atomic-write`（[`packages/util/atomic-write/src/index.ts`](../packages/util/atomic-write/src/index.ts)）
 - `@deepseek-ai/dsh-base`（[`packages/bundle/base/src/index.ts`](../packages/bundle/base/src/index.ts)）
 - `@deepseek-ai/dsh-brand`（[`packages/util/brand/src/index.ts`](../packages/util/brand/src/index.ts)）
+- `@deepseek-ai/dsh-client-schema-form`（[`packages/client/schema-form/src/index.ts`](../packages/client/schema-form/src/index.ts)）
 - `@deepseek-ai/dsh-client-store`（[`packages/client/store/src/index.ts`](../packages/client/store/src/index.ts)）
 - `@deepseek-ai/dsh-client-test-runtime`（[`packages/test-support/client-runtime/src/index.ts`](../packages/test-support/client-runtime/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-primitives`（[`packages/client/ui-primitives/src/index.ts`](../packages/client/ui-primitives/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-slots`（[`packages/client/ui-slots/src/index.ts`](../packages/client/ui-slots/src/index.ts)）
 - `@deepseek-ai/dsh-client-web`（[`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts)）
+- `@deepseek-ai/dsh-client-web-react`（[`packages/client/web-react/src/index.ts`](../packages/client/web-react/src/index.ts)）
 - `@deepseek-ai/dsh-cmdline`（[`packages/boot/cmdline/src/index.ts`](../packages/boot/cmdline/src/index.ts)）
 - `@deepseek-ai/dsh-deque`（[`packages/util/deque/src/index.ts`](../packages/util/deque/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-agent-team-profile`（[`packages/experimental/agent-team-profile/src/index.ts`](../packages/experimental/agent-team-profile/src/index.ts)）

@@ -13,16 +13,16 @@ kind: "package-reference"
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 把本包组合进挂载 Connection 通道的宿主组合；网关只应答具有回环权限的请求。它暴露：
@@ -49,7 +49,7 @@ kind: "package-reference"
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -65,7 +65,7 @@ pnpm 可用时，网关把安装/更新/卸载委托给 profile workspace 里的
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [宿主 plugin-control 网关](../../../packages/host/plugin-control/README.zh.md)
@@ -74,7 +74,7 @@ pnpm 可用时，网关把安装/更新/卸载委托给 profile workspace 里的
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 ### Agent 工具
@@ -107,7 +107,7 @@ pnpm 可用时，网关把安装/更新/卸载委托给 profile workspace 里的
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - packument 未声明 `dist.integrity` 的 tarball 仅以 HTTPS 传输信任，不做内容校验。
 - 配置的 `githubMirror` 是第三方服务，能看到（也可能篡改）下载内容——镜像前缀是显式开启的，设置前应知情。
@@ -118,7 +118,7 @@ pnpm 可用时，网关把安装/更新/卸载委托给 profile workspace 里的
 - 已安装插件在重启后以完整宿主权限运行——安装任意包是用户拥有的代码执行决策。
 - 启动失败环形记录覆盖 JS 可捕获的加载失败、启动超时与延迟拒绝；硬崩溃或主线程挂起不会留下记录（这些恢复路径由桌面端的启动标记兜底）。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

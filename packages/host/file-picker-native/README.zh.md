@@ -13,16 +13,16 @@ kind: "package-reference"
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 把本包与 [`file-picker`](../file-picker/README.zh.md) 缝隙一起组合进宿主组合；它注册具体服务实现，使 `ctx.filePicker` 可解析。
@@ -37,7 +37,7 @@ kind: "package-reference"
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -49,7 +49,7 @@ kind: "package-reference"
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [文件选择器缝隙](../../../packages/host/file-picker/README.zh.md)
@@ -58,7 +58,7 @@ kind: "package-reference"
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 无。该 native 后端打开宿主的操作系统选择框；这里没有任何内容进入模型请求。
@@ -69,12 +69,12 @@ kind: "package-reference"
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - **不支持 win32**——在实现 `IFileOpenDialog` 文件多选对话（沿用目录选择器已有的 koffi 驱动）之前，Windows 上的选择会大声失败。
 - **仅适用于宿主本机屏幕**——远程部署没有可打开选择框的显示器，因此该后端仅在操作者坐于宿主机前时组合使用。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

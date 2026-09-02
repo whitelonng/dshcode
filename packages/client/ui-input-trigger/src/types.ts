@@ -284,6 +284,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/** Serialized image the composer hands a command source when its claim allows images. */
 export interface SubmitImageAttachment {
   /** Declared media type; the host verifies it against the decoded bytes. */
   readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
@@ -293,23 +294,28 @@ export interface SubmitImageAttachment {
   readonly name?: string
 }
 
+/** Submit result a command claim returns through the scoped input event. */
 export interface SubmitOutcome {
   readonly kind: 'success' | 'error'
   readonly text?: string
 }
 
+/** Draft-span CAS material: integrity-watched range plus the draft revision it belongs to. */
 export interface TokenSpan {
   readonly start: number
   readonly end: number
   readonly draftRev: number
 }
 
+/** What a pick resolves into: a claim, a reference insert, inserted text, or explicit handling. */
 export type PickOutcome =
   | { readonly claim: CommandClaim }
   | { readonly insert: ReferenceInsert }
   | { readonly text: string; readonly continue?: boolean }
   | 'handled'
   | undefined
+
+/** Claim the composer grants a command source while its leading token remains unbroken. */
 export interface CommandClaim {
   /** Integrity-watched draft prefix, e.g. `/goal ` — breaking startsWith releases the claim. */
   readonly token: string
@@ -329,6 +335,7 @@ export interface CommandClaim {
   submit(args: string, actx: ClientContext, images: readonly SubmitImageAttachment[]): Promise<SubmitOutcome>
 }
 
+/** Reference a source inserts into the draft, e.g. `@session` or `/file`. */
 export interface ReferenceInsert {
   readonly source: string
   readonly ref: string

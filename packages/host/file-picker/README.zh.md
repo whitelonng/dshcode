@@ -13,16 +13,16 @@ Web GUI 宿主的本地文件选择器是一个能力缝隙（capability seam）
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 把本包组合进宿主组合；服务可注入为 `ctx.filePicker`，调用后会在宿主显示器上打开原生选择框。
@@ -37,7 +37,7 @@ Web GUI 宿主的本地文件选择器是一个能力缝隙（capability seam）
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -49,7 +49,7 @@ Service Definition 声明 `FilePicker` 及其提供方返回的能力对象。`c
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [目录选择器缝隙](../../../packages/host/directory-picker/README.zh.md)
@@ -58,7 +58,7 @@ Service Definition 声明 `FilePicker` 及其提供方返回的能力对象。`c
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 无。该 seam 服务于 GUI 宿主的本地文件选择；这里没有任何内容进入模型请求。
@@ -69,12 +69,12 @@ Service Definition 声明 `FilePicker` 及其提供方返回的能力对象。`c
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - **仅 native**——没有远程客户端交互形态；在不存在宿主显示器的部署中，应隐藏选择入口而不是报错。
 - **系统级搜索由调用方提供**——`locateByName` 自行遍历工作区树，并通过可选的 `systemSearch` 委托接受任何更宽的搜索（spotlight/`find`），因此其覆盖范围和开销属于调用方的策略。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

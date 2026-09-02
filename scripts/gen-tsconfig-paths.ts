@@ -187,8 +187,10 @@ export function renderAliases(aliases: readonly PackageAlias[], handWritten: Rea
       lines.push(`      ${JSON.stringify(invariant)}: [${JSON.stringify(`${alias.source}/invariant.ts`)}]`)
     }
   }
-  // The region closes `paths`, so the last member carries no trailing comma.
-  return lines.join(',\n')
+  // Hand-written aliases may follow the region (this fork appends desktop-only
+  // packages after the END marker), so the last generated member keeps its
+  // comma; JSONC accepts the trailing comma when the region closes `paths`.
+  return lines.length === 0 ? '' : `${lines.join(',\n')},`
 }
 
 /**

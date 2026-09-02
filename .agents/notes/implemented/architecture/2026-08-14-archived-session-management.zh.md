@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-14-archived-session-management.md) | 中文
 
-> 范围：让归档集合变得可管理的完整垂直切片——持久化层的持久删除、工作区账目层的恢复/移除、三个 workspace RPC、客户端运行时方法与设置页。扩展 [workspace 归档集合](2026-08-13-session-content-search-opt-in.zh.md) 机制与 [session 持久化协调器](2026-07-19-gui-layering-and-rpc-protocol.zh.md) 接缝。
+> 范围：让归档集合变得可管理的完整垂直切片——持久化层的持久删除、工作区账目层的恢复/移除、三个 workspace RPC、客户端运行时方法与设置页。扩展 [workspace 归档集合](2026-08-13-session-content-search-opt-in.zh.md) 机制与 [session 持久化协调器](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md) 接缝。
 
 ## 问题
 

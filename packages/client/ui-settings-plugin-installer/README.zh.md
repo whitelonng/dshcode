@@ -13,16 +13,16 @@ Web 插件设置中的合并插件列表标签页（`settings.plugins.tab`，id 
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 把本包组合进客户端装配；`plugins` 标签页出现在 Web 插件设置下，经共享的 `/api` 载体与宿主 plugin-installer 网关通信。
@@ -37,7 +37,7 @@ Web 插件设置中的合并插件列表标签页（`settings.plugins.tab`，id 
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -49,7 +49,7 @@ Web 插件设置中的合并插件列表标签页（`settings.plugins.tab`，id 
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [Web 客户端架构](../../../docs/subsystems/web-client.zh.md)
@@ -58,7 +58,7 @@ Web 插件设置中的合并插件列表标签页（`settings.plugins.tab`，id 
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 ### 浏览器插件标签页
@@ -77,14 +77,14 @@ Web 插件设置中的合并插件列表标签页（`settings.plugins.tab`，id 
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - git 来源需要本机存在 `git` 二进制；npm 来源经 HTTPS 下载，尚无完整性固定（integrity pinning）。
 - 更新检测仅做来源比较（`dist-tags.latest` / 远端 HEAD）；npm 范围解析从不选择预发布版本。
 - 安装任意包意味着重启后以完整宿主权限运行其代码——UI 通过重启流程隐含提示；安装前请审查来源。
 - 修复对话就地修改已安装副本；之后的重新安装或更新会覆盖修复内容。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

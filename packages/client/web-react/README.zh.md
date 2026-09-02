@@ -13,16 +13,16 @@ slot 终端设计的外壳侧 React 胶水。`createSlotRenderer` 是外壳安�
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 外壳把本包作为客户端装配的一部分来组合；业务插件绝不直接导入它。
@@ -37,7 +37,7 @@ slot 终端设计的外壳侧 React 胶水。`createSlotRenderer` 是外壳安�
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -49,7 +49,7 @@ slot 终端设计的外壳侧 React 胶水。`createSlotRenderer` 是外壳安�
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [Web 客户端架构](../../../docs/subsystems/web-client.zh.md)
@@ -58,7 +58,7 @@ slot 终端设计的外壳侧 React 胶水。`createSlotRenderer` 是外壳安�
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 无。ctx↔React 机制完全在浏览器中运行；这里没有任何内容进入模型请求。
@@ -69,13 +69,13 @@ slot 终端设计的外壳侧 React 胶水。`createSlotRenderer` 是外壳安�
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - **persist 中间件会损坏原始值状态 store**：保存时它会对状态执行对象展开，因此 `SnapshotStore<string>` 往返后会变成字符映射；引擎改为自行实现持久化（见 `attachPersistence`）。
 - **`UseSession` 有意保持宽泛（`object` 快照）**：依赖方向（runtime → web-react，绝不反向）使真实 `ConversationSnapshot` 类型不可访问；会话 slot 消费方在其边界处缩窄一次。
 - **`renderSlot` 是唯一的渲染形式**：没有 Suspense 集成或逐配置项惰性加载。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

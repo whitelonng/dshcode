@@ -4,7 +4,7 @@ Status: implemented
 
 English | [中文](2026-08-14-archived-session-management.zh.md)
 
-> Scope: the full vertical slice that makes the archive set manageable — durable session deletion in persistence, workspace-accounting restore/remove, three workspace RPCs, client-runtime methods, and the settings page. Extends the [workspace archive set](2026-08-13-session-content-search-opt-in.md) mechanism and the [session persistence coordinator](2026-07-19-gui-layering-and-rpc-protocol.md) seam.
+> Scope: the full vertical slice that makes the archive set manageable — durable session deletion in persistence, workspace-accounting restore/remove, three workspace RPCs, client-runtime methods, and the settings page. Extends the [workspace archive set](2026-08-13-session-content-search-opt-in.md) mechanism and the [session persistence coordinator](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md) seam.
 
 ## Problem
 

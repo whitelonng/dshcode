@@ -13,16 +13,16 @@ Web 设置中的归档会话页面。一个 section（`settings.section`，id `a
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 把本包组合进客户端装配并让它注册 `settings.section` 条目；归档页面出现在 Web 设置下。
@@ -37,7 +37,7 @@ Web 设置中的归档会话页面。一个 section（`settings.section`，id `a
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -49,7 +49,7 @@ Web 设置中的归档会话页面。一个 section（`settings.section`，id `a
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [Web 客户端架构](../../../docs/subsystems/web-client.zh.md)
@@ -58,7 +58,7 @@ Web 设置中的归档会话页面。一个 section（`settings.section`，id `a
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 ### 浏览器设置区块
@@ -77,12 +77,12 @@ Web 设置中的归档会话页面。一个 section（`settings.section`，id `a
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - 附件字节是 content-addressed 且跨会话共享；彻底删除移除会话日志，但孤儿附件文件会保留到未来的垃圾回收通道。
 - 列表在挂载与每次变更后刷新；在另一个窗口执行的删除会在下次打开本页时生效。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

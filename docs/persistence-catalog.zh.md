@@ -26,6 +26,7 @@ export type SurfaceEventType =
   | 'user/message'
   | 'assistant/message'
   | 'tool/result'
+  | 'message/delete'
 
 /**
  * How a session event entered the ordered surface. Only valid on
@@ -39,10 +40,16 @@ export type SurfaceEventType =
  *   node. The node's {@link SessionEvent.sourceEventSeqs} must include every
  *   shadowed surface node. Used by compaction; any surface-replacing producer
  *   may use it.
+ * - `{ op: 'delete', start, end }`: removes surface nodes from `start`
+ *   (inclusive) through `end` (inclusive) without a replacement. Only
+ *   `message/delete` events carry it — a human-edited transcript removal. Both
+ *   ends must exist as surface nodes in the current surface; the event's
+ *   {@link SessionEvent.sourceEventSeqs} must include every removed node.
  */
 export type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: SessionSeq; end: SessionSeq }
+  | { op: 'delete'; start: SessionSeq; end: SessionSeq }
 
 /**
  * One immutable entry in the session log.
@@ -92,7 +99,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-来源：[`packages/core/session/src/types.ts:366`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:373`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:402`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:434`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:375`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:382`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:417`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:450`](../packages/core/session/src/types.ts)
 
 ## 事件
 
@@ -497,8 +504,27 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 /** Durable transition written after a retry wait succeeds and before the next request attempt starts. */
 'llm/retry-started': LlmRetryStartedEventData
 ```
-
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
+
+### `message/*`
+
+<a id="messagedelete--surface"></a>
+
+#### `message/delete` — surface
+
+```ts persistence-catalog
+/**
+ * Removes the surface range [`start`, `end`] (inclusive, both existing
+ * surface node seqs) from the model-visible history without replacement.
+ * Log-only: derives no message, but the surface fold must know the range —
+ * its `surfaceOp` carries the same {@link SurfaceOp delete} values and
+ * `sourceEventSeqs` cites every removed node. Appended only outside an open
+ * turn, by a human transcript edit (delete message / discard a turn).
+ */
+'message/delete': { start: number; end: number }
+```
+
+来源：[`packages/core/session/src/types.ts:333`](../packages/core/session/src/types.ts)
 
 ### `model/*`
 

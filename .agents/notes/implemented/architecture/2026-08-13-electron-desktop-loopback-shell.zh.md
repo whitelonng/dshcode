@@ -10,7 +10,7 @@ Status: implemented
 
 桌面端还必须拥有自己启动的 Web 服务。固定端口可能与另一个 DSHCode 或开发进程冲突，通配地址会把控制面暴露给局域网，未释放 Harness 树就退出 Electron 可能留下套接字或子进程。打包还有独立的失败方式：pnpm 工作区包把必需对等依赖（peer dependency）用作共享 Service Definition，因此部署可以成功构建，却在 loader 导入安装树中遗漏的对等依赖时才失败。
 
-[GUI 分层决策](2026-07-19-gui-layering-and-rpc-protocol.zh.md)同时保留了同源 Web 载体与将来的 Electron IPC 载体。现有 Web profile 已经拥有静态资源、HTTP API 路由、[WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.zh.md)、目录选择以及完整浏览器插件清单。替换载体会扩大首个桌面改动，却不会改变用户要求的界面。
+[GUI 分层决策](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)同时保留了同源 Web 载体与将来的 Electron IPC 载体。现有 Web profile 已经拥有静态资源、HTTP API 路由、[WebSocket 下行载体](../../archived/architecture/2026-08-04-websocket-downlink-carrier.md)、目录选择以及完整浏览器插件清单。替换载体会扩大首个桌面改动，却不会改变用户要求的界面。
 
 ## Decision
 

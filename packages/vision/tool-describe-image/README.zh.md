@@ -13,16 +13,16 @@ kind: "package-reference"
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 把插件安装到 profile，让它只在装载时注册一次 `describe_image` 工具；没有按调用选择模型或端点的参数，模型无法把图片路由到部署配置之外的任何后端。
@@ -69,7 +69,7 @@ dsh plugin --profile web add github:whitelonng/dsh-plugin-describe-image
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -83,7 +83,7 @@ API key 每次调用解析一次，先匹配者胜：显式 `apiKey` → [凭据
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [工具目录](../../../docs/tool-catalog.zh.md)
@@ -92,7 +92,7 @@ API key 每次调用解析一次，先匹配者胜：显式 `apiKey` → [凭据
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 ### Tool schema
@@ -125,14 +125,14 @@ schema 与描述不变时前缀稳定；插件生命周期或改变描述的配�
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - **仅头部校验** — 魔数门检测媒体类型但不解码图片；头部合法而载荷损坏的文件会在视觉端点处失败，而不是在本工具处。
 - **一图一答** — 不支持多图输入、对上一张图的追问，也不输出结构化结果（坐标、包围盒）。需要反复看-判断-再看或像素级 UI 控制的工作应使用视觉模型子代理，而不是本工具。
 - **文字提取仍消耗一次 VLM 调用** — 没有本地 OCR 兜底；只做文字提取的部署可把 `baseURL` 指向更便宜的 OCR 优先模型（或本地 Ollama 端点）。
 - **仅限 OpenAI 兼容契约** — chat-completions 请求或响应形状不同的提供方需要单独的工具或适配器；线上格式固定在源码中。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

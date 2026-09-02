@@ -3,4 +3,4 @@
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/host/file-picker-native/README.md
 README.md: c93911c55fb7ff7a47bb026413e443da5c53e069
-README.zh.md: 96ee8de4b9be7161737a254baa056b8b25c8f309
+README.zh.md: 5f86f9b14556e938cfc9dc5bf192b6e0312b7a79

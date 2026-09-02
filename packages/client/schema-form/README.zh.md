@@ -13,16 +13,16 @@ kind: "package-reference"
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 从包根导入这些辅助函数，并在编辑器组件的控制器里驱动它们。
@@ -37,7 +37,7 @@ kind: "package-reference"
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -49,17 +49,17 @@ kind: "package-reference"
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
-- [Web 客户端架构](../../../docs/subsystems/web-client.md)
-- [Settings seam](../../../packages/settings/settings/README.md)
-- [Web 配置平面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md)
-- [新增包指南](../../../docs/cookbook/adding-a-package.md)
+- [Web 客户端架构](../../../docs/subsystems/web-client.zh.md)
+- [Settings seam](../../../packages/settings/settings/README.zh.md)
+- [Web 配置平面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md)
+- [新增包指南](../../../docs/cookbook/adding-a-package.zh.md)
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 无。该包支撑的是浏览器配置编辑器；这里没有任何内容进入模型请求。
@@ -70,13 +70,13 @@ kind: "package-reference"
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - **还原会执行所服务的封装** — `rehydrateSchema` 重建活的 schemastery 校验器，而 schemastery 通过 `new Function` 复原序列化回调，因此 schema 封装是可执行内容而非惰性数据。只有来自服务页面的同一可信宿主的封装才是安全的；协议不提供跨信任的惰性表示。
 - **校验是草稿级而非逐字段** — `validateDraft` 报告 schemastery 的第一条失败消息（含 `$.path`），不会把错误映射到单个控件。
-- **没有通用渲染器** — 消费者在这些辅助函数之上构建特性专属表单。[Web 配置平面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md) 记录了这一取舍。
+- **没有通用渲染器** — 消费者在这些辅助函数之上构建特性专属表单。[Web 配置平面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md) 记录了这一取舍。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

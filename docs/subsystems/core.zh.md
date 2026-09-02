@@ -75,76 +75,65 @@ interface Agent {
   readonly status: AgentStatus
   /** Agent-scoped context; its contributions are agent-local, unwind on disposal, and reject registration afterward. */
   readonly ctx: Context
-
   /**
-   * Clear queued and steering work — unless `keepInbox` — and abort the active
-   * turn or between-turn task. The first cause wins for that activity. With no
-   * active activity, cancellation is a no-op and does not arm later work.
-   * @param cause - the stable caller intent carried by the active operation signal.
-   * @param options - cancellation options; `keepInbox` preserves pending work.
-   */
+     * Clear queued and steering work — unless `keepInbox` — and abort the active
+     * turn or between-turn task. The first cause wins for that activity. With no
+     * active activity, cancellation is a no-op and does not arm later work.
+     * @param cause - the stable caller intent carried by the active operation signal.
+     * @param options - cancellation options; `keepInbox` preserves pending work.
+     */
   cancel(cause: AgentCancelCause, options?: CancelOptions): void
-
   /**
-   * Resolve after the current whole-agent activity reaches quiescence. This
-   * follows replacement work started before the observed driver retires,
-   * but does not identify the settlement of any particular message.
-   * @returns fulfillment after no active driver or maintenance task remains.
-   */
+     * Resolve after the current whole-agent activity reaches quiescence. This
+     * follows replacement work started before the observed driver retires,
+     * but does not identify the settlement of any particular message.
+     * @returns fulfillment after no active driver or maintenance task remains.
+     */
   whenIdle(): Promise<void>
-
   /**
-   * Run one non-turn maintenance task from the true idle phase. The task starts
-   * synchronously after claiming that phase; later waking input remains in the
-   * inbox until the task settles, while public status stays `idle`.
-   * `whenIdle()` follows both the task and any waking work released behind it.
-   * @param task - operation whose fulfillment or rejection is preserved, with a signal aborted by {@link cancel}.
-   * @throws synchronously when turn-driving or another maintenance task already owns the agent.
-   * @returns the task promise.
-   */
+     * Run one non-turn maintenance task from the true idle phase. The task starts
+     * synchronously after claiming that phase; later waking input remains in the
+     * inbox until the task settles, while public status stays `idle`.
+     * `whenIdle()` follows both the task and any waking work released behind it.
+     * @param task - operation whose fulfillment or rejection is preserved, with a signal aborted by {@link cancel}.
+     * @throws synchronously when turn-driving or another maintenance task already owns the agent.
+     * @returns the task promise.
+     */
   runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>
-
   /**
-   * Route identified input to an inbox boundary and optionally wake the driver.
-   * Waking input submitted after active cancellation is queued for the next
-   * turn and runs when the aborted activity converges to idle; a `disposed`
-   * cancel leaves it parked. A wake submitted while already idle always opens
-   * its turn boundary, even when its message is cleared before the driver
-   * claims ([cancel-convergence wake latch](../../../../.agents/notes/implemented/bug-fix/2026-08-07-cancel-convergence-wake-latch.md)).
-   * @param message - identified content and the source that supplied it.
-   * @param target - the preferred next-turn or next-step inbox boundary.
-   * @param wakeup - whether delivery may wake the driver.
-   */
+     * Route identified input to an inbox boundary and optionally wake the driver.
+     * Waking input submitted after active cancellation is queued for the next
+     * turn and runs when the aborted activity converges to idle; a `disposed`
+     * cancel leaves it parked. A wake submitted while already idle always opens
+     * its turn boundary, even when its message is cleared before the driver
+     * claims ([cancel-convergence wake latch](../../../../.agents/notes/implemented/bug-fix/2026-08-07-cancel-convergence-wake-latch.md)).
+     * @param message - identified content and the source that supplied it.
+     * @param target - the preferred next-turn or next-step inbox boundary.
+     * @param wakeup - whether delivery may wake the driver.
+     */
   send(message: UserMessage, target: InboxTarget, wakeup: boolean): void
-
   /**
-   * Queue an ordinary follow-up turn and wake the driver. The item becomes the
-   * sole ordinary message of its own turn.
-   * @param message - identified prompt content and the source that supplied it.
-   * @param replace - optional surface rewrite for the first claimed message of
-   * this turn: instead of appending, it replaces the current surface range
-   * [`start`, `end`] with the message (a human edit-and-regenerate), citing
-   * every shadowed node in `sourceEventSeqs`.
-   */
+     * Queue an ordinary follow-up turn and wake the driver. The item becomes the
+     * sole ordinary message of its own turn.
+     * @param message - identified prompt content and the source that supplied it.
+     */
   followup(message: UserMessage, replace?: FollowupReplace): void
-
   /**
-   * Submit steering for the nearest step. An idle driver starts a turn;
-   * a running driver consumes it at its next step boundary.
-   * A rejected step leaves steering parked in the inbox until the next
-   * wake; cancellation or disposal may discard pending steering.
-   * @param message - identified steering content and the source that supplied it.
-   */
+     * Submit steering for the nearest step. An idle driver starts a turn;
+     * a running driver consumes it at its next step boundary.
+     * A rejected step leaves steering parked in the inbox until the next
+     * wake; cancellation or disposal may discard pending steering.
+     * @param message - identified steering content and the source that supplied it.
+     */
   steer(message: UserMessage): void
-
   /**
-   * Queue model-facing context for the next pre-step without waking the
-   * driver. A running driver claims it at the nearest later step boundary;
-   * idle drivers leave it pending until follow-up or steering
-   * wakes them. It may miss a request whose pre-step already claimed its
-   * batch. Cancellation or disposal may discard pending context.
-   * @param message - identified injected context and the source that supplied it.
-   */
+     * Queue model-facing context for the next pre-step without waking the
+     * driver. A running driver claims it at the nearest later step boundary;
+     * idle drivers leave it pending until follow-up or steering
+     * wakes them. It may miss a request whose pre-step already claimed its
+     * batch. Cancellation or disposal may discard pending context.
+     * @param message - identified injected context and the source that supplied it.
+     */
   inject(message: UserMessage): void
 }
 ```

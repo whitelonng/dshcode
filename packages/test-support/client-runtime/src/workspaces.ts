@@ -163,6 +163,7 @@ export class TestWorkspaces implements IWorkspaces {
    * Browse listing (recorded). The default serves an empty home level; stub
    * to shape a tree.
    * @param path - absolute directory to list; absent lists the home level.
+   * @param signal - aborts an in-flight listing; forwarded to the wire like production.
    * @returns the level's listing.
    */
   async listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {

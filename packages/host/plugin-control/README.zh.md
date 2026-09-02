@@ -13,16 +13,16 @@ kind: "package-reference"
 
 ## 目录
 
-- [使用本包](#使用本包)
-- [理解实现](#理解实现)
-- [延伸阅读](#延伸阅读)
-- [模型体验](#模型体验)
-- [已知限制与暂缓事项](#已知限制与暂缓事项)
-- [开发备注](#开发备注)
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
 -----
 
-<a id="使用本包"></a>
+<a id="use-this-package"></a>
 ## 使用本包
 
 把本包与 `profilePatchPath` 和 `controls` 清单一起组合进宿主组合；网关挂载在 Connection 通道 `/plugin-control` 上，只应答具有回环权限的请求。
@@ -37,7 +37,7 @@ kind: "package-reference"
 
 -----
 
-<a id="理解实现"></a>
+<a id="understand-the-implementation"></a>
 ## 理解实现
 
 <details>
@@ -49,7 +49,7 @@ kind: "package-reference"
 
 -----
 
-<a id="延伸阅读"></a>
+<a id="further-exploration"></a>
 ## 延伸阅读
 
 - [宿主 plugin-installer 网关](../../../packages/host/plugin-installer/README.zh.md)
@@ -58,7 +58,7 @@ kind: "package-reference"
 
 -----
 
-<a id="模型体验"></a>
+<a id="model-experience"></a>
 ## 模型体验
 
 ### 重启期插件选择
@@ -77,14 +77,14 @@ kind: "package-reference"
 
 ## 已知限制与暂缓事项
 
-<a id="已知限制与暂缓事项"></a>
+<a id="known-limitations-and-deferred-work"></a>
 
 - **需要重启** —— 开关会持久化期望状态，但不会卸载或重新加载当前插件 fiber，因为第三方插件 teardown 后可能仍保留路由、工具或其他注册。
 - **只控制配置的产品** —— 端点只控制部署方提供的逻辑清单，并不是 Loader 清单的通用修改 API。
 - **后续层仍有更高优先级** —— 应用在 profile patch 之后的 home 级 patch 或命令行 overlay，可能在下次启动时覆盖已保存设置。
 - **不订阅文件系统变化** —— 启动后直接编辑文件，不会反映在当前 gateway 快照中，直至进程重启。
 
-<a id="开发备注"></a>
+<a id="dev-note"></a>
 ### 开发备注
 
 <details>

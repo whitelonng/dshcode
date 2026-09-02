@@ -24,6 +24,7 @@ export type SurfaceEventType =
   | 'user/message'
   | 'assistant/message'
   | 'tool/result'
+  | 'message/delete'
 
 /**
  * How a session event entered the ordered surface. Only valid on
@@ -37,10 +38,16 @@ export type SurfaceEventType =
  *   node. The node's {@link SessionEvent.sourceEventSeqs} must include every
  *   shadowed surface node. Used by compaction; any surface-replacing producer
  *   may use it.
+ * - `{ op: 'delete', start, end }`: removes surface nodes from `start`
+ *   (inclusive) through `end` (inclusive) without a replacement. Only
+ *   `message/delete` events carry it — a human-edited transcript removal. Both
+ *   ends must exist as surface nodes in the current surface; the event's
+ *   {@link SessionEvent.sourceEventSeqs} must include every removed node.
  */
 export type SurfaceOp =
   | 'append'
   | { op: 'replace'; start: SessionSeq; end: SessionSeq }
+  | { op: 'delete'; start: SessionSeq; end: SessionSeq }
 
 /**
  * One immutable entry in the session log.
@@ -90,7 +97,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:366`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:373`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:402`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:434`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:375`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:382`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:417`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:450`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -498,6 +505,26 @@ Source: [`packages/llm/llm-retry/src/types.ts:9`](../packages/llm/llm-retry/src/
 
 Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
 
+### `message/*`
+
+<a id="messagedelete--surface"></a>
+
+#### `message/delete` — surface
+
+```ts persistence-catalog
+/**
+ * Removes the surface range [`start`, `end`] (inclusive, both existing
+ * surface node seqs) from the model-visible history without replacement.
+ * Log-only: derives no message, but the surface fold must know the range —
+ * its `surfaceOp` carries the same {@link SurfaceOp delete} values and
+ * `sourceEventSeqs` cites every removed node. Appended only outside an open
+ * turn, by a human transcript edit (delete message / discard a turn).
+ */
+'message/delete': { start: number; end: number }
+```
+
+Source: [`packages/core/session/src/types.ts:333`](../packages/core/session/src/types.ts)
+
 ### `model/*`
 
 <a id="modelselection--log-only"></a>
@@ -563,7 +590,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:46`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:339`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:348`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -582,7 +609,7 @@ Source: [`packages/core/session/src/types.ts:339`](../packages/core/session/src/
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:329`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:338`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -657,7 +684,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/end-seed': Record<string, never>
 ```
 
-Source: [`packages/core/session/src/types.ts:362`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:371`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
