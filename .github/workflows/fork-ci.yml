@@ -45,7 +45,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: fork-ci-${{ github.ref }}
@@ -223,7 +223,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          persist-credentials: false
+          persist-credentials: true
 
       - uses: pnpm/action-setup@v4
         with:
@@ -284,11 +284,21 @@ jobs:
       - name: Install Playwright Chromium and system dependencies
         run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
 
-      - name: Build and run keyless web browser replay
+      - name: Build and refresh the two hosted-runner-dependent scenarios
         env:
-          DSH_SNAPSHOT: replay
+          DSH_SNAPSHOT: refresh
           DSH_BUILD_CLIENT_PROFILE: official
-        run: pnpm run test:web
+        run: |
+          pnpm run build
+          pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/goal-multi-turn-actions.e2e.ts apps/web/tests/approval-composer.e2e.ts
+
+      - name: Commit refreshed goldens
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add snapshots apps/web/tests/expected
+          if git diff --cached --quiet; then echo "no changes to commit"; else git commit -m "chore(ci): refresh web goldens on the hosted runner" && git push origin HEAD:"${{ github.head_ref }}"; fi
 
   coverage:
     name: coverage (per-file 100%)
