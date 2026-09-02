@@ -15,7 +15,9 @@
     "dsh": "lib/bin.js"
   },
   "files": [
-    "lib/*.js"
+    "lib/*.js",
+    "lib/types/**/*.d.ts",
+    "config"
   ],
   "dsh": {
     "configTrees": [

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-host-file-picker",
   "description": "Abstract native file-picking seam (ctx.filePicker) plus basename file location for the DeepSeek Harness web GUI host",
-  "version": "1.0.5",
+  "version": "0.1.2-alpha.4",
   "publishConfig": {
     "access": "public"
   },
