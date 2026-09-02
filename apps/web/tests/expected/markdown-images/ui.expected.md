@@ -10,6 +10,8 @@
 - text: Show the Markdown image policy. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
 - heading "Markdown images" [level=2]
 - paragraph:
   - img "Remote test image"
@@ -21,13 +23,17 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
+- button "Add files" [disabled]:
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
