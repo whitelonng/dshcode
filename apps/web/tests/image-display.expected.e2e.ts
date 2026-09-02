@@ -140,19 +140,19 @@ it('accepts pasted images into the composer rail in order and removes them', asy
     expect(document.querySelector('[role="group"][aria-label="Pending images"]')).toBeNull()
   })
 
-  // A non-image file resolves by basename; an empty match announces the
-  // add-file fallback (the inline strip is already gone).
+  // An unsupported file announces a transient toast (the inline strip is
+  // gone) and the banner dismisses itself after its hold-and-fade lifetime.
   fireEvent.paste(textarea, {
     clipboardData: {
       items: [{ kind: 'file', type: 'text/plain', getAsFile: () => new File(['x'], 'notes.txt', { type: 'text/plain' }) }],
       getData: () => '',
     },
   })
-  const locateMessage = 'Cannot locate notes.txt; use the add-file button'
-  const toast = await screen.findByText(locateMessage)
+  const unsupportedMessage = 'Only PNG, JPG, WebP, and GIF images are supported'
+  const toast = await screen.findByText(unsupportedMessage)
   expect(toast.closest('[role="alert"]')).not.toBeNull()
   await waitFor(() => {
-    expect(screen.queryByText(locateMessage)).toBeNull()
+    expect(screen.queryByText(unsupportedMessage)).toBeNull()
   }, { timeout: 6_000 })
 })
 

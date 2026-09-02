@@ -1,4 +1,3 @@
-// @ts-nocheck -- alpha.4 sync: product composer machine awaits the ComposerKeyboard deep migration
 /** The default composer body: the 'conversation.composer.bar' slot entry.
  * Machine state arrives through the standard provide channel
  * (useInput + inputActions); the keyboard/DOM command face and stop arrive
@@ -11,16 +10,14 @@
  * ComposerContentEditable; chips render as decorator portals, and the
  * keymap registers submit/menu/paste gestures on the editor command layer.
  * The no-session state renders the SAME div inert as the Workspace-picker
- * trigger instead of a parallel tree. File/mention intake (pickFiles /
- * locateFiles) rides the same Lexical keymap path — pasted and picked
- * non-image files resolve to @path mentions, images join the draft rail.
+ * trigger instead of a parallel tree.
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  IconPaperclipOutline16, IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
+  IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
@@ -36,41 +33,20 @@ import { ComposerContentEditable } from '../input/editor/ComposerContentEditable
 import { DecoratorPortals } from '../input/editor/DecoratorPortals.tsx'
 import { registerComposerKeymap } from '../input/editor/keymap.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
-import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import css from './InputBar.module.css'
-
-/**
- * Classify one dropped/pasted file as an image (multi-modal intake) versus a
- * plain file (basename-location intake). The `image/*` MIME family decides:
- * an image type joins the image rail, where the rail's own admission keeps
- * its authoritative "only PNG/JPG/WebP/GIF" refusal; everything else — any
- * non-image MIME or an empty MIME — resolves to a `@path` mention. Routing on
- * the MIME family keeps one rule that does not drift with a deployment's
- * narrowed intake list.
- * @param file - the browser file.
- * @returns true when the file joins the image rail, false when it is path-located.
- */
-function isSupportedImage(file: File): boolean {
-  return file.type.startsWith('image/')
-}
 
 export type InputBarProps = ComposerBarProps
 
 export const InputBar = memo(function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
-  pickFiles, locateFiles,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
   workspacePickerOpen = false, onRequestWorkspace,
   placeholder, accessory,
 }: InputBarProps) {
-  // The props face resolves to `any` under the alpha.4 ts-nocheck; pin the
-  // file-intake faces so their then() arms are typed (behavior unchanged).
-  const pickFilesTyped = pickFiles as undefined | (() => Promise<{ cancelled: boolean; paths: string[] }>)
-  const locateFilesTyped = locateFiles as undefined | ((names: string[]) => Promise<{ paths: string[]; name: string }[]>)
   const input = useInput(s => s)
   const notice = useNotices(s => s)
   void useLexicon // hook seat stays bound by the inject compartment; text-ref decoration rides the shell's editor transforms
@@ -236,97 +212,37 @@ export const InputBar = memo(function InputBar({
     return () => { el.removeEventListener('wheel', onWheel) }
   }, [])
 
-  // The asynchronous file-location/native-pick arms write the draft after a
-  // network round trip, so the keyboard access rides a ref; the draft itself
-  // comes from the machine's synchronous snapshot (never the render closure,
-  // which can lag one frame behind the user's latest keystroke).
-  const liveKeyboard = useRef(keyboard)
-  liveKeyboard.current = keyboard
-
-  // Insert `@path` mentions at the caret/selection through the shell's paste
-  // path: the Lexical editor inserts over the current selection (the caret
-  // when collapsed), so a pick/location settled after the user kept typing
-  // edits the draft as-is. Mentions are plain text; the machine re-projects
-  // and re-tracks on the resulting editor commit.
-  const insertFileMentions = (mentions: readonly string[]): void => {
-    const currentKeyboard = liveKeyboard.current
-    if (currentKeyboard === undefined || mentions.length === 0) return
-    currentKeyboard.paste(`${mentions.join(' ')} `)
-  }
-
-  // Admission pre-check for one image batch: a batch that would break a
-  // projected limit is refused whole and announced immediately. Format
-  // precedes limits — a batch with a non-image must announce the format
-  // problem, not a count or size it could never pass anyway; without a
-  // projected limit the host admission answer is the only rejecter.
-  const admitImages = (batch: readonly File[]): void => {
+  // Intake pre-check: an addition that would break
+  // a projected limit is refused as a whole batch, announced immediately, and
+  // never enters the rail — no more submit-time failure rolling the rail
+  // back. The host enforces the same limits at submit for callers that bypass
+  // this composer.
+  const intakeImages = useCallback((files: readonly File[]): void => {
+    if (addImages === undefined || files.length === 0) return
     const rejected = ((): string | null => {
       if (imageLimits !== undefined) {
-        if (batch.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
-          return addImages?.(batch) ?? null
+        // Format precedes limits: a batch with
+        // a non-image must announce the format problem, not a count or size
+        // it could never pass anyway — addImages rejects it authoritatively.
+        if (files.some(file => !(imageLimits.mediaTypes as readonly string[]).includes(file.type))) {
+          return addImages(files)
         }
-        if (attachments.length + batch.length > imageLimits.maxImagesPerMessage) {
+        if (attachments.length + files.length > imageLimits.maxImagesPerMessage) {
           return t('image.tooMany', { count: imageLimits.maxImagesPerMessage })
         }
-        if (batch.some(file => file.size > imageLimits.maxImageBytes)) {
+        if (files.some(file => file.size > imageLimits.maxImageBytes)) {
           return t('image.fileTooLarge', { size: imageSizeText(imageLimits.maxImageBytes) })
         }
         const total = attachments.reduce((sum, attachment) => sum + attachment.file.size, 0)
-          + batch.reduce((sum, file) => sum + file.size, 0)
+          + files.reduce((sum, file) => sum + file.size, 0)
         if (total > imageLimits.maxMessageImageBytes) {
           return t('image.totalTooLarge', { size: imageSizeText(imageLimits.maxMessageImageBytes) })
         }
       }
-      return addImages?.(batch) ?? null
+      return addImages(files)
     })()
     if (rejected !== null) showToast(rejected)
-  }
-
-  // Intake: when a workspace file-location face is mounted, split the batch —
-  // images ride the rail (refused whole on a broken limit, announced
-  // immediately), non-images resolve to `@path` mentions against the
-  // workspace. Without that face the whole batch falls through to the host
-  // admission, which owns the format rejection (the default composer path).
-  const intakeImages = useCallback((files: readonly File[]): void => {
-    if (files.length === 0 || addImages === undefined) return
-    if (locateFilesTyped === undefined) {
-      admitImages(files)
-      return
-    }
-    const images = files.filter(isSupportedImage)
-    const others = files.filter(file => !isSupportedImage(file))
-    if (images.length > 0) admitImages(images)
-    if (others.length > 0) {
-      void locateFilesTyped(others.map(file => file.name)).then((items: { paths: string[]; name: string }[]) => {
-        const mentions: string[] = []
-        const ambiguous: string[] = []
-        for (const item of items) {
-          if (item.paths.length === 1 && item.paths[0] !== undefined) {
-            const mention = formatFileMention({ path: item.paths[0], kind: 'file' }, false)
-            if (mention !== undefined) mentions.push(mention)
-          } else {
-            ambiguous.push(item.name)
-          }
-        }
-        if (mentions.length > 0) insertFileMentions(mentions)
-        if (ambiguous.length > 0) showToast(t('file.locateFailed', { names: ambiguous.join(', ') }))
-      }, (error: unknown) => { showToast(error instanceof Error ? error.message : String(error)) })
-    }
-  }, [addImages, attachments, imageLimits, showToast, t, locateFilesTyped])
-
-  // The native multi-file picker: selected paths become `@path` mentions.
-  const onAddFiles = (): void => {
-    if (pickFilesTyped === undefined || locked || machineBusy) return
-    void pickFilesTyped().then((result: { cancelled: boolean; paths: string[] }) => {
-      if (result.cancelled || result.paths.length === 0) return
-      const mentions = result.paths
-        .map(path => formatFileMention({ path, kind: 'file' }, false))
-        .filter((mention): mention is string => mention !== undefined)
-      insertFileMentions(mentions)
-    }, (error: unknown) => {
-      showToast(error instanceof Error ? error.message : String(error))
-    })
-  }
+  }, [addImages, attachments, imageLimits, showToast, t])
 
   const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
 
@@ -522,18 +438,6 @@ export const InputBar = memo(function InputBar({
         </div>
         <div className={css.row}>
           <div className={css.tools}>
-            <Tooltip label={t('input.addFiles')} side="top" delayMs={500}>
-              <button
-                type="button"
-                className={css.add}
-                aria-label={t('input.addFiles')}
-                disabled={locked || machineBusy || pickFilesTyped === undefined}
-                onMouseDown={keepFocus}
-                onClick={() => { onAddFiles() }}
-              >
-                <IconPaperclipOutline16 size={14} />
-              </button>
-            </Tooltip>
             <Tooltip label={t('input.commands')} side="top" delayMs={500}>
               <button
                 type="button"
