@@ -348,7 +348,18 @@ jobs:
           exit "$sandbox_status"
 
       - name: Run exhaustive coverage
-        run: pnpm run check:ci:coverage
+        run: |
+          pnpm run check:ci:coverage 2>&1 | tee coverage.log
+        shell: bash
+
+      - name: Surface coverage failures as annotations
+        if: failure()
+        run: |
+          # v8 threshold errors and uncovered-location records are log-only by
+          # default; re-emit them as workflow annotations so a per-file miss
+          # names the offending file without downloading the raw log.
+          grep -E 'ERROR: Coverage|does not meet|uncovered' coverage.log | sed 's/^[[:space:]]*//' | sed 's/^/::error::/' || true
+        shell: bash
 
   # Single stable required check for branch protection: require "Fork CI /
   # all checks passed" instead of enumerating jobs whose names evolve as lanes
