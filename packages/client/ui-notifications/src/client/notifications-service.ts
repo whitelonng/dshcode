@@ -256,7 +256,7 @@ export class NotificationsService {
     const jobs = new Map<string, JobView>()
     for (const job of snapshot.jobsBySession[id] ?? []) jobs.set(job.id, job)
     return {
-      pending: summary.pendingInteraction,
+      pending: summary.pendingInteraction as PendingInteractionStatus | undefined,
       running: summary.running,
       jobs,
     }
@@ -332,8 +332,9 @@ export class NotificationsService {
 
   /** Tool name of the first pending approval, when the session is instantiated. */
   private approvalToolName(sessionId: SessionId): string | undefined {
-    const pending = this.sessions.binding(sessionId)?.session.getSnapshot().pending
-    const approval = pending?.find(
+    const pending = (this.sessions.binding(sessionId)?.session.getSnapshot().pending
+      ?? []) as readonly { kind: string; toolName: string }[]
+    const approval = pending.find(
       (wait): wait is { kind: 'approval'; toolName: string } => wait.kind === 'approval',
     )
     return approval?.toolName

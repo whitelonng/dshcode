@@ -32,7 +32,7 @@ describe('ApprovalPanel keyboard confirmation', () => {
     const props = panelProps()
     render(<ApprovalPanel {...props} />)
     fireEvent.keyDown(document, { key: 'Enter', ctrlKey: true })
-    await expect.poll(() => props.answer).toHaveBeenCalled()
+    await expect.poll(() => props.answer as unknown).toHaveBeenCalled()
     expect(props.answer).toHaveBeenCalledWith('allowed-once')
   })
 
@@ -40,7 +40,7 @@ describe('ApprovalPanel keyboard confirmation', () => {
     const props = panelProps()
     render(<ApprovalPanel {...props} />)
     fireEvent.keyDown(document, { key: 'Enter', metaKey: true })
-    await expect.poll(() => props.answer).toHaveBeenCalledTimes(1)
+    await expect.poll(() => props.answer as unknown).toHaveBeenCalledTimes(1)
     expect(props.answer).toHaveBeenCalledWith('allowed-once')
   })
 
@@ -67,7 +67,7 @@ describe('ApprovalPanel keyboard confirmation', () => {
     const props = panelProps()
     render(<ApprovalPanel {...props} />)
     fireEvent.keyDown(document, { key: 'Enter', ctrlKey: true })
-    await expect.poll(() => props.answer).toHaveBeenCalledTimes(1)
+    await expect.poll(() => props.answer as unknown).toHaveBeenCalledTimes(1)
     fireEvent.keyDown(document, { key: 'Enter', ctrlKey: true })
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(props.answer).toHaveBeenCalledTimes(1)

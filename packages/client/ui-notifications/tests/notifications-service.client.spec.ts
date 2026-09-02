@@ -59,7 +59,7 @@ function sessionsDouble() {
     update: (id: string, patch: Omit<Partial<SessionSummary>, 'pendingInteraction'>
       & { pendingInteraction?: PendingInteractionStatus | undefined }): void => {
       list.update((draft) => {
-        draft.byId[sid(id)] = { ...draft.byId[sid(id)]!, ...patch } as SessionSummary
+        draft.byId[sid(id)] = { ...draft.byId[sid(id)]!, ...patch }
       })
     },
     setJobs: (id: string, jobs: readonly JobView[]): void => {

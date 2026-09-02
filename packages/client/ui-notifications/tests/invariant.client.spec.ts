@@ -13,7 +13,7 @@ describe('ui-notifications invariant companion', () => {
     expect(NotificationsInvariant.name).toBe('client-ui-notifications-invariant')
     expect(NotificationsInvariant.inject).toEqual(['invariants'])
     // Emitting an unrelated event proves the companion installed no audit.
-    expect(() => { (ctx.emit as (event: string) => void)('slots/changed') }).not.toThrow()
+    expect(() => { ctx.emit('slots/changed', 'probe') }).not.toThrow()
     await fiber.dispose()
   })
 })

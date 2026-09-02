@@ -239,19 +239,14 @@ export class InputTriggerController {
         return 'consumed'
       }
       case 'tab': {
-        return this.complete(state)
-      }
-      case 'enter': {
-        if (state.highlight === null) return 'pass'
-        // Refinement keeps the previous rows and highlight visible while the
-        // next fetch is pending; Enter then neither picks the stale row nor
-        // falls through to submit — an explicit no-op until the group is ready.
-        const group = state.groups.find(g => g.source === state.highlight?.source)
-        if (group === undefined || group.status !== 'ready') return 'consumed'
-        this.pick(state.highlight.source, state.highlight.index)
-        return 'pick-highlighted'
-      }
-      case 'tab': {
+        // The leading `/`-command completion is the tab path that uses
+        // complete(); every other open-menu candidate follows the drill/pick
+        // path below (complete() itself would otherwise consume the key for
+        // them via its own open-menu contract).
+        if (state.highlight !== null && this.hit !== null
+          && this.hit.trigger === '/' && this.hit.position === 'leading') {
+          return this.complete(state)
+        }
         if (state.highlight === null) return 'pass'
         const group = state.groups.find(g => g.source === state.highlight?.source)
         // Pending refinement keeps the stale highlight visible: consume the
@@ -263,6 +258,16 @@ export class InputTriggerController {
           this.pick(state.highlight.source, state.highlight.index, 'drill')
           return 'consumed'
         }
+        this.pick(state.highlight.source, state.highlight.index)
+        return 'pick-highlighted'
+      }
+      case 'enter': {
+        if (state.highlight === null) return 'pass'
+        // Refinement keeps the previous rows and highlight visible while the
+        // next fetch is pending; Enter then neither picks the stale row nor
+        // falls through to submit — an explicit no-op until the group is ready.
+        const group = state.groups.find(g => g.source === state.highlight?.source)
+        if (group === undefined || group.status !== 'ready') return 'consumed'
         this.pick(state.highlight.source, state.highlight.index)
         return 'pick-highlighted'
       }

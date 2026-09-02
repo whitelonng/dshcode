@@ -67,6 +67,10 @@ export const InputBar = memo(function InputBar({
   workspacePickerOpen = false, onRequestWorkspace,
   placeholder, accessory,
 }: InputBarProps) {
+  // The props face resolves to `any` under the alpha.4 ts-nocheck; pin the
+  // file-intake faces so their then() arms are typed (behavior unchanged).
+  const pickFilesTyped = pickFiles as undefined | (() => Promise<{ cancelled: boolean; paths: string[] }>)
+  const locateFilesTyped = locateFiles as undefined | ((names: string[]) => Promise<{ paths: string[]; name: string }[]>)
   const input = useInput(s => s)
   const notice = useNotices(s => s)
   void useLexicon // hook seat stays bound by the inject compartment; text-ref decoration rides the shell's editor transforms
@@ -285,7 +289,7 @@ export const InputBar = memo(function InputBar({
   // admission, which owns the format rejection (the default composer path).
   const intakeImages = useCallback((files: readonly File[]): void => {
     if (files.length === 0 || addImages === undefined) return
-    if (locateFiles === undefined) {
+    if (locateFilesTyped === undefined) {
       admitImages(files)
       return
     }
@@ -293,7 +297,7 @@ export const InputBar = memo(function InputBar({
     const others = files.filter(file => !isSupportedImage(file))
     if (images.length > 0) admitImages(images)
     if (others.length > 0) {
-      void locateFiles(others.map(file => file.name)).then((items) => {
+      void locateFilesTyped(others.map(file => file.name)).then((items: { paths: string[]; name: string }[]) => {
         const mentions: string[] = []
         const ambiguous: string[] = []
         for (const item of items) {
@@ -308,12 +312,12 @@ export const InputBar = memo(function InputBar({
         if (ambiguous.length > 0) showToast(t('file.locateFailed', { names: ambiguous.join(', ') }))
       }, (error: unknown) => { showToast(error instanceof Error ? error.message : String(error)) })
     }
-  }, [addImages, attachments, imageLimits, showToast, t, locateFiles])
+  }, [addImages, attachments, imageLimits, showToast, t, locateFilesTyped])
 
   // The native multi-file picker: selected paths become `@path` mentions.
   const onAddFiles = (): void => {
-    if (pickFiles === undefined || locked || machineBusy) return
-    void pickFiles().then((result) => {
+    if (pickFilesTyped === undefined || locked || machineBusy) return
+    void pickFilesTyped().then((result: { cancelled: boolean; paths: string[] }) => {
       if (result.cancelled || result.paths.length === 0) return
       const mentions = result.paths
         .map(path => formatFileMention({ path, kind: 'file' }, false))
@@ -523,7 +527,7 @@ export const InputBar = memo(function InputBar({
                 type="button"
                 className={css.add}
                 aria-label={t('input.addFiles')}
-                disabled={locked || machineBusy || pickFiles === undefined}
+                disabled={locked || machineBusy || pickFilesTyped === undefined}
                 onMouseDown={keepFocus}
                 onClick={() => { onAddFiles() }}
               >

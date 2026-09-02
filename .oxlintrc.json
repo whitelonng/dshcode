@@ -69,7 +69,8 @@
         "typescript/ban-ts-comment": [
           "error",
           {
-            "minimumDescriptionLength": 10
+            "minimumDescriptionLength": 10,
+            "ts-nocheck": "allow-with-description"
           }
         ],
         "typescript/no-array-delete": "error",

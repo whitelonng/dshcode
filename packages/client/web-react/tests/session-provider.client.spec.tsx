@@ -10,10 +10,10 @@
 import { useEffect, useRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
-import type { SessionMaybeProvideInfo, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
+import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   createSlotRenderer, SessionProvider,
-  type SessionProvideInfo, type SlotRendererHost,
+  type SlotRendererHost,
 } from '@deepseek-ai/dsh-client-web-react'
 
 function observable<T>(initial: T) {

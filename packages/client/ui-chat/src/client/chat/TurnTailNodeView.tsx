@@ -12,9 +12,12 @@ type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
 
 /** Turn-local actions and feature tail over the Location index, independent of Assistant placement. */
 export const TurnTailNodeView = memo(function TurnTailNodeView({
-  node, openFile, forkAt, renderSlot, renderSlotChain, t, useChat,
+  node, openFile, forkAt, deleteAt, renderSlot, renderSlotChain, t, useChat,
 }: TurnTailNodeViewProps) {
   const data = node.data
+  // The props face resolves to `any` under the alpha.4 ts-nocheck; pin the
+  // delete callback so its call arm is typed.
+  const deleteAtTyped = deleteAt as ((seq: number) => Promise<boolean>) | undefined
   const hasLaterChatNode = useChat(snapshot =>
     snapshot.locations.getTurn(data.turn).at(-1) !== node.key)
   const isLatestTurn = useChat(snapshot => snapshot.timeline.turnOrder.at(-1) === data.turn)
@@ -54,7 +57,7 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
         clock="end"
         onBranch={() => { forkAt(closing.finalNode.seq) }}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}
-        onDelete={() => deleteAt(deleteTarget)}
+        onDelete={() => deleteAtTyped(deleteTarget)}
         deleteUnavailable={anyOpenTurn}
         className={css.actions}
         extraActions={assistantActions}

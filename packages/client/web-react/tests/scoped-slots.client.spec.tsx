@@ -13,7 +13,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render } from '@testing-library/react'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import type { ActionsDecl, SlotEntryDef, SlotSpec, StoreHandle, StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SessionMaybeProvideInfo } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   createSlotRenderer, SessionProvider, SlotOwnershipError, StaleAuthorizationError,
   type RenderOpts, type SessionProvideInfo,
@@ -113,8 +112,11 @@ function makeHost() {
   }
   const sessionAdapter: SlotScopeAdapter = {
     current,
-    resolve: key => sessionBindings.get(key),
-    renderArea: (binding, props) => {
+    resolve: (key: string) => sessionBindings.get(key) as unknown,
+    renderArea: (
+      binding: { key: string | undefined },
+      props: { empty?: (() => ReactNode) | undefined; children: ReactNode },
+    ) => {
       const childrenRaw = props.children as unknown
       const body = typeof childrenRaw === 'function' ? (childrenRaw as (id: string) => ReactNode)(binding.key) : childrenRaw
       if (binding.key === undefined) return props.empty?.() ?? null
@@ -174,7 +176,7 @@ function makeHost() {
     },
     root: rootBinding,
     scopeRevision,
-    scope: () => sessionAdapter,
+    scope: (_scope: string) => sessionAdapter as unknown,
   }
   return {
     host,

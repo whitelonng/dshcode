@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 /** Section, setup-card, and hand-written editor behavior over a scripted wire face. */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Schema from '@deepseek-ai/schemastery'
 import { bindSnapshotSelector, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
@@ -15,12 +16,16 @@ import type { ModelsSectionInjected, ModelsSectionProps } from '../src/client/Mo
 import { pathOps } from '../src/client/ProviderEditor.tsx'
 import {
   DeepSeekModelsEditor, formatCapacity, modelDrafts, parseCapacity, validateDeepSeekModels,
+  type DeepSeekModelDraft,
 } from '../src/client/DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from '../src/client/apiKey.ts'
+import { ModelListEditor, type ModelDraft } from '../src/client/ModelListEditor.tsx'
+import type { ModelDiscoveryOutcome, ModelsOperations } from '../src/client/operations.ts'
+import { ReasoningLevelCheckboxes } from '../src/client/ReasoningLevelCheckboxes.tsx'
+import { INVALID_EFFORTS, THINKING_LEVELS, type ReasoningEffortsValue, type ReasoningLevel } from '../src/client/reasoning-efforts.ts'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { deriveKeyRef, ModelsSettingsStore } from '../src/client/store.ts'
 import { createModelsOperations } from '../src/client/operations.ts'
-import type { ModelsOperations } from '../src/client/operations.ts'
 import type { ProviderRow } from '../src/client/store.ts'
 import { en } from '../src/client/locales.ts'
 import { settingsSchema } from './settings-schema.client.ts'
@@ -907,6 +912,48 @@ describe('ModelsSection', () => {
       .toEqual({ index: 1, key: 'modelIdDuplicate' })
   })
 
+  it('rejects a reasoning-effort declaration the adapter would not accept', () => {
+    expect(validateDeepSeekModels([{ id: 'm', reasoningEfforts: 'invalid' }]))
+      .toEqual({ index: 0, key: 'modelReasoningEffortsInvalid' })
+    expect(validateDeepSeekModels([{ id: 'm', reasoningEfforts: { high: '' } }]))
+      .toEqual({ index: 0, key: 'modelReasoningEffortsInvalid' })
+    expect(validateDeepSeekModels([{ id: 'm', reasoningEfforts: {} }]))
+      .toEqual({ index: 0, key: 'modelReasoningEffortsInvalid' })
+    expect(validateDeepSeekModels([{ id: 'm', reasoningEfforts: { off: null } }]))
+      .toEqual({ index: 0, key: 'modelReasoningEffortsInvalid' })
+  })
+
+  it('writes per-model reasoningEfforts from the deepseek four-level group', () => {
+    const onChange = vi.fn()
+    function Mount() {
+      const [models, setModels] = useState<DeepSeekModelDraft[]>([{ id: 'deepseek-v4-flash' }])
+      return (
+        <DeepSeekModelsEditor
+          models={models}
+          overridden
+          defaultContextWindow={undefined}
+          defaultMaxTokens={undefined}
+          t={t}
+          disabled={false}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          onReset={vi.fn()}
+        />
+      )
+    }
+    render(<Mount />)
+    expandRow(1)
+    // Only the levels this wire route dispatches are offered.
+    expect(screen.queryByLabelText(`${en.modelReasoningLevels} 1 minimal`)).toBeNull()
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 low`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'deepseek-v4-flash', reasoningEfforts: { low: 'low' } },
+    ])
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 max`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'deepseek-v4-flash', reasoningEfforts: { low: 'low', max: 'max' } },
+    ])
+  })
+
   it('renders malformed draft fallbacks without inventing catalog values', () => {
     render(<DeepSeekModelsEditor
       models={[{}]}
@@ -1517,5 +1564,714 @@ describe('apiKeyFailure', () => {
     // heuristic leaves them alone rather than guessing at a paste error.
     expect(apiKeyFailure('"')).toBeUndefined()
     expect(apiKeyFailure('"a')).toBeUndefined()
+  })
+})
+
+/** Minimal operations whose discovery never runs in these suites. */
+function idleOperations(): ModelsOperations {
+  return {
+    describeCredential: vi.fn(),
+    storeCredential: vi.fn(),
+    removeCredential: vi.fn(),
+    writeSettings: vi.fn(),
+    discoverModels: vi.fn(),
+  }
+}
+
+describe('model reasoning-effort declaration editing', () => {
+
+  /** Render the editor with real local state so checkbox toggles round-trip. */
+  function mountEditor(onChange: (models: unknown[]) => void) {
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'third-party', reasoningEfforts: { high: 'high' } },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+          operations={idleOperations()}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    expandRow(1)
+  }
+
+  it('parses the declaration text into the draft on edit', () => {
+    const onChange = vi.fn()
+    mountEditor(onChange)
+    const input = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`)
+    fireEvent.change(input, { target: { value: 'high: high, max: ultra' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: { high: 'high', max: 'ultra' } },
+    ])
+  })
+
+  it('parks the invalid sentinel for unreadable text and refuses it in validation', () => {
+    const onChange = vi.fn()
+    mountEditor(onChange)
+    const input = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`)
+    fireEvent.change(input, { target: { value: 'ultra: ultra' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: INVALID_EFFORTS },
+    ])
+    expect(validateDeepSeekModels([{ id: 'x', reasoningEfforts: INVALID_EFFORTS }]))
+      .toEqual({ index: 0, key: 'modelReasoningEffortsInvalid' })
+    expect(validateDeepSeekModels([{ id: 'x', reasoningEfforts: { high: 'high' } }])).toBeUndefined()
+    expect(validateDeepSeekModels([{ id: 'x', reasoningEfforts: false }])).toBeUndefined()
+  })
+
+  it('disables reasoning with the checkbox and clears the declaration when unchecked', () => {
+    const onChange = vi.fn()
+    mountEditor(onChange)
+    const toggle = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningOff} 1`)
+    fireEvent.click(toggle)
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party', reasoningEfforts: false }])
+    fireEvent.click(toggle)
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party' }])
+  })
+
+  it('shows the stored declaration as field text', () => {
+    mountEditor(() => {})
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`).value)
+      .toBe('high: high')
+  })
+})
+
+describe('model capability and reasoning-level checkboxes', () => {
+
+  /** Render the pi-ai editor with real local state so checkbox toggles round-trip. */
+  function mountPiAiEditor(onChange: (models: unknown[]) => void, probeApi?: string) {
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'third-party' },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai', ...probeApi === undefined ? {} : { api: probeApi } }}
+          operations={idleOperations()}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    expandRow(1)
+  }
+
+  it('pre-checks the off/low/max default offer and toggles levels on top of it', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    // A model that declares no levels shows the default offer pre-checked…
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 off`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 low`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 max`).checked).toBe(true)
+    // …adding a level extends it with the protocol default spelling…
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: { off: null, low: 'low', max: 'max', high: 'high' } },
+    ])
+    // …and removing it returns to the default offer.
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: { off: null, low: 'low', max: 'max' } },
+    ])
+  })
+
+  it('keeps the raw-text declaration behind the advanced disclosure and re-derives it', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    // A custom wire spelling typed into the advanced field lands in the map…
+    const raw = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningEfforts} 1`)
+    fireEvent.change(raw, { target: { value: 'high: ultra' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', reasoningEfforts: { high: 'ultra' } },
+    ])
+    // …the checkbox group reads it as a checked level…
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 high`).checked).toBe(true)
+    // …and unchecking it clears the text buffer back to the derived value.
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 high`))
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party', reasoningEfforts: false }])
+  })
+
+  it('shows the protocol family suggestion as an advisory hint', () => {
+    mountPiAiEditor(() => {}, 'openai-completions')
+    expect(screen.getByText(`${en.reasoningLevelsSuggestion}minimal, low, medium, high`)).toBeTruthy()
+  })
+
+  it('toggles image input and generation independently', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    fireEvent.click(screen.getByLabelText(`${en.modelImageGeneration} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', output: ['text', 'image'] },
+    ])
+    fireEvent.click(screen.getByLabelText(`${en.modelImageInput} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', output: ['text', 'image'], input: ['text', 'image'] },
+    ])
+  })
+
+  it('implies image input at the storage level when understanding is checked', () => {
+    const onChange = vi.fn()
+    mountPiAiEditor(onChange)
+    fireEvent.click(screen.getByLabelText(`${en.modelImageUnderstanding} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', input: ['text', 'image'], capabilities: { imageUnderstanding: true } },
+    ])
+    fireEvent.click(screen.getByLabelText(`${en.modelImageUnderstanding} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'third-party', input: ['text', 'image'] },
+    ])
+    fireEvent.click(screen.getByLabelText(`${en.modelImageInput} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party', input: ['text'] }])
+  })
+
+  it('disables the whole group when the declaration is false and clears it back to inheritance', () => {
+    const onChange = vi.fn()
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'third-party', reasoningEfforts: false },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+          operations={idleOperations()}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    expandRow(1)
+    // `false` disables every level checkbox, and the disable checkbox is on.
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 off`).disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 low`).disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 max`).disabled).toBe(true)
+    const offToggle = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningOff} 1`)
+    expect(offToggle.checked).toBe(true)
+    // Clearing the disable control returns to inheritance (undefined).
+    fireEvent.click(offToggle)
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'third-party' }])
+  })
+})
+
+describe('model list fetch and catalog editing', () => {
+  function operationsWithDiscovery(
+    discover: (settingsNs: string, request: Parameters<ModelsOperations['discoverModels']>[1]) => Promise<ModelDiscoveryOutcome>,
+  ): ModelsOperations {
+    return {
+      describeCredential: vi.fn(),
+      storeCredential: vi.fn(),
+      removeCredential: vi.fn(),
+      writeSettings: vi.fn(),
+      discoverModels: discover,
+    }
+  }
+
+  function mountListEditor({
+    models,
+    overridden,
+    onReset,
+    probe = { provider: 'openai', settingsNs: 'llm-pi-ai' },
+    probeBlocked,
+    disabled = false,
+    onChange,
+    operations,
+  }: {
+    models: readonly ModelDraft[]
+    overridden?: boolean
+    onReset?: () => void
+    probe?: { provider?: string; settingsNs: string; baseURL?: string; api?: string; apiKey?: string }
+    probeBlocked?: keyof typeof en
+    disabled?: boolean
+    onChange: (models: ModelDraft[]) => void
+    operations: ModelsOperations
+  }): void {
+    render(<ModelListEditor
+      models={models}
+      {...overridden === undefined ? {} : { overridden }}
+      onChange={onChange}
+      {...onReset === undefined ? {} : { onReset }}
+      probe={probe}
+      {...probeBlocked === undefined ? {} : { probeBlocked }}
+      operations={operations}
+      t={t}
+      disabled={disabled}
+    />)
+  }
+
+  it('fetches candidates and adopts the picked ones into the catalog', async () => {
+    const discovered = vi.fn(async () => ({
+      kind: 'found' as const,
+      models: [
+        { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128_000, maxTokens: 16_384 },
+        { id: 'gpt-4o-mini', name: 'GPT-4o mini', contextWindow: 64_000, maxTokens: 8_192 },
+        { id: 'bare' },
+      ],
+    }))
+    const onChange = vi.fn()
+    // The catalog already owns `gpt-4o`, so the unknown `gpt-4o-mini` and
+    // `bare` start picked, and adopt preserves the tuned row rather than
+    // overwriting it while carrying only the disclosed optional fields.
+    mountListEditor({
+      models: [{ id: 'gpt-4o', name: 'Tuned GPT-4o', contextWindow: 200_000 }],
+      onChange,
+      operations: operationsWithDiscovery(discovered),
+    })
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(discovered).toHaveBeenCalledTimes(1) })
+    expect(discovered).toHaveBeenCalledWith('llm-pi-ai', { provider: 'openai' })
+
+    // The search filters the candidate list to `gpt-4o-mini`.
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(en.fetchSearch), {
+      target: { value: 'mini' },
+    })
+    expect(screen.getByText('gpt-4o-mini')).toBeTruthy()
+    expect(screen.queryByText('gpt-4o')).toBeNull()
+    expect(screen.queryByText('Tuned GPT-4o')).toBeNull()
+
+    // A name-only query also matches (the display-name branch).
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(en.fetchSearch), {
+      target: { value: 'o mini' },
+    })
+    expect(screen.getByText('gpt-4o-mini')).toBeTruthy()
+
+    // Clearing the query adopts the disclosed fields; the bare candidate keeps
+    // only its id because it disclosed none of the optional ones.
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(en.fetchSearch), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByText(en.fetchAdopt))
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'gpt-4o', name: 'Tuned GPT-4o', contextWindow: 200_000 },
+      { id: 'gpt-4o-mini', name: 'GPT-4o mini', contextWindow: 64_000, maxTokens: 8_192 },
+      { id: 'bare' },
+    ])
+    expect(screen.getByText(en.fetchModels)).toBeTruthy()
+  })
+
+  it('deselects and reselects the visible candidate batch, then cancels', async () => {
+    const discovered = vi.fn(async () => ({
+      kind: 'found' as const,
+      models: [
+        { id: 'gpt-4o', name: 'GPT-4o' },
+        { id: 'gpt-4o-mini', name: 'GPT-4o mini' },
+      ],
+    }))
+    const { unmount } = render(
+      <ModelListEditor
+        models={[]}
+        onChange={vi.fn()}
+        probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+        operations={operationsWithDiscovery(discovered)}
+        t={t}
+        disabled={false}
+      />,
+    )
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(screen.getByText('gpt-4o-mini')).toBeTruthy() })
+
+    // Every candidate is picked, so the batch button offers deselect-all.
+    expect(screen.getByText(en.fetchDeselectAll)).toBeTruthy()
+
+    // Unchecking one candidate (its row checkbox) removes it from the pick; its
+    // row checkbox toggles back on when clicked again.
+    const miniRow = within(screen.getByText('gpt-4o-mini').closest('li') as HTMLElement)
+    fireEvent.click(miniRow.getByRole('checkbox'))
+    expect(screen.getByText(en.fetchSelectAll)).toBeTruthy()
+    fireEvent.click(miniRow.getByRole('checkbox'))
+    expect(screen.getByText(en.fetchDeselectAll)).toBeTruthy()
+    fireEvent.click(miniRow.getByRole('checkbox'))
+
+    // Select-the-batch re-adds the dropped candidate; deselect-all clears it.
+    fireEvent.click(screen.getByText(en.fetchSelectAll))
+    expect(screen.getByText(en.fetchDeselectAll)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.fetchDeselectAll))
+    expect(screen.getByText(en.fetchSelectAll)).toBeTruthy()
+
+    // Refining a query to no match shows the empty state, then cancelling
+    // closes the dialog and restores the section heading.
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(en.fetchSearch), {
+      target: { value: 'nomatch' },
+    })
+    expect(screen.getByText(en.fetchNoMatches)).toBeTruthy()
+    fireEvent.click(screen.getByText(en.cancel))
+    expect(screen.getByText(en.fetchModels)).toBeTruthy()
+    unmount()
+  })
+
+  it('shows the refusal, empty, and busy fetch states', async () => {
+    const refused = vi.fn(async () => ({ kind: 'refused' as const, message: 'endpoint refused' }))
+    const onChange = vi.fn()
+    const { unmount } = render(
+      <ModelListEditor
+        models={[]}
+        onChange={onChange}
+        probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+        operations={operationsWithDiscovery(refused)}
+        t={t}
+        disabled={false}
+      />,
+    )
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(screen.getByText('endpoint refused')).toBeTruthy() })
+    unmount()
+
+    const empty = vi.fn(async () => ({ kind: 'found' as const, models: [] }))
+    render(
+      <ModelListEditor
+        models={[]}
+        onChange={onChange}
+        probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+        operations={operationsWithDiscovery(empty)}
+        t={t}
+        disabled={false}
+      />,
+    )
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(screen.getByText(en.fetchEmpty)).toBeTruthy() })
+  })
+
+  it('forwards every probe field to discovery and stays askable via baseURL alone', async () => {
+    // An adapter the form already describes answers without an endpoint, but a
+    // draft with a base URL (and no provider) is askable on that alone.
+    const discovered = vi.fn(async () => ({ kind: 'found' as const, models: [{ id: 'm' }] }))
+    render(
+      <ModelListEditor
+        models={[]}
+        onChange={vi.fn()}
+        probe={{
+          settingsNs: 'llm-pi-ai',
+          baseURL: 'https://api.example.com',
+          api: 'openai-completions',
+          apiKey: 'sk-test',
+        }}
+        operations={operationsWithDiscovery(discovered)}
+        t={t}
+        disabled={false}
+      />,
+    )
+    expect(screen.getByText<HTMLButtonElement>(en.fetchModels).disabled).toBe(false)
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await waitFor(() => { expect(discovered).toHaveBeenCalledTimes(1) })
+    expect(discovered).toHaveBeenCalledWith('llm-pi-ai', {
+      baseURL: 'https://api.example.com',
+      api: 'openai-completions',
+      apiKey: 'sk-test',
+    })
+  })
+
+  it('disables the fetch action when no askable target or a blocked key is present', () => {
+    const nothingAskable = vi.fn()
+    const { unmount } = render(
+      <ModelListEditor
+        models={[]}
+        onChange={vi.fn()}
+        probe={{ settingsNs: 'llm-pi-ai' }}
+        operations={operationsWithDiscovery(nothingAskable)}
+        t={t}
+        disabled={false}
+      />,
+    )
+    const button = screen.getByText(en.fetchModels) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.title).toBe(en.fetchNeedsBaseUrl)
+    unmount()
+
+    render(
+      <ModelListEditor
+        models={[]}
+        onChange={vi.fn()}
+        probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+        probeBlocked="keyRequired"
+        operations={operationsWithDiscovery(nothingAskable)}
+        t={t}
+        disabled={false}
+      />,
+    )
+    const blocked = screen.getByText(en.fetchModels) as HTMLButtonElement
+    expect(blocked.disabled).toBe(true)
+    expect(blocked.title).toBe(en.keyRequired)
+  })
+
+  it('edits row text and capacity fields, clears an emptied optional field, and removes rows', () => {
+    const onChange = vi.fn()
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'one', name: 'First', contextWindow: 1000 },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+          operations={operationsWithDiscovery(vi.fn())}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(`${en.modelId} 1`), {
+      target: { value: 'two' },
+    })
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'two', name: 'First', contextWindow: 1000 }])
+
+    // A non-empty name is stored verbatim; an emptied one leaves the profile.
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(`${en.modelName} 1`), {
+      target: { value: 'Renamed' },
+    })
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'two', name: 'Renamed', contextWindow: 1000 }])
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>(`${en.modelName} 1`), {
+      target: { value: '' },
+    })
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'two', contextWindow: 1000 }])
+
+    // Editing a capacity parses the K/M spelling onto the draft.
+    expandRow(1)
+    const context = screen.getByLabelText<HTMLInputElement>(`${en.modelContextWindow} 1`)
+    expect(context.value).toBe('1K')
+    fireEvent.change(context, { target: { value: '256K' } })
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'two', contextWindow: 256_000 }])
+
+    const max = screen.getByLabelText<HTMLInputElement>(`${en.modelMaxTokens} 1`)
+    fireEvent.change(max, { target: { value: '32K' } })
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'two', contextWindow: 256_000, maxTokens: 32_000 }])
+
+    // Opening and closing the disclosure toggles the expanded set both ways.
+    expect(screen.getByLabelText(`${en.modelAdvanced} 1`).getAttribute('aria-expanded')).toBe('true')
+    expandRow(1)
+    expect(screen.getByLabelText(`${en.modelAdvanced} 1`).getAttribute('aria-expanded')).toBe('false')
+    expandRow(1)
+    expect(screen.getByLabelText(`${en.modelAdvanced} 1`).getAttribute('aria-expanded')).toBe('true')
+
+    // Removing the row drops it and re-keys the capacity edits.
+    fireEvent.click(screen.getByLabelText(`${en.removeModel} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([])
+  })
+
+  it('re-keys editing buffers and expanded rows around a removal', () => {
+    const onChange = vi.fn()
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'first' },
+        { id: 'second', contextWindow: 2000 },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+          operations={operationsWithDiscovery(vi.fn())}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    // Open the second row (index 1) and type a capacity so its edit buffer is
+    // keyed `1:contextWindow`.
+    expandRow(2)
+    const secondContext = screen.getByLabelText<HTMLInputElement>(`${en.modelContextWindow} 2`)
+    fireEvent.change(secondContext, { target: { value: '2M' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'first' },
+      { id: 'second', contextWindow: 2_000_000 },
+    ])
+
+    // Removing the first row shifts the second's buffer key down to `0:`.
+    fireEvent.click(screen.getByLabelText(`${en.removeModel} 1`))
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'second', contextWindow: 2_000_000 }])
+    // The surviving row still shows its typed text, carried across the removal.
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelContextWindow} 1`).value).toBe('2M')
+  })
+
+  it('keeps buffers and expanded rows before the removed index untouched', () => {
+    const onChange = vi.fn()
+    function Mount() {
+      const [models, setModels] = useState<readonly ModelDraft[]>([
+        { id: 'first', contextWindow: 1000 },
+        { id: 'second' },
+      ])
+      return (
+        <ModelListEditor
+          models={models}
+          onChange={(next) => { setModels(next); onChange(next) }}
+          probe={{ provider: 'openai', settingsNs: 'llm-pi-ai' }}
+          operations={operationsWithDiscovery(vi.fn())}
+          t={t}
+          disabled={false}
+        />
+      )
+    }
+    render(<Mount />)
+    // A typed buffer on the first row (index 0) and an open disclosure on it
+    // both sit before the removed second row (index 1), so they stay put.
+    expandRow(1)
+    const firstContext = screen.getByLabelText<HTMLInputElement>(`${en.modelContextWindow} 1`)
+    fireEvent.change(firstContext, { target: { value: '8K' } })
+    expect(onChange).toHaveBeenLastCalledWith([
+      { id: 'first', contextWindow: 8_000 },
+      { id: 'second' },
+    ])
+
+    fireEvent.click(screen.getByLabelText(`${en.removeModel} 2`))
+    expect(onChange).toHaveBeenLastCalledWith([{ id: 'first', contextWindow: 8_000 }])
+    // The first row keeps its disclosure open and its typed text.
+    expect(screen.getByLabelText(`${en.modelAdvanced} 1`).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelContextWindow} 1`).value).toBe('8K')
+  })
+
+  it('adds a row, inherits when not overridden, and resets an override', () => {
+    const onChange = vi.fn()
+    const onReset = vi.fn()
+    mountListEditor({
+      models: [],
+      overridden: true,
+      onReset,
+      onChange,
+      operations: operationsWithDiscovery(vi.fn()),
+    })
+    fireEvent.click(screen.getByText(en.addModel))
+    expect(onChange).toHaveBeenLastCalledWith([{ id: '' }])
+    fireEvent.click(screen.getByText(en.resetModels))
+    expect(onReset).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the inherited meta and disables every control when disabled or not overridden', () => {
+    mountListEditor({
+      models: [{ id: 'one' }],
+      overridden: false,
+      disabled: true,
+      onChange: vi.fn(),
+      operations: operationsWithDiscovery(vi.fn()),
+    })
+    expect(screen.getByText(en.modelsInherited)).toBeTruthy()
+    const id = screen.getByLabelText<HTMLInputElement>(`${en.modelId} 1`)
+    expect(id.disabled).toBe(true)
+    expect(screen.getByText<HTMLButtonElement>(en.fetchModels).disabled).toBe(true)
+    expect(screen.getByText<HTMLButtonElement>(en.addModel).disabled).toBe(true)
+  })
+})
+
+describe('ReasoningLevelCheckboxes', () => {
+  /** Mount with real local state so checkbox toggles round-trip. */
+  function mountCheckboxes(
+    value: ReasoningEffortsValue | undefined,
+    opts: {
+      levels?: readonly ReasoningLevel[]
+      suggested?: readonly ReasoningLevel[] | undefined
+      disabled?: boolean
+      onChange?: (v: ReasoningEffortsValue | undefined) => void
+    } = {},
+  ): ReturnType<typeof vi.fn> {
+    const onChange = (opts.onChange ?? vi.fn()) as ReturnType<typeof vi.fn>
+    function Mount() {
+      const [current, setCurrent] = useState<ReasoningEffortsValue | undefined>(value)
+      return (
+        <ReasoningLevelCheckboxes
+          value={current}
+          levels={opts.levels ?? THINKING_LEVELS}
+          suggested={opts.suggested}
+          index={0}
+          disabled={opts.disabled ?? false}
+          onChange={(next) => { setCurrent(next); (onChange as (v: ReasoningEffortsValue | undefined) => void)(next) }}
+          t={t}
+        />
+      )
+    }
+    render(<Mount />)
+    return onChange
+  }
+
+  it('offers the advisory hint only when a non-empty suggestion list is present', () => {
+    const { unmount } = render(
+      <ReasoningLevelCheckboxes
+        value={undefined}
+        levels={THINKING_LEVELS}
+        suggested={undefined}
+        index={0}
+        disabled={false}
+        onChange={vi.fn()}
+        t={t}
+      />,
+    )
+    expect(screen.queryByText(en.reasoningLevelsSuggestion)).toBeNull()
+    unmount()
+
+    render(
+      <ReasoningLevelCheckboxes
+        value={undefined}
+        levels={THINKING_LEVELS}
+        suggested={[]}
+        index={0}
+        disabled={false}
+        onChange={vi.fn()}
+        t={t}
+      />,
+    )
+    expect(screen.queryByText(en.reasoningLevelsSuggestion)).toBeNull()
+  })
+
+  it('shows the hint text when a non-empty suggestion list is present', () => {
+    mountCheckboxes(undefined, { suggested: ['low', 'high'] })
+    expect(screen.getByText(`${en.reasoningLevelsSuggestion}low, high`)).toBeTruthy()
+  })
+
+  it('disables the level group when the declaration is false but keeps the disable control live', () => {
+    mountCheckboxes(false)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 off`).disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 low`).disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 max`).disabled).toBe(true)
+    const off = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningOff} 1`)
+    expect(off.disabled).toBe(false)
+    expect(off.checked).toBe(true)
+  })
+
+  it('disables every control when disabled', () => {
+    mountCheckboxes(undefined, { disabled: true })
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 max`).disabled).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningOff} 1`).disabled).toBe(true)
+  })
+
+  it('toggles a level and back to false when the last level is removed', () => {
+    const onChange = mountCheckboxes(undefined)
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 medium`))
+    expect(onChange).toHaveBeenLastCalledWith({ medium: 'medium' })
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 medium`).checked).toBe(true)
+    fireEvent.click(screen.getByLabelText(`${en.modelReasoningLevels} 1 medium`))
+    expect(onChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('sets and clears the disable declaration through its control', () => {
+    const onChange = mountCheckboxes(undefined)
+    const off = screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningOff} 1`)
+    fireEvent.click(off)
+    expect(onChange).toHaveBeenLastCalledWith(false)
+    fireEvent.click(off)
+    expect(onChange).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('reads a malformed array as showing no checked level', () => {
+    mountCheckboxes(['not-a-map'] as unknown as ReasoningEffortsValue)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 high`).checked).toBe(false)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 off`).checked).toBe(false)
+  })
+
+  it('checks the levels present in a real declaration', () => {
+    mountCheckboxes({ high: 'ultra', off: null })
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 high`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 off`).checked).toBe(true)
+    expect(screen.getByLabelText<HTMLInputElement>(`${en.modelReasoningLevels} 1 minimal`).checked).toBe(false)
   })
 })

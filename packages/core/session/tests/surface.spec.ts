@@ -5,6 +5,7 @@ import {
   SessionId,
   SessionLogOffset,
   SessionSeq,
+  deriveEventMessage,
   foldSurface,
   isAppendSurfaceEvent,
   isDeleteSurfaceEvent,
@@ -726,6 +727,62 @@ describe('SurfaceManager', () => {
   })
 })
 
+describe('deriveEventMessage', () => {
+  it('projects user, assistant, and tool-result events to their frozen message', () => {
+    const user = provenanceEvent(SessionSeq(0), undefined)
+    expect(deriveEventMessage(user)).toEqual(user.data)
+
+    const assistant = {
+      type: 'assistant/message' as const,
+      seq: SessionSeq(1),
+      time: 1,
+      data: {
+        turn: 1, step: 1,
+        message: createMessage({
+          role: 'assistant',
+          content: [{ type: 'text', text: 'hi' }],
+          source: { kind: 'model', provider: 'mock', model: 'mock' },
+        }),
+      },
+    }
+    expect(deriveEventMessage(assistant)).toEqual((assistant.data as { message: unknown }).message)
+
+    const tool = toolResultEvent(SessionSeq(2), 'call-1')
+    expect(deriveEventMessage(tool)).toEqual((tool.data as { message: unknown }).message)
+  })
+
+  it('projects a content-less assistant/message (usage host) to null', () => {
+    const usageHost: SessionEvent = {
+      type: 'assistant/message',
+      seq: SessionSeq(0),
+      time: 0,
+      data: {
+        turn: 1, step: 1,
+        message: createMessage({
+          role: 'assistant',
+          content: [],
+          source: { kind: 'model', provider: 'mock', model: 'mock' },
+        }),
+      },
+    }
+    expect(deriveEventMessage(usageHost)).toBeNull()
+  })
+
+  it('projects non-surface events (boundary, chunk, log-only) to null', () => {
+    expect(deriveEventMessage({
+      type: 'turn/start', seq: SessionSeq(0), time: 0, data: { turn: 1 },
+    })).toBeNull()
+    expect(deriveEventMessage({
+      type: 'assistant/chunk', seq: SessionSeq(1), time: 1,
+      data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'h' } },
+    })).toBeNull()
+    expect(deriveEventMessage({
+      type: 'turn/end', seq: SessionSeq(2), time: 2,
+      data: { turn: 1, reason: { kind: 'completed' } },
+    })).toBeNull()
+  })
+})
+
 describe('deriveMessages with surface', () => {
   it('uses the surface path when surface markers are present', () => {
     const s = surfaceSession()
@@ -1106,6 +1163,33 @@ describe('foldSurface deletions', () => {
       deleteEvent(2, 1, 0, [0, 1]),
     ] as SessionEvent[]
     expect(() => foldSurface(events)).toThrow(/surface delete: start seq 1 .* is after end seq 0/)
+  })
+
+  it('rejects a non-object surfaceOp (null, string, array) on a surface-eligible event', () => {
+    for (const bad of [null, 'append-ish', ['append']] as const) {
+      const event = {
+        ...provenanceEvent(0, undefined),
+        surfaceOp: bad,
+      } as unknown as SessionEvent
+      expect(() => foldSurface([event])).toThrow(/carries an invalid surfaceOp/)
+    }
+  })
+
+  it('rejects a malformed surfaceOp object that is not a replace shape', () => {
+    // `start` is not a sequence, so the delete-range guard refuses the shape
+    // and the object does not satisfy the replace-shape fallback either.
+    const malformedDelete = {
+      ...provenanceEvent(0, undefined),
+      surfaceOp: { op: 'delete', start: 'not-a-seq', end: 0 },
+    } as unknown as SessionEvent
+    expect(() => foldSurface([malformedDelete])).toThrow(/carries an invalid surfaceOp/)
+
+    // An extra key keeps the object out of both the replace and delete shapes.
+    const extraKey = {
+      ...provenanceEvent(0, undefined),
+      surfaceOp: { op: 'replace', start: 0, end: 0, extra: true },
+    } as unknown as SessionEvent
+    expect(() => foldSurface([extraKey])).toThrow(/carries an invalid surfaceOp/)
   })
 })
 

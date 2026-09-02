@@ -11,7 +11,9 @@
 
 /** Minimal credential wire face consumed by the describe-image card. */
 export interface CredentialWire {
-  describe(opts: { refs: readonly string[] }): Promise<{ result: { ok: boolean; value: { credentials: Record<string, { configured?: boolean }> } } }>
+  describe(opts: { refs: readonly string[] }): Promise<{
+    result: { ok: boolean; value: { credentials: Record<string, { configured?: boolean }> } }
+  }>
   set(opts: { ref: string; value: string }): Promise<{ ok: boolean }>
 }
 import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
