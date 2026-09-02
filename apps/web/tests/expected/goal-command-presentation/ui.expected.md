@@ -14,7 +14,9 @@
   - img
   - img
   - text: "goal No goal is currently set. Usage: /goal [<objective>|clear|edit <objective>|pause|resume]"
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
+- button "Add files" [disabled]:
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

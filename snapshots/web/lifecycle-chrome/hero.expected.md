@@ -29,8 +29,10 @@
   - img
   - text: Standard mode
   - img
-- textbox "Describe what you want to build... / commands, @ files or sessions":
+- textbox "Describe what you want to build":
   - paragraph
+- button "Add files" [disabled]:
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

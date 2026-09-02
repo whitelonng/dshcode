@@ -16,6 +16,8 @@
 - text: Reply with the single word LIGHTHOUSE and stop. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
 - button "Thought for a while":
   - text: Thought for a while
   - img
@@ -25,6 +27,8 @@
 - button "Good response":
   - img
 - button "Bad response":
+  - img
+- button "Delete":
   - img
 - button "Branch into a new conversation":
   - img
@@ -36,7 +40,9 @@
   - img
   - img
   - text: "feedback Feedback recorded for session session-{{uuid}} Anonymous user: {{uuid}}. Session sharing is feedback-gated; recording feedback uploads the session records not yet shared."
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
+- button "Add files" [disabled]:
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

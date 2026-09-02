@@ -16,6 +16,8 @@
 - text: Reply with the single word LIGHTHOUSE and stop. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
 - button "Thought for a while" [expanded]:
   - text: Thought for a while
   - img
@@ -34,13 +36,17 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
+- button "Add files" [disabled]:
+  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
