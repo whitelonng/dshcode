@@ -127,3 +127,5 @@ None; the gateway contributes nothing to any provider request.
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: the installer gateway owns no cross-plugin runtime relation.

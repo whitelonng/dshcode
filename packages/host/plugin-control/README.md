@@ -93,3 +93,5 @@ None in the running process. After restart, enabling or disabling a plugin can c
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: the control gateway owns no cross-plugin runtime relation.

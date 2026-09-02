@@ -91,3 +91,5 @@ None in the current process; the section contributes nothing to any provider req
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: the archive settings surface owns no cross-plugin runtime relation.

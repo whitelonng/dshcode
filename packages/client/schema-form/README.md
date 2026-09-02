@@ -33,8 +33,6 @@ Choose this package when a settings surface must edit a namespace it does not fu
 
 ### Minimal configuration
 
-No mount: the package registers nothing into a composition. Its invariant companion (`apply` on the `./invariant` entry) is an empty installer, since a pure helper library owns no cross-plugin mutable relation.
-
 -----
 
 <a id="understand-the-implementation"></a>
@@ -85,3 +83,5 @@ None; this package neither assembles nor sends a provider request.
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: a pure schema/draft helper library owns no cross-plugin mutable relation; its model specs assert the invariants directly.

@@ -31,9 +31,6 @@
     },
     {
       "path": "../../util/launch-environment"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

@@ -83,3 +83,5 @@ None; this package neither assembles nor sends a provider request.
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: the native picker adapter owns no cross-plugin runtime relation.

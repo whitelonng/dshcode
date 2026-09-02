@@ -91,3 +91,5 @@ None; the package never assembles or sends provider requests.
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: the notifications surface owns no cross-plugin runtime relation.

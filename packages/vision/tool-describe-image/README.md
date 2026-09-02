@@ -141,3 +141,5 @@ Append-only; newly visible content follows the reusable request prefix and does 
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: the describe-image tool owns no cross-plugin runtime relation.

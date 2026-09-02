@@ -93,3 +93,5 @@ None in the current process; the tab contributes nothing to any provider request
 None.
 
 </details>
+
+**Runtime invariant:** No companion is published: the plugin-installer settings surface owns no cross-plugin runtime relation.
