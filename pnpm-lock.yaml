@@ -600,6 +600,9 @@ importers:
       '@deepseek-ai/dsh-command-feedback':
         specifier: workspace:^
         version: link:../../packages/feedback/command-feedback
+      '@deepseek-ai/dsh-command-goal':
+        specifier: workspace:^
+        version: link:../../packages/goal/command-goal
       '@deepseek-ai/dsh-commands':
         specifier: workspace:^
         version: link:../../packages/interaction/commands
@@ -801,6 +804,12 @@ importers:
       '@deepseek-ai/dsh-tool-jobs':
         specifier: workspace:^
         version: link:../../packages/jobs/tool-jobs
+      '@deepseek-ai/dsh-tool-pwsh':
+        specifier: workspace:^
+        version: link:../../packages/shell/tool-pwsh
+      '@deepseek-ai/dsh-tool-pwsh-persistent':
+        specifier: workspace:^
+        version: link:../../packages/shell/tool-pwsh-persistent
       '@deepseek-ai/dsh-tool-ralph':
         specifier: workspace:^
         version: link:../../packages/workflow/tool-ralph
@@ -840,6 +849,9 @@ importers:
       '@deepseek-ai/dsh-user-questions':
         specifier: workspace:^
         version: link:../../packages/interaction/user-questions
+      '@deepseek-ai/dsh-util-time':
+        specifier: workspace:^
+        version: link:../../packages/util/time
       '@deepseek-ai/dsh-web':
         specifier: workspace:^
         version: link:../../packages/web/web

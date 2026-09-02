@@ -155,7 +155,8 @@
     "demo:inspector": "node --import tsx/esm apps/cli/src/bin.ts web --patch ./packages/experimental/inspector/cordis.source.patch.yml",
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",
     "dev:web": "tsx scripts/dev-web.ts --poll",
-    "postinstall": "node scripts/install-lefthook.mjs"
+    "postinstall": "node scripts/install-lefthook.mjs",
+    "verify-desktop-runtime-closure": "tsx scripts/verify-runtime-closure.ts --manifest apps/desktop/package.json"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-tool-session-query": "workspace:^",
