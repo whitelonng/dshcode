@@ -111,8 +111,10 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
   await pathInput.press('Enter')
   await dialog.getByRole('button', { name: 'Open', exact: true }).click()
   // The pick connected the workspace: the blank session's live composer
-  // replaces the locked placeholder and enables.
-  await page.locator('[data-composer-input][contenteditable="true"][data-placeholder="Describe what you want to build... / commands, @ files or sessions"]')
+  // replaces the locked placeholder and enables. The fork ships a shorter
+  // English hero placeholder than upstream, so the unlock waits on the
+  // fork's product copy.
+  await page.locator('[data-composer-input][contenteditable="true"][data-placeholder="Describe what you want to build"]')
     .waitFor({ timeout: 15_000 })
 }
 

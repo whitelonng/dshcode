@@ -130,7 +130,7 @@ describe('web e2e: startup auto-selection', () => {
       expect(await page.locator('[data-composer-input]').first().isVisible()).toBe(true)
 
       releaseOpening()
-      await page.locator('[data-composer-input][contenteditable="true"][data-placeholder="Describe what you want to build... / commands, @ files or sessions"]')
+      await page.locator('[data-composer-input][contenteditable="true"][data-placeholder="Describe what you want to build"]')
         .waitFor({ timeout: 15_000 })
       acknowledgeReloadConnectionLoss(tripwire, warningsBefore)
 

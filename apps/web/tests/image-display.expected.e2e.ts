@@ -90,7 +90,7 @@ it('accepts pasted images into the composer rail in order and removes them', asy
   // this assembled lane pins the intake chain over the built graph.
   const textarea = await waitFor(() => {
     const surface = document.querySelector<HTMLElement>(
-      '[data-composer-input][data-placeholder="Describe what you want to build... / commands, @ files or sessions"]',
+      '[data-composer-input][data-placeholder="Describe what you want to build"]',
     )
     if (surface === null) throw new Error('composer surface missing')
     return surface
@@ -165,7 +165,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   fireEvent.click(start)
   const textarea = await waitFor(() => {
     const surface = document.querySelector<HTMLElement>(
-      '[data-composer-input][data-placeholder="Describe what you want to build... / commands, @ files or sessions"]',
+      '[data-composer-input][data-placeholder="Describe what you want to build"]',
     )
     if (surface === null) throw new Error('composer surface missing')
     return surface
@@ -220,7 +220,7 @@ it('renders a host dimension rejection with the projected 2000px limit', async (
 
   const textarea = await waitFor(() => {
     const surface = document.querySelector<HTMLElement>(
-      '[data-composer-input][data-placeholder="Describe what you want to build... / commands, @ files or sessions"]',
+      '[data-composer-input][data-placeholder="Describe what you want to build"]',
     )
     if (surface === null) throw new Error('composer surface missing')
     return surface

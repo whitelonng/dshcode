@@ -45,7 +45,7 @@ describe('web e2e: goal bar clear convergence', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-goal-bar-clear'))
     // Startup reuses the fixture workspace's blank session, keeping this
     // command independent of alpha's running replay and pending question.
-    const input = page.locator('[data-composer-input][data-placeholder="Describe what you want to build... / commands, @ files or sessions"]')
+    const input = page.locator('[data-composer-input][data-placeholder="Describe what you want to build"]')
     await input.waitFor({ timeout: 10_000 })
     await input.fill('/goal guard rapid clear clicks')
     await input.press('Enter')

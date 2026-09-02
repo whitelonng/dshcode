@@ -21,7 +21,7 @@ async function freshComposer(): Promise<HTMLElement> {
   fireEvent.click(start)
   return await waitFor(() => {
     const surface = document.querySelector<HTMLElement>(
-      '[data-composer-input][data-placeholder="Describe what you want to build... / commands, @ files or sessions"]',
+      '[data-composer-input][data-placeholder="Describe what you want to build"]',
     )
     if (surface === null) throw new Error('composer surface missing')
     return surface
