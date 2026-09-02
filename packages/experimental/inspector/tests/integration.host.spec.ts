@@ -375,12 +375,16 @@ describe('experimental Inspector real Worker', () => {
     await client.log(value, marker)
     let firstEvent: CdpMessage | undefined
     let secondEvent: CdpMessage | undefined
+    // Fork note: the console broadcast crosses the Worker RPC round trip plus
+    // two CDP connections; give it the same five-second budget the rest of
+    // this suite uses, because the default one-second waitFor flakes under
+    // the coverage lane's instrumented concurrency.
     await vi.waitFor(() => {
       firstEvent = consoleEvent(cdp!, firstContext, marker)
       secondEvent = consoleEvent(secondCdp!, secondContext, marker)
       expect(firstEvent).toBeDefined()
       expect(secondEvent).toBeDefined()
-    })
+    }, { timeout: 5_000 })
     const firstObjectId = asRecord(recordArray(firstEvent!.params?.args)[0]).objectId
     const secondObjectId = asRecord(recordArray(secondEvent!.params?.args)[0]).objectId
     expect(firstObjectId).toBeTypeOf('string')
