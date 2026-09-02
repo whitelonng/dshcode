@@ -71,7 +71,7 @@ describe('DescribeImageCardController', () => {
     let resolveFirst: (value: Awaited<ReturnType<CredentialWire['describe']>>) => void = () => {}
     const first = new Promise<Awaited<ReturnType<CredentialWire['describe']>>>((resolve) => { resolveFirst = resolve })
     const api = wire(false)
-    api.describe.mockImplementationOnce(() => first)
+    api.describe.mockReturnValueOnce(first)
     const controller = new DescribeImageCardController(host.scope, api)
     const state = () => controller.inject().hooks.describeImageCard.getSnapshot()
 
