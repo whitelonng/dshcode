@@ -759,6 +759,21 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('rename') rename(request: SessionRenameRequest): Promise<SessionRenameValue>
 
 /**
+ * Delete one user or assistant message (or one whole stopped turn) from a
+ * live Session's model-visible surface.
+ * @param request - Session identity and the target message or turn/end seq.
+ * @returns the host-computed removed surface range and shadowed node seqs.
+ */
+@Remote('deleteMessage') deleteMessage(request: SessionDeleteMessageRequest): Promise<SessionDeleteMessageValue>
+
+/**
+ * Edit the last user message of a live Session and regenerate its turn.
+ * @param request - Session identity, the target user-message seq, replacement content, and client time zone.
+ * @returns acknowledgement that the edit replaced the turn.
+ */
+@Remote('editMessage') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>
+
+/**
  * Fork one cold-readable completed-turn prefix into a new Session.
  * @param request - source Session and optional event anchor.
  * @returns the new Session identity.
@@ -996,6 +1011,25 @@ A Session became visible to Session list consumers.
  */
 'api-session/added'(summary: SessionSummary): void
 ```
+
+Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
+
+<a id="api-sessiondeleted--emit"></a>
+
+#### `api-session/deleted` — emit
+
+A persisted Session was permanently deleted host-side.
+
+```ts cordis-catalog
+/**
+ * A persisted Session was permanently deleted host-side.
+ * @mode emit
+ * @param sessionId - deleted Session identity.
+ */
+'api-session/deleted'(sessionId: SessionId): void
+```
+
+Types: [SessionId](core.md)
 
 Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
 

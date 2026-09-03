@@ -1409,6 +1409,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the accepted title and durable event sequence.',
       },
       {
+        signature: '@Remote(\'deleteMessage\') deleteMessage(request: SessionDeleteMessageRequest): Promise<SessionDeleteMessageValue>',
+        description: 'Delete one user or assistant message (or one whole stopped turn) from a live Session\'s model-visible surface.',
+        parameters: [{ name: 'request', description: 'Session identity and the target message or turn/end seq.' }],
+        returns: 'the host-computed removed surface range and shadowed node seqs.',
+      },
+      {
+        signature: '@Remote(\'editMessage\') editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue>',
+        description: 'Edit the last user message of a live Session and regenerate its turn.',
+        parameters: [{ name: 'request', description: 'Session identity, the target user-message seq, replacement content, and client time zone.' }],
+        returns: 'acknowledgement that the edit replaced the turn.',
+      },
+      {
         signature: '@Remote(\'fork\') fork(request: SessionForkRequest): Promise<SessionForkValue>',
         description: 'Fork one cold-readable completed-turn prefix into a new Session.',
         parameters: [{ name: 'request', description: 'source Session and optional event anchor.' }],
@@ -2827,8 +2839,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'archiveSession\') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>',
-        description: 'Hide one known Session from Workspace grouping surfaces.',
+        description: 'Add one known Session to the registry-global archive set.',
         parameters: [{ name: 'request', description: 'Session identity to archive.' }],
+        returns: 'the complete resulting archive set.',
+      },
+      {
+        signature: '@Remote(\'listArchived\') listArchived(): Promise<WorkspaceListArchivedValue>',
+        description: 'List the registry-global archive set with best-effort folded titles.',
+        parameters: [],
+        returns: 'one row per archived Session, in archive-set order.',
+      },
+      {
+        signature: '@Remote(\'restoreSession\') restoreSession(request: WorkspaceRestoreSessionRequest): Promise<WorkspaceArchiveValue>',
+        description: 'Remove one Session from the registry-global archive set.',
+        parameters: [{ name: 'request', description: 'Session identity to unarchive.' }],
+        returns: 'the complete resulting archive set.',
+      },
+      {
+        signature: '@Remote(\'deleteSession\') deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceArchiveValue>',
+        description: 'Permanently delete one archived Session: log first, then accounting.',
+        parameters: [{ name: 'request', description: 'archived Session identity to delete.' }],
         returns: 'the complete resulting archive set.',
       },
       {
@@ -3031,6 +3061,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'A Session became visible to Session list consumers.',
     description: 'A Session became visible to Session list consumers.',
     parameters: [{ name: 'summary', description: 'initial list row for the Session.' }],
+  },
+  {
+    name: 'api-session/deleted',
+    mode: 'emit',
+    signature: '\'api-session/deleted\'(sessionId: SessionId): void',
+    summary: 'A persisted Session was permanently deleted host-side.',
+    description: 'A persisted Session was permanently deleted host-side.',
+    parameters: [{ name: 'sessionId', description: 'deleted Session identity.' }],
   },
   {
     name: 'api-session/error',
@@ -4909,6 +4947,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
   },
   {
+    name: 'SessionDeleteMessageRequest',
+    declaration: 'export interface SessionDeleteMessageRequest {\n    readonly sessionId: SessionId;\n    readonly seq: number;\n}',
+  },
+  {
+    name: 'SessionDeleteMessageValue',
+    declaration: 'export interface SessionDeleteMessageValue {\n    readonly start: number;\n    readonly end: number;\n    readonly deletedSeqs: number[];\n}',
+  },
+  {
+    name: 'SessionEditMessageRequest',
+    declaration: 'export interface SessionEditMessageRequest {\n    readonly sessionId: SessionId;\n    readonly seq: number;\n    readonly content: readonly PromptContentPart[];\n    readonly clientTimeZone?: string;\n}',
+  },
+  {
+    name: 'SessionEditMessageValue',
+    declaration: 'export interface SessionEditMessageValue {\n    readonly accepted: true;\n}',
+  },
+  {
     name: 'SessionEvent',
     declaration: 'export type SessionEvent<T extends SessionEventType = SessionEventType> = {\n    [K in SessionEventType]: {\n        type: K;\n        seq: SessionSeq;\n        time: number;\n        data: SessionEventMap[K];\n        ignorable?: true;\n    } & (K extends SurfaceEventType ? {\n        sourceEventSeqs?: SessionSeq[];\n        surfaceOp?: SurfaceOp;\n    } : object);\n}[T];',
   },
@@ -6209,6 +6263,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceDeleteRequest {\n    readonly workspaceId: WorkspaceId;\n}',
   },
   {
+    name: 'WorkspaceDeleteSessionRequest',
+    declaration: 'export interface WorkspaceDeleteSessionRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
     name: 'WorkspaceDeleteValue',
     declaration: 'export interface WorkspaceDeleteValue {\n    readonly deleted: true;\n}',
   },
@@ -6229,12 +6287,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceInsertSessionBeforeRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly sessionId: SessionId;\n    readonly beforeSessionId?: SessionId;\n}',
   },
   {
+    name: 'WorkspaceListArchivedValue',
+    declaration: 'export interface WorkspaceListArchivedValue {\n    readonly items: readonly ArchivedSessionItem[];\n}',
+  },
+  {
     name: 'WorkspaceOrderValue',
     declaration: 'export interface WorkspaceOrderValue {\n    readonly workspaceIds: readonly WorkspaceId[];\n}',
   },
   {
     name: 'WorkspaceRenameRequest',
     declaration: 'export interface WorkspaceRenameRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly title: string;\n}',
+  },
+  {
+    name: 'WorkspaceRestoreSessionRequest',
+    declaration: 'export interface WorkspaceRestoreSessionRequest {\n    readonly sessionId: SessionId;\n}',
   },
   {
     name: 'WorkspaceValue',
