@@ -95,6 +95,8 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
@@ -218,6 +220,8 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
@@ -226,7 +230,7 @@
 - text: {{clock}}
 - button "Back to bottom":
   - img
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

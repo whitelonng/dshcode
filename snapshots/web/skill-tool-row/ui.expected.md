@@ -14,6 +14,10 @@
 - text: Load the editing-cordis-compositions skill with the skill tool, then reply DONE. {{date}} {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "1 tool call" [expanded]:
   - text: 1 tool call
   - img
@@ -45,13 +49,15 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
 - text: {{date}} {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Full access"': Full access

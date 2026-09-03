@@ -16,6 +16,10 @@
 - text: Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop. {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "1 tool call" [expanded]:
   - text: 1 tool call
   - img
@@ -34,8 +38,12 @@
 - text: "Interjection: include the word BANANA in your final reply. {{clock}}"
 - button "Copy":
   - img
+- button "Delete":
+  - img
 - text: "Interjection: include the word ORANGE in your final reply. {{clock}}"
 - button "Copy":
+  - img
+- button "Delete":
   - img
 - paragraph: "Got it: BANANA and ORANGE."
 - button "Copy":
@@ -44,13 +52,15 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

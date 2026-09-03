@@ -16,6 +16,8 @@
   - img
 - button "Delete":
   - img
+- button "Edit":
+  - img
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -29,8 +31,6 @@
   - img
   - text: "Failed Bash Error: tool call aborted before dispatch"
 - textbox "Message the agent"
-- button "Add files" [disabled]:
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Full access"': Full access

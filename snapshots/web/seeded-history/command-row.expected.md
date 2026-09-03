@@ -17,6 +17,10 @@
 - text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. 7/25 {{clock}}"
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "2 tool calls" [expanded]:
   - text: 2 tool calls
   - img
@@ -45,6 +49,8 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
@@ -58,7 +64,7 @@
   - text: Context injection AGENTS.md
 - img
 - text: permission preset read-only
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Read Only"': Read Only

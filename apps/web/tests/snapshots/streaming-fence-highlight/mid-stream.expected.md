@@ -16,6 +16,9 @@
 - text: Stream one TypeScript fence for the highlighting snapshot. {{clock}}
 - button "Copy":
   - img
+- button "Delete" [disabled]:
+  - img
+- text: Agent is running; stop the turn to delete
 - button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
@@ -24,7 +27,7 @@
 - button "Copy"
 - code: "const first: number = 1 const second = \"two\" let tail"
 - status: Deep diving...
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

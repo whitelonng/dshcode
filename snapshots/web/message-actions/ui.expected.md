@@ -18,6 +18,8 @@
 - button "Copy":
   - img
 - tooltip "Copy"
+- button "Delete":
+  - img
 - button "Think The user wants me to read a.txt and b.txt, then reply with \"DONE\". Let me do both reads in parallel.":
   - img
   - img
@@ -28,6 +30,8 @@
 - button "Good response":
   - img
 - button "Bad response":
+  - img
+- button "Delete":
   - img
 - button "Branch into a new conversation" [disabled]:
   - img
@@ -53,6 +57,10 @@
 - text: Stopped Now give the final answer. 7/25 {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - paragraph: DONE
 - button "Copy":
   - img
@@ -60,13 +68,15 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
 - text: 7/25 {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

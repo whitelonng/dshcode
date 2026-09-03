@@ -102,6 +102,8 @@
   - img
 - button "Delete":
   - img
+- button "Edit":
+  - img
 - button "1 tool call" [expanded]:
   - text: 1 tool call
   - img
@@ -125,8 +127,6 @@
   - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message the agent"
-- button "Add files" [disabled]:
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

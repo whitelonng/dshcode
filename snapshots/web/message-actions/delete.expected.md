@@ -7,6 +7,13 @@
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+- navigation "Turn navigation":
+  - button "Jump to turn 1"
+  - button "Jump to turn 2"
+- button "System prompt":
+  - img
+  - img
+  - text: System prompt
 - text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. 7/25 {{clock}}"
 - button "Copy":
   - img
@@ -27,7 +34,11 @@
   - img
 - button "Branch into a new conversation" [disabled]:
   - img
-- text: Available only on the last message of a completed turn 7/25 {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
+- text: Available only on the last message of a completed turn
+- button "Ran for {{duration}}":
+  - img
+  - text: Ran for {{duration}}
+- text: 7/25 {{clock}}
 - button "Read a.txt":
   - img
   - img
@@ -50,8 +61,6 @@
 - button "Edit":
   - img
 - textbox "Message the agent"
-- button "Add files":
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

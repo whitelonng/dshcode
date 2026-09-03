@@ -12,6 +12,8 @@
   - img
 - button "Delete":
   - img
+- button "Edit":
+  - img
 - heading "Markdown images" [level=2]
 - paragraph:
   - img "Remote test image"
@@ -32,8 +34,6 @@
   - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message the agent"
-- button "Add files" [disabled]:
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

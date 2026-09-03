@@ -166,6 +166,30 @@ interface ToolArgsMap {
     /** children (default) lists direct children only; descendants walks the complete tree below you. */
     scope?: "children" | "descendants";
   } & Record<string, JsonValue>;
+  /** Install a DSH plugin from an npm package name or git repository. A bundle plugin (its manifest declares dsh.bundle) joins the profile bundle layer stack; a plain plugin gets a profile patch insert row. Changes apply after the application restarts. */
+  plugin_install: {
+    /** Install source: an npm package name (bundle or plain plugin) or a git repository. */
+    source: string;
+  } & Record<string, JsonValue>;
+  /** Search installable DSH plugins across the registered index sources (cached catalog enumeration with a 6h TTL; the default source is the dsh-external hub catalog). With `source`, probes that source — an index JSON file/URL (hub catalog format: {"repos": [...]}) — lazily and remembers it. Results carry the owning source and its trust level. */
+  plugin_search: {
+    /** Substring to match against plugin id or description. Empty returns all. */
+    query?: string;
+    /** A registered source id, or a new index JSON file/URL to probe and remember. */
+    source?: string;
+    /** Force re-enumeration, ignoring cached snapshots. */
+    refresh?: boolean;
+  } & Record<string, JsonValue>;
+  /** Show installed DSH plugins: id, version, install source, and saved enablement for each. */
+  plugin_status: {
+    /** Plugin id or package name to inspect. */
+    id?: string;
+  } & Record<string, JsonValue>;
+  /** Remove an installed DSH plugin by its id (package name): the dependency, the profile patch rows, and the recorded state entry. Changes apply after the application restarts. */
+  plugin_uninstall: {
+    /** Plugin id (npm package name) to remove. */
+    id: string;
+  } & Record<string, JsonValue>;
   /** Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only when the direct human explicitly asks for Ralph or fresh-agent iteration. Each round opens a new child with no parent conversation or prior child session; the shared workspace is long-term memory, and only a bounded structured report crosses rounds. The call returns when a worker reports completion or a concrete blocker, or at the round limit. Ordinary long-running same-session work belongs to goal tools. */
   ralph: {
     /** The immutable completion objective for every fresh Ralph round. */
@@ -403,6 +427,36 @@ interface ToolOutputMap {
     parent?: string;
     depth?: number;
   })[];
+  plugin_install: {
+    ok: boolean;
+    plugin: {
+      id: string;
+      version: string;
+    };
+    needsRestart: boolean;
+  };
+  plugin_search: {
+    plugins: ({
+      id: string;
+      kind: "bundle" | "plugin";
+      source: string;
+      faces: string[];
+      description?: string;
+      sourceId: string;
+      trust?: string;
+    })[];
+  };
+  plugin_status: {
+    plugins: {
+      id: string;
+      version: string;
+      source: string;
+      enabled: boolean;
+    }[];
+  };
+  plugin_uninstall: {
+    ok: boolean;
+  };
   ralph: {
     runId: string;
     agentsStarted: number;

@@ -10,10 +10,14 @@
 - text: Research notes what changed? Referenced session · Research notes {{clock}}
 - button "Copy":
   - img
+- button "Delete":
+  - img
+- button "Edit":
+  - img
 - button "Session recall Research notes":
   - img
   - text: Session recall Research notes
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

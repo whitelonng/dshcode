@@ -31,8 +31,6 @@
   - img
 - textbox "Describe what you want to build":
   - paragraph
-- button "Add files" [disabled]:
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

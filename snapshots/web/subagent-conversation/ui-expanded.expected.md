@@ -24,6 +24,8 @@
 - text: "Explain event sourcing in one sentence.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. {{clock}}"
 - button "Copy":
   - img
+- button "Delete":
+  - img
 - button "Thought for a while" [expanded]:
   - text: Thought for a while
   - img
@@ -42,6 +44,8 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
@@ -54,6 +58,10 @@
   - text: System prompt
 - text: Now give the same explanation to a human reader. {{clock}}
 - button "Copy":
+  - img
+- button "Delete":
+  - img
+- button "Edit":
   - img
 - button "Thought for a while" [expanded]:
   - text: Thought for a while
@@ -69,13 +77,15 @@
   - img
 - button "Bad response":
   - img
+- button "Delete":
+  - img
 - button "Branch into a new conversation":
   - img
 - button "Ran for {{duration}}":
   - img
   - text: Ran for {{duration}}
 - text: {{clock}}
-- textbox "Message or run a task... / commands, @ files or sessions"
+- textbox "Message the agent"
 - button "Commands":
   - img
 - 'button "Access mode, current: Custom"': Custom

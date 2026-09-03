@@ -324,6 +324,72 @@
       }
     },
     {
+      "name": "plugin_install",
+      "description": "Install a DSH plugin from an npm package name or git repository. A bundle plugin (its manifest declares dsh.bundle) joins the profile bundle layer stack; a plain plugin gets a profile patch insert row. Changes apply after the application restarts.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Install source: an npm package name (bundle or plain plugin) or a git repository."
+          }
+        },
+        "required": [
+          "source"
+        ]
+      }
+    },
+    {
+      "name": "plugin_search",
+      "description": "Search installable DSH plugins across the registered index sources (cached catalog enumeration with a 6h TTL; the default source is the dsh-external hub catalog). With `source`, probes that source — an index JSON file/URL (hub catalog format: {\"repos\": [...]}) — lazily and remembers it. Results carry the owning source and its trust level.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Substring to match against plugin id or description. Empty returns all."
+          },
+          "source": {
+            "type": "string",
+            "description": "A registered source id, or a new index JSON file/URL to probe and remember."
+          },
+          "refresh": {
+            "type": "boolean",
+            "description": "Force re-enumeration, ignoring cached snapshots."
+          }
+        }
+      }
+    },
+    {
+      "name": "plugin_status",
+      "description": "Show installed DSH plugins: id, version, install source, and saved enablement for each.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Plugin id or package name to inspect."
+          }
+        }
+      }
+    },
+    {
+      "name": "plugin_uninstall",
+      "description": "Remove an installed DSH plugin by its id (package name): the dependency, the profile patch rows, and the recorded state entry. Changes apply after the application restarts.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Plugin id (npm package name) to remove."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
       "name": "ralph",
       "description": "Run a foreground fresh-agent Ralph loop toward one immutable objective. Use only when the direct human explicitly asks for Ralph or fresh-agent iteration. Each round opens a new child with no parent conversation or prior child session; the shared workspace is long-term memory, and only a bounded structured report crosses rounds. The call returns when a worker reports completion or a concrete blocker, or at the round limit. Ordinary long-running same-session work belongs to goal tools.",
       "parameters": {

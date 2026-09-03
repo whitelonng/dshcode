@@ -43,8 +43,6 @@
   - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message the agent"
-- button "Add files" [disabled]:
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Read Only"': Read Only

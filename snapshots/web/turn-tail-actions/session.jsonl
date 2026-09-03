@@ -1,4 +1,4 @@
-{"type":"session","version":0,"id":"{{session:1}}","createdAt":1787736446077,"cwd":"{{cwd}}","agentPreset":"standard"}
+{"type":"session","version":0,"id":"{{session:1}}","createdAt":1788462590611,"cwd":"{{cwd}}","agentPreset":"standard"}
 {"type":"permission/preset","data":{"preset":"workspace-write"}}
 {"type":"sandbox/mode","data":{"mode":"workspace-write"}}
 {"type":"approval/policy","data":{"policy":"ask"}}
@@ -12,11 +12,11 @@
 {"type":"request/header","data":{"header":{"config":{"provider":"deepseek-official","model":"deepseek-v4-flash"},"system":"{{system}}","tools":"{{tools}}"},"reason":"initial"}}
 {"type":"request/context","data":{"provider":"deepseek-official","model":"deepseek-v4-flash","contextWindow":128000}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":0,"blockType":"reasoning"}}}
-{"type":"reasoning-chunks","data":{"turn":1,"step":1,"index":0,"dt":[0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"texts":["The"," user"," wants"," me"," to"," begin"," with"," \"","Reading"," the"," workspace"," now",".\""," and"," call"," bash"," with"," \"","echo"," alpha","\""," in"," the"," same"," message","."," Then"," after"," the"," tool"," result",","," reply"," with"," the"," single"," word"," D","ONE"," and"," stop","."]}}
+{"type":"reasoning-chunks","data":{"turn":1,"step":1,"index":0,"dt":[202,202,202,202,202,206,202,201,202,202,202,202,202,202,202,202,202,202,201,202,200,201,201,202,201,201,201,201,201,202,200,202,202,200,201,201,201,202,200,202,201],"texts":["The"," user"," wants"," me"," to"," begin"," with"," \"","Reading"," the"," workspace"," now",".\""," and"," call"," bash"," with"," \"","echo"," alpha","\""," in"," the"," same"," message","."," Then"," after"," the"," tool"," result",","," reply"," with"," the"," single"," word"," D","ONE"," and"," stop","."]}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":1,"blockType":"text"}}}
-{"type":"text-chunks","data":{"turn":1,"step":1,"index":1,"dt":[1,0,0,0],"texts":["Reading"," the"," workspace"," now","."]}}
+{"type":"text-chunks","data":{"turn":1,"step":1,"index":1,"dt":[201,201,201,202],"texts":["Reading"," the"," workspace"," now","."]}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":2,"blockType":"tool-call"}}}
-{"type":"tool-call-chunks","data":{"turn":1,"step":1,"index":2,"dt":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0],"id":"call_00_1yZGg4XTqe0N5r1rnDLx5082","name":"bash","args":["","{","\"","command","\"",": ","\"","echo"," alpha","\"",", ","\"","description","\"",": ","\"","Print"," alpha"," to"," stdout","\"","}"]}}
+{"type":"tool-call-chunks","data":{"turn":1,"step":1,"index":2,"dt":[201,201,201,200,202,201,202,201,201,202,202,201,202,202,202,202,202,201,201,201,201],"id":"call_00_1yZGg4XTqe0N5r1rnDLx5082","name":"bash","args":["","{","\"","command","\"",": ","\"","echo"," alpha","\"",", ","\"","description","\"",": ","\"","Print"," alpha"," to"," stdout","\"","}"]}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":0,"block":{"type":"reasoning","text":"The user wants me to begin with \"Reading the workspace now.\" and call bash with \"echo alpha\" in the same message. Then after the tool result, reply with the single word DONE and stop."}}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":1,"block":{"type":"text","text":"Reading the workspace now."}}}}
 {"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":2,"block":{"type":"tool-call","id":"call_00_1yZGg4XTqe0N5r1rnDLx5082","name":"bash","arguments":"{\"command\": \"echo alpha\", \"description\": \"Print alpha to stdout\"}"}}}}

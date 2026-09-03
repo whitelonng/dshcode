@@ -18,6 +18,8 @@
   - img
 - button "Delete":
   - img
+- button "Edit":
+  - img
 - button "Thought for a while":
   - text: Thought for a while
   - img
@@ -37,8 +39,6 @@
   - text: Ran for {{duration}}
 - text: {{clock}}
 - textbox "Message the agent"
-- button "Add files" [disabled]:
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

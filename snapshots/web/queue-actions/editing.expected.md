@@ -43,8 +43,6 @@
     - button "Cancel editing":
       - img
 - textbox "Cmd/Ctrl+Enter steers all queued messages"
-- button "Add files":
-  - img
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
