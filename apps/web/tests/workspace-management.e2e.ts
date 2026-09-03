@@ -104,16 +104,27 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
   }
 
   /**
-   * Reveal and click a row action, re-hovering if a projection update replaces
-   * the row before its hover-only button becomes visible.
+   * Reveal and click a row action. Hover and click are one retried gesture:
+   * the reveal is a pure CSS `:hover` rule, so a projection update that
+   * replaces or shifts the row between a hover and the click hides the button
+   * again, and Playwright's click actionability loop never re-hovers — the
+   * click would then wait out its whole budget on a visibility only a fresh
+   * hover restores. Each iteration re-hovers the row's current position and
+   * clicks only from that hover.
    */
   async function clickHoverAction(row: Locator, name: string): Promise<void> {
     const button = row.getByRole('button', { name })
     await expect.poll(async () => {
-      await row.hover()
-      return await button.isVisible()
+      try {
+        await row.hover()
+        await button.click({ timeout: 500 })
+        return true
+      } catch {
+        // A hover or click that lost the race (row replaced, reveal hidden
+        // again) is this poll's retry signal, not a failure.
+        return false
+      }
     }, { timeout: 10_000 }).toBe(true)
-    await button.click()
   }
 
   beforeAll(async () => {
