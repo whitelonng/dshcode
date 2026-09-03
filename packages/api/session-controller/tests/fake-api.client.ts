@@ -19,6 +19,9 @@ import type {
   SessionSelectModelRequest,
   SessionSelectModelValue,
 } from '@deepseek-ai/dsh-api-session-controller/types'
+// Message-surface Remote faces are stubbed as inert below; the request/value
+// types keep the fake assignable to the generated namespace.
+import type {} from '@deepseek-ai/dsh-api-session-controller/remote'
 import type { WorkspaceRemote } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { WorkspaceFollowFrame } from '@deepseek-ai/dsh-api-workspace-controller/types'
 import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
@@ -227,6 +230,8 @@ export class FakeApiClient {
         attachment: payload => this.record('session.attachment', payload, this.onAttachment(payload)),
         updateQueue: payload => this.record('session.updateQueue', payload, this.onUpdateQueue(payload)),
         cancel: payload => this.record('session.cancel', payload, this.onCancel(payload)),
+        deleteMessage: () => Promise.reject(new Error('fake-api: session.deleteMessage not scripted')),
+        editMessage: () => Promise.reject(new Error('fake-api: session.editMessage not scripted')),
         openWorkspacePath: payload => this.record(
           'session.openWorkspacePath',
           payload,
@@ -267,6 +272,21 @@ export class FakeApiClient {
           'workspace.archiveSession',
           payload,
           this.onWorkspaceArchiveSession(payload),
+        ),
+        listArchived: () => this.record(
+          'workspace.listArchived',
+          {},
+          Promise.resolve(ok({ items: [] })),
+        ),
+        restoreSession: payload => this.record(
+          'workspace.restoreSession',
+          payload,
+          Promise.resolve(ok({ archivedSessionIds: [] })),
+        ),
+        deleteSession: payload => this.record(
+          'workspace.deleteSession',
+          payload,
+          Promise.resolve(ok({ archivedSessionIds: [] })),
         ),
         follow: signal => this.openWorkspace(signal),
       },

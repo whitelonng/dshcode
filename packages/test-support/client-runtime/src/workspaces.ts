@@ -1,7 +1,7 @@
 /** Test-owned workspaces face: the renderer standard-kit observable plus recorded actions. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
-  IWorkspaces, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
+  ArchivedSessionItem, IWorkspaces, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -30,8 +30,6 @@ type ProductWorkspaceAction =
   | 'locateFiles'
   | 'listDirectory'
   | 'createDirectory'
-  | 'restoreSession'
-  | 'deleteSession'
 
 /** Everything the double records and can stub. */
 type AnyWorkspaceAction = WorkspaceAction | ProductWorkspaceAction
@@ -44,8 +42,6 @@ interface ProductWorkspaceStub {
   locateFiles: (sessionId: SessionId, names: string[]) => Promise<Array<{ name: string; paths: string[] }>>
   listDirectory: (path: string | undefined, signal: AbortSignal | undefined) => Promise<DirectoryListing>
   createDirectory: (path: string, name: string) => Promise<string>
-  restoreSession: (sessionId: SessionId) => Promise<void>
-  deleteSession: (sessionId: SessionId) => Promise<void>
 }
 
 /** Test replacement retaining one command's parameters and result. */
@@ -263,6 +259,18 @@ export class TestWorkspaces implements IWorkspaces {
     await this.update((draft) => {
       draft.archivedSessionIds = [...draft.archivedSessionIds, sessionId]
     })
+  }
+
+  /**
+   * List the Host's archived sessions (recorded). The default projects the
+   * list state's archive set as identity-only rows.
+   * @returns one row per archived session, in archive-set order.
+   */
+  async listArchived(): Promise<ArchivedSessionItem[]> {
+    this.calls.push({ method: 'listArchived', args: [] })
+    const stub = this.stubs.get('listArchived')
+    if (stub !== undefined) return await (stub() as Promise<ArchivedSessionItem[]>)
+    return this.list.getSnapshot().archivedSessionIds.map(sessionId => ({ sessionId }))
   }
 
   /**

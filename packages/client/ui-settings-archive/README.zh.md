@@ -43,7 +43,7 @@ Web 设置中的归档会话页面。一个 section（`settings.section`，id `a
 <details>
 <summary>实现内部——点击展开</summary>
 
-本区块从 workspace 归档集合快照渲染行。恢复通过 `workspace.restoreSession` 把会话移出归档集合，会话在其原 workspace 位置重新出现；彻底删除调用 `workspace.deleteSession`，宿主从持久化中移除会话日志并清除其 workspace 记账与归档集合条目——其 `host/session-deleted` 帧让每个已连接的客户端把该会话从列表镜像中驱逐。生命周期由网关持有的活会话会先被销毁。线面（`list` / `restore` / `remove`）由 `apply` 注入，携带 workspace 归档层回调，在 `protocol.ts` 中于客户端边界校验每条响应，并以携带宿主错误码的 `ArchiveActionError` 拒绝，供区块把已知错误码映射为可操作的文案。
+本区块从 workspace 归档集合快照渲染行。恢复通过客户端 `workspaces` 服务（网关上的 `workspace/restoreSession`）把会话移出归档集合，会话在其原 workspace 位置重新出现；彻底删除调用同一服务的删除（`workspace/deleteSession`），宿主从持久化中移除会话日志并清除其 workspace 记账与归档集合条目——转发的 `api-session/deleted` 帧让每个已连接的客户端把该会话从列表镜像中驱逐。仍活跃的会话以 `workspace/session-active` 拒绝彻底删除，区块把该错误码映射为说明处理方式的文案。线面（`list` / `restore` / `remove`）由 `apply` 注入，携带 workspace 归档层回调，在 `protocol.ts` 中于客户端边界校验每条响应，并以携带宿主错误码的 `ArchiveActionError` 拒绝，供区块把已知错误码映射为可操作的文案。
 
 </details>
 
@@ -65,7 +65,7 @@ Web 设置中的归档会话页面。一个 section（`settings.section`，id `a
 
 #### 模型看到的内容
 
-归档区块不产生任何模型可见内容。本页不发起任何模型请求，不持有对话上下文，也不注册任何面向模型的内容；列表由宿主的 `session-query` 服务经 `workspace.listArchived` 从持久化会话日志折叠而来。
+归档区块不产生任何模型可见内容。本页不发起任何模型请求，不持有对话上下文，也不注册任何面向模型的内容；列表由宿主的 `session-query` 服务经 `workspace/listArchived` 从持久化会话日志折叠而来。
 
 #### Token 影响
 

@@ -46,6 +46,10 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'directory-picker/exists': { readonly path: string }
     /** The parent is not fully qualified, the name is not one segment, or creation failed. */
     'directory-picker/create-failed': { readonly path: string }
+    /** Permanent deletion needs the Session in the registry-global archive set. */
+    'workspace/not-archived': { readonly sessionId: SessionId }
+    /** Permanent deletion refuses a Session that is still live in this process. */
+    'workspace/session-active': { readonly sessionId: SessionId }
   }
 }
 
@@ -107,6 +111,30 @@ export interface WorkspaceArchiveSessionRequest {
 /** Complete archived Session set after a mutation. */
 export interface WorkspaceArchiveValue {
   readonly archivedSessionIds: readonly SessionId[]
+}
+
+/** One archived-session row: identity plus best-effort title and age. */
+export interface ArchivedSessionItem {
+  readonly sessionId: SessionId
+  /** Folded log title; absent when the log has no title event. */
+  readonly title?: string
+  /** Header creation timestamp (ms); absent when the Session is not persisted. */
+  readonly createdAt?: number
+}
+
+/** Complete archived-session listing for the settings surface. */
+export interface WorkspaceListArchivedValue {
+  readonly items: readonly ArchivedSessionItem[]
+}
+
+/** Session requested for archival-set removal (unarchive). */
+export interface WorkspaceRestoreSessionRequest {
+  readonly sessionId: SessionId
+}
+
+/** Archived Session requested for permanent deletion. */
+export interface WorkspaceDeleteSessionRequest {
+  readonly sessionId: SessionId
 }
 
 /** Complete reconnect baseline for Workspace browser state. */

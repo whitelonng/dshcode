@@ -43,7 +43,7 @@ No mount: the package registers nothing into a composition. Its wire face is inj
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The section renders rows from the workspace archive-set snapshot. Restore removes the session from the archive set through `workspace.restoreSession`, so the session reappears in its original workspace position; permanent delete calls `workspace.deleteSession`, which removes the session log from persistence and drops its workspace accounting and archive-set entries — its `host/session-deleted` frame makes every connected client evict the session from its list mirror. A live session whose lifecycle the gateway owns is disposed first. The wire face (`list` / `restore` / `remove`) is injected from `apply`, carries the workspace archive-seam callbacks, validates each response in `protocol.ts` at the client boundary, and rejects as `ArchiveActionError` carrying the Host error code so the section maps known codes to actionable copy.
+The section renders rows from the workspace archive-set snapshot. Restore removes the session from the archive set through the Client `workspaces` service (`workspace/restoreSession` over the Gateway), so the session reappears in its original workspace position; permanent delete calls the same service's delete (`workspace/deleteSession`), which removes the session log from persistence and drops its workspace accounting and archive-set entries — the forwarded `api-session/deleted` frame makes every connected client evict the session from its list mirror. A live session refuses permanent delete with `workspace/session-active`, which the section maps to copy naming the remedy. The wire face (`list` / `restore` / `remove`) is injected from `apply`, carries the workspace archive-seam callbacks, validates each response in `protocol.ts` at the client boundary, and rejects as `ArchiveActionError` carrying the Host error code so the section maps known codes to actionable copy.
 
 </details>
 
@@ -65,7 +65,7 @@ The section renders rows from the workspace archive-set snapshot. Restore remove
 
 #### What the model sees
 
-Nothing from the `archive` section. The page performs no model requests, holds no conversation context, and registers no model-facing content; its list is folded from persisted session logs by the host `session-query` service through `workspace.listArchived`.
+Nothing from the `archive` section. The page performs no model requests, holds no conversation context, and registers no model-facing content; its list is folded from persisted session logs by the host `session-query` service through `workspace/listArchived`.
 
 #### Token effect
 

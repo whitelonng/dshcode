@@ -4,7 +4,7 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
-import type { WorkspaceView } from '../types.ts'
+import type { ArchivedSessionItem, WorkspaceView } from '../types.ts'
 import type { ClientWorkspaceModel, WorkspaceSnapshot } from './model.ts'
 
 /** Structured create failure for callers that distinguish Host business errors. */
@@ -14,6 +14,27 @@ export class WorkspaceCreateError extends Error {
   /** @param rpcError - Host business or folded carrier failure. */
   constructor(readonly rpcError: RemoteFailure) {
     super(`workspace create failed: ${rpcError.code}: ${rpcError.message}`)
+  }
+}
+
+/**
+ * Command failure carrying the Host wire code, so callers that map specific
+ * rejections to dedicated copy (the archive section's session-active remedy)
+ * keep their typed handling over the shared service face. The code is also
+ * readable as the plain `code` field: consumer plugins cannot import this
+ * class as a value (cross-plugin value imports are a bundle error), so they
+ * match on the structure instead of the class identity.
+ */
+export class WorkspaceCommandError extends Error {
+  override readonly name = 'WorkspaceCommandError'
+
+  /** The Host wire code of the failed command. */
+  readonly code: string
+
+  /** @param rpcError - Host business or folded carrier failure. */
+  constructor(readonly rpcError: RemoteFailure, operation: string) {
+    super(`workspace ${operation} failed: ${rpcError.code}: ${rpcError.message}`)
+    this.code = rpcError.code
   }
 }
 
@@ -62,6 +83,21 @@ export interface IWorkspaces {
    * @param sessionId - Session to archive.
    */
   archiveSession(sessionId: SessionId): Promise<void>
+  /**
+   * List the Host's archived sessions for the settings surface.
+   * @returns one row per archived Session, in archive-set order.
+   */
+  listArchived(): Promise<ArchivedSessionItem[]>
+  /**
+   * Remove one Session from the registry-global archive set.
+   * @param sessionId - Session to unarchive.
+   */
+  restoreSession(sessionId: SessionId): Promise<void>
+  /**
+   * Permanently delete one archived Session (log first, then accounting).
+   * @param sessionId - archived Session to delete.
+   */
+  deleteSession(sessionId: SessionId): Promise<void>
   /**
    * Move a Session within one Workspace account.
    * @param workspaceId - owning Workspace.
@@ -116,6 +152,34 @@ export class WorkspaceController extends Service implements IWorkspaces {
     if (!result.ok) throw commandError('session archive', result.error)
   }
 
+  /**
+   * List the Host's archived sessions for the settings surface.
+   * @returns one row per archived Session, in archive-set order.
+   */
+  async listArchived(): Promise<ArchivedSessionItem[]> {
+    const result = await this.model.listArchived()
+    if (!result.ok) throw commandError('archived listing', result.error)
+    return [...result.value.items]
+  }
+
+  /**
+   * Remove one Session from the registry-global archive set.
+   * @param sessionId - Session to unarchive.
+   */
+  async restoreSession(sessionId: SessionId): Promise<void> {
+    const result = await this.model.restoreSession(sessionId)
+    if (!result.ok) throw commandError('session restore', result.error)
+  }
+
+  /**
+   * Permanently delete one archived Session (log first, then accounting).
+   * @param sessionId - archived Session to delete.
+   */
+  async deleteSession(sessionId: SessionId): Promise<void> {
+    const result = await this.model.deleteSession(sessionId)
+    if (!result.ok) throw commandError('session delete', result.error)
+  }
+
   async insertSessionBefore(
     workspaceId: WorkspaceId,
     sessionId: SessionId,
@@ -128,5 +192,5 @@ export class WorkspaceController extends Service implements IWorkspaces {
 }
 
 function commandError(operation: string, failure: RemoteFailure): Error {
-  return new Error(`workspace ${operation} failed: ${failure.code}: ${failure.message}`)
+  return new WorkspaceCommandError(failure, operation)
 }

@@ -24,13 +24,16 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
+  WorkspaceDeleteSessionRequest,
   WorkspaceDeleteValue,
   WorkspaceFollowFrame,
+  WorkspaceId,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
+  WorkspaceListArchivedValue,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
-  WorkspaceId,
+  WorkspaceRestoreSessionRequest,
   WorkspaceValue,
   WorkspaceView,
 } from '../src/types.ts'
@@ -140,6 +143,18 @@ class ScriptedWorkspaceRemote implements WorkspaceRemote {
     throw new Error('unused')
   }
 
+  listArchived(): Promise<RemoteResult<WorkspaceListArchivedValue>> {
+    throw new Error('unused')
+  }
+
+  restoreSession(_request: WorkspaceRestoreSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    throw new Error('unused')
+  }
+
+  deleteSession(_request: WorkspaceDeleteSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    throw new Error('unused')
+  }
+
   async *follow(signal = new AbortController().signal): AsyncIterable<WorkspaceFollowFrame> {
     const generation = this.generations[this.calls++]
     if (generation === undefined) throw new Error('no scripted Workspace generation')
@@ -178,6 +193,16 @@ class CommandWorkspaceRemote implements WorkspaceRemote {
 
   readonly archiveSession = vi.fn<WorkspaceRemote['archiveSession']>(request => Promise.resolve(remoteOk({
     archivedSessionIds: [request.sessionId],
+  })))
+
+  readonly listArchived = vi.fn<WorkspaceRemote['listArchived']>(() => Promise.resolve(remoteOk({ items: [] })))
+
+  readonly restoreSession = vi.fn<WorkspaceRemote['restoreSession']>(() => Promise.resolve(remoteOk({
+    archivedSessionIds: [],
+  })))
+
+  readonly deleteSession = vi.fn<WorkspaceRemote['deleteSession']>(() => Promise.resolve(remoteOk({
+    archivedSessionIds: [],
   })))
 
   async *follow(_signal?: AbortSignal): AsyncIterable<WorkspaceFollowFrame> {}

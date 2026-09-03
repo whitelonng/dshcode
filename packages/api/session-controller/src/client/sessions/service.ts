@@ -364,6 +364,14 @@ export class ClientSessions implements ISessions {
   }
 
   /**
+   * Apply one remotely forwarded permanent-deletion frame.
+   * @param sessionId - deleted Session identity.
+   */
+  handleSessionDeleted(sessionId: Parameters<SessionManager['handleSessionDeleted']>[0]): void {
+    this.manager.handleSessionDeleted(sessionId)
+  }
+
+  /**
    * Apply one remotely forwarded running-state change.
    * @param args - Session identity and current Agent running state.
    */

@@ -13,6 +13,9 @@
     - button "Agent presets":
       - img
       - text: Agent presets
+    - button "Archived sessions":
+      - img
+      - text: Archived sessions
   - button "Open configuration file"
   - button "Close":
     - img
@@ -48,3 +51,9 @@
   - button "Queue":
     - text: Queue
     - img
+  - text: System notifications System-level alerts for approval waits and task completion System notification permission was denied
+  - button "Retry"
+  - text: Approval notifications
+  - switch "Approval notifications" [checked]
+  - text: Task completion notifications
+  - switch "Task completion notifications" [checked]

@@ -10,9 +10,12 @@ import type {
   WorkspaceBaseline,
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
+  WorkspaceDeleteSessionRequest,
   WorkspaceDeleteValue,
   WorkspaceInsertSessionBeforeRequest,
+  WorkspaceListArchivedValue,
   WorkspaceOrderValue,
+  WorkspaceRestoreSessionRequest,
   WorkspaceValue,
   WorkspaceId,
   WorkspaceView,
@@ -166,6 +169,40 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     sessionId: WorkspaceArchiveSessionRequest['sessionId'],
   ): Promise<RemoteResult<WorkspaceArchiveValue>> {
     const result = await this.remote.archiveSession({ sessionId })
+    if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    return result
+  }
+
+  /**
+   * List the Host's archived sessions for the settings surface.
+   * @returns generated Remote result; the projection does not change.
+   */
+  async listArchived(): Promise<RemoteResult<WorkspaceListArchivedValue>> {
+    return this.remote.listArchived()
+  }
+
+  /**
+   * Restore one archived Session and install the returned archive set.
+   * @param sessionId - Session to unarchive.
+   * @returns generated Remote result.
+   */
+  async restoreSession(
+    sessionId: WorkspaceRestoreSessionRequest['sessionId'],
+  ): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    const result = await this.remote.restoreSession({ sessionId })
+    if (result.ok) this.installArchived(result.value.archivedSessionIds)
+    return result
+  }
+
+  /**
+   * Permanently delete one archived Session and install the returned archive set.
+   * @param sessionId - archived Session to delete.
+   * @returns generated Remote result.
+   */
+  async deleteSession(
+    sessionId: WorkspaceDeleteSessionRequest['sessionId'],
+  ): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    const result = await this.remote.deleteSession({ sessionId })
     if (result.ok) this.installArchived(result.value.archivedSessionIds)
     return result
   }

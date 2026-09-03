@@ -1,6 +1,11 @@
 /** Workspace command implementation and stable Remote failure mapping. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+// Type-only: activates the `sessionPersistence` / `sessionQuery` Context merges
+// the archive commands read.
+import type {} from '@deepseek-ai/dsh-session-persistence'
+import type {} from '@deepseek-ai/dsh-session-query'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   WorkspaceId,
@@ -17,10 +22,13 @@ import type {
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
   WorkspaceDeleteValue,
+  WorkspaceDeleteSessionRequest,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
+  WorkspaceListArchivedValue,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceRestoreSessionRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -157,6 +165,79 @@ export class WorkspaceCommands {
       if (!(error instanceof WorkspaceUnknownSessionError)) throw error
       throw new RemoteError('session/not-found', error.message, { sessionId: request.sessionId }, { cause: error })
     }
+    return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
+  }
+
+  /**
+   * List the registry-global archive set with best-effort folded titles and
+   * header ages. Without the session-query service (cold harnesses, disabled
+   * search) rows carry only identity and age.
+   * @returns one row per archived Session, in archive-set order.
+   */
+  async listArchived(): Promise<WorkspaceListArchivedValue> {
+    const ids = this.ctx.workspaceRegistry.archivedSessionIds
+    // Optional service: compositions without session query (cold harnesses,
+    // disabled search) serve the settings surface with identity and age only.
+    const sessionQuery = this.ctx.get('sessionQuery')
+    let titles: ReadonlyMap<SessionId, string> | undefined
+    if (sessionQuery !== undefined && ids.length > 0) {
+      const observations = await sessionQuery.readTitleSnapshots(ids)
+      titles = new Map(observations.flatMap((result) => {
+        if (result.status === 'rejected') return []
+        return result.value.title === undefined ? [] : [[result.value.session.id, result.value.title.title] as const]
+      }))
+    }
+    const headers = await this.ctx.sessionPersistence.list()
+    const byId = new Map(headers.map(header => [header.id, header] as const))
+    return {
+      items: ids.map((sessionId) => {
+        const createdAt = byId.get(sessionId)?.createdAt
+        const title = titles?.get(sessionId)
+        return {
+          sessionId,
+          ...title === undefined ? {} : { title },
+          ...createdAt === undefined ? {} : { createdAt },
+        }
+      }),
+    }
+  }
+
+  /**
+   * Remove one Session from the registry-global archive set.
+   * @param request - Session identity to unarchive.
+   * @returns the complete resulting archive set.
+   */
+  async restoreSession(request: WorkspaceRestoreSessionRequest): Promise<WorkspaceArchiveValue> {
+    await this.ctx.workspaceRegistry.restoreSession(request.sessionId)
+    return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
+  }
+
+  /**
+   * Permanently delete one archived Session: the log is removed from
+   * persistence first, then its workspace accounting and archive-set entry. A
+   * Session that is not archived, or that is still live in this process,
+   * refuses with a typed business failure.
+   * @param request - archived Session identity to delete.
+   * @returns the complete resulting archive set.
+   */
+  async deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceArchiveValue> {
+    const { sessionId } = request
+    if (!this.ctx.workspaceRegistry.archivedSessionIds.includes(sessionId)) {
+      throw new RemoteError(
+        'workspace/not-archived',
+        `session '${sessionId}' is not archived and cannot be permanently deleted`,
+        { sessionId },
+      )
+    }
+    if (this.ctx.sessions.get(sessionId) !== undefined) {
+      throw new RemoteError(
+        'workspace/session-active',
+        `session '${sessionId}' is still active; close it before deleting`,
+        { sessionId },
+      )
+    }
+    await this.ctx.sessionPersistence.delete(sessionId)
+    await this.ctx.workspaceRegistry.removeSession(sessionId)
     return { archivedSessionIds: [...this.ctx.workspaceRegistry.archivedSessionIds] }
   }
 

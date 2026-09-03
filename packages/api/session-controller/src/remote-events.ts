@@ -4,6 +4,7 @@ type SessionControllerRemoteEvent =
   | 'api-session/added'
   | 'api-session/error'
   | 'api-session/removed'
+  | 'api-session/deleted'
   | 'api-session/status'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {

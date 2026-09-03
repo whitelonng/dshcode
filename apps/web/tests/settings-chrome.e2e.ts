@@ -25,7 +25,9 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/settings-chrome', import.
 const DIALOG_EXPECTED = join(SNAPSHOT_DIR, 'dialog.expected.md')
 const PLUGINS_EXPECTED = join(SNAPSHOT_DIR, 'plugins.expected.md')
 const DIALOG_EN_EXPECTED = join(SNAPSHOT_DIR, 'dialog-en.expected.md')
-const PLUGIN_ROW_SELECTOR = '[data-plugin-entry$=":ui-settings"]'
+const PLUGIN_ROW_SELECTOR = '[data-plugin-scope="global"] [data-plugin-entry$=":ui-settings"]'
+const PLUGIN_STATUS_TAB = { zh: '插件状态', en: 'Plugin status' } as const
+const PLUGIN_LIST_TAB = { zh: '插件列表', en: 'Plugin list' } as const
 const MODE = webSnapshotMode()
 
 describe('web e2e: settings modal and General preferences', () => {
@@ -95,35 +97,44 @@ describe('web e2e: settings modal and General preferences', () => {
     await dialog.getByRole('button', { name: '模型' }).click()
     await expect.poll(() => dialog.getByRole('button', { name: '模型' }).getAttribute('aria-current'), { timeout: 5_000 }).toBe('true')
     expect(await dialog.getByRole('button', { name: '通用设置' }).getAttribute('aria-current')).toBeNull()
-    // Plugins is a projection of the same assembled Loader tree: the merged
-    // list tab keeps user plugins on top and built-ins collapsed below.
-    // Capture one stable shipped row rather than the whole inventory so
-    // adding an unrelated plugin does not rewrite this surface's golden.
+    // Plugins section, two tabs. The status tab projects the assembled
+    // Loader tree (presets grouped by scope, global rows read-only); the list
+    // tab is the install surface whose built-in plane starts collapsed.
     await dialog.getByRole('button', { name: '插件', exact: true }).click()
     await dialog.getByRole('heading', { name: '插件', exact: true }).waitFor({ timeout: 10_000 })
-    await dialog.getByRole('tab', { name: '插件列表', exact: true }).click()
-    await dialog.getByText('内置插件', { exact: true }).click()
+    await dialog.getByRole('tab', { name: PLUGIN_STATUS_TAB.zh, exact: true }).click()
+    await dialog.getByRole('button', { name: '选择要查看的 Agent 预设' }).waitFor({ timeout: 10_000 })
+    // The global plane starts collapsed and expands on demand.
+    await dialog.getByRole('button', { name: '全局插件' }).click()
     const pluginRow = dialog.locator(PLUGIN_ROW_SELECTOR)
     await pluginRow.waitFor({ timeout: 10_000 })
     const expectedPluginCount = [...scaffold.ctx.loader.entries()]
       .filter(entry => !entry.options.group)
       .length
-    expect(await dialog.getByRole('searchbox', { name: '搜索插件' }).count()).toBe(1)
-    // Every Loader entry appears exactly once in the global group — rows the
-    // presets took over included, preset compositions excluded.
+    // Every ungrouped Loader entry appears exactly once in the global scope —
+    // rows the presets took over included, preset compositions excluded.
     expect(await dialog.locator('[data-plugin-scope="global"] [data-plugin-entry]').count())
       .toBe(expectedPluginCount)
-    expect(await dialog.locator('[data-plugin-count]').getAttribute('data-plugin-count'))
+    expect(await dialog.locator('[data-plugin-scope="global"] [data-plugin-count]').getAttribute('data-plugin-count'))
       .toBe(String(expectedPluginCount))
     expect(await dialog.getByRole('button', { name: '插件', exact: true }).getAttribute('aria-current')).toBe('true')
-    expect(await dialog.getByRole('tab', { name: '插件列表', exact: true }).getAttribute('aria-selected')).toBe('true')
+    expect(await dialog.getByRole('tab', { name: PLUGIN_STATUS_TAB.zh, exact: true }).getAttribute('aria-selected')).toBe('true')
     expect(await dialog.getByRole('button', { name: '模型' }).getAttribute('aria-current')).toBeNull()
+    // Capture one stable shipped row rather than the whole inventory so
+    // adding an unrelated plugin does not rewrite this surface's golden.
     const pluginsSnapshot = await captureStableAria(
       page,
       PLUGIN_ROW_SELECTOR,
       scaffold.workspaceCwd,
     )
     await compareOrRefreshGolden(PLUGINS_EXPECTED, pluginsSnapshot, MODE)
+    // The list tab's built-in plane opens on demand and carries its own
+    // search box; its rows cover the same Loader inventory.
+    await dialog.getByRole('tab', { name: PLUGIN_LIST_TAB.zh, exact: true }).click()
+    await dialog.getByText('内置插件', { exact: true }).click()
+    await expect.poll(() => dialog.getByRole('searchbox', { name: '搜索插件' }).count(), { timeout: 5_000 }).toBe(1)
+    await expect.poll(() => dialog.locator('[data-plugin-panel] [data-plugin-entry]').count(), { timeout: 5_000 })
+      .toBe(expectedPluginCount)
     // Close path 1: Escape.
     await page.keyboard.press('Escape')
     await expect.poll(() => page.getByRole('dialog', { name: '设置' }).count(), { timeout: 5_000 }).toBe(0)
@@ -197,17 +208,18 @@ describe('web e2e: settings modal and General preferences', () => {
     await page.keyboard.press('Escape')
 
     // Hold real plugin bundles so the shell-owned loading page remains
-    // observable. The modules and runtime rows are parser-blocking head
-    // preloads (the boot queue needs their registrations before the shell
-    // runs); holding them would block body parsing and hide the loading page
-    // entirely, so they pass through and the remaining plugin bundles hold
-    // the loader open.
+    // observable. The modules combo batch is the boot's one parser-blocking
+    // head script (the boot queue needs its registration before the shell
+    // runs); holding it would block body parsing and hide the loading page
+    // entirely, so it passes through and the remaining plugin bundles hold
+    // the loader open. Bundle ids ride the combo URL's query, so the pass-through
+    // test reads the full request URL.
     const pluginPattern = '**/plugins/**'
-    const preloadPathPattern = /\/plugins\/@deepseek-ai\/dsh-client-(?:modules|runtime)\/client\.js/
+    const preloadUrlPattern = /\/plugins\/\?\?@deepseek-ai\/dsh-client-modules\//
     let releaseBundles = (): void => {}
     const bundlesReleased = new Promise<void>((resolve) => { releaseBundles = resolve })
     await page.route(pluginPattern, async (route) => {
-      if (preloadPathPattern.test(new URL(route.request().url()).pathname)) {
+      if (preloadUrlPattern.test(route.request().url())) {
         await route.continue()
         return
       }
@@ -576,10 +588,17 @@ describe('web e2e: settings modal and General preferences', () => {
       const dialog = enPage.getByRole('dialog', { name: 'Settings' })
       await dialog.waitFor({ timeout: 10_000 })
       await dialog.getByRole('button', { name: 'English' }).waitFor({ timeout: 10_000 })
-      // The plugin list resolves shipped preset names through the en
+      // The last General row anchors the golden: everything above has rendered.
+      await dialog.getByRole('button', { name: 'Queue', exact: true }).waitFor({ timeout: 10_000 })
+      // Golden of the English dialog on a fresh home — the visible output this
+      // scenario produces; the zh golden above covers the detected-locale
+      // surface, so the pair pins both directions of the resolution.
+      const dialogSnapshot = await captureStableAria(enPage, '[role="dialog"]', fresh.workspaceCwd)
+      await compareOrRefreshGolden(DIALOG_EN_EXPECTED, dialogSnapshot, MODE)
+      // The status tab resolves shipped preset names through the en
       // dictionaries instead of echoing the preset files' Chinese metadata.
       await dialog.getByRole('button', { name: 'Plugins', exact: true }).click()
-      await dialog.getByRole('tab', { name: 'Plugin list', exact: true }).click()
+      await dialog.getByRole('tab', { name: PLUGIN_STATUS_TAB.en, exact: true }).click()
       const presetSwitcher = dialog.getByRole('button', { name: 'Choose the agent preset to inspect' })
       await presetSwitcher.waitFor({ timeout: 10_000 })
       expect(await presetSwitcher.textContent()).toBe('Standard mode (default)')
@@ -593,10 +612,10 @@ describe('web e2e: settings modal and General preferences', () => {
     }
   }, 90_000)
 
-  it('opens a browser asking for no shipped language in English', async () => {
+  it('opens a browser asking for no shipped language in Chinese', async () => {
     // The product default for "no usable signal": a French browser ships
-    // neither zh nor en, so resolution falls to FALLBACK_LOCALE (en) rather
-    // than to Chinese.
+    // neither zh nor en, so resolution falls to FALLBACK_LOCALE (zh — the
+    // DSHCode product is Chinese-first) rather than to English.
     const fresh = await launchWebScaffold({})
     const frPage = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: 'fr-FR' })
     const frTripwire = watchConsole(frPage)
@@ -605,21 +624,20 @@ describe('web e2e: settings modal and General preferences', () => {
       await frPage.goto(fresh.authenticatedUrl, { waitUntil: 'load' })
       await frPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
       expect(await frPage.evaluate(() => localStorage.getItem('dsh.locale'))).toBeNull()
-      await frPage.getByRole('button', { name: 'Settings', exact: true }).click()
-      const dialog = frPage.getByRole('dialog', { name: 'Settings' })
+      await frPage.getByRole('button', { name: '设置', exact: true }).click()
+      const dialog = frPage.getByRole('dialog', { name: '设置' })
       await dialog.waitFor({ timeout: 10_000 })
-      await dialog.getByRole('button', { name: 'English' }).waitFor({ timeout: 10_000 })
-      // A locale-owned nav label proves the dictionaries resolved to en.
-      await dialog.getByRole('button', { name: 'Agent presets' }).waitFor({ timeout: 10_000 })
-      // The markup already ships `en`, so this alone cannot prove the sync ran
-      // — the zh scenario above is the discriminating half. Asserted here too
-      // so a future change that resolves en but writes the wrong tag is caught.
-      expect(await frPage.evaluate(() => document.documentElement.lang)).toBe('en')
-      // Golden of the English fallback dialog — the visible output this change
-      // produces. The zh golden above covers the detected-locale surface, so
-      // the pair pins both directions of the resolution.
+      await dialog.getByRole('button', { name: '中文' }).waitFor({ timeout: 10_000 })
+      // A locale-owned nav label proves the dictionaries resolved to zh.
+      await dialog.getByRole('button', { name: 'Agent 预设' }).waitFor({ timeout: 10_000 })
+      // The markup already ships `zh`, so this alone cannot prove the sync ran
+      // — the en scenario above is the discriminating half. Asserted here too
+      // so a future change that resolves zh but writes the wrong tag is caught.
+      expect(await frPage.evaluate(() => document.documentElement.lang)).toBe('zh-CN')
+      // The fallback dialog is the shipped zh default surface: identical to
+      // the detected-locale golden, which pins the whole resolution output.
       const snapshot = await captureStableAria(frPage, '[role="dialog"]', fresh.workspaceCwd)
-      await compareOrRefreshGolden(DIALOG_EN_EXPECTED, snapshot, MODE)
+      await compareOrRefreshGolden(DIALOG_EXPECTED, snapshot, MODE)
       expect(frTripwire.pageErrors).toEqual([])
       expect(frTripwire.warnings).toEqual([])
     } finally {
@@ -632,6 +650,7 @@ describe('web e2e: settings modal and General preferences', () => {
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'dialog.expected.md',
+      'dialog-en.expected.md',
       'plugins.expected.md',
     ])
   })

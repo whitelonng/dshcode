@@ -47,7 +47,20 @@ async function harness() {
   const storageDomain = new DomainFacility(ctx, { backend: 'memory', routes: {} })
   ctx.storage.mount('domain', storageDomain)
   ctx.provide('storageDomain', storageDomain)
-  ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
+  const persisted: {
+    headers: Array<{ id: SessionId; createdAt: number; cwd?: string }>
+    deleted: SessionId[]
+  } = {
+    headers: [],
+    deleted: [],
+  }
+  ctx.provide('sessionPersistence', {
+    list: () => Promise.resolve(persisted.headers),
+    delete: (id: SessionId) => {
+      persisted.deleted.push(id)
+      return Promise.resolve()
+    },
+  } as never)
   await ctx.plugin(WorkspaceRegistry)
   const dispose = (): void => {}
   ctx.provide('typert', {
@@ -55,7 +68,7 @@ async function harness() {
     contexts: { configureHost: () => dispose },
   } as never)
   const controller = new WorkspaceController(ctx)
-  return { controller, ctx, root, storageDomain }
+  return { controller, ctx, root, storageDomain, persisted }
 }
 
 function stageDir(root: string, name: string): string {
@@ -216,6 +229,49 @@ describe('WorkspaceController commands', () => {
       .resolves.toEqual({ archivedSessionIds: [session.id] })
     await expect(controller.archiveSession({ sessionId: SessionId('unknown') }))
       .rejects.toMatchObject({ code: 'session/not-found' })
+  })
+
+  it('lists, restores, and permanently deletes archived Sessions', async () => {
+    const { controller, ctx, root, persisted } = await harness()
+    const created = await controller.create({ path: stageDir(root, 'archive-me') })
+    const registry = ctx.workspaceRegistry.get(created.workspace.workspaceId)
+    if (registry === undefined) throw new Error('fixture Workspace disappeared')
+    const cold = SessionId('cold-session')
+    // attachSession validates the id against persistence (header plus a cwd
+    // matching the workspace), so the header lands in the fake store first.
+    persisted.headers.push({ id: cold, createdAt: 1704067200000, cwd: created.workspace.path })
+    await registry.attachSession(cold)
+    await controller.archiveSession({ sessionId: cold })
+    await expect(controller.listArchived()).resolves.toEqual({
+      items: [{ sessionId: cold, createdAt: 1704067200000 }],
+    })
+
+    await expect(controller.restoreSession({ sessionId: cold }))
+      .resolves.toEqual({ archivedSessionIds: [] })
+    await expect(controller.listArchived()).resolves.toEqual({ items: [] })
+
+    await controller.archiveSession({ sessionId: cold })
+    await expect(controller.deleteSession({ sessionId: cold }))
+      .resolves.toEqual({ archivedSessionIds: [] })
+    expect(persisted.deleted).toEqual([cold])
+    await expect(controller.listArchived()).resolves.toEqual({ items: [] })
+  })
+
+  it('refuses permanent delete for unarchived and still-live Sessions', async () => {
+    const { controller, ctx, root } = await harness()
+    await expect(controller.deleteSession({ sessionId: SessionId('never-archived') }))
+      .rejects.toMatchObject({ code: 'workspace/not-archived' })
+
+    const created = await controller.create({ path: stageDir(root, 'live') })
+    const session = ctx.sessions.create(SessionId('live-session'), {
+      meta: { cwd: created.workspace.path },
+    })
+    const registry = ctx.workspaceRegistry.get(created.workspace.workspaceId)
+    if (registry === undefined) throw new Error('fixture Workspace disappeared')
+    await registry.attachSession(session.id)
+    await controller.archiveSession({ sessionId: session.id })
+    await expect(controller.deleteSession({ sessionId: session.id }))
+      .rejects.toMatchObject({ code: 'workspace/session-active' })
   })
 })
 

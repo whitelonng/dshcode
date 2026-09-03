@@ -8,12 +8,15 @@ import type {
   WorkspaceCreateRequest,
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
+  WorkspaceDeleteSessionRequest,
   WorkspaceDeleteValue,
   WorkspaceFollowFrame,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
+  WorkspaceListArchivedValue,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceRestoreSessionRequest,
   WorkspaceValue,
   WorkspaceId,
   WorkspaceView,
@@ -84,6 +87,16 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     request: WorkspaceArchiveSessionRequest,
   ) => Promise<RemoteResult<WorkspaceArchiveValue>> = request =>
     Promise.resolve(remoteOk({ archivedSessionIds: [request.sessionId] }))
+  onListArchived: () => Promise<RemoteResult<WorkspaceListArchivedValue>> = () =>
+    Promise.resolve(remoteOk({ items: [] }))
+  onRestoreSession: (
+    _request: WorkspaceRestoreSessionRequest,
+  ) => Promise<RemoteResult<WorkspaceArchiveValue>> = () =>
+    Promise.resolve(remoteOk({ archivedSessionIds: [] }))
+  onDeleteSession: (
+    _request: WorkspaceDeleteSessionRequest,
+  ) => Promise<RemoteResult<WorkspaceArchiveValue>> = () =>
+    Promise.resolve(remoteOk({ archivedSessionIds: [] }))
 
   create(request: WorkspaceCreateRequest): Promise<RemoteResult<WorkspaceCreateValue>> {
     this.record('create', request)
@@ -113,6 +126,21 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
     this.record('archiveSession', request)
     return this.onArchiveSession(request)
+  }
+
+  listArchived(): Promise<RemoteResult<WorkspaceListArchivedValue>> {
+    this.record('listArchived', {})
+    return this.onListArchived()
+  }
+
+  restoreSession(request: WorkspaceRestoreSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    this.record('restoreSession', request)
+    return this.onRestoreSession(request)
+  }
+
+  deleteSession(request: WorkspaceDeleteSessionRequest): Promise<RemoteResult<WorkspaceArchiveValue>> {
+    this.record('deleteSession', request)
+    return this.onDeleteSession(request)
   }
 
   async *follow(_signal?: AbortSignal): AsyncGenerator<WorkspaceFollowFrame> {}
@@ -306,6 +334,23 @@ describe('ClientWorkspaceModel', () => {
     remote.onArchiveSession = request => Promise.resolve(remoteOk({ archivedSessionIds: [request.sessionId] }))
     await expect(model.archiveSession(sid('fresh'))).resolves.toMatchObject({ ok: true })
     expect(model.getSnapshot().archivedSessionIds).toEqual(['fresh'])
+  })
+
+  it('installs archive-set echoes from restore and permanent delete, leaving reads untouched', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [], [sid('archived')])
+
+    await expect(model.listArchived()).resolves.toMatchObject({ ok: true, value: { items: [] } })
+    expect(model.getSnapshot().archivedSessionIds).toEqual(['archived'])
+
+    remote.onRestoreSession = () => Promise.resolve(remoteOk({ archivedSessionIds: [] }))
+    await expect(model.restoreSession(sid('archived'))).resolves.toMatchObject({ ok: true })
+    expect(model.getSnapshot().archivedSessionIds).toEqual([])
+
+    remote.onDeleteSession = () => Promise.resolve(remoteOk({ archivedSessionIds: [] }))
+    await expect(model.deleteSession(sid('gone'))).resolves.toMatchObject({ ok: true })
+    expect(remote.calls).toContainEqual({ method: 'deleteSession', request: { sessionId: 'gone' } })
   })
 
   it('keeps the newest row and places Workspaces missing from partial orders last', async () => {

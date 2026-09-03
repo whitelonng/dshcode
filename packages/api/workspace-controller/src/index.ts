@@ -12,11 +12,14 @@ import type {
   WorkspaceCreateValue,
   WorkspaceDeleteRequest,
   WorkspaceDeleteValue,
+  WorkspaceDeleteSessionRequest,
   WorkspaceFollowFrame,
   WorkspaceInsertBeforeRequest,
   WorkspaceInsertSessionBeforeRequest,
+  WorkspaceListArchivedValue,
   WorkspaceOrderValue,
   WorkspaceRenameRequest,
+  WorkspaceRestoreSessionRequest,
   WorkspaceValue,
 } from './types.ts'
 
@@ -32,7 +35,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Host service backing the generated `ctx.remote.workspace` namespace. */
 export class WorkspaceController extends TypertRemoteService {
-  static inject = ['typert', 'workspaceRegistry']
+  static inject = ['typert', 'workspaceRegistry', 'sessionPersistence', 'sessions']
 
   private readonly commands: WorkspaceCommands
   private readonly feed: WorkspaceFeed
@@ -100,13 +103,42 @@ export class WorkspaceController extends TypertRemoteService {
   }
 
   /**
-   * Hide one known Session from Workspace grouping surfaces.
+   * Add one known Session to the registry-global archive set.
    * @param request - Session identity to archive.
    * @returns the complete resulting archive set.
    */
   @Remote('archiveSession')
   archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue> {
     return this.commands.archiveSession(request)
+  }
+
+  /**
+   * List the registry-global archive set with best-effort folded titles.
+   * @returns one row per archived Session, in archive-set order.
+   */
+  @Remote('listArchived')
+  listArchived(): Promise<WorkspaceListArchivedValue> {
+    return this.commands.listArchived()
+  }
+
+  /**
+   * Remove one Session from the registry-global archive set.
+   * @param request - Session identity to unarchive.
+   * @returns the complete resulting archive set.
+   */
+  @Remote('restoreSession')
+  restoreSession(request: WorkspaceRestoreSessionRequest): Promise<WorkspaceArchiveValue> {
+    return this.commands.restoreSession(request)
+  }
+
+  /**
+   * Permanently delete one archived Session: log first, then accounting.
+   * @param request - archived Session identity to delete.
+   * @returns the complete resulting archive set.
+   */
+  @Remote('deleteSession')
+  deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceArchiveValue> {
+    return this.commands.deleteSession(request)
   }
 
   /**
