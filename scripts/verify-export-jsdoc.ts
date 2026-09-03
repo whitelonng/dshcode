@@ -568,6 +568,10 @@ export function collectExportJsdocViolations(scanRoot: string = root): string[] 
   const violations: string[] = []
   const rels = globSync('packages/*/*/src/**/*.ts', { cwd: scanRoot })
     .map(path => path.split(sep).join('/'))
+    // An emitted `src/**/*.d.ts` face duplicates its `.ts` twin (parameter
+    // properties lose their docs across the emit) and would report violations
+    // the source scan already owns; keep scanning only source-less modules.
+    .filter(rel => !(rel.endsWith('.d.ts') && existsSync(resolve(scanRoot, `${rel.slice(0, -'.d.ts'.length)}.ts`))))
     .sort()
   const program = ts.createProgram(rels.map(rel => resolve(scanRoot, rel)), loadCompilerOptions(scanRoot))
   const checker = program.getTypeChecker()

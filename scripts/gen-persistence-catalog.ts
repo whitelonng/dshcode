@@ -174,6 +174,9 @@ export function collectLogEvents(scanRoot: string = root): LogEventEntry[] {
   const seen = new Map<string, string>()
   let owningDecl: string | null = null
   for (const rel of globSync('packages/*/*/src/**/*.ts', { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
+    // Emitted `src/**/*.d.ts` faces duplicate their `.ts` twin and would make
+    // every declaration look doubly declared on a built checkout.
+    if (rel.endsWith('.d.ts')) continue
     const abs = resolve(scanRoot, rel)
     const text = readFileSync(abs, 'utf8')
     if (!text.includes('SessionEventMap')) continue
@@ -251,6 +254,9 @@ export function collectEventEnvelopeTypes(scanRoot: string = root): EventEnvelop
   const violations: string[] = []
   const wanted = new Set<string>(EVENT_ENVELOPE_TYPE_NAMES)
   for (const rel of globSync('packages/*/*/src/**/*.ts', { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
+    // Emitted `src/**/*.d.ts` faces duplicate their `.ts` twin and would make
+    // every declaration look doubly declared on a built checkout.
+    if (rel.endsWith('.d.ts')) continue
     const abs = resolve(scanRoot, rel)
     const text = readFileSync(abs, 'utf8')
     if (!EVENT_ENVELOPE_TYPE_NAMES.some(name => text.includes(name))) continue
@@ -297,6 +303,9 @@ export function collectEventEnvelopeTypes(scanRoot: string = root): EventEnvelop
 export function collectSurfaceEventTypes(scanRoot: string = root): string[] {
   const found: { names: string[]; source: string }[] = []
   for (const rel of globSync('packages/*/*/src/**/*.ts', { cwd: scanRoot }).map(s => s.split(sep).join('/')).sort()) {
+    // Emitted `src/**/*.d.ts` faces duplicate their `.ts` twin and would make
+    // every declaration look doubly declared on a built checkout.
+    if (rel.endsWith('.d.ts')) continue
     const abs = resolve(scanRoot, rel)
     const text = readFileSync(abs, 'utf8')
     if (!text.includes('SurfaceEventType')) continue
