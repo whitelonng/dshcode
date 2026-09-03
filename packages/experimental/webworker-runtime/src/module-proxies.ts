@@ -60,7 +60,16 @@ export const MODULE_PROXIES: Record<string, string> = {
   'node:dns/promises': './node/builtin_modules/mock/dns/promises.ts',
   'dns/promises': './node/builtin_modules/mock/dns/promises.ts',
   'node:net': './node/builtin_modules/mock/net.ts',
+  // Node's assert face, the promise pipeline helpers, the WHATWG stream
+  // re-exports, and incremental decoding: answered directly, from
+  // readable-stream plus the platform globals and TextDecoder.
+  'node:assert': './node/builtin_modules/implemented/assert.ts',
+  'assert': './node/builtin_modules/implemented/assert.ts',
   'node:stream': './node/builtin_modules/implemented/stream.ts',
+  'node:stream/promises': './node/builtin_modules/implemented/stream/promises.ts',
+  'node:stream/web': './node/builtin_modules/implemented/stream/web.ts',
+  'node:string_decoder': './node/builtin_modules/implemented/string_decoder.ts',
+  'string_decoder': './node/builtin_modules/implemented/string_decoder.ts',
   'node:vm': './node/builtin_modules/mock/vm.ts',
   'node:worker_threads': './node/builtin_modules/mock/worker_threads.ts',
   'node:sqlite': './node/builtin_modules/mock/sqlite.ts',

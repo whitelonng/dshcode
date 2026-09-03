@@ -200,7 +200,7 @@ export function createWorkerHost(options: WorkerHostOptions): WorkerHost {
       vfs = mounted
 
       const manifestPath = options.manifestPath ?? join(root, IMAGE_MANIFEST_PATH)
-      requireLoweredImage(mounted, manifestPath)
+      const manifest = requireLoweredImage(mounted, manifestPath)
       const staticModules: Record<string, StaticModuleFactory> = { ...options.staticModules }
       // Read at require time, not here: the table entry then answers whichever
       // global `installProcessGlobal` left in place, in this role's order.
@@ -240,6 +240,12 @@ export function createWorkerHost(options: WorkerHostOptions): WorkerHost {
           args: [...(options.cmdlineArgs ?? ['--host', '127.0.0.1', '--port', String(port), '--no-open'])],
           exit: (code: number) => { console.warn(`webworker host: tree requested exit(${String(code)})`) },
         })
+        // Mirror the launcher (`apps/cli/src/profile-boot.ts`), which provides
+        // this on every real launch: profile-aware plugins — the web bundle's
+        // plugin-control and plugin-installer rows — inject the profile's own
+        // user layer, and their rows wait for the path here exactly as they
+        // wait for the command line.
+        hostCtx.provide('profileUserPatchPath', join(home, 'profiles', manifest.profile, 'cordis.patch.yml'))
       })
       context = ctx
 
@@ -332,7 +338,27 @@ export function installLogSink(ctx: HostContext, require: (specifier: string) =>
  * @param path - Manifest path inside the image.
  * @throws When the manifest is missing, unreadable, or names another contract.
  */
-function requireLoweredImage(vfs: MemoryVfs, path: string): void {
+/**
+ * The manifest facts the boot needs: the lowering contract the image was
+ * emitted against and the profile name the composition was dumped from.
+ */
+interface ImageManifest {
+  /** The wrapper contract; must equal {@link LOWERING_VERSION}. */
+  lowered: string
+  /** Profile name the composed configuration was dumped from. */
+  profile: string
+}
+
+/**
+ * Check the image records the lowering this build runs, and hand back the
+ * manifest facts the boot reads.
+ * @param vfs - Filesystem holding the manifest.
+ * @param path - Manifest path.
+ * @returns The parsed manifest.
+ * @throws When the manifest is missing, malformed, or lowered by another
+ *   build, because a half-compatible image fails here rather than far away.
+ */
+function requireLoweredImage(vfs: MemoryVfs, path: string): ImageManifest {
   if (!vfs.existsSync(path)) {
     throw new Error(`webworker host: ${path} is missing, so the image records no lowering; rebuild the image`)
   }
@@ -340,10 +366,14 @@ function requireLoweredImage(vfs: MemoryVfs, path: string): void {
   if (typeof parsed !== 'object' || parsed === null) {
     throw new Error(`webworker host: ${path} does not hold an object`)
   }
-  const lowered = (parsed as { lowered?: unknown }).lowered
-  if (lowered !== LOWERING_VERSION) {
-    throw new Error(`webworker host: image was lowered by ${String(lowered)}, this build runs ${LOWERING_VERSION}; rebuild the image`)
+  const manifest = parsed as Partial<ImageManifest>
+  if (manifest.lowered !== LOWERING_VERSION) {
+    throw new Error(`webworker host: image was lowered by ${String(manifest.lowered)}, this build runs ${LOWERING_VERSION}; rebuild the image`)
   }
+  if (typeof manifest.profile !== 'string' || manifest.profile === '') {
+    throw new Error(`webworker host: ${path} records no profile name, so the profile-aware plugin rows cannot resolve their user patch path; rebuild the image`)
+  }
+  return manifest as ImageManifest
 }
 
 /**

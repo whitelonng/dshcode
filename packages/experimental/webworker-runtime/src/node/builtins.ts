@@ -22,6 +22,7 @@
  * that shim, on the path that first needs it.
  */
 import * as nodeAsyncHooks from './builtin_modules/implemented/async_hooks.ts'
+import * as nodeAssert from './builtin_modules/implemented/assert.ts'
 import * as nodeBuffer from './builtin_modules/implemented/buffer.ts'
 import * as nodeCrypto from './builtin_modules/implemented/crypto.ts'
 import * as nodeDnsPromises from './builtin_modules/mock/dns/promises.ts'
@@ -34,6 +35,8 @@ import * as nodeOs from './builtin_modules/implemented/os.ts'
 import * as nodePath from './builtin_modules/implemented/path.ts'
 import * as nodePerfHooks from './builtin_modules/implemented/perf_hooks.ts'
 import * as nodeStream from './builtin_modules/implemented/stream.ts'
+import * as nodeStreamPromises from './builtin_modules/implemented/stream/promises.ts'
+import * as nodeStreamWeb from './builtin_modules/implemented/stream/web.ts'
 import * as nodeTimersPromises from './builtin_modules/implemented/timers/promises.ts'
 import * as nodeTty from './builtin_modules/implemented/tty.ts'
 import * as nodeUrl from './builtin_modules/implemented/url.ts'
@@ -43,6 +46,7 @@ import * as nodeZlib from './builtin_modules/implemented/zlib.ts'
 import * as nodeChildProcess from './builtin_modules/implemented/child_process.ts'
 import * as nodeNet from './builtin_modules/mock/net.ts'
 import * as nodeSqlite from './builtin_modules/mock/sqlite.ts'
+import * as nodeStringDecoder from './builtin_modules/implemented/string_decoder.ts'
 import * as nodeVm from './builtin_modules/mock/vm.ts'
 import * as nodeWorkerThreads from './builtin_modules/mock/worker_threads.ts'
 import * as koffi from './external_packages/koffi.ts'
@@ -56,6 +60,7 @@ import type { StaticModuleFactory } from '../module-system/module-loader.ts'
 
 /** Builtin modules, keyed with and without the `node:` prefix. */
 const BUILTINS: Record<string, StaticModuleFactory> = {
+  assert: () => nodeAssert,
   async_hooks: () => nodeAsyncHooks,
   buffer: () => nodeBuffer,
   child_process: () => nodeChildProcess,
@@ -73,6 +78,9 @@ const BUILTINS: Record<string, StaticModuleFactory> = {
   perf_hooks: () => nodePerfHooks,
   sqlite: () => nodeSqlite,
   stream: () => nodeStream,
+  'stream/promises': () => nodeStreamPromises,
+  'stream/web': () => nodeStreamWeb,
+  string_decoder: () => nodeStringDecoder,
   'timers/promises': () => nodeTimersPromises,
   tty: () => nodeTty,
   url: () => nodeUrl,

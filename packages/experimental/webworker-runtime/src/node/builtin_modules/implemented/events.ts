@@ -152,5 +152,9 @@ export const __esModule = true
  */
 type NodeFace = Partial<Omit<typeof import('node:events'), 'EventEmitter'>> & Record<'EventEmitter', unknown>
 
-/** CommonJS default export: the members `require()` hands a caller of this module. */
-export default { EventEmitter } satisfies NodeFace
+/**
+ * CommonJS default export: Node's `node:events` module IS the EventEmitter
+ * class, so a caller that default-imports it and extends it — `tar`'s stream
+ * plumbing does — receives the constructor, not a wrapper object.
+ */
+export default Object.assign(EventEmitter, { EventEmitter }) as unknown as NodeFace

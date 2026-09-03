@@ -352,6 +352,9 @@ export class WorkerModuleLoader {
             const resolution = this.resolve(specifier, directory)
             return resolution.kind === 'static' ? resolution.specifier : pathToFileUrl(resolution.path)
           },
+          // Node parity for `import.meta.dirname`: the VFS directory of this
+          // module file, the same path `__dirname` binds above.
+          dirname: directory,
         },
         this.als,
       )
