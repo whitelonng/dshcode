@@ -102,6 +102,11 @@ describe('SessionController facade', () => {
     })
     expect(consumeSelection).toHaveBeenCalledTimes(1)
 
+    const deleted = vi.fn()
+    ctx.on('api-session/deleted', deleted)
+    ctx.emit('session/deleted', sessionId)
+    expect(deleted).toHaveBeenCalledWith(sessionId)
+
     const abort = new AbortController()
     const iterator = controller.follow({
       address: { kind: 'session', sessionId },
@@ -171,6 +176,40 @@ describe('SessionController facade', () => {
       await ctx.fiber.dispose()
     },
   )
+
+  it('routes deleteMessage and editMessage through the command controller', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    const sessionId = SessionId('controller-edit')
+    const header: SessionHeader = {
+      version: 0, id: sessionId, createdAt: 1, cwd: '/workspace', isSeeded: false,
+    }
+    ctx.provide('sessionPersistence', testSessionPersistence(ctx, {
+      list: () => Promise.resolve([header]),
+    }) as never)
+    const controller = createSessionTestController(ctx, defaults)
+    const session = ctx.sessions.create(sessionId, { meta: { cwd: '/workspace' } })
+    const followup = vi.fn()
+    ctx.agents.register({ id: sessionId, session, status: 'idle', ctx, followup } as unknown as Agent)
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'draft' }], source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+
+    await expect(controller.editMessage({
+      sessionId, seq: 0, content: [{ type: 'text', text: 'revised' }],
+    })).resolves.toEqual({ accepted: true })
+    expect(followup).toHaveBeenCalledOnce()
+    expect(followup.mock.calls[0]?.[1]).toEqual({ start: 0, end: 0, sourceEventSeqs: [0] })
+
+    await expect(controller.deleteMessage({ sessionId, seq: 0 })).resolves.toEqual({
+      start: 0,
+      end: 0,
+      deletedSeqs: [0],
+    })
+    expect(session.surface.nodes).toEqual([])
+    await ctx.fiber.dispose()
+  })
 
   it('waits for an admitted background promotion during teardown', async () => {
     const ctx = new Context()

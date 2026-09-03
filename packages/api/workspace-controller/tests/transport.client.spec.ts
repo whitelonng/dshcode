@@ -13,6 +13,7 @@ import * as WorkspaceClientPlugin from '../src/client/index.ts'
 import {
   ClientWorkspaceModel,
   createWorkspaceStateStream,
+  WorkspaceCommandError,
   WorkspaceController,
   WorkspaceCreateError,
   type WorkspaceFollowSink,
@@ -488,6 +489,12 @@ describe('WorkspaceController', () => {
     })
     await expect(controller.archiveSession(sid('session'))).resolves.toBeUndefined()
     await expect(controller.delete(wid('one'))).resolves.toBeUndefined()
+
+    const archivedRow = { sessionId: sid('archived'), createdAt: 1704067200000 }
+    remote.listArchived.mockResolvedValueOnce(remoteOk({ items: [archivedRow] }))
+    await expect(controller.listArchived()).resolves.toEqual([archivedRow])
+    await expect(controller.restoreSession(sid('session'))).resolves.toBeUndefined()
+    await expect(controller.deleteSession(sid('session'))).resolves.toBeUndefined()
   })
 
   it('maps generated business failures to the command facade errors', async () => {
@@ -515,5 +522,16 @@ describe('WorkspaceController', () => {
     )))
     await expect(controller.insertSessionBefore(wid('missing'), sid('session')))
       .rejects.toThrow('workspace move failed: workspace/move-invalid: invalid move')
+
+    remote.listArchived.mockResolvedValueOnce(remoteFailure(missingSession))
+    const listing = controller.listArchived()
+    await expect(listing).rejects.toBeInstanceOf(WorkspaceCommandError)
+    await expect(listing).rejects.toThrow('workspace archived listing failed: session/not-found: missing session')
+    remote.restoreSession.mockResolvedValueOnce(remoteFailure(missingSession))
+    await expect(controller.restoreSession(sid('session')))
+      .rejects.toThrow('workspace session restore failed: session/not-found: missing session')
+    remote.deleteSession.mockResolvedValueOnce(remoteFailure(missingSession))
+    await expect(controller.deleteSession(sid('session')))
+      .rejects.toMatchObject({ code: 'session/not-found' })
   })
 })

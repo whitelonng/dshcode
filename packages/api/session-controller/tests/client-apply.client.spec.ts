@@ -138,6 +138,18 @@ describe('Session Controller Client apply', () => {
     await flush()
     expect(bench.sessions.list.getSnapshot().byId[sid('session-1')]).toBeUndefined()
 
+    bench.dispatch('api-session/added', {
+      sessionId: sid('session-doomed'),
+      updatedAt: 2,
+      running: false,
+      blank: true,
+    })
+    await flush()
+    expect(bench.sessions.list.getSnapshot().byId[sid('session-doomed')]).toBeDefined()
+    bench.dispatch('api-session/deleted', sid('session-doomed'))
+    await flush()
+    expect(bench.sessions.list.getSnapshot().byId[sid('session-doomed')]).toBeUndefined()
+
     bench.ctx.emit('connection/reset')
     expect(connected).toHaveBeenCalledOnce()
   })

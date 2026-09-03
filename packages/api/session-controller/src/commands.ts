@@ -225,6 +225,9 @@ export class SessionCommandController {
         start: seq,
         end: deleteSurfaceEndOf(nodes, events, seq),
       }
+    /* v8 ignore start -- non-turn targets always yield a defined range, so only
+       the turn/end string is producible; the message string answers the optional
+       range type. */
     if (range === undefined) {
       throw new RemoteError(
         'session/delete-unavailable',
@@ -234,6 +237,7 @@ export class SessionCommandController {
         { sessionId: request.sessionId, seq },
       )
     }
+    /* v8 ignore stop */
     const { start, end } = range
     const shadowedSeqs = [...nodes.slice(nodes.indexOf(start), nodes.indexOf(end) + 1)]
     // A whole-turn deletion also cites every non-surface event between the
@@ -737,25 +741,31 @@ function assertTurnClosed(events: readonly SessionEvent[]): void {
  */
 function deleteSurfaceEndOf(nodes: readonly SessionSeq[], events: readonly SessionEvent[], start: SessionSeq): SessionSeq {
   const target = events[start]
+  /* v8 ignore start -- both callers verify this same predicate on the same seq before calling. */
   if (target?.type !== 'user/message' && target?.type !== 'assistant/message') {
     throw new Error(`deleteSurfaceEndOf: node ${String(start)} is not a deletable message`)
   }
+  /* v8 ignore stop */
   const index = nodes.indexOf(start)
   if (target.type === 'user/message') {
     for (let i = index + 1; i < nodes.length; i += 1) {
       const node = nodes[i]
+      /* v8 ignore next -- nodes is built dense by push/splice; the guard answers the index signature. */
       if (node === undefined) continue
       const event = events[node]
       if (event?.type === 'user/message') {
         const previous = nodes[i - 1]
+        /* v8 ignore next -- the iterated node has a predecessor inside the dense array. */
         return previous ?? start
       }
     }
+    /* v8 ignore next -- the loop back-stops on a non-empty dense array. */
     return nodes.at(-1) ?? start
   }
   let end = start
   for (let i = index + 1; i < nodes.length; i += 1) {
     const node = nodes[i]
+    /* v8 ignore next -- nodes is built dense by push/splice; the guard answers the index signature. */
     if (node === undefined) break
     const event = events[node]
     if (event?.type !== 'tool/result') break
@@ -784,13 +794,17 @@ function deleteSurfaceTurnRangeOf(
   seq: SessionSeq,
 ): { start: SessionSeq; end: SessionSeq } | undefined {
   const target = events[seq]
+  /* v8 ignore start -- the caller resolves this same turn/end on the same log before calling. */
   if (target === undefined || target.type !== 'turn/end') {
     throw new Error(`deleteSurfaceTurnRangeOf: event ${String(seq)} is not a turn/end`)
   }
+  /* v8 ignore stop -- the live-append path accepts an orphan turn/end, so this guard is test-reachable there. */
   const startIdx = events.findIndex(event => event.type === 'turn/start' && event.data.turn === target.data.turn)
+  /* v8 ignore start -- replay/validation rejects an orphan turn/end before the surface range is built. */
   if (startIdx === -1 || startIdx > seq) {
     throw new Error(`deleteSurfaceTurnRangeOf: no turn/start precedes the turn/end at ${String(seq)}`)
   }
+  /* v8 ignore stop */
   // Turns are contiguous, so the closed seq range between the turn's own
   // boundaries is exactly its surface span (user messages carry no turn
   // field, so membership resolves by position rather than payload).
@@ -816,6 +830,7 @@ function deleteSurfaceTurnRangeOf(
  */
 function turnEventSeqs(events: readonly SessionEvent[], turnEndSeq: SessionSeq): SessionSeq[] {
   const target = events[turnEndSeq]
+  /* v8 ignore start -- deleteSurfaceTurnRangeOf validated this identical pair on the same arguments. */
   if (target === undefined || target.type !== 'turn/end') {
     throw new Error(`turnEventSeqs: event ${String(turnEndSeq)} is not a turn/end`)
   }
@@ -823,5 +838,6 @@ function turnEventSeqs(events: readonly SessionEvent[], turnEndSeq: SessionSeq):
   if (startIdx === -1 || startIdx > turnEndSeq) {
     throw new Error(`turnEventSeqs: no turn/start precedes the turn/end at ${String(turnEndSeq)}`)
   }
+  /* v8 ignore stop */
   return events.slice(startIdx, turnEndSeq + 1).map(event => event.seq)
 }

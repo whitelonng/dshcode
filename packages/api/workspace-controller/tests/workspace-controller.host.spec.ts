@@ -257,6 +257,46 @@ describe('WorkspaceController commands', () => {
     await expect(controller.listArchived()).resolves.toEqual({ items: [] })
   })
 
+  it('folds archived titles through the session query while isolating per-row failures', async () => {
+    const { controller, ctx, root, persisted } = await harness()
+    const created = await controller.create({ path: stageDir(root, 'archive-rows') })
+    const titled = ctx.sessions.create(SessionId('archived-titled'), {
+      meta: { cwd: created.workspace.path },
+    })
+    const untitled = ctx.sessions.create(SessionId('archived-untitled'), {
+      meta: { cwd: created.workspace.path },
+    })
+    const unreadable = ctx.sessions.create(SessionId('archived-unreadable'), {
+      meta: { cwd: created.workspace.path },
+    })
+    // Only one archived row keeps a persisted header, so the others render ageless.
+    persisted.headers.push({ id: titled.id, createdAt: 1704067200000 })
+    ctx.provide('sessionQuery', {
+      readTitleSnapshots: (ids: readonly SessionId[]) => Promise.resolve(ids.map(id =>
+        id === unreadable.id
+          ? { sessionId: id, status: 'rejected' as const, reason: new Error('log unreadable') }
+          : {
+            sessionId: id,
+            status: 'fulfilled' as const,
+            value: {
+              session: { id },
+              ...(id === titled.id ? { title: { title: 'Titled' } } : {}),
+            },
+          })),
+    } as never)
+    await controller.archiveSession({ sessionId: titled.id })
+    await controller.archiveSession({ sessionId: untitled.id })
+    await controller.archiveSession({ sessionId: unreadable.id })
+
+    await expect(controller.listArchived()).resolves.toEqual({
+      items: [
+        { sessionId: titled.id, title: 'Titled', createdAt: 1704067200000 },
+        { sessionId: untitled.id },
+        { sessionId: unreadable.id },
+      ],
+    })
+  })
+
   it('refuses permanent delete for unarchived and still-live Sessions', async () => {
     const { controller, ctx, root } = await harness()
     await expect(controller.deleteSession({ sessionId: SessionId('never-archived') }))

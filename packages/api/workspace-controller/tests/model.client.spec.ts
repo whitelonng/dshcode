@@ -336,6 +336,24 @@ describe('ClientWorkspaceModel', () => {
     expect(model.getSnapshot().archivedSessionIds).toEqual(['fresh'])
   })
 
+  it('keeps the archive projection when restore or permanent delete is refused', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    baseline(model, [], [sid('archived')])
+
+    remote.onRestoreSession = () => Promise.resolve(workspaceError(
+      new RemoteError('session/not-found', 'missing', { sessionId: sid('archived') }),
+    ))
+    await expect(model.restoreSession(sid('archived'))).resolves.toMatchObject({ ok: false })
+    expect(model.getSnapshot().archivedSessionIds).toEqual(['archived'])
+
+    remote.onDeleteSession = () => Promise.resolve(workspaceError(
+      new RemoteError('workspace/session-active', 'still live', { sessionId: sid('archived') }),
+    ))
+    await expect(model.deleteSession(sid('archived'))).resolves.toMatchObject({ ok: false })
+    expect(model.getSnapshot().archivedSessionIds).toEqual(['archived'])
+  })
+
   it('installs archive-set echoes from restore and permanent delete, leaving reads untouched', async () => {
     const remote = new FakeWorkspaceRemote()
     const model = modelFor(remote)
