@@ -34,12 +34,17 @@ import type {
   SessionCancelValue,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionDeleteMessageRequest,
+  SessionDeleteMessageValue,
+  SessionEditMessageRequest,
+  SessionEditMessageValue,
   SessionForkRequest,
   SessionForkValue,
   SessionPromptRequest,
   SessionPromptValue,
   SessionRenameRequest,
   SessionRenameValue,
+  SessionRequestId,
   SessionSelectModelRequest,
   SessionSelectModelValue,
   SessionUpdateQueueRequest,
@@ -181,12 +186,151 @@ export class SessionCommandController {
   }
 
   /**
+   * Delete one user or assistant message (or one whole stopped turn) from a
+   * live Session's model-visible surface. The host expands a user message to
+   * its whole turn, an assistant message to itself plus its step's tool
+   * results, and a turn/end anchor to its whole turn — the interrupted-answer
+   * path where a stopped partial left no durable assistant message.
+   * @param request - Session identity and the target message or turn/end seq.
+   * @returns the host-computed removed surface range and shadowed node seqs.
+   */
+  async deleteMessage(request: SessionDeleteMessageRequest): Promise<SessionDeleteMessageValue> {
+    const seq = parseEventSeq(request.seq)
+    const agent = await this.resolveAgent(request.sessionId)
+    const session = agent.session
+    const events = session.events
+    const target = events[seq]
+    if (target === undefined
+      || (target.type !== 'user/message' && target.type !== 'assistant/message' && target.type !== 'turn/end')) {
+      throw new RemoteError(
+        'session/delete-unavailable',
+        `event ${String(seq)} is not a deletable message`,
+        { sessionId: request.sessionId, seq },
+      )
+    }
+    const nodes = session.surface.nodes
+    // A turn/end anchor deletes its whole turn (the interrupted-answer path);
+    // everything else must address a current surface node.
+    if (target.type !== 'turn/end' && !nodes.includes(seq)) {
+      throw new RemoteError(
+        'session/delete-unavailable',
+        `event ${String(seq)} is not a current conversation message (already shadowed by compaction or an earlier edit)`,
+        { sessionId: request.sessionId, seq },
+      )
+    }
+    assertTurnClosed(events)
+    const range = target.type === 'turn/end'
+      ? deleteSurfaceTurnRangeOf(nodes, events, seq)
+      : {
+        start: seq,
+        end: deleteSurfaceEndOf(nodes, events, seq),
+      }
+    if (range === undefined) {
+      throw new RemoteError(
+        'session/delete-unavailable',
+        target.type === 'turn/end'
+          ? `turn ${String(target.data.turn)} left nothing on the surface to delete`
+          : 'the targeted message left nothing on the surface to delete',
+        { sessionId: request.sessionId, seq },
+      )
+    }
+    const { start, end } = range
+    const shadowedSeqs = [...nodes.slice(nodes.indexOf(start), nodes.indexOf(end) + 1)]
+    // A whole-turn deletion also cites every non-surface event between the
+    // turn's boundaries (chunks, boundaries) so the transcript fold hides
+    // the stopped partial answer, not just the model-visible nodes.
+    const sourceEventSeqs = target.type === 'turn/end'
+      ? turnEventSeqs(events, seq)
+      : shadowedSeqs
+    try {
+      session.append('message/delete', { start, end }, {
+        surfaceOp: { op: 'delete', start, end },
+        sourceEventSeqs,
+      })
+    } catch (error) {
+      throw new RemoteError(
+        'gateway/internal',
+        `failed to delete message at event ${String(seq)}: ${String(error)}`,
+        { sessionId: request.sessionId, seq },
+      )
+    }
+    return { start, end, deletedSeqs: shadowedSeqs }
+  }
+
+  /**
+   * Edit the conversation's last user message and regenerate its turn: the
+   * host shadows the old turn's surface range and the new turn answers the
+   * edited prompt.
+   * @param request - Session identity, the target user-message seq, replacement content, and client time zone.
+   * @returns acknowledgement that the edit replaced the turn.
+   */
+  async editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue> {
+    const seq = parseEventSeq(request.seq)
+    const clientTimeZone = request.clientTimeZone === undefined
+      ? undefined
+      : canonicalClientTimeZone(request.clientTimeZone)
+    if (request.clientTimeZone !== undefined && clientTimeZone === undefined) {
+      throw new RemoteError(
+        'session/invalid-time-zone',
+        'clientTimeZone must be UTC or a valid IANA Area/Location name',
+        { value: request.clientTimeZone },
+      )
+    }
+    const agent = await this.resolveAgent(request.sessionId)
+    const session = agent.session
+    const events = session.events
+    const target = events[seq]
+    if (target === undefined || target.type !== 'user/message'
+      || (target.data.source.kind !== 'user')) {
+      throw new RemoteError(
+        'session/edit-unavailable',
+        `event ${String(seq)} is not an editable user message`,
+        { sessionId: request.sessionId, seq },
+      )
+    }
+    const nodes = session.surface.nodes
+    const lastUserIndex = nodes.findLastIndex(node => events[node]?.type === 'user/message')
+    if (lastUserIndex === -1 || nodes[lastUserIndex] !== seq) {
+      throw new RemoteError(
+        'session/edit-unavailable',
+        'only the last user message of a conversation can be edited',
+        { sessionId: request.sessionId, seq },
+      )
+    }
+    assertTurnClosed(events)
+    // The edited message replaces its whole turn (the last user message has
+    // no later user nodes, so the range runs to the surface tail).
+    const end = deleteSurfaceEndOf(nodes, events, seq)
+    const shadowedSeqs = [...nodes.slice(nodes.indexOf(seq), nodes.indexOf(end) + 1)]
+    const source: MessageSource = {
+      kind: 'user',
+      rpcId: brandString<SessionRequestId>(randomUUID()),
+      ...(clientTimeZone === undefined ? {} : { clientTimeZone: clientTimeZone }),
+    }
+    const hasImage = request.content.some(part => part.type === 'image')
+    const admit = async (): Promise<SessionEditMessageValue> => {
+      try {
+        const content = await admitPromptContent(this.ctx.attachments, request.content)
+        const message: UserMessage = createUserMessage({ content, source })
+        agent.followup(message, { start: seq, end, sourceEventSeqs: shadowedSeqs })
+      } catch (error) {
+        if (remoteErrorOf(error) !== undefined) throw error
+        if (error instanceof AttachmentError) {
+          throw new RemoteError('session/attachment-invalid', error.message, { reason: error.code })
+        }
+        throw new RemoteError('session/agent-busy', 'edit rejected', { reason: String(error) })
+      }
+      return { accepted: true }
+    }
+    return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
+  }
+
+  /**
    * Create a new ordinary Session from one completed-turn prefix.
    * @param request - source Session and optional event anchor.
    * @returns the new Session identity.
    */
-  async fork(request: SessionForkRequest): Promise<SessionForkValue> {
-    let atSeq: ReturnType<typeof SessionSeq> | undefined
+  async fork(request: SessionForkRequest): Promise<SessionForkValue> {    let atSeq: ReturnType<typeof SessionSeq> | undefined
     try {
       atSeq = request.atSeq === undefined ? undefined : SessionSeq(request.atSeq)
     } catch {
@@ -553,4 +697,131 @@ function referencedImage(
 
 function routeServed(ctx: Context, provider: string): boolean {
   return ctx.llm.listProviders().some(entry => entry.id === provider)
+}
+
+/** Validate one wire event seq into its branded durable form. */
+function parseEventSeq(seq: number): SessionSeq {
+  try {
+    return SessionSeq(seq)
+  } catch {
+    throw new RemoteError('gateway/bad-request', 'seq must be a non-negative safe integer', {})
+  }
+}
+
+/**
+ * Fail with `agent-busy` when the session log ends inside an open turn: a
+ * running agent owns its surface, so transcript surgery would race the turn.
+ */
+function assertTurnClosed(events: readonly SessionEvent[]): void {
+  const lastTurnStart = events.findLastIndex(event => event.type === 'turn/start')
+  const lastTurnEnd = events.findLastIndex(event => event.type === 'turn/end')
+  if (lastTurnStart > lastTurnEnd) {
+    throw new RemoteError(
+      'session/agent-busy',
+      'the agent is running; stop the turn before changing the transcript',
+      { reason: 'turn-open' },
+    )
+  }
+}
+
+/**
+ * Resolve the inclusive surface-range end for deleting one message node.
+ * Deleting a user message removes its whole turn (everything through the node
+ * before the next user message); deleting an assistant message removes it plus
+ * the tool results its own step produced, so no orphan tool results remain
+ * model-visible. The caller has verified `start` is a current surface node.
+ * @param nodes - current surface node seqs in model-visible order.
+ * @param events - the session log.
+ * @param start - seq of the message node being deleted.
+ * @returns the inclusive end seq of the surface range to remove.
+ */
+function deleteSurfaceEndOf(nodes: readonly SessionSeq[], events: readonly SessionEvent[], start: SessionSeq): SessionSeq {
+  const target = events[start]
+  if (target?.type !== 'user/message' && target?.type !== 'assistant/message') {
+    throw new Error(`deleteSurfaceEndOf: node ${String(start)} is not a deletable message`)
+  }
+  const index = nodes.indexOf(start)
+  if (target.type === 'user/message') {
+    for (let i = index + 1; i < nodes.length; i += 1) {
+      const node = nodes[i]
+      if (node === undefined) continue
+      const event = events[node]
+      if (event?.type === 'user/message') {
+        const previous = nodes[i - 1]
+        return previous ?? start
+      }
+    }
+    return nodes.at(-1) ?? start
+  }
+  let end = start
+  for (let i = index + 1; i < nodes.length; i += 1) {
+    const node = nodes[i]
+    if (node === undefined) break
+    const event = events[node]
+    if (event?.type !== 'tool/result') break
+    if (event.data.turn !== target.data.turn || event.data.step !== target.data.step) break
+    end = node
+  }
+  return end
+}
+
+/**
+ * Resolve the inclusive surface range of one whole turn, for deleting a
+ * stopped (interrupted) turn from its `turn/end` anchor. An interrupted turn
+ * leaves no durable assistant message — its partial renders from chunks — so
+ * the client targets the turn/end event and everything the turn put on the
+ * surface goes away together. The caller has verified `seq` is a `turn/end`
+ * event.
+ * @param nodes - current surface node seqs in model-visible order.
+ * @param events - the session log.
+ * @param seq - seq of the turn/end event anchoring the turn.
+ * @returns the inclusive surface range of the turn, or `undefined` when the
+ *   turn left nothing on the surface.
+ */
+function deleteSurfaceTurnRangeOf(
+  nodes: readonly SessionSeq[],
+  events: readonly SessionEvent[],
+  seq: SessionSeq,
+): { start: SessionSeq; end: SessionSeq } | undefined {
+  const target = events[seq]
+  if (target === undefined || target.type !== 'turn/end') {
+    throw new Error(`deleteSurfaceTurnRangeOf: event ${String(seq)} is not a turn/end`)
+  }
+  const startIdx = events.findIndex(event => event.type === 'turn/start' && event.data.turn === target.data.turn)
+  if (startIdx === -1 || startIdx > seq) {
+    throw new Error(`deleteSurfaceTurnRangeOf: no turn/start precedes the turn/end at ${String(seq)}`)
+  }
+  // Turns are contiguous, so the closed seq range between the turn's own
+  // boundaries is exactly its surface span (user messages carry no turn
+  // field, so membership resolves by position rather than payload).
+  let start: SessionSeq | undefined
+  let end: SessionSeq | undefined
+  for (const node of nodes) {
+    if (node < startIdx || node > seq) continue
+    start ??= node
+    end = node
+  }
+  return start === undefined || end === undefined ? undefined : { start, end }
+}
+
+/**
+ * Every event seq of one whole turn, from its `turn/start` through the
+ * `turn/end` anchor (turns are contiguous, so the closed range is exact).
+ * Used as the deletion provenance for whole-turn deletes: the surface op
+ * removes the model-visible nodes, and these citations let the transcript
+ * fold hide the turn's chunks and boundaries too.
+ * @param events - seq-indexed session log.
+ * @param turnEndSeq - seq of the turn/end event anchoring the turn.
+ * @returns the turn's event seqs in ascending order.
+ */
+function turnEventSeqs(events: readonly SessionEvent[], turnEndSeq: SessionSeq): SessionSeq[] {
+  const target = events[turnEndSeq]
+  if (target === undefined || target.type !== 'turn/end') {
+    throw new Error(`turnEventSeqs: event ${String(turnEndSeq)} is not a turn/end`)
+  }
+  const startIdx = events.findIndex(event => event.type === 'turn/start' && event.data.turn === target.data.turn)
+  if (startIdx === -1 || startIdx > turnEndSeq) {
+    throw new Error(`turnEventSeqs: no turn/start precedes the turn/end at ${String(turnEndSeq)}`)
+  }
+  return events.slice(startIdx, turnEndSeq + 1).map(event => event.seq)
 }

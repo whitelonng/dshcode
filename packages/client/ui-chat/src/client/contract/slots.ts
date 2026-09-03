@@ -77,6 +77,17 @@ export interface ChatNodeOwnerProps {
   openFile: (path: string) => void
   inspectCall: (callId: ToolCallId) => void
   forkAt: (seq: number) => void
+  /**
+   * Delete one user or assistant message from the transcript and the
+   * model-visible history; resolves false when the host refused (running
+   * agent or an already-shadowed seq).
+   */
+  deleteAt: (seq: number) => Promise<boolean>
+  /**
+   * Edit the conversation's last user message and regenerate its turn;
+   * resolves false when the host refused.
+   */
+  editAt?: ((seq: number, text: string) => Promise<boolean>) | undefined
   renderMessageImages: RenderMessageImages
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
   /** Turn-process state when this Node belongs to a projected Turn. */
@@ -143,6 +154,10 @@ export interface ChatViewInjected {
     read: () => ChatScrollPosition | null
   }
   forkAt: (seq: number) => void
+  /** Delete the message at `seq` (or the whole turn when `seq` anchors its turn/end); resolves false when the host refused. */
+  deleteAt: (seq: number) => Promise<boolean>
+  /** Edit the last user message at `seq` with `text` and regenerate; resolves false on refusal. */
+  editAt: (seq: number, text: string) => Promise<boolean>
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 

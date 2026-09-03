@@ -29,6 +29,7 @@ import type {
 } from '../contract/events.ts'
 import { Notifier } from './notifier.ts'
 import { isRemoteFailure } from '@deepseek-ai/dsh-api-gateway/client'
+import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionRemotes } from './remotes.ts'
 import { ProjectionValueStore } from './projection-store.ts'
@@ -353,6 +354,58 @@ export class Session implements SessionFace {
     const result = await this.remote.commands.execute(this.sessionId, line, [])
     if (!result.ok) return result
     return { ok: true, value: { matched: result.value !== undefined } }
+  }
+
+  /**
+   * Delete one user or assistant message from the model-visible transcript.
+   * The Host expands a user message to its whole turn, an assistant message
+   * to itself plus its step's tool results, and a turn/end anchor to its
+   * whole turn (the interrupted-answer path). Rejected while the agent is
+   * running (`agent-busy`) or when `seq` is not a deletable event
+   * (`delete-unavailable`); subagent conversations refuse locally.
+   * @param seq - seq of the message event, or of the turn/end event anchoring
+   *   a whole stopped turn.
+   * @returns the host-computed removed range.
+   */
+  async deleteMessage(seq: number): Promise<RemoteResult<{ start: number; end: number; deletedSeqs: number[] }>> {
+    if (this.address !== undefined) {
+      return {
+        ok: false,
+        error: new RemoteError(
+          'session/agent-busy',
+          'subagent conversations do not support message deletion',
+          { reason: 'subagent-read-only' },
+        ),
+      }
+    }
+    return this.remote.session.deleteMessage({ sessionId: this.sessionId, seq })
+  }
+
+  /**
+   * Edit the conversation's last user message and regenerate its turn: the
+   * host shadows the old turn's surface range and the new turn answers the
+   * edited prompt. Subagent conversations refuse locally.
+   * @param seq - seq of the user message to edit.
+   * @param content - replacement text (plus optional browser image uploads).
+   * @returns acceptance, or the business error.
+   */
+  async editMessage(seq: number, content: PromptContentPart[]): Promise<RemoteResult<{ accepted: true }>> {
+    if (this.address !== undefined) {
+      return {
+        ok: false,
+        error: new RemoteError(
+          'session/agent-busy',
+          'subagent conversations do not support message editing',
+          { reason: 'subagent-read-only' },
+        ),
+      }
+    }
+    return this.remote.session.editMessage({
+      sessionId: this.sessionId,
+      seq,
+      content,
+      clientTimeZone: resolvedClientTimeZone(),
+    })
   }
 
   /** First open: pull the tail page (idempotent — in-flight/already-open returns the existing promise). */

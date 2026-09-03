@@ -30,6 +30,10 @@ import type {
   SessionControlFrame,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionDeleteMessageRequest,
+  SessionDeleteMessageValue,
+  SessionEditMessageRequest,
+  SessionEditMessageValue,
   SessionFollowFrame,
   SessionFollowRequest,
   SessionForkRequest,
@@ -139,6 +143,9 @@ export class SessionController extends TypertRemoteService {
     })
     ctx.on('session/disposed', (session) => {
       ctx.emit('api-session/removed', session.id)
+    })
+    ctx.on('session/deleted', (sessionId) => {
+      ctx.emit('api-session/deleted', sessionId)
     })
     ctx.on('agent/status', ({ agent, status }) => {
       ctx.emit('api-session/status', agent.id, status === 'running')
@@ -305,6 +312,27 @@ export class SessionController extends TypertRemoteService {
   @Remote('rename')
   rename(request: SessionRenameRequest): Promise<SessionRenameValue> {
     return this.commands.rename(request)
+  }
+
+  /**
+   * Delete one user or assistant message (or one whole stopped turn) from a
+   * live Session's model-visible surface.
+   * @param request - Session identity and the target message or turn/end seq.
+   * @returns the host-computed removed surface range and shadowed node seqs.
+   */
+  @Remote('deleteMessage')
+  deleteMessage(request: SessionDeleteMessageRequest): Promise<SessionDeleteMessageValue> {
+    return this.commands.deleteMessage(request)
+  }
+
+  /**
+   * Edit the last user message of a live Session and regenerate its turn.
+   * @param request - Session identity, the target user-message seq, replacement content, and client time zone.
+   * @returns acknowledgement that the edit replaced the turn.
+   */
+  @Remote('editMessage')
+  editMessage(request: SessionEditMessageRequest): Promise<SessionEditMessageValue> {
+    return this.commands.editMessage(request)
   }
 
   /**

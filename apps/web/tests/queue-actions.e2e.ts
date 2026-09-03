@@ -40,6 +40,17 @@ function turnEndReasons(events: readonly SessionEvent[]): string[] {
   return events.flatMap(event => event.type === 'turn/end' ? [event.data.reason.kind] : [])
 }
 
+/**
+ * Wait until the browser renders the hung replay turn's streamed partial.
+ * The hang entry emits one `partial` text delta before stalling, and the
+ * ready-file only proves the Host hung — capturing before the delta renders
+ * freezes a golden without it, racing the capture against the follow stream.
+ * @param page - the scenario's browser page.
+ */
+async function waitForStreamedPartial(page: Page): Promise<void> {
+  await expect.poll(() => page.getByText('partial', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
+}
+
 describe('web e2e: queue row actions', () => {
   let scaffold: WebScaffold | undefined
   let browser: Browser | undefined
@@ -92,6 +103,7 @@ describe('web e2e: queue row actions', () => {
     await input.fill(ACTIVE_PROMPT)
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await waitForStreamedPartial(page)
 
     for (const text of [REMOVE, EDIT]) {
       // A just-submitted composer is read-only for the prompt round-trip.
@@ -211,6 +223,7 @@ describe('web e2e: queue row actions', () => {
     await input.fill('/goal Keep the composer context panels aligned')
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await waitForStreamedPartial(page)
     await page.locator('[data-goal-bar]').waitFor({ timeout: 10_000 })
 
     const sessions = scaffold.ctx.sessions.list()

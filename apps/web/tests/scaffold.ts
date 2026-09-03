@@ -608,10 +608,14 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     })
     await mkdir(profileDir, { recursive: true })
     const rootConfig = join(profileDir, 'cordis.yml')
+    const profilePatchPath = join(profileDir, 'cordis.patch.yml')
     await writeFile(rootConfig, '[]\n')
     ctx.baseUrl = pathToFileURL(profileDir).href + '/'
-    // This direct Loader harness supplies the same root-path capability as app-boot.
+    // This direct Loader harness supplies the same root-path capabilities as
+    // app-boot: the config-expression resolvers the web bundle's `!!js` rows
+    // and `inject` gates read (`profile-boot.ts` provides both on a real launch).
     ctx.provide('dshHomePath', dshHomePath)
+    ctx.provide('profileUserPatchPath', profilePatchPath)
     // A host with no command line still provides one: the web bundle's startup
     // row releases the rows waiting on it, and with no arguments each starts on
     // the values this scaffold composed above. An exit request can only come

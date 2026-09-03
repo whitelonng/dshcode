@@ -275,10 +275,6 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
   node, renderMessageImages, deleteAt, editAt, t, useChat,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
-  // The props face resolves to `any` under the alpha.4 ts-nocheck; pin the
-  // message-action callbacks so their call/then arms are typed.
-  const editAtTyped = editAt as undefined | ((seq: number, draft: string) => Promise<boolean>)
-  const deleteAtTyped = deleteAt as ((seq: number) => Promise<boolean>) | undefined
   const isHuman = (data.source as { kind?: unknown } | undefined)?.kind === 'user'
   const openTurn = useChat((snapshot) => {
     const location = node.location
@@ -303,10 +299,10 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
     setEditing(true)
   }
   const submitEdit = (): void => {
-    if (editAtTyped === undefined || editPending) return
+    if (editAt === undefined || editPending) return
     setEditPending(true)
     setEditFailed(false)
-    void editAtTyped(node.data.seq, draft).then((ok) => {
+    void editAt(node.data.seq, draft).then((ok) => {
       setEditPending(false)
       if (ok) {
         setEditing(false)
@@ -315,7 +311,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
       setEditFailed(true)
     })
   }
-  const canEdit = isHuman && isLastUser && !openTurn && editAtTyped !== undefined
+  const canEdit = isHuman && isLastUser && !openTurn && editAt !== undefined
   return (
     <UserStyleBubble
       content={data.content}
@@ -347,7 +343,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
             clock="start"
             className={css.actions}
             t={t}
-            onDelete={isHuman ? () => deleteAtTyped(data.seq) : undefined}
+            onDelete={isHuman ? () => deleteAt(data.seq) : undefined}
             deleteUnavailable={openTurn}
             onEdit={canEdit ? openEditor : undefined}
           />

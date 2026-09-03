@@ -196,6 +196,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/steer-unavailable': { readonly itemId: MessageId }
     'session/title-invalid': { readonly sessionId: SessionId }
     'session/fork-unavailable': { readonly sessionId: SessionId }
+    'session/delete-unavailable': { readonly sessionId: SessionId; readonly seq: number }
+    'session/edit-unavailable': { readonly sessionId: SessionId; readonly seq: number }
     'subagent/not-found': {
       readonly parentSessionId: SessionId
       readonly childSessionId: SessionId
@@ -285,6 +287,35 @@ export interface SessionRenameRequest {
 export interface SessionRenameValue {
   readonly title: string
   readonly seq: number
+}
+
+/** Session message deletion request. */
+export interface SessionDeleteMessageRequest {
+  readonly sessionId: SessionId
+  /** Seq of the message event to delete, or of the turn/end event anchoring a whole stopped turn. */
+  readonly seq: number
+}
+
+/** Host-computed removed surface range plus every shadowed surface node. */
+export interface SessionDeleteMessageValue {
+  readonly start: number
+  readonly end: number
+  readonly deletedSeqs: number[]
+}
+
+/** Session message edit request. */
+export interface SessionEditMessageRequest {
+  readonly sessionId: SessionId
+  /** Seq of the user message to edit (it must be the conversation's last one). */
+  readonly seq: number
+  /** Replacement prompt content admitted in place of the edited turn. */
+  readonly content: readonly PromptContentPart[]
+  readonly clientTimeZone?: string
+}
+
+/** Receipt after one edit replaced its turn. */
+export interface SessionEditMessageValue {
+  readonly accepted: true
 }
 
 /** Session fork request. */
@@ -526,6 +557,12 @@ declare module '@deepseek-ai/cordis' {
      * @param sessionId - removed Session identity.
      */
     'api-session/removed'(sessionId: SessionId): void
+    /**
+     * A persisted Session was permanently deleted host-side.
+     * @mode emit
+     * @param sessionId - deleted Session identity.
+     */
+    'api-session/deleted'(sessionId: SessionId): void
     /**
      * One Agent changed running state.
      * @mode emit

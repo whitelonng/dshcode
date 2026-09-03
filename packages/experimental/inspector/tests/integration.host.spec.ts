@@ -380,7 +380,9 @@ describe('experimental Inspector real Worker', () => {
     // re-emitted until both sessions observe it; the recorded event is only
     // emitted after both subscriptions are proven live.
     await vi.waitFor(async () => {
-      await client.log({ probe: true }, warmupMarker)
+      // Narrowing does not survive the waitFor closure; the fixture assignment
+      // above the waitFor owns the definedness, matching the `cdp!` reads below.
+      await client!.log({ probe: true }, warmupMarker)
       expect(consoleEvent(cdp!, firstContext, warmupMarker)).toBeDefined()
       expect(consoleEvent(secondCdp!, secondContext, warmupMarker)).toBeDefined()
     }, { timeout: 5_000 })

@@ -91,6 +91,7 @@ export function apply(ctx: Context): void {
   const sessions = new ClientSessions(ctx, remotes)
   ctx.remote.$on('api-session/added', (summary) => { sessions.handleSessionAdded(summary) })
   ctx.remote.$on('api-session/removed', (sessionId) => { sessions.handleSessionRemoved(sessionId) })
+  ctx.remote.$on('api-session/deleted', (sessionId) => { sessions.handleSessionDeleted(sessionId) })
   ctx.remote.$on('api-session/status', (sessionId, running) => {
     sessions.handleSessionStatus(sessionId, running)
   })

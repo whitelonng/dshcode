@@ -319,6 +319,14 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
     if (this.inputs.has(event.seq)) return 'none'
     this.revised.clear()
     this.inputs.set(event.seq, record)
+    if (event.type === 'message/delete'
+      || (event.type === 'user/message' && event.surfaceOp !== 'append'
+        && (event.data.source as { kind?: unknown } | undefined)?.kind === 'user')) {
+      // A deletion or an edit-replace shadows earlier raw seqs: rebuild the
+      // visible window so the superseded messages, tool cards, and emptied
+      // turn brackets leave the transcript in one atomic replace.
+      return this.replaceWindow(this.sortedInputs(), this.hasMore)
+    }
     let publication: ConversationPublication = 'none'
     if (isLocationBoundary(event.type)) {
       const previousTimeline = this.locationIndex.snapshot()

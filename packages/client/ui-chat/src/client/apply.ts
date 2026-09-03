@@ -146,6 +146,14 @@ export function apply(ctx: Context): void {
                 // Fork or child-title failure leaves the source view unchanged.
               })
           },
+          deleteAt: async (seq) => {
+            const result = await session.deleteMessage(seq).catch(() => undefined)
+            return result?.ok ?? false
+          },
+          editAt: async (seq, text) => {
+            const result = await session.editMessage(seq, [{ type: 'text', text }]).catch(() => undefined)
+            return result?.ok ?? false
+          },
         }
       },
     }, ChatView)
