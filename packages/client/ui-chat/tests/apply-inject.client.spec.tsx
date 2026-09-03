@@ -42,6 +42,11 @@ function sessionFakeFor() {
     })),
     prompt: vi.fn<ISession['prompt']>(() => Promise.resolve({ ok: true, value: { accepted: true } })),
     cancel: vi.fn<ISession['cancel']>(() => Promise.resolve({ ok: true, value: { accepted: true } })),
+    deleteMessage: vi.fn<ISession['deleteMessage']>(() => Promise.resolve({
+      ok: true,
+      value: { start: 9, end: 10, deletedSeqs: [10] },
+    })),
+    editMessage: vi.fn<ISession['editMessage']>(() => Promise.resolve({ ok: true, value: { accepted: true } })),
   } satisfies SessionBehaviorOverrides
 }
 
@@ -109,6 +114,46 @@ describe('Chat inject API', () => {
     await vi.waitFor(() => {
       expect(fork).toHaveBeenCalledWith({ sessionId: ROOT, atSeq: 18, increaseTitle: true })
     })
+    await b.runtime.dispose()
+  })
+
+  it('deletes and edits through the Session verbs and maps refusals to false', async () => {
+    const b = await bench()
+    const { injected } = b.chatViewApi(ROOT)
+
+    await expect(injected.deleteAt(9)).resolves.toBe(true)
+    expect(b.session.deleteMessage).toHaveBeenCalledWith(9)
+
+    await expect(injected.editAt(9, 'rewritten')).resolves.toBe(true)
+    expect(b.session.editMessage).toHaveBeenCalledWith(9, [{ type: 'text', text: 'rewritten' }])
+
+    vi.mocked(b.session.deleteMessage).mockResolvedValueOnce({
+      ok: false,
+      error: new RemoteError('session/agent-busy', 'the turn is open', { reason: 'turn open' }),
+    })
+    await expect(injected.deleteAt(10)).resolves.toBe(false)
+
+    vi.mocked(b.session.deleteMessage).mockRejectedValueOnce(new Error('delete rejected'))
+    await expect(injected.deleteAt(11)).resolves.toBe(false)
+
+    vi.mocked(b.session.editMessage).mockRejectedValueOnce(new Error('edit rejected'))
+    await expect(injected.editAt(10, 'too late')).resolves.toBe(false)
+
+    expect(injected.keyedHooks.chatNode('absent-key')).toBeTypeOf('object')
+    expect(injected.keyedHooks.chatNodeProcess('absent-key')).toBeTypeOf('object')
+
+    await b.runtime.dispose()
+  })
+
+  it('fails loud when the Chat inject factory sees an unknown session', async () => {
+    const b = await bench()
+    const entry = b.runtime.slots.entries('conversation.view')[0]!
+    const inject = entry.inject as unknown as (
+      sessionId: SessionId,
+      actions: ChatActions,
+    ) => ChatViewInjected
+    expect(() => inject('missing' as SessionId, {} as ChatActions))
+      .toThrow('ui-chat: unknown session "missing"')
     await b.runtime.dispose()
   })
 
