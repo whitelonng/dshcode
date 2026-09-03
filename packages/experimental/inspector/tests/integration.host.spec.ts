@@ -372,13 +372,21 @@ describe('experimental Inspector real Worker', () => {
     const secondContext = await clientContext(secondCdp)
     const value = { owner: 'client-console' }
     const marker = 'client-console-event'
+    const warmupMarker = 'client-console-warmup'
+    // Console events are broadcast without buffering: the Client fans a call
+    // out only to sessions whose console-enable frame it has processed, and
+    // the Worker drops frames with no matching session subscription, so an
+    // event emitted before a subscriber attaches is lost. The sentinel is
+    // re-emitted until both sessions observe it; the recorded event is only
+    // emitted after both subscriptions are proven live.
+    await vi.waitFor(async () => {
+      await client.log({ probe: true }, warmupMarker)
+      expect(consoleEvent(cdp!, firstContext, warmupMarker)).toBeDefined()
+      expect(consoleEvent(secondCdp!, secondContext, warmupMarker)).toBeDefined()
+    }, { timeout: 5_000 })
     await client.log(value, marker)
     let firstEvent: CdpMessage | undefined
     let secondEvent: CdpMessage | undefined
-    // Fork note: the console broadcast crosses the Worker RPC round trip plus
-    // two CDP connections; give it the same five-second budget the rest of
-    // this suite uses, because the default one-second waitFor flakes under
-    // the coverage lane's instrumented concurrency.
     await vi.waitFor(() => {
       firstEvent = consoleEvent(cdp!, firstContext, marker)
       secondEvent = consoleEvent(secondCdp!, secondContext, marker)
@@ -402,7 +410,7 @@ describe('experimental Inspector real Worker', () => {
     expect((await cdp.call('Runtime.discardConsoleEntries')).error).toBeUndefined()
     expect((await cdp.call('Runtime.getProperties', { objectId: firstObjectId })).error).toBeDefined()
     expect((await secondCdp.call('Runtime.getProperties', { objectId: secondObjectId })).error).toBeUndefined()
-  })
+  }, 15_000)
 
   it('projects a chunked Client bundle as read-only Debugger source', async () => {
     const sourceText = `const clientSourceMarker = 42\n/*${'x'.repeat(150_000)}*/\n`
