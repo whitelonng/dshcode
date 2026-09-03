@@ -96,6 +96,29 @@ describe('ui-settings-archive browser plugin', () => {
     await b.ctx.fiber.dispose()
   })
 
+  it('converts a rejected restoreSession into the section action error', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+
+    const entry = requiredAt(b.slots.entries('settings.section'), 0)
+    const injected = (entry.inject as unknown as () => ArchiveSessionsSectionInjected)()
+    b.workspaces.restoreSession.mockRejectedValueOnce(new WorkspaceCommandError(
+      { code: 'workspace/not-archived', message: 'not archived', details: {} } as RemoteFailure,
+      'session restore',
+    ))
+    const failure = injected.restore('s-archived')
+    await expect(failure).rejects
+      .toThrow('workspace session restore failed: workspace/not-archived: not archived')
+    // The rejection carries the structured Host code so the section can map
+    // known failures (workspace/session-active) to actionable copy.
+    await expect(failure).rejects.toMatchObject({
+      name: 'ArchiveActionError',
+      code: 'workspace/not-archived',
+    })
+    await b.ctx.fiber.dispose()
+  })
+
   it('follows locale and survives declaration reload', async () => {
     const b = await bench()
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
