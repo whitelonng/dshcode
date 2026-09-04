@@ -1,8 +1,3 @@
-// Head/tail height-cap arithmetic shared by the block primitives (TerminalBlock,
-// SearchBlock), so long results use consistent head and tail slices. The split is
-// `ceil(maxLines / 2)` head rows and the remainder as tail rows; a result within
-// the cap shows every row and hides none.
-
 /** The head/tail split metrics for a capped list. */
 export interface HeadTailCap {
   /** Rows beyond the cap (list length − maxLines); ≤ 0 means nothing is hidden. */

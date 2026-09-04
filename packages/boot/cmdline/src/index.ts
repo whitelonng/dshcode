@@ -41,12 +41,25 @@ export interface AppExit {
   (code: number): void
 }
 
+/** Successful application-startup signal owned by the launcher. */
+export interface AppReady {
+  /**
+   * Run a listener once successful startup is committed. A failed or
+   * externally terminated startup never calls it.
+   * @param listener - work that may begin only after successful startup.
+   * @returns a disposer that cancels a pending listener.
+   */
+  onReady(listener: () => void): () => void
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The invocation's inner arguments; provided by a launcher before the tree mounts. */
     cmdlineArgs?: CmdlineArgs
     /** Bounded process-exit request; provided by a launcher before the tree mounts. */
     appExit?: AppExit
+    /** Successful startup signal; provided by a launcher before the tree mounts. */
+    appReady?: AppReady
   }
 }
 
@@ -56,25 +69,79 @@ export interface CmdlineHost {
   args: readonly string[]
   /** Bounded process-exit request. */
   exit: AppExit
+  /** Successful startup signal for lifecycle work that must not mask boot failure. */
+  ready?: AppReady
 }
 
 /**
- * Provide the command line and the exit request on a host context before any
- * tree entry mounts. Both are launcher facts, not config: an embedding host
- * with no command line provides an empty argument list.
+ * Provide launcher facts on a host context before any tree entry mounts: the
+ * command line, bounded exit request, and optional successful-startup signal.
+ * An embedding host with no command line provides an empty argument list; a
+ * host that mounts a stdio application also provides readiness.
  * @param ctx - the host context the tree will mount under.
- * @param host - the invocation's arguments and its exit request.
+ * @param host - the invocation's arguments, exit request, and optional readiness signal.
  */
 export function provideCmdline(ctx: Context, host: CmdlineHost): void {
   const snapshot: readonly string[] = Object.freeze([...host.args])
   ctx.provide('cmdlineArgs', { get: () => snapshot })
   ctx.provide('appExit', host.exit)
+  if (host.ready !== undefined) ctx.provide('appReady', host.ready)
 }
 
-/** The process streams commander output is written to; production writes to the process. */
-export const internals: { stdout: { write(chunk: string): unknown }; stderr: { write(chunk: string): unknown } } = {
+/** Process stdin operations used to bind a stdio application's lifetime. */
+export interface AppStdin {
+  /** Whether EOF arrived before the application bound its listener. */
+  readonly readableEnded: boolean
+  /** Subscribe once to stdin EOF. */
+  once(event: 'end', listener: () => void): unknown
+  /** Remove a previously installed stdin EOF listener. */
+  off(event: 'end', listener: () => void): unknown
+}
+
+/** Process streams used by app command lines and stdio lifetime binding; tests substitute them. */
+export const internals: {
+  stdin: AppStdin
+  stdout: { write(chunk: string): unknown }
+  stderr: { write(chunk: string): unknown }
+} = {
+  stdin: process.stdin,
   stdout: process.stdout,
   stderr: process.stderr,
+}
+
+/**
+ * Make stdin EOF request the launcher's bounded successful shutdown after
+ * {@link AppReady} commits. A startup rejection therefore remains the process
+ * outcome when it races EOF. The caller invokes this only after its command
+ * action accepts the invocation, so help and usage failures start no transport
+ * lifecycle. This listener does not read or resume stdin: the protocol
+ * transport owns input and receives bytes buffered before it mounts. Disposal
+ * removes the EOF and readiness listeners.
+ * @param ctx - app plugin context carrying the launcher's exit request.
+ * @param label - effect label naming the owning application.
+ */
+export function exitOnStdinEnd(ctx: Context, label: string): void {
+  const exit = ctx.get('appExit')
+  const ready = ctx.get('appReady')
+  if (exit === undefined || ready === undefined) {
+    throw new Error('stdio app: the launcher must provide ctx.appExit and ctx.appReady before the tree mounts')
+  }
+  const stdin = internals.stdin
+  let active = true
+  let ended = false
+  let cancelReady = (): void => {}
+  const onEnd = (): void => {
+    if (!active || ended) return
+    ended = true
+    cancelReady = ready.onReady(() => { exit(0) })
+  }
+  ctx.effect(() => () => {
+    active = false
+    cancelReady()
+    stdin.off('end', onEnd)
+  }, label)
+  stdin.once('end', onEnd)
+  if (stdin.readableEnded) queueMicrotask(onEnd)
 }
 
 /**

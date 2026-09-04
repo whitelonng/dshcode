@@ -22,7 +22,7 @@ Enter continues the flow and submits the batch on the last question, Shift+Enter
 
 ## Alternatives considered
 
-**`field-sizing: content`.** Rejected for the same reason [the composer's Safari recovery](../bug-fix/2026-08-13-safari-textarea-soft-wrap-reflow.md) rejected it: Safari reproduces a stale intrinsic height after a deletion crosses a wrap threshold. The mirror is a plain block whose height Safari computes correctly, and it is already the technique this repository runs in the chat composer.
+**`field-sizing: content`.** Rejected for the same reason [the composer's Safari recovery](../../archived/bug-fix/2026-08-13-safari-textarea-soft-wrap-reflow.md) rejected it: Safari reproduces a stale intrinsic height after a deletion crosses a wrap threshold. The mirror is a plain block whose height Safari computes correctly, and it is the technique the chat composer ran before its Lexical editor.
 
 **Resize in JS on every keystroke** — set `height: auto`, read `scrollHeight`, write it back. Rejected: it pays two forced layouts per keystroke and reintroduces the stale-geometry class of defect the mirror avoids, in exchange for no capability the mirror lacks.
 

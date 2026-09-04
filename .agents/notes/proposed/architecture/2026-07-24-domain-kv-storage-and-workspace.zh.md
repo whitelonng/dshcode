@@ -6,7 +6,7 @@ Status: proposed
 
 ## 问题
 
-host 侧唯一的持久化面是 session 事件日志（`packages/session/session-persistence`：仅追加、一 session 一文件）。凡是"不属于某个 session"的信息就没有落盘处，眼下有两个真实需求：
+host 侧唯一的持久化面是 session 事件日志（`packages/session/session-persistence`：仅追加、一 session 一文件）。凡是"不属于某个 session"的信息就没有落盘处，存在两个已交付需求：
 
 - **workspace 实体**。GUI 要把 workspace 做成真实对象：路径、标题、关联 session 清单。归属关系由 workspace 持有——"哪些 session 属于这个 workspace"不是任何单个 session 自己的事实，塞进 session log 语义不成立。在本设计之前，workspace 只是 sidebar 上按 cwd 分组的视觉概念，没有实体。
 - **session 动态元信息**（可预见的第二个消费方）。冷会话列表只读日志首行 header（创建时的不可变快照），title、结束状态这类随会话推进变化的信息拿不到；补齐方向是 sidecar 元数据表——正是一张按 key 高频点更新的 KV 表。
@@ -75,7 +75,7 @@ Config 仅 `root`（必填无默认，schemastery）；apply 在 `ctx.effect()` 
 
 Config 为 `path`（必填，`':memory:'` 允许）+ `journalMode`（枚举，默认 `wal`）；apply 同 json，注册后端 `sqlite`。
 
-- `node:sqlite` `DatabaseSync`；打开序列照抄 session-persistence-sqlite：mkdir 0o700 → 不存在则 `open(path,'wx',0o600)` 独占建文件 → `PRAGMA foreign_keys=ON` → journal_mode → 版本检查 → 建表。
+- `node:sqlite` `DatabaseSync`；打开序列为 mkdir 0o700 → 不存在则 `open(path,'wx',0o600)` 独占建文件 → `PRAGMA foreign_keys=ON` → journal_mode → 版本检查 → 建表。
 - 物理布局版本 `STORAGE_SQLITE_SCHEMA_VERSION = 1` 存 `PRAGMA user_version`：0 → 盖章；≠ → `version-mismatch`。
 - DDL（全 STRICT；表名由受限字符集拼接加 `u_` 前缀，杜绝外部输入进 DDL）：
 
@@ -83,9 +83,9 @@ Config 为 `path`（必填，`':memory:'` 允许）+ `journalMode`（枚举，�
 CREATE TABLE IF NOT EXISTS units (name TEXT PRIMARY KEY, version INTEGER NOT NULL) STRICT;
 CREATE TABLE IF NOT EXISTS unit_globals (
   unit TEXT PRIMARY KEY REFERENCES units(name), value TEXT NOT NULL) STRICT;
--- 每 unit 每表：
+-- One table per unit/table pair:
 CREATE TABLE IF NOT EXISTS "u_<unit>_<table>" (
-  key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;             -- value = 记录 JSON 文档
+  key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;             -- value = record JSON document
 ```
 
 - unit 版本存 `units` 行，descriptor 不符 → `version-mismatch`。行粒度 document-per-row，保住按 key 精确落盘更新（为 session sidecar 这类高频点更新大表留路）；查询需求出现时 JSON1 直查 value 列。
@@ -97,8 +97,8 @@ CREATE TABLE IF NOT EXISTS "u_<unit>_<table>" (
 
 ```ts ignore-check
 export const Config = z.object({
-  backend: z.string().required(),                // 默认后端名，必填
-  routes: z.dict(z.string()).default({}),        // per-domain 覆盖：{ workspace: 'sqlite' }
+  backend: z.string().required(),                // required default backend name
+  routes: z.dict(z.string()).default({}),        // per-domain override: { workspace: 'sqlite' }
 })
 
 export function apply(ctx: Context, config: Config) {
@@ -135,21 +135,21 @@ export function domainTable<K extends string, V>(schema: ZodType<V>): DomainTabl
 6. 构造 `Domain` 并注册 `ctx.effect()`：disposer 排空写链 → `unit.close()`。
 
 ```ts ignore-check
-export interface Domain</* 由 spec 推导 */> {
+export interface Domain</* inferred from spec */> {
   readonly name: string
-  readonly global: { get(): G; set(value: G): Promise<void> }   // 仅当 spec.global 声明
+  readonly global: { get(): G; set(value: G): Promise<void> }   // only when spec.global exists
   table<N extends keyof S['tables']>(name: N): KvTable<KeyOf<N>, ValueOf<N>>
 }
 
 export interface KvTable<K extends string, V> {
-  get(key: K): V | undefined                     // 内存快照，同步
+  get(key: K): V | undefined                     // synchronous in-memory snapshot
   entries(): IterableIterator<[K, V]>
   keys(): IterableIterator<K>
   readonly size: number
   put(key: K, value: V): Promise<void>
-  delete(key: K): Promise<boolean>               // false = 本就不存在
+  delete(key: K): Promise<boolean>               // false when already absent
   /** Atomic read-modify-write on the domain's single write chain; fn is sync-pure. */
-  update(key: K, fn: (current: V) => V): Promise<V>   // 缺 key → DomainError('missing-key')
+  update(key: K, fn: (current: V) => V): Promise<V>   // missing key -> DomainError('missing-key')
 }
 ```
 
@@ -178,7 +178,7 @@ export abstract class SessionPersistence extends Service {
 ```
 
 - JSONL 后端：unlink 该 session 文件（含 `.zstd` 变体）；文件与 intent 均无 → reject。
-- SQLite 后端：单事务 `DELETE FROM events…; DELETE FROM sessions…`；0 行命中且无 intent → reject。
+- 仓库外后端在自己的介质中原子删除，并保留相同的未知 id 与已取消 intent 结果；本提案不定义其他 first-party 物理路径。
 - 删除成功后 emit `'session-persistence/deleted'(id: SessionId)`（`@mode emit`；session-persistence 层事件面，与 `domain/changed` 无关）。派生数据（session-query 全文索引等）订阅自清；持久层不直连索引，崩溃窗口靠派生索引可丢弃重建兜底。
 
 编排层规则（随级联删一起实施；`session.delete` RPC 与 workspace 级联复用同一规则）：
@@ -256,7 +256,7 @@ export class WorkspaceRegistry extends Service {
 
 ### 复用与 session 后端迁移展望
 
-**长期方向**：session-persistence 的 JSONL/SQLite 后端里"纯介质操作"下沉到 `dsh-storage` 后端（session 包不删，`SessionPersistence` seam 与 coordinator 语义不动；动的只是它们脚下的文件/db 操作层）。复用的动机：介质层全是文件系统操作、数据库调用与跨平台兼容的脏活（Windows 权限与原子发布变体、fsync 语义、独占建文件……），这些只应写一遍；业务语义（session 怎么 append、何时 append、append 什么）留在上层——而"底下这次 append 是否正常完成"（持久性/原子性/平台正确性）是底层的责任，责任界面就是 facet 原语的约定。为此后端接口按**介质 owner + 数据形状 facet** 设计：session 日志是仅追加流，与 KV 形状不同——强行统一进 KV 原语会两头变形，所以按 facet 分开（`kv` 本期、`log` 迁移期），介质与生命周期共享。
+**长期方向**：Session-persistence JSONL provider 的纯介质操作可以下沉到 `dsh-storage` log facet（Session package 保留，`SessionPersistence` seam 与 coordinator 语义不动；只移动下层文件操作）。复用动机是让介质层拥有 Windows 原子发布、fsync 语义与独占建文件等文件系统和跨平台工作，业务语义（Session 如何 append、何时 append、append 什么）留在上层。Session 日志是仅追加流，与 KV 形式不同，因此接口保留**介质 owner + 数据形式 facet**，而不强迫二者共用一套原语。
 
 现状复用审计（迁移前就能看清的账）：
 
@@ -264,12 +264,10 @@ export class WorkspaceRegistry extends Service {
 | --- | --- | --- |
 | JSONL：temp 写 + fsync + link/unlink 原子发布、0o700/0o600 权限、Windows 变体（win32.ts） | 纯介质 | 本期 `dsh-storage-json` 直接抄用（整文件原子覆写正是同一套）；迁移期成为共享实现 |
 | JSONL：逐行 append、首行 header 快读、zstd 逐帧压缩 | log 形状 | 留在原地；迁移期进 `log` facet |
-| SQLite：openDatabase（mkdir/独占建文件/PRAGMA 序列/user_version 检查） | 纯介质 | 本期 `dsh-storage-sqlite` 抄用——两处 openDatabase 已几乎逐行同构，本组是第三个使用者；先抄后提，提取放迁移期 |
-| SQLite：events/sessions 表结构、同事务物化 | log 形状 | 留在原地；迁移期进 `log` facet |
 | coordinator（per-id 写链、懒物化、崩溃修复、flush 屏障） | session 语义 | 永不下沉——事件日志的领域逻辑，在 domain 层对应的是写串行链，各归各 |
 | encodeSegment（id 进路径转义） | 介质工具 | domain 侧 key 不进路径用不到；`log` facet（一 session 一文件）迁移时随之下沉 |
 
-**本期不改 session-persistence 的介质代码**（只加 delete 原语）；上表是迁移期的施工清单，也是后端接口"必须装得下 log 形状"的设计依据。
+**本期不改 Session-persistence 的介质代码**（只加 delete 原语）。未来 log-facet 变更需要自己的 consumer 与证据；上表记录剩余 JSONL 复用边界，但不承诺一定提取。
 
 ### 测试矩阵
 
@@ -279,7 +277,7 @@ export class WorkspaceRegistry extends Service {
 | 注册表/mount | 重复注册、未挂载访问、disposer 摘除 | — |
 | domain 层 | open 六步语义、schema 拒绝、update 串行（并发交错压测）、`domain/changed` 逐条、global 初值懒物化、路由与 `facet-unsupported` | 任一（json） |
 | workspace | create/唯一性/realpath、attach 校验（含 sessionPersistence 缺席拒绝）、一致性口径四情形 | mock domain 或 json |
-| session delete 约定（future work，随实施并入 runPersistenceContract） | 未知 id、已删 id 复用、未物化 intent、与在途 append 串行、deleted 事件 | jsonl、sqlite |
+| session delete 约定（future work，随实施并入 runPersistenceContract） | 未知 id、已删 id 复用、未物化 intent、与在途 append 串行、deleted 事件 | jsonl |
 
 快照：本期无模型可见面与组装面，不新增；下期 RPC 接线时随 `workspace.*` 域补。
 
@@ -288,7 +286,7 @@ export class WorkspaceRegistry extends Service {
 | 不做 | 触发条件 | 返工点 | 预埋 |
 | --- | --- | --- | --- |
 | Session 删除（`SessionPersistence.delete`、deleted 事件、递归删除、运行中检查） | 破坏性的 Session 删除产品流启动 | 实现 Session 原语及 `session.delete`；与 Workspace 注册记录删除保持独立 | 上文编排规则和拒绝清单仍是基础；Workspace 删除会保留 Session 与日志 |
-| `log` facet 与 session 后端迁移 | 本期后任意期启动 | 介质操作下沉（复用审计表即施工清单） | facet 结构已留位；两后端介质代码本期即按可下沉形状组织 |
+| `log` facet 与 Session provider 迁移 | 本期后任意期启动 | 有真实 consumer 证明需要时下沉 JSONL 介质操作 | facet 组织保留选项，但不承诺提取 |
 | 多进程并发写保护 | 两 host 进程同写一介质 | JSON 后端文件锁；SQLite WAL 天然多进程 | 写全经 domain 单点串行，加锁只动后端 |
 | 跨进程变更观测 | GUI 断线重连感知 | revision 模式（抄 session-persistence） | 进程内已有 `domain/changed` |
 | 数据迁移 | 首个 tagged release 后模型再变 | 版本号驱动逐域迁移 | 版本号自第一天入介质 |

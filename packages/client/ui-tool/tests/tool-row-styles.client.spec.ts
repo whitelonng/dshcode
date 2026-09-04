@@ -42,4 +42,16 @@ describe('ToolRow.module.css summary line', () => {
     ]))
     expect(declarations('.summarySuffix')).not.toEqual(expect.arrayContaining(['text-overflow: ellipsis']))
   })
+
+  it('sizes the summary texts from the secondary content tier', () => {
+    // The Settings font-size preference must reach tool-call rows, not only
+    // the narration body: summary, suffix, and file link read the secondary
+    // tier (one step under the body), matching think text.
+    for (const selector of ['.summary', '.summarySuffix', '.fileLink']) {
+      expect(declarations(selector)).toEqual(expect.arrayContaining([
+        'font-size: var(--dsh-content-font-size-secondary, 13px)',
+        'line-height: calc(24px + var(--dsh-content-font-delta, 0px))',
+      ]))
+    }
+  })
 })

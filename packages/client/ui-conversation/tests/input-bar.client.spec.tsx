@@ -1,24 +1,32 @@
 // @vitest-environment jsdom
-// InputBar behavior over the machine wiring: Enter-send semantics (IME guard,
-// Shift newline, busy Enter policy, Ctrl/Meta steering, repeat suppression), running
-// semantics (input stays free; continuable children keep Send beside Stop), the machine pending lock,
-// decoration backdrop, error banners, status strips, and the focus-keeping mousedown.
+// InputBar behavior over the editor + submit-machine wiring: Enter-send
+// semantics (IME guard, Shift newline, busy Enter policy, Ctrl/Meta steering,
+// repeat suppression), running semantics (input stays free; continuable
+// children keep Send beside Stop), the machine pending lock, chip decorators,
+// error banners, status strips, and the focus-keeping mousedown. Keyboard
+// gestures dispatch real KeyboardEvents at the contenteditable (the Lexical
+// root listener routes them through the keymap commands); draft writes drive
+// the shell (jsdom's beforeinput lacks the ranges Lexical needs).
 
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import { $getRoot, $isTextNode } from 'lexical'
 import {
-  createSnapshotStore, EMPTY_CHAT_SNAPSHOT, EMPTY_CONVERSATION_VIEWS,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+  bindSnapshotSelector, conversationSnapshot as conversationFixture, makeTranslate, RemoteError,
+  sessionSnapshot as sessionFixture,
+} from '@deepseek-ai/dsh-client-test-runtime'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SessionListState, SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import type { ClientContext, ConversationSnapshot, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ArbitrateKey, ArbitrateOutcome, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps,
 } from '../src/client/contract/slots.ts'
-import type { DraftAttachmentId } from '../src/client/input/contract.ts'
+import type { DraftAttachmentId } from '../src/client/contract/input.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
@@ -32,26 +40,11 @@ afterEach(cleanup)
 const ZERO_RECT = (): DOMRect => ({ top: 0, bottom: 0 }) as DOMRect
 Range.prototype.getBoundingClientRect = ZERO_RECT
 
-// Read through the descriptor so the native method is never referenced unbound;
-// the reveal case below wraps it to record what it was asked to measure.
-const NATIVE_SET_START = Object.getOwnPropertyDescriptor(Range.prototype, 'setStart')!
-  .value as (this: Range, node: Node, offset: number) => void
-
-const SCTX = {} as ClientContext
+const SCTX = {} as Context
 const SID = 's1' as SessionId
 
-/** Stable empty lexicon snapshot (uSES requires a same-reference idle answer). */
-const NO_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
-
-function snapshotOf(overrides: Partial<ConversationSnapshot> = {}): ConversationSnapshot {
-  return {
-    sessionId: SID, views: EMPTY_CONVERSATION_VIEWS, chat: EMPTY_CHAT_SNAPSHOT,
-    nodes: [], turnTimings: new Map(), turnEnds: new Map(), partial: null, runningCalls: [],
-    pending: [], queue: [], running: false, composerPhase: 'active', removed: false,
-    openState: 'open', openError: null, hasMore: false, loadingOlder: false,
-    promptError: null, blank: false, subagent: null, lastAgentError: null,
-    ...overrides,
-  }
+function snapshotOf(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
+  return { ...sessionFixture(SID), ...overrides }
 }
 
 interface BenchOptions {
@@ -73,14 +66,15 @@ interface BenchOptions {
   }
   draft?: string
   running?: boolean
-  subagent?: Exclude<ConversationSnapshot['subagent'], null>
+  subagent?: Exclude<SessionSnapshot['subagent'], null>
   disabled?: boolean
   inert?: boolean
+  blocked?: { readonly reason: string }
   workspacePickerOpen?: boolean
   onRequestWorkspace?: () => void
-  promptError?: ConversationSnapshot['promptError']
+  promptError?: SessionSnapshot['promptError']
   /** Authoritative queue rows served to the machine overlay (empty = none). */
-  queue?: ConversationSnapshot['queue']
+  queue?: SessionSnapshot['queue']
   /** The hub's steer-all face (empty-draft accelerated Enter). */
   steerQueue?: () => void
   variant?: 'hero' | 'composer'
@@ -91,19 +85,16 @@ interface BenchOptions {
   overlay?: React.ReactNode
   leftItems?: React.ReactNode
   rightItems?: React.ReactNode
+  footer?: React.ReactNode
   attachments?: readonly ComposerAttachment[]
   addImages?: (files: readonly File[]) => string | null
-  pickFiles?: () => Promise<{ cancelled: boolean; paths: string[] }>
-  locateFiles?: (names: string[]) => Promise<Array<{ name: string; paths: string[] }>>
   commandMenuOpen?: boolean
   busyEnter?: 'queue' | 'steer'
   toggleCommandMenu?: (selection: { start: number; end: number }) => void
-  /** The slash menu's keyboard-arbitration verdicts (the Tab-completion benches). */
-  arbitrate?: (key: ArbitrateKey, composing: boolean) => ArbitrateOutcome
 }
 
 /** One pending queue row (the runtime snapshot shape, as the dock tests build it). */
-function row(id: string): ConversationSnapshot['queue'][number] {
+function row(id: string): SessionSnapshot['queue'][number] {
   return {
     id: id as never, messageId: `message-${id}` as never, placement: 'queued',
     content: [{ type: 'text', text: id }], preview: id, text: id,
@@ -119,7 +110,7 @@ function bench(over?: BenchOptions) {
     signal: AbortSignal,
   ) => Promise<SubmitOutcome>>(() => Promise.resolve({ kind: 'success' }))
   const lex = over?.lexicon
-  const session = createSnapshotStore<ConversationSnapshot>(snapshotOf({
+  const session = createSnapshotStore<SessionSnapshot>(snapshotOf({
     running: over?.running ?? false,
     subagent: over?.subagent ?? null,
     removed: over?.disabled ?? false,
@@ -136,15 +127,13 @@ function bench(over?: BenchOptions) {
       subscribe: fn => session.subscribe(fn),
     },
     ...(over?.steerQueue !== undefined ? { steerQueue: over.steerQueue } : {}),
-    // Slash stub: the lexicon face (read unconditionally by the useLexicon
-    // seat) plus the optional arbitrate face (menu-keyboard benches);
-    // adjudication stays untouched (undefined slash methods are never
-    // reached — plain-draft flows only).
-    ...((lex !== undefined || over?.arbitrate !== undefined)
+    // Lexicon-only stub: adjudication untouched (undefined slash methods are
+    // never reached — these benches drive plain-draft flows only).
+    ...(lex !== undefined
       ? {
         inputTriggers: (() => ({
-          lexicon: { getSnapshot: () => lex ?? NO_LEXICON, subscribe: () => () => {} },
-          ...(over?.arbitrate !== undefined ? { arbitrate: over.arbitrate } : {}),
+          track: () => {},
+          lexicon: { getSnapshot: () => lex, subscribe: () => () => {} },
         })) as unknown as NonNullable<ShellDeps['inputTriggers']>,
       }
       : {}),
@@ -157,21 +146,26 @@ function bench(over?: BenchOptions) {
   const slotCalls: { key: string; owner: unknown }[] = []
   const renderSlot = ((key: string, owner: object) => {
     slotCalls.push({ key, owner })
+    if (key === 'conversation.input.overlay') return over?.overlay ?? null
+    if (key === 'conversation.input.left') return over?.leftItems ?? null
+    if (key === 'conversation.input.right') return over?.rightItems ?? null
+    if (key === 'conversation.composer.dock') return over?.footer ?? null
     if (key === 'conversation.input.plan') return over?.planEntry ?? null
     if (key === 'conversation.input.model') return over?.modelEntry ?? null
     return null
-  }) as InputBarProps['renderSlot']
+  }) as never
   const props: InputBarProps = {
     sessionId: SID,
-    SessionProvider: ({ children }) => children(SID),
+    SessionProvider: ({ children }) => children,
     useSession: bindSnapshotSelector(session),
-    useSessions: bindSnapshotSelector(createSnapshotStore({
+    useConversation: bindSnapshotSelector(createSnapshotStore(conversationFixture())),
+    useSessionPendingInteraction: bindSnapshotSelector(createSnapshotStore(new Map())),
+    useSessions: bindSnapshotSelector(createSnapshotStore<SessionListState>({
       ids: [], byId: {}, current: undefined, phase: 'ready',
       subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
     })),
     useWorkspaces: bindSnapshotSelector(createSnapshotStore({
       items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
-      baselinesReady: true, recentWorkspaceId: undefined,
     })),
     useProjection: ((key: string, selector?: (v: unknown) => unknown) =>
       (selector ?? (v => v))(key === 'permissions'
@@ -181,8 +175,6 @@ function bench(over?: BenchOptions) {
     inputActions: shell.actions,
     keyboard: shell,
     addImages: over?.addImages ?? (() => null),
-    pickFiles: over?.pickFiles ?? (() => Promise.resolve({ cancelled: true, paths: [] })),
-    locateFiles: over?.locateFiles ?? (() => Promise.resolve([])),
     removeImage,
     draftImages: ids => ids.flatMap((id) => {
       const attachment = over?.attachments?.find(candidate => candidate.id === id)
@@ -204,17 +196,17 @@ function bench(over?: BenchOptions) {
     renderSlot,
     variant: over?.variant ?? 'composer',
     ...(over?.inert === true ? { disabled: true } : {}),
+    ...(over?.blocked !== undefined ? { blocked: over.blocked } : {}),
     ...(over?.workspacePickerOpen !== undefined ? { workspacePickerOpen: over.workspacePickerOpen } : {}),
     ...(over?.onRequestWorkspace !== undefined ? { onRequestWorkspace: over.onRequestWorkspace } : {}),
     ...(over?.placeholder !== undefined ? { placeholder: over.placeholder } : {}),
     ...(over?.accessory !== undefined ? { accessory: over.accessory } : {}),
-    ...(over?.overlay !== undefined ? { overlay: over.overlay } : {}),
-    ...(over?.leftItems !== undefined ? { leftItems: over.leftItems } : {}),
-    ...(over?.rightItems !== undefined ? { rightItems: over.rightItems } : {}),
   }
   const view = render(<InputBar {...props} />)
-  const textarea = view.container.querySelector('textarea')!
+  const textarea = view.container.querySelector<HTMLDivElement>('[data-composer-input]')!
+  const sendableDraft = (over?.draft?.trim() ?? '') !== '' || (over?.attachments?.length ?? 0) > 0
   const primaryStops = over?.running === true && over.subagent === undefined
+    && (!sendableDraft || over.blocked !== undefined)
   const button = view.container.querySelector<HTMLButtonElement>(
     `button[aria-label="${primaryStops ? '停止生成' : '发送消息'}"]`,
   )!
@@ -223,18 +215,9 @@ function bench(over?: BenchOptions) {
     view, textarea, button, interruptButton, props, sink, shell, wiring: shell, session, stop, removeImage, slotCalls,
     menuLauncher,
     steerQueue: over?.steerQueue,
+    get placeholder() { return placeholderOf(view.container) },
+    get inputDisabled() { return textarea.getAttribute('aria-disabled') === 'true' },
   }
-}
-
-/**
- * Dispatch the native `beforeinput` the composer reads the pre-edit selection
- * from. The DOM event carries no range for a textarea (`getTargetRanges()` is
- * empty there), so the element's own selection plus `inputType` is the signal.
- * The selection each gesture leaves is the engine-observed one: a delete over a
- * selection reports that selection, a caret delete reports the bare caret.
- */
-function beforeInput(el: HTMLTextAreaElement, inputType = 'insertText'): void {
-  el.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType }))
 }
 
 function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]): ComposerAttachmentsOwnerProps {
@@ -245,8 +228,23 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
   throw new Error('attachment slot was not rendered')
 }
 
+/** The state's placeholder copy (the textarea.placeholder equivalent; the visible layer renders it only while empty). */
+function placeholderOf(container: HTMLElement): string {
+  return container.querySelector('[data-composer-input]')?.getAttribute('data-placeholder') ?? ''
+}
+
+/** Whether the composer surface accepts edits right now (setEditable's DOM face). */
+function editableOf(input: HTMLElement): boolean {
+  return input.getAttribute('contenteditable') === 'true'
+}
+
+/** Write the draft through the shell inside act (the seed path; caret lands at the end). */
+function writeDraft(shell: SessionInputShell, text: string): void {
+  act(() => { shell.setDraft(text) })
+}
+
 describe('image draft rail', () => {
-  it('collects clipboard files while preserving text from a mixed paste', () => {
+  it('collects clipboard files while preserving text from a mixed paste', async () => {
     const addImages = vi.fn(() => null)
     const { textarea, shell } = bench({ addImages })
     const image = new File([Uint8Array.of(1, 2, 3)], 'pixel.png', { type: 'image/png' })
@@ -260,7 +258,8 @@ describe('image draft rail', () => {
       },
     })
     expect(addImages).toHaveBeenCalledWith([image])
-    expect(shell.snapshot.draft).toBe('同时粘贴的文字')
+    // The paste lands inside the PASTE_COMMAND update; its commit is a microtask away.
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('同时粘贴的文字') })
   })
 
   it('pre-checks projected limits at intake: whole-batch refusal with product copy, none added', () => {
@@ -304,17 +303,27 @@ describe('image draft rail', () => {
     expect(within.view.queryByRole('alert')).toBeNull()
   })
 
-  it('routes non-image files to basename location instead of the image rail', async () => {
-    const addImages = vi.fn(() => null)
-    const locateFiles = vi.fn((names: string[]) => Promise.resolve(names.map(name => ({ name, paths: [] }))))
-    const result = bench({ addImages, locateFiles })
+  it('announces the format problem before any limit when the batch holds a non-image', () => {
+    const addImages = vi.fn(() => '仅支持 PNG、JPG、WebP、GIF 格式的图片')
+    const result = bench({
+      addImages,
+      imageLimits: {
+        maxImageBytes: 8,
+        maxImagesPerMessage: 1,
+        maxMessageImageBytes: 8,
+        maxImagePixels: 40_000_000,
+        maxImageDimension: 2000,
+        mediaTypes: ['image/png'] as const,
+      },
+    })
+    // Oversized AND over-count AND wrong type: the format rejection wins.
     const files = [
       new File([new ArrayBuffer(64)], 'a.pdf', { type: 'application/pdf' }),
       new File([new ArrayBuffer(64)], 'b.pdf', { type: 'application/pdf' }),
     ]
     act(() => { attachmentOwner(result.slotCalls).onAddImages(files) })
-    expect(addImages).not.toHaveBeenCalled()
-    await vi.waitFor(() => { expect(locateFiles).toHaveBeenCalledWith(['a.pdf', 'b.pdf']) })
+    expect(addImages).toHaveBeenCalledWith(files)
+    expect(result.view.getByRole('alert').textContent).toContain('仅支持 PNG、JPG、WebP、GIF 格式的图片')
   })
 
   it('projects display-ready limits into the attachment slot', () => {
@@ -333,9 +342,9 @@ describe('image draft rail', () => {
   })
 
   it('announces server attachment rejections as product copy, other codes as developer text', () => {
-    const attachmentError = (reason: string): ConversationSnapshot['promptError'] => ({
+    const attachmentError = (reason: string): SessionSnapshot['promptError'] => ({
       op: 'send',
-      error: { code: 'attachment-error', message: 'raw wire text', details: { reason } },
+      error: new RemoteError('session/attachment-invalid', 'raw wire text', { reason }),
     })
     const model = bench({ promptError: attachmentError('MODEL_DOES_NOT_SUPPORT_IMAGES') })
     expect(model.view.getByRole('alert').textContent).toContain('当前模型不支持图片，请切换支持图片的模型')
@@ -343,10 +352,21 @@ describe('image draft rail', () => {
     const unknown = bench({ promptError: attachmentError('ATTACHMENT_NOT_REFERENCED') })
     expect(unknown.view.getByRole('alert').textContent).toContain('图片发送失败（ATTACHMENT_NOT_REFERENCED）')
     cleanup()
-    const other = bench({
-      promptError: { op: 'send', error: { code: 'internal', message: 'boom', details: {} } },
+    // A subagent refusal uses the same product copy for the same reason.
+    const subagent = bench({
+      promptError: {
+        op: 'send',
+        error: new RemoteError('subagent/attachment-invalid', 'raw wire text', {
+          reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES',
+        }),
+      },
     })
-    expect(other.view.getByRole('alert').textContent).toContain('boom (internal)')
+    expect(subagent.view.getByRole('alert').textContent).toContain('当前模型不支持图片，请切换支持图片的模型')
+    cleanup()
+    const other = bench({
+      promptError: { op: 'send', error: new RemoteError('gateway/internal', 'boom', {}) },
+    })
+    expect(other.view.getByRole('alert').textContent).toContain('boom (gateway/internal)')
   })
 
   it('marks the attachment slot unavailable while the composer is locked', () => {
@@ -371,20 +391,35 @@ describe('image draft rail', () => {
     sink.mockImplementationOnce(() => new Promise<SubmitOutcome>((resolve) => { settle = resolve }))
     fireEvent.keyDown(textarea, { key: 'Enter' })
     expect(sink).toHaveBeenCalledWith('', ['draft-1'], 'queue', expect.any(AbortSignal))
-    expect(attachmentOwner(result.slotCalls).attachments).toEqual([attachments[0]])
+    // Optimistic commit: the rail clears at submit, before the admission settles.
+    expect(attachmentOwner(result.slotCalls).attachments).toEqual([])
     await act(async () => { settle({ kind: 'success' }) })
-    await vi.waitFor(() => {
-      expect(attachmentOwner(result.slotCalls).attachments).toEqual([])
-    })
+    expect(attachmentOwner(result.slotCalls).attachments).toEqual([])
   })
 
-  it('announces a failed file location as a fading toast, repeatable for the same reason', async () => {
+  it('returns an image-only draft to the rail when its admission fails', async () => {
+    const file = new File([Uint8Array.of(1)], 'pixel.png', { type: 'image/png' })
+    const attachments = [
+      { kind: 'image' as const, id: 'draft-1' as DraftAttachmentId, file, previewUrl: 'blob:draft-1' },
+    ]
+    const result = bench({ attachments })
+    const { textarea, sink } = result
+    let fail!: (outcome: SubmitOutcome) => void
+    sink.mockImplementationOnce(() => new Promise<SubmitOutcome>((resolve) => { fail = resolve }))
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    expect(attachmentOwner(result.slotCalls).attachments).toEqual([])
+    await act(async () => { fail({ kind: 'error', text: '图片发送失败' }) })
+    await vi.waitFor(() => {
+      expect(attachmentOwner(result.slotCalls).attachments).toEqual([attachments[0]])
+    })
+    expect(result.view.getByRole('alert').textContent).toContain('图片发送失败')
+  })
+
+  it('announces an image-intake rejection as a fading toast, repeatable for the same reason', () => {
     vi.useFakeTimers()
     try {
-      const { view, textarea } = bench({
-        addImages: vi.fn(() => null),
-        locateFiles: names => Promise.resolve(names.map(name => ({ name, paths: [] }))),
-      })
+      const addImages = vi.fn(() => '仅支持 PNG、JPG、WebP、GIF 格式的图片')
+      const { view, textarea } = bench({ addImages })
       const paste = () => {
         fireEvent.paste(textarea, {
           clipboardData: {
@@ -394,12 +429,12 @@ describe('image draft rail', () => {
         })
       }
       paste()
-      await vi.waitFor(() => { expect(view.getByRole('alert').textContent).toContain('无法定位文件') })
+      expect(view.getByRole('alert').textContent).toContain('仅支持 PNG、JPG、WebP、GIF 格式的图片')
       act(() => { vi.advanceTimersByTime(4000) })
       expect(view.queryByRole('alert')).toBeNull()
-      // The identical miss re-announces: the toast is keyed per show.
+      // The identical rejection re-announces: the toast is keyed per show.
       paste()
-      await vi.waitFor(() => { expect(view.getByRole('alert').textContent).toContain('无法定位文件') })
+      expect(view.getByRole('alert').textContent).toContain('仅支持 PNG、JPG、WebP、GIF 格式的图片')
     } finally {
       vi.useRealTimers()
     }
@@ -415,49 +450,18 @@ describe('image draft rail', () => {
     })
     expect(result.view.getByRole('alert').textContent).toContain('图片读取服务不可用')
   })
-
-  it('inserts @path mentions from the native multi-file picker', async () => {
-    const pickFiles = vi.fn(async () => ({ cancelled: false, paths: ['/tmp/a.txt', '/tmp/b c.txt'] }))
-    const result = bench({ pickFiles })
-    const addButton = result.view.container.querySelector<HTMLButtonElement>('button[aria-label="添加文件"]')!
-    await act(async () => { fireEvent.click(addButton) })
-    expect(pickFiles).toHaveBeenCalled()
-    expect(result.shell.snapshot.draft).toBe('@/tmp/a.txt @"/tmp/b c.txt"')
-  })
-
-  it('inserts one @path mention when a dragged file resolves to exactly one match', async () => {
-    const locateFiles = vi.fn(async (names: string[]) => names.map(name => ({ name, paths: [`/work/${name}`] })))
-    const result = bench({ locateFiles })
-    act(() => {
-      attachmentOwner(result.slotCalls).onAddImages([new File(['x'], 'note.txt', { type: 'text/plain' })])
-    })
-    await vi.waitFor(() => {
-      expect(result.shell.snapshot.draft).toBe('@/work/note.txt')
-    })
-  })
-
-  it('announces a failed file-location lookup as a toast', async () => {
-    const locateFiles = vi.fn(async () => { throw new Error('location exploded') })
-    const result = bench({ locateFiles })
-    act(() => {
-      attachmentOwner(result.slotCalls).onAddImages([new File(['x'], 'note.txt', { type: 'text/plain' })])
-    })
-    await vi.waitFor(() => {
-      expect(result.view.getByRole('alert').textContent).toContain('location exploded')
-    })
-  })
 })
 
 describe('Enter semantics', () => {
   it('advertises the empty-draft whole-queue steering gesture when it is available', () => {
-    const { textarea } = bench({ running: true, queue: [row('q-1')], steerQueue: vi.fn() })
-    expect(textarea.placeholder).toBe('Cmd/Ctrl+Enter 插话发送全部排队消息')
+    const { placeholder } = bench({ running: true, queue: [row('q-1')], steerQueue: vi.fn() })
+    expect(placeholder).toBe('Cmd/Ctrl+Enter 插话发送全部排队消息')
   })
 
   it('keeps the owning placeholder or ordinary guidance when whole-queue steering is unavailable', () => {
-    expect(bench({ running: true }).textarea.placeholder).toBe('给智能体发消息')
-    expect(bench({ queue: [row('q-1')] }).textarea.placeholder).toBe('给智能体发消息')
-    expect(bench({ running: true, queue: [row('q-1')], draft: '消息' }).textarea.placeholder).toBe('给智能体发消息')
+    expect(bench({ running: true }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
+    expect(bench({ queue: [row('q-1')] }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
+    expect(bench({ running: true, queue: [row('q-1')], draft: '消息' }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
     expect(bench({
       running: true,
       queue: [row('q-1')],
@@ -465,26 +469,26 @@ describe('Enter semantics', () => {
         address: { parentSessionId: 'parent' as SessionId, childSessionId: SID, mode: 'continuable' },
         parentAvailable: true,
       },
-    }).textarea.placeholder).toBe('给智能体发消息')
+    }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
     expect(bench({
       running: true,
       queue: [row('q-1')],
       placeholder: '上层指定提示',
-    }).textarea.placeholder).toBe('上层指定提示')
+    }).placeholder).toBe('上层指定提示')
     // The command menu owns Enter while open: neither the hint nor the
     // gesture may claim the chord.
     expect(bench({
       running: true,
       queue: [row('q-1')],
       commandMenuOpen: true,
-    }).textarea.placeholder).toBe('给智能体发消息')
+    }).placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
     // The steer hint intentionally outranks the plan placeholder: while it
     // shows, the whole-queue gesture is genuinely available in plan mode.
     expect(bench({
       running: true,
       queue: [row('q-1')],
       plan: { active: true, pending: false },
-    }).textarea.placeholder).toBe('Cmd/Ctrl+Enter 插话发送全部排队消息')
+    }).placeholder).toBe('Cmd/Ctrl+Enter 插话发送全部排队消息')
   })
 
   it('an open command menu withholds the whole-queue steering gesture', () => {
@@ -519,19 +523,6 @@ describe('Enter semantics', () => {
     fireEvent.keyDown(textarea, { key: 'a' })
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
     expect(sink).not.toHaveBeenCalled()
-  })
-
-  it('Tab arbitration that consumed the key preventDefaults the focus walk', () => {
-    const arbitrate = vi.fn(() => 'consumed' as const)
-    const { textarea } = bench({ draft: '/go', arbitrate })
-    // false = the event was preventDefault'd: no focus walk to the toolbar.
-    expect(fireEvent.keyDown(textarea, { key: 'Tab' })).toBe(false)
-    expect(arbitrate).toHaveBeenCalledWith('tab', false)
-  })
-
-  it('Tab without an open menu passes through to native focus behavior', () => {
-    const { textarea } = bench({ draft: '/go', arbitrate: () => 'pass' })
-    expect(fireEvent.keyDown(textarea, { key: 'Tab' })).toBe(true)
   })
 
   it('Shift+Enter newline wins even inside IME composition (unconditional precedence)', () => {
@@ -627,14 +618,74 @@ describe('Enter semantics', () => {
     expect(sink).not.toHaveBeenCalled()
   })
 
-  it('platform undo/redo chords route to the machine, never the browser stack', () => {
+  it('platform undo/redo chords drive the Lexical history stack, never the browser one', () => {
     const { textarea, shell } = bench({ draft: '' })
-    fireEvent.change(textarea, { target: { value: 'first' } })
-    fireEvent.change(textarea, { target: { value: 'first second' } })
-    fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true })
-    expect(shell.snapshot.draft).not.toBe('first second')
-    fireEvent.keyDown(textarea, { key: 'z', ctrlKey: true, shiftKey: true })
+    vi.useFakeTimers()
+    onTestFinished(() => { vi.useRealTimers() })
+    writeDraft(shell, 'first')
+    vi.advanceTimersByTime(1100) // beyond the history merge window: a separate undo step
+    act(() => {
+      shell.editor.update(() => {
+        const first = $getRoot().getAllTextNodes()[0]
+        if ($isTextNode(first)) first.select(5, 5).insertText(' second')
+      }, { discrete: true })
+    })
     expect(shell.snapshot.draft).toBe('first second')
+    // Lexical's chord detection reads keyCode (90 = z); a history restore
+    // commits on the next flush (setEditorState defers inside the command
+    // update).
+    const flush = (): void => { act(() => { shell.editor.update(() => {}, { discrete: true }) }) }
+    fireEvent.keyDown(textarea, { key: 'z', keyCode: 90, ctrlKey: true })
+    flush()
+    expect(shell.snapshot.draft).toBe('first')
+    fireEvent.keyDown(textarea, { key: 'z', keyCode: 90, ctrlKey: true, shiftKey: true })
+    flush()
+    expect(shell.snapshot.draft).toBe('first second')
+  })
+
+  it('a paste inside the typing merge window is its own undo step', async () => {
+    const { textarea, shell } = bench({ draft: '' })
+    vi.useFakeTimers()
+    onTestFinished(() => { vi.useRealTimers() })
+    writeDraft(shell, 'typed')
+    vi.advanceTimersByTime(1100) // separate the seed from the typing step
+    act(() => {
+      shell.editor.update(() => {
+        const first = $getRoot().getAllTextNodes()[0]
+        if ($isTextNode(first)) first.select(5, 5).insertText(' one')
+      }, { discrete: true })
+    })
+    // No timer advance: the paste lands inside the history merge window, and
+    // PASTE_TAG still gives it its own undo entry. The paste commits inside
+    // the PASTE_COMMAND update, a microtask away.
+    fireEvent.paste(textarea, {
+      clipboardData: { items: [], getData: () => ' two' },
+    })
+    await vi.waitFor(() => { expect(shell.snapshot.draft).toBe('typed one two') })
+    const flush = (): void => { act(() => { shell.editor.update(() => {}, { discrete: true }) }) }
+    fireEvent.keyDown(textarea, { key: 'z', keyCode: 90, ctrlKey: true })
+    flush()
+    expect(shell.snapshot.draft).toBe('typed one')
+  })
+
+  it('caret-only commits advance neither draftRev nor the published state', () => {
+    const { shell } = bench({ draft: 'hello' })
+    const before = shell.snapshot
+    act(() => {
+      shell.editor.update(() => {
+        const first = $getRoot().getAllTextNodes()[0]
+        if ($isTextNode(first)) first.select(1, 1)
+      }, { discrete: true })
+    })
+    expect(shell.snapshot).toBe(before) // publish skipped: the snapshot reference is unchanged
+    act(() => {
+      shell.editor.update(() => {
+        const first = $getRoot().getAllTextNodes()[0]
+        if ($isTextNode(first)) first.select(1, 1).insertText('x')
+      }, { discrete: true })
+    })
+    expect(shell.snapshot.draftRev).toBe(before.draftRev + 1)
+    expect(shell.snapshot.draft).toBe('hxello')
   })
 
   it('composition Enter never sends: ref guard, isComposing, and keyCode 229 paths', () => {
@@ -660,15 +711,53 @@ describe('Enter semantics', () => {
 })
 
 describe('running and lock semantics', () => {
-  it('running keeps the input free (typing + Enter queue) while the primary turns stop', () => {
-    const { textarea, button, stop, sink } = bench({ running: true, draft: '排队消息' })
-    expect(textarea.disabled).toBe(false)
-    fireEvent.change(textarea, { target: { value: '排队消息2' } })
-    fireEvent.keyDown(textarea, { key: 'Enter' })
-    expect(sink).toHaveBeenCalledWith('排队消息2', [], 'queue', expect.any(AbortSignal))
+  it('running switches the primary between Stop and Queue Send with the draft', async () => {
+    const { textarea, button, stop, sink, shell } = bench({ running: true, busyEnter: 'steer' })
+    expect(textarea.getAttribute('aria-disabled')).not.toBe('true')
     expect(button.getAttribute('aria-label')).toBe('停止生成')
     fireEvent.click(button)
     expect(stop).toHaveBeenCalledTimes(1)
+
+    writeDraft(shell, '排队消息')
+    expect(button.getAttribute('aria-label')).toBe('发送消息')
+    writeDraft(shell, '   ')
+    expect(button.getAttribute('aria-label')).toBe('停止生成')
+    writeDraft(shell, '排队消息2')
+    expect(button.getAttribute('aria-label')).toBe('发送消息')
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('排队消息2', [], 'queue', expect.any(AbortSignal))
+    await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('停止生成') })
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+
+  it('running treats an attachment-only draft as Send', async () => {
+    const attachment = {
+      kind: 'image' as const,
+      id: 'draft-1' as DraftAttachmentId,
+      file: new File([Uint8Array.of(1)], 'pixel.png', { type: 'image/png' }),
+      previewUrl: 'blob:pixel',
+    }
+    const { button, sink } = bench({ running: true, attachments: [attachment] })
+    expect(button.getAttribute('aria-label')).toBe('发送消息')
+    fireEvent.click(button)
+    expect(sink).toHaveBeenCalledWith('', ['draft-1'], 'queue', expect.any(AbortSignal))
+    await vi.waitFor(() => { expect(button.getAttribute('aria-label')).toBe('停止生成') })
+  })
+
+  it('running blocked composer keeps Stop with a retained draft', () => {
+    const { button, sink, stop, textarea } = bench({
+      running: true,
+      draft: '保留的草稿',
+      blocked: { reason: '请选择可用模型' },
+      placeholder: '请选择可用模型',
+    })
+    expect(textarea.getAttribute('aria-disabled')).toBe('true')
+    expect(textarea.getAttribute('data-placeholder')).toBe('请选择可用模型')
+    expect(button.getAttribute('aria-label')).toBe('停止生成')
+    expect(button.disabled).toBe(false)
+    fireEvent.click(button)
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(sink).not.toHaveBeenCalled()
   })
 
   it('running plain Enter follows the busy-state Steer preference', () => {
@@ -702,7 +791,7 @@ describe('running and lock semantics', () => {
     })
     expect(button.getAttribute('aria-label')).toBe('发送消息')
     expect(interruptButton).not.toBeNull()
-    expect(textarea.disabled).toBe(false)
+    expect(textarea.getAttribute('aria-disabled')).not.toBe('true')
     fireEvent.click(button)
     expect(sink).toHaveBeenCalledWith('后续消息', [], 'queue', expect.any(AbortSignal))
     fireEvent.click(interruptButton!)
@@ -722,9 +811,9 @@ describe('running and lock semantics', () => {
         parentAvailable: false,
       },
     })
-    expect(textarea.disabled).toBe(true)
-    expect(textarea.placeholder).toBe('父会话已离线，无法继续发送；仍可停止当前运行')
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect(textarea.getAttribute('aria-disabled')).toBe('true')
+    expect(placeholderOf(view.container)).toBe('父会话已离线，无法继续发送；仍可停止当前运行')
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
     expect(button.getAttribute('aria-label')).toBe('发送消息')
     expect(button.disabled).toBe(true)
     expect(interruptButton?.disabled).toBe(false)
@@ -770,9 +859,9 @@ describe('running and lock semantics', () => {
 
   it('disabled (session removed) locks the textarea and chrome', () => {
     const { textarea, view } = bench({ disabled: true })
-    expect(textarea.disabled).toBe(true)
-    expect(textarea.placeholder).toBe('会话不可用')
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect(textarea.getAttribute('aria-disabled')).toBe('true')
+    expect(placeholderOf(view.container)).toBe('会话不可用')
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('idle primary sends and disables on empty draft', () => {
@@ -783,21 +872,22 @@ describe('running and lock semantics', () => {
     expect(empty.button.disabled).toBe(true)
   })
 
-  it('unlock refocuses the textarea; mousedown on the button keeps focus', () => {
+  it('unlock refocuses the surface; mousedown on the button keeps focus', () => {
     const first = bench({ disabled: true, draft: 'x' })
+    const textarea = first.view.container.querySelector<HTMLDivElement>('[data-composer-input]')!
+    const focused: (boolean | undefined)[] = []
+    textarea.focus = (options?: FocusOptions) => { focused.push(options?.preventScroll) }
     act(() => { first.session.set(snapshotOf({ removed: false })) })
-    const textarea = first.view.container.querySelector('textarea')!
-    expect(document.activeElement).toBe(textarea)
-    textarea.blur()
+    expect(focused).toEqual([true])
     fireEvent.mouseDown(first.view.container.querySelector('button[aria-label="发送消息"]')!)
-    expect(document.activeElement).toBe(textarea)
+    expect(focused).toEqual([true, true])
   })
 
-  it('typing forwards through the machine (draft state echoes back)', () => {
-    const { textarea, wiring } = bench()
-    fireEvent.change(textarea, { target: { value: 'typed' } })
+  it('a programmatic draft write echoes back through the state and the editor DOM', () => {
+    const { textarea, wiring, shell } = bench()
+    writeDraft(shell, 'typed')
     expect(wiring.state.getSnapshot().draft).toBe('typed')
-    expect((textarea).value).toBe('typed')
+    expect(textarea.textContent).toBe('typed')
   })
 
   it('wheel over a non-overflowing draft forwards to the conversation host', () => {
@@ -851,270 +941,45 @@ describe('running and lock semantics', () => {
     }
   })
 
-  it('the caret layer and the glyph layer ride one scrollport', () => {
-    const { view, textarea } = bench({ draft: 'line\n'.repeat(40) })
+  it('one editable surface rides the scrollport (no mirror or backdrop layers)', () => {
+    const { view, textarea } = bench({ draft: 'line\n'.repeat(40).trimEnd() })
     const scroll = view.container.querySelector<HTMLElement>('[data-input-scroll]')!
-    const backdrop = view.container.querySelector<HTMLElement>('[data-input-backdrop]')!
-    // The caret is the textarea's and every visible glyph is the backdrop's, so
-    // one box has to carry both or an offset can exist in one and not the other.
-    // jsdom has no layout and loads no stylesheet — which box scrolls is the
-    // browser scenario's to assert; what is checkable here is that the
-    // scrollport element holds both layers.
     expect(scroll.contains(textarea)).toBe(true)
-    expect(scroll.contains(backdrop)).toBe(true)
-    // The glyph layer carries the draft and nothing else — no height padding
-    // to a second box's scroll extent.
-    expect(backdrop.textContent).toBe('line\n'.repeat(40))
+    // The three-layer stack is gone: the editable surface owns glyphs, caret,
+    // and height at once.
+    expect(view.container.querySelector('[data-input-backdrop]')).toBeNull()
+    expect(view.container.querySelector('[data-input-mirror]')).toBeNull()
+    // DOM textContent joins paragraphs without separators; the projection
+    // carries the newlines.
+    expect(textarea.textContent).toBe('line'.repeat(40))
+    expect(bench({ draft: 'a\nb' }).shell.snapshot.draft).toBe('a\nb')
   })
 
-  it('repairs Safari native overflow after the mirror shrinks the draft', () => {
-    const vendor = vi.spyOn(window.navigator, 'vendor', 'get').mockReturnValue('Apple Computer, Inc.')
-    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(
-      'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15',
-    )
-    onTestFinished(() => {
-      vendor.mockRestore()
-      userAgent.mockRestore()
-    })
-    const { textarea } = bench({ draft: 'two wrapped lines' })
-    const scrollport = textarea.closest<HTMLElement>('[data-input-scroll]')!
-    let inputRepaired = false
-    let scrollportRepaired = false
-    const inputLayouts: string[] = []
-    const scrollportLayouts: string[] = []
-    Object.defineProperty(textarea, 'clientHeight', {
-      configurable: true,
-      get: () => textarea.style.height === '29px' ? 29 : 28,
-    })
-    Object.defineProperty(textarea, 'scrollHeight', {
-      configurable: true,
-      get: () => inputRepaired ? 28 : 52,
-    })
-    Object.defineProperty(textarea, 'offsetHeight', {
-      configurable: true,
-      get: () => {
-        inputLayouts.push(textarea.style.height)
-        if (textarea.style.height === '') inputRepaired = true
-        return textarea.clientHeight
-      },
-    })
-    Object.defineProperty(scrollport, 'clientHeight', {
-      configurable: true,
-      get: () => {
-        if (scrollport.style.height === '53px') return 53
-        if (inputRepaired && !scrollportRepaired) return 52
-        return 28
-      },
-    })
-    Object.defineProperty(scrollport, 'offsetHeight', {
-      configurable: true,
-      get: () => {
-        scrollportLayouts.push(scrollport.style.height)
-        if (scrollport.style.height === '') scrollportRepaired = true
-        return scrollport.clientHeight
-      },
-    })
-    textarea.setSelectionRange(5, 5)
-
-    fireEvent.change(textarea, { target: { value: 'one line' } })
-
-    expect(inputLayouts).toEqual(['29px', ''])
-    expect(scrollportLayouts).toEqual(['53px', ''])
-    expect(textarea.style.height).toBe('')
-    expect(scrollport.style.height).toBe('')
-    expect(textarea.scrollHeight).toBe(textarea.clientHeight)
-    expect(scrollport.clientHeight).toBe(28)
-  })
-
-  it('does not force the Safari recovery for another iOS browser', () => {
-    const vendor = vi.spyOn(window.navigator, 'vendor', 'get').mockReturnValue('Apple Computer, Inc.')
-    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(
-      'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/140.0.0.0 Mobile/15E148 Safari/604.1',
-    )
-    onTestFinished(() => {
-      vendor.mockRestore()
-      userAgent.mockRestore()
-    })
-    const { textarea } = bench({ draft: 'two wrapped lines' })
-    const scrollport = textarea.closest<HTMLElement>('[data-input-scroll]')!
-    Object.defineProperty(textarea, 'clientHeight', { configurable: true, value: 28 })
-    Object.defineProperty(textarea, 'scrollHeight', { configurable: true, value: 52 })
-    Object.defineProperty(textarea, 'offsetHeight', {
-      configurable: true,
-      get: () => { throw new Error('non-Safari browser must not force textarea layout') },
-    })
-    Object.defineProperty(scrollport, 'offsetHeight', {
-      configurable: true,
-      get: () => { throw new Error('non-Safari browser must not force scrollport layout') },
-    })
-
-    fireEvent.change(textarea, { target: { value: 'one line' } })
-
-    expect(scrollport.style.height).toBe('')
-  })
-
-  it('does not read Safari layout while a native edit grows the draft', () => {
-    const vendor = vi.spyOn(window.navigator, 'vendor', 'get').mockReturnValue('Apple Computer, Inc.')
-    const userAgent = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(
-      'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15',
-    )
-    onTestFinished(() => {
-      vendor.mockRestore()
-      userAgent.mockRestore()
-    })
-    const { textarea, shell } = bench({ draft: 'one line' })
-    Object.defineProperty(textarea, 'clientHeight', {
-      configurable: true,
-      get: () => { throw new Error('growing Safari input must not read layout') },
-    })
-    Object.defineProperty(textarea, 'scrollHeight', {
-      configurable: true,
-      get: () => { throw new Error('growing Safari input must not read layout') },
-    })
-
-    fireEvent.change(textarea, { target: { value: 'one line grows' } })
-
-    expect(shell.snapshot.draft).toBe('one line grows')
-  })
-
-  it('an edit the composer performs itself scrolls the caret back into view', async () => {
-    // Paste and cut suppress the native edit, so no engine reveals the caret
-    // for them. jsdom has no layout: the rects are stubbed,
-    // and what is asserted is the arithmetic — minimal scroll, in both
-    // directions, and nothing at all for a caret already inside the box.
-    const { view, textarea } = bench({ draft: 'line\n'.repeat(40) })
-    const scroll = view.container.querySelector<HTMLElement>('[data-input-scroll]')!
-    const mirror = view.container.querySelector<HTMLElement>('[data-input-mirror]')!
-    expect(mirror.firstChild).toBeInstanceOf(Text)
-    scroll.getBoundingClientRect = () => ({ top: 100, bottom: 436 }) as DOMRect
-    // jsdom reports scrollHeight === clientHeight for every element, which is
-    // the composer's own "nothing to reveal" case; a scrollable box is what
-    // puts the reveal on the table at all.
-    Object.defineProperty(scroll, 'clientHeight', { value: 336, configurable: true })
-    Object.defineProperty(scroll, 'scrollHeight', { value: 964, configurable: true })
-    Object.defineProperty(scroll, 'scrollTop', { value: 0, writable: true, configurable: true })
-    onTestFinished(() => {
-      Range.prototype.getBoundingClientRect = ZERO_RECT
-      Range.prototype.setStart = NATIVE_SET_START
-    })
-    // Which layer the caret is measured against, and at which index: the stub
-    // records `setStart` so a helper that measured the backdrop instead, or
-    // always collapsed at 0, fails here rather than only in the browser lane.
-    let measured: { node: Node; offset: number } | null = null
-    Range.prototype.setStart = function setStart(node: Node, offset: number): void {
-      measured = { node, offset }
-      NATIVE_SET_START.call(this, node, offset)
-    }
-    const caretAt = (top: number): void => {
-      Range.prototype.getBoundingClientRect = () => ({ top, bottom: top + 24 }) as DOMRect
-    }
-    const settle = async (): Promise<void> => {
-      await act(async () => { await new Promise((resolve) => { requestAnimationFrame(() => { resolve(null) }) }) })
-    }
-    // Pasted text lands below the fold: scroll down by exactly the overshoot.
-    caretAt(500)
-    fireEvent.paste(textarea, { clipboardData: { items: [], getData: () => 'pasted' } })
-    await settle()
-    expect(scroll.scrollTop).toBe(88) // 524 - 436
-    // Measured on the mirror's own text, at the index the paste left the caret
-    // (an empty draft's selection start, 0, plus the pasted length).
-    expect(measured!.node).toBe(mirror.firstChild)
-    expect(measured!.offset).toBe('pasted'.length)
-    // A caret already inside the box does not move it.
-    caretAt(200)
-    fireEvent.paste(textarea, { clipboardData: { items: [], getData: () => 'more' } })
-    await settle()
-    expect(scroll.scrollTop).toBe(88)
-    // Above the fold (a cut can leave it there): scroll back up.
-    caretAt(60)
-    fireEvent.paste(textarea, { clipboardData: { items: [], getData: () => 'again' } })
-    await settle()
-    expect(scroll.scrollTop).toBe(48) // 88 - (100 - 60)
-    // A caret straight after a newline has nothing on its line to measure, so
-    // the newline it just left is measured instead and one line is added.
-    // chromium reports no client rects at all for the collapsed position.
-    mirror.style.lineHeight = '24px'
-    caretAt(500)
-    fireEvent.paste(textarea, { clipboardData: { items: [], getData: () => 'block\n' } })
-    await settle()
-    // The four pastes accumulate at the draft's head, so the caret is at the
-    // end of what they inserted — and the measured index is the newline before it.
-    expect(measured!.offset).toBe('pastedmoreagainblock\n'.length - 1)
-    expect(scroll.scrollTop).toBe(48 + 112) // from 48, by (524 + 24) - 436
-  })
-
-  it('a session switch refocuses without moving the transcript, and reveals the new draft caret', () => {
-    // The composer DOM is reused across sessions, so the previous session's
-    // offset survives while the value swap puts the caret at the new draft's
-    // end. `preventScroll` keeps the browser from revealing it through the
-    // conversation scrollport, which leaves the reveal to the effect itself.
-    const { view, textarea, props } = bench({ draft: 'line\n'.repeat(40) })
-    const scroll = view.container.querySelector<HTMLElement>('[data-input-scroll]')!
-    const mirror = view.container.querySelector<HTMLElement>('[data-input-mirror]')!
-    onTestFinished(() => { Range.prototype.getBoundingClientRect = ZERO_RECT })
-    scroll.getBoundingClientRect = () => ({ top: 100, bottom: 436 }) as DOMRect
-    Object.defineProperty(scroll, 'clientHeight', { value: 336, configurable: true })
-    Object.defineProperty(scroll, 'scrollHeight', { value: 964, configurable: true })
-    Object.defineProperty(scroll, 'scrollTop', { value: 0, writable: true, configurable: true })
-    Range.prototype.getBoundingClientRect = () => ({ top: 500, bottom: 524 }) as DOMRect
-    // The draft ends in a newline, so the reveal takes the after-newline path
-    // and needs a resolvable line-height (jsdom computes `normal`).
-    mirror.style.lineHeight = '24px'
-    // Which index the effect reveals at, not merely that it scrolled: a
-    // revealCaret(0) would land the same offset without this.
-    onTestFinished(() => { Range.prototype.setStart = NATIVE_SET_START })
-    let measured: { node: Node; offset: number } | null = null
-    Range.prototype.setStart = function setStart(node: Node, offset: number): void {
-      measured = { node, offset }
-      NATIVE_SET_START.call(this, node, offset)
-    }
+  it('a session switch refocuses the editable surface with preventScroll', () => {
+    const { view, textarea, props } = bench({ draft: 'line one' })
     const focused: (boolean | undefined)[] = []
     textarea.focus = (options?: FocusOptions) => { focused.push(options?.preventScroll) }
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length)
     act(() => { view.rerender(<InputBar {...props} sessionId={'s2' as SessionId} />) })
     expect(focused).toEqual([true])
-    expect(scroll.scrollTop).toBe(112) // (524 + 24) - 436
-    // The draft ends in a newline, so the rule measures that newline: the
-    // caret's own index is the mirror text's length minus its sentinel.
-    expect(measured!.node).toBe(mirror.firstChild)
-    expect(measured!.offset).toBe(textarea.value.length - 1)
   })
 
-  it('a persisted draft adopted after mount gets its caret revealed too', () => {
-    // ConversationSession seeds the stored draft in its own mount effect, which
-    // runs after this component's: the first reveal measures an empty mirror,
-    // so the draft's arrival has to run it again without reclaiming focus.
-    const { view, textarea, shell } = bench()
-    const scroll = view.container.querySelector<HTMLElement>('[data-input-scroll]')!
-    const mirror = view.container.querySelector<HTMLElement>('[data-input-mirror]')!
-    // The restored draft ends in a newline, so the reveal takes the
-    // after-newline path and needs a resolvable line-height (jsdom says `normal`).
-    mirror.style.lineHeight = '24px'
-    onTestFinished(() => { Range.prototype.getBoundingClientRect = ZERO_RECT })
-    scroll.getBoundingClientRect = () => ({ top: 100, bottom: 436 }) as DOMRect
-    Object.defineProperty(scroll, 'clientHeight', { value: 336, configurable: true })
-    Object.defineProperty(scroll, 'scrollHeight', { value: 964, configurable: true })
-    Object.defineProperty(scroll, 'scrollTop', { value: 0, writable: true, configurable: true })
-    Range.prototype.getBoundingClientRect = () => ({ top: 500, bottom: 524 }) as DOMRect
+  it('a persisted draft adopted after mount does not steal focus from another control', () => {
+    const { shell } = bench()
     const other = document.createElement('input')
     document.body.appendChild(other)
     onTestFinished(() => { other.remove() })
     other.focus()
-    expect(scroll.scrollTop).toBe(0)
     act(() => { shell.setDraft('restored\n'.repeat(40)) })
     expect(document.activeElement).toBe(other)
-    // The caret the machine left at the draft's end, revealed once the draft exists.
-    expect(textarea.selectionStart).toBe(textarea.value.length)
-    expect(scroll.scrollTop).toBe(112) // (524 + 24) - 436
+    expect(shell.snapshot.draft).toBe('restored\n'.repeat(40))
   })
 
   it('disabled state shows the unavailable placeholder; custom placeholder wins', () => {
-    const { textarea } = bench({ disabled: true })
-    expect(textarea.placeholder).toBe('会话不可用')
+    expect(bench({ disabled: true }).placeholder).toBe('会话不可用')
     const live = bench()
-    expect(live.textarea.placeholder).toBe('给智能体发消息')
+    expect(live.placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
     const custom = bench({ placeholder: 'Custom placeholder' })
-    expect(custom.textarea.placeholder).toBe('Custom placeholder')
+    expect(custom.placeholder).toBe('Custom placeholder')
   })
 
   it('the inert textarea opens the Workspace picker by pointer or keyboard', () => {
@@ -1125,11 +990,11 @@ describe('running and lock semantics', () => {
       onRequestWorkspace,
       placeholder: '选择一个工作区开始',
     })
-    expect(textarea.disabled).toBe(false)
-    expect(textarea.readOnly).toBe(true)
+    expect(textarea.getAttribute('aria-disabled')).not.toBe('true')
+    expect(editableOf(textarea)).toBe(false)
     expect(textarea.getAttribute('aria-haspopup')).toBe('menu')
     expect(textarea.getAttribute('aria-expanded')).toBe('false')
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
 
     fireEvent.click(textarea)
     fireEvent.keyDown(textarea, { key: 'Enter' })
@@ -1153,16 +1018,16 @@ describe('running and lock semantics', () => {
 
   it('the plan projection swaps the placeholder while its effective target is plan mode', () => {
     const active = bench({ plan: { active: true, pending: false } })
-    expect(active.textarea.placeholder).toBe('描述你的任务以生成计划')
+    expect(active.placeholder).toBe('描述你的任务以生成计划')
     // /plan just ran: pending entry already reads as the plan target.
     const entering = bench({ plan: { active: false, pending: true } })
-    expect(entering.textarea.placeholder).toBe('描述你的任务以生成计划')
+    expect(entering.placeholder).toBe('描述你的任务以生成计划')
     // Pending exit: target is default again.
     const leaving = bench({ plan: { active: true, pending: true } })
-    expect(leaving.textarea.placeholder).toBe('给智能体发消息')
+    expect(leaving.placeholder).toBe('发消息或做任务… / 调用指令 @ 文件或对话')
     // Owner placeholder outranks the plan swap.
     const custom = bench({ plan: { active: true, pending: false }, placeholder: 'Custom placeholder' })
-    expect(custom.textarea.placeholder).toBe('Custom placeholder')
+    expect(custom.placeholder).toBe('Custom placeholder')
   })
 })
 
@@ -1182,34 +1047,40 @@ describe('machine pending lock', () => {
       shell.submit()
     })
     expect(shell.snapshot.phase).toBe('submitting')
-    const textarea = view.container.querySelector('textarea')!
-    expect(textarea.readOnly).toBe(true)
+    const textarea = view.container.querySelector<HTMLDivElement>('[data-composer-input]')!
+    expect(editableOf(textarea)).toBe(false)
     expect(view.container.querySelector<HTMLButtonElement>('button[aria-label="发送消息"]')!.disabled).toBe(true)
   })
 })
 
 describe('decorations', () => {
-  it('claimed token renders the mirror highlight and the blank-args hint', () => {
+  /** The claim-token styled leaf (the transform's inline warn color). */
+  function tokenSpanOf(container: HTMLElement): HTMLElement | null {
+    return container.querySelector('[data-lexical-text][style*="warn-label"]')
+  }
+
+  it('claimed token styles the leading leaf and sets the blank-args hint variable', () => {
     // Dictionary-less stub: an unmatched hint key keeps the machine's raw hint.
-    const { view, shell } = bench({ t: makeTranslate({}) })
+    const { view, shell, textarea } = bench({ t: makeTranslate({}) })
     act(() => {
       shell.setDraft('/goal ')
       shell.beginCommand(
         { token: '/goal ', hint: '目标内容', submit: () => Promise.resolve({ kind: 'success' as const }) },
         { start: 0, end: 6, draftRev: shell.snapshot.draftRev },
       )
+      shell.editor.update(() => {}, { discrete: true }) // flush the queued decoration refresh
     })
-    const token = view.container.querySelector('[data-decoration="token"]')
-    expect(token?.textContent).toBe('/goal ')
-    expect(view.container.querySelector('[data-decoration="hint"]')?.textContent).toBe('目标内容')
-    // Args typed: the hint disappears, the token highlight stays.
+    expect(tokenSpanOf(view.container)?.textContent).toBe('/goal ')
+    expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe(JSON.stringify('目标内容'))
+    // Args typed: the hint disappears, the token style stays.
     act(() => { shell.setDraft('/goal 发布') })
-    expect(view.container.querySelector('[data-decoration="hint"]')).toBeNull()
-    expect(view.container.querySelector('[data-decoration="token"]')).not.toBeNull()
+    act(() => { shell.editor.update(() => {}, { discrete: true }) }) // flush the queued decoration refresh
+    expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe('')
+    expect(tokenSpanOf(view.container)).not.toBeNull()
   })
 
   it('a locale entry for the claimed command overrides the raw claim hint (trailing-space token)', () => {
-    const { view, shell } = bench()
+    const { shell, textarea } = bench()
     act(() => {
       shell.setDraft('/goal ')
       shell.beginCommand(
@@ -1217,10 +1088,10 @@ describe('decorations', () => {
         { start: 0, end: 6, draftRev: shell.snapshot.draftRev },
       )
     })
-    expect(view.container.querySelector('[data-decoration="hint"]')?.textContent).toBe('输入目标，智能体将持续执行')
+    expect(textarea.style.getPropertyValue('--dsh-composer-hint')).toBe(JSON.stringify('输入目标，智能体将持续执行'))
   })
 
-  it('an inserted reference decorates its complete inline display range', () => {
+  it('an inserted reference renders a real chip capsule with its icon and label', () => {
     const { view, shell } = bench()
     const reference = {
       source: 'reference', ref: 'w1', label: '会话一', appearance: 'session' as const, clipboardText: '@w1',
@@ -1232,214 +1103,117 @@ describe('decorations', () => {
         { start: 3, end: 6, draftRev: shell.snapshot.draftRev },
       )
     })
-    const chip = view.container.querySelector('[data-decoration="chip"]')
-    expect(chip?.textContent).toBe('@会话一')
-    expect(chip?.getAttribute('data-reference-appearance')).toBe('session')
+    const chip = view.container.querySelector('[data-composer-chip]')
+    expect(chip?.textContent).toBe('会话一')
     expect(chip?.querySelector('svg')).not.toBeNull()
+    expect(chip?.getAttribute('contenteditable')).toBe('false')
     expect(shell.snapshot.occurrences).toHaveLength(1)
-    expect(shell.snapshot.draft).toBe('参考 @会话一 内容')
-    expect(shell.snapshot.occurrences[0]).toMatchObject({ offset: 3, length: 4 })
+    // The draft IS the clipboard projection; the label lives in the chip DOM.
+    expect(shell.snapshot.draft).toBe('参考 @w1 内容')
+    expect(shell.snapshot.occurrences[0]).toMatchObject({ offset: 3, length: 3 })
   })
 
-  it('keeps the textarea glyph layer transparent when a structured reference becomes disabled', () => {
+  it('keeps the chip decorator mounted when the session becomes disabled', () => {
     const { view, shell, session, textarea } = bench()
     act(() => {
       shell.setDraft('@w1')
       shell.insertReference({
         source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
       }, { start: 0, end: 3, draftRev: shell.snapshot.draftRev })
-      session.set(snapshotOf({ removed: true }))
     })
-    const backdrop = view.container.querySelector('[data-input-backdrop]')
-    expect(textarea.disabled).toBe(true)
-    expect(backdrop?.getAttribute('data-disabled')).toBe('true')
-    expect(backdrop?.querySelector('[data-decoration="chip"] svg')).not.toBeNull()
+    const chip = view.container.querySelector('[data-composer-chip]')
+    expect(chip?.querySelector('svg')).not.toBeNull()
+    act(() => { session.set(snapshotOf({ removed: true })) })
+    expect(textarea.getAttribute('aria-disabled')).toBe('true')
+    expect(view.container.querySelector('[data-composer-chip]')).toBe(chip)
   })
 
-  it('Backspace and Delete remove a reference as one range at its boundaries', () => {
-    const reference = {
-      source: 'reference', ref: 'w1', label: '会话一', appearance: 'session' as const, clipboardText: '@w1',
-    }
-    const backspace = bench()
-    act(() => {
-      backspace.shell.setDraft('前 @w1 后')
-      backspace.shell.insertReference(
-        reference,
-        { start: 2, end: 5, draftRev: backspace.shell.snapshot.draftRev },
-      )
-    })
-    backspace.textarea.setSelectionRange(6, 6)
-    fireEvent.keyDown(backspace.textarea, { key: 'Backspace' })
-    expect(backspace.shell.snapshot).toMatchObject({ draft: '前  后', occurrences: [] })
-
-    const forwardDelete = bench()
-    act(() => {
-      forwardDelete.shell.setDraft('前 @w1 后')
-      forwardDelete.shell.insertReference(
-        reference,
-        { start: 2, end: 5, draftRev: forwardDelete.shell.snapshot.draftRev },
-      )
-    })
-    forwardDelete.textarea.setSelectionRange(2, 2)
-    fireEvent.keyDown(forwardDelete.textarea, { key: 'Delete' })
-    expect(forwardDelete.shell.snapshot).toMatchObject({ draft: '前  后', occurrences: [] })
-  })
-
-  it('typing the trigger char immediately before a reference keeps it structured', () => {
-    const { shell, textarea } = bench()
-    act(() => {
-      shell.setDraft('@w1')
-      shell.insertReference({
-        source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
-      }, { start: 0, end: 3, draftRev: shell.snapshot.draftRev })
-    })
-    expect(shell.snapshot.draft).toBe('@会话一 ')
-    // The inserted char equals the reference's own leading trigger, so the two
-    // drafts alone cannot say whether it landed before or after that trigger.
-    textarea.setSelectionRange(0, 0)
-    act(() => {
-      beforeInput(textarea)
-      fireEvent.change(textarea, { target: { value: '@@会话一 ' } })
-    })
-    expect(shell.snapshot.draft).toBe('@@会话一 ')
-    expect(shell.snapshot.occurrences).toHaveLength(1)
-    expect(shell.snapshot.occurrences[0]).toMatchObject({ offset: 1, length: 4 })
-  })
-
-  it('a selection-replacing delete before a reference keeps it structured', () => {
-    const { shell, textarea } = bench()
-    act(() => {
-      shell.setDraft('@@w1')
-      shell.insertReference({
-        source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
-      }, { start: 1, end: 4, draftRev: shell.snapshot.draftRev })
-    })
-    expect(shell.snapshot.draft).toBe('@@会话一 ')
-    textarea.setSelectionRange(0, 1)
-    act(() => {
-      beforeInput(textarea, 'deleteContentBackward')
-      fireEvent.change(textarea, { target: { value: '@会话一 ' } })
-    })
-    expect(shell.snapshot.draft).toBe('@会话一 ')
-    expect(shell.snapshot.occurrences).toHaveLength(1)
-    expect(shell.snapshot.occurrences[0]).toMatchObject({ offset: 0, length: 4 })
-  })
-
-  it('a caret Backspace before a reference keeps it structured', () => {
-    const { shell, textarea } = bench()
-    act(() => {
-      shell.setDraft('@@w1')
-      shell.insertReference({
-        source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
-      }, { start: 1, end: 4, draftRev: shell.snapshot.draftRev })
-    })
-    expect(shell.snapshot.draft).toBe('@@会话一 ')
-    // A caret delete reports the bare caret, never the character it removes.
-    textarea.setSelectionRange(1, 1)
-    act(() => {
-      beforeInput(textarea, 'deleteContentBackward')
-      fireEvent.change(textarea, { target: { value: '@会话一 ' } })
-    })
-    expect(shell.snapshot.draft).toBe('@会话一 ')
-    expect(shell.snapshot.occurrences).toHaveLength(1)
-    expect(shell.snapshot.occurrences[0]).toMatchObject({ offset: 0, length: 4 })
-  })
-
-  it('a caret Delete before a reference keeps it structured', () => {
-    const { shell, textarea } = bench()
-    act(() => {
-      shell.setDraft('@@w1')
-      shell.insertReference({
-        source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
-      }, { start: 1, end: 4, draftRev: shell.snapshot.draftRev })
-    })
-    textarea.setSelectionRange(0, 0)
-    act(() => {
-      beforeInput(textarea, 'deleteContentForward')
-      fireEvent.change(textarea, { target: { value: '@会话一 ' } })
-    })
-    expect(shell.snapshot.draft).toBe('@会话一 ')
-    expect(shell.snapshot.occurrences).toHaveLength(1)
-    expect(shell.snapshot.occurrences[0]).toMatchObject({ offset: 0, length: 4 })
-  })
-
-  it('a caret word delete before a reference keeps it structured', () => {
-    const { shell, textarea } = bench()
-    act(() => {
-      shell.setDraft('word @w1')
-      shell.insertReference({
-        source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
-      }, { start: 5, end: 8, draftRev: shell.snapshot.draftRev })
-    })
-    expect(shell.snapshot.draft).toBe('word @会话一 ')
-    // One caret gesture can remove more than one character; the deleted span
-    // is whatever the draft lost, never a fixed step.
-    textarea.setSelectionRange(5, 5)
-    act(() => {
-      beforeInput(textarea, 'deleteWordBackward')
-      fireEvent.change(textarea, { target: { value: '@会话一 ' } })
-    })
-    expect(shell.snapshot.draft).toBe('@会话一 ')
-    expect(shell.snapshot.occurrences).toHaveLength(1)
-    expect(shell.snapshot.occurrences[0]).toMatchObject({ offset: 0, length: 4 })
-  })
-
-  it('copy and cut expand a partial reference selection to its structured range', () => {
-    const { shell, textarea } = bench()
+  it('a chip leaves the document as one unit (keyboard deletion is asserted in the browser lane)', () => {
+    // jsdom lacks the non-standard Selection.modify Lexical's character
+    // deletion crosses nodes with, so the Backspace/Delete gesture itself is
+    // an e2e assertion; the structural unit — one span covering the chip
+    // removes the whole occurrence — is checkable here.
+    const { shell } = bench()
     act(() => {
       shell.setDraft('前 @w1 后')
       shell.insertReference({
         source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
       }, { start: 2, end: 5, draftRev: shell.snapshot.draftRev })
     })
-    const setData = vi.fn()
-    textarea.setSelectionRange(3, 4)
-    fireEvent.copy(textarea, { clipboardData: { setData } })
-    expect(setData).toHaveBeenCalledWith('text/plain', '@w1')
-    expect(shell.snapshot.draft).toBe('前 @会话一 后')
-
-    textarea.setSelectionRange(3, 4)
-    fireEvent.cut(textarea, { clipboardData: { setData } })
-    expect(setData).toHaveBeenLastCalledWith('text/plain', '@w1')
+    expect(shell.snapshot.occurrences).toHaveLength(1)
+    act(() => {
+      shell.editor.update(() => {
+        expect($replaceDetectSpanWithText({ start: 2, end: 3 }, '')).toBe(true)
+      }, { discrete: true })
+    })
     expect(shell.snapshot).toMatchObject({ draft: '前  后', occurrences: [] })
   })
 
-  it('a lexicon-matched plain token renders the text-ref mark', () => {
+  it('copy and cut expand a selected chip to its clipboard projection natively', async () => {
+    const { shell, textarea } = bench()
+    act(() => {
+      shell.setDraft('前 @w1 后')
+      shell.insertReference({
+        source: 'reference', ref: 'w1', label: '会话一', appearance: 'session', clipboardText: '@w1',
+      }, { start: 2, end: 5, draftRev: shell.snapshot.draftRev })
+      // Select the chip plus its flanking spaces: detect [1, 4).
+      shell.editor.update(() => { $selectDetectSpan({ start: 1, end: 4 }) }, { discrete: true })
+    })
+    const setData = vi.fn()
+    fireEvent.copy(textarea, { clipboardData: { setData, getData: () => '' } })
+    expect(setData).toHaveBeenCalledWith('text/plain', ' @w1 ')
+    expect(shell.snapshot.draft).toBe('前 @w1 后')
+
+    act(() => {
+      shell.editor.update(() => { $selectDetectSpan({ start: 1, end: 4 }) }, { discrete: true })
+    })
+    fireEvent.cut(textarea, { clipboardData: { setData, getData: () => '' } })
+    await vi.waitFor(() => {
+      expect(shell.snapshot).toMatchObject({ draft: '前后', occurrences: [] })
+    })
+    expect(setData).toHaveBeenLastCalledWith('text/plain', ' @w1 ')
+  })
+
+  it('a lexicon-matched plain token renders the text-ref node', () => {
     const lexicon = new Map<'/' | '@', readonly string[]>([['/', ['fixture-demo']]])
     const { view, shell } = bench({ lexicon })
     act(() => { shell.setDraft('use /fixture-demo now') })
-    const mark = view.container.querySelector('[data-decoration="text-ref"]')
+    const mark = view.container.querySelector('[data-composer-text-ref]')
     expect(mark?.textContent).toBe('/fixture-demo')
     // Editing the token out of match shape drops the decoration.
     act(() => { shell.setDraft('use /fixture-dem now') })
-    expect(view.container.querySelector('[data-decoration="text-ref"]')).toBeNull()
+    expect(view.container.querySelector('[data-composer-text-ref]')).toBeNull()
   })
 
-  it('a directory completion renders a folder glyph without changing its plain text', () => {
+  it('a directory completion decorates color-only: literal text, no icon seat', () => {
     const { view, shell } = bench()
     act(() => { shell.setDraft('see @src/components/') })
-    const mark = view.container.querySelector('[data-decoration="text-ref"]')
+    const mark = view.container.querySelector('[data-composer-text-ref]')
     expect(mark?.textContent).toBe('@src/components/')
-    expect(mark?.querySelector('svg')).not.toBeNull()
+    // The trigger character marks editable text; the domain icon is the
+    // settled chip's alone.
+    expect(mark?.getAttribute('data-ref-appearance')).toBeNull()
     expect(shell.snapshot.draft).toBe('see @src/components/')
   })
 
-  it('a plain-text reference keeps its nodes while earlier text shifts its offset', () => {
-    const { view, textarea, shell } = bench()
+  it('a plain-text reference keeps its DOM node while typing ahead of it (bug #2793 regression)', () => {
+    const { view, shell } = bench()
     act(() => { shell.setDraft('see @src/components/ here') })
-    const backdrop = view.container.querySelector('[data-input-backdrop]')!
-    const mark = backdrop.querySelector('[data-decoration="text-ref"]')!
-    const icon = mark.querySelector('svg')!
-    act(() => { fireEvent.change(textarea, { target: { value: 'X see @src/components/ here' } }) })
-    // Node identity, not text: an offset-derived key remounts the mark and its
-    // icon on every keystroke landing ahead of the range.
-    expect(backdrop.querySelector('[data-decoration="text-ref"]')).toBe(mark)
-    expect(icon.isConnected).toBe(true)
+    const mark = view.container.querySelector('[data-composer-text-ref]')!
+    // Type ahead through the node API (the transaction path typing takes).
+    act(() => {
+      shell.editor.update(() => {
+        const first = $getRoot().getAllTextNodes()[0]
+        if ($isTextNode(first)) first.spliceText(0, 0, 'X ')
+      }, { discrete: true })
+    })
+    // Node identity, not text: the entity node survives edits ahead of it.
+    expect(view.container.querySelector('[data-composer-text-ref]')).toBe(mark)
     expect(mark.textContent).toBe('@src/components/')
+    expect(shell.snapshot.draft).toBe('X see @src/components/ here')
     // A token edited out of match shape still loses its decoration.
-    act(() => { fireEvent.change(textarea, { target: { value: 'X see X@src/components/ here' } }) })
-    expect(backdrop.querySelector('[data-decoration="text-ref"]')).toBeNull()
-    expect(shell.snapshot.draft).toBe('X see X@src/components/ here')
+    act(() => { shell.setDraft('X see X@src/components/ here') })
+    expect(view.container.querySelector('[data-composer-text-ref]')).toBeNull()
   })
 })
 
@@ -1465,10 +1239,12 @@ describe('strips and variants', () => {
   it('announces promptError as a fading toast (ordinary failure — no transaction UI, no Retry)', () => {
     vi.useFakeTimers()
     try {
-      const send = bench({ promptError: { op: 'send', error: { code: 'agent-busy', message: 'boom', details: { reason: 'boom' } } } })
+      const send = bench({
+        promptError: { op: 'send', error: new RemoteError('session/agent-busy', 'boom', { reason: 'boom' }) },
+      })
       // The toast body-portals (transformed ancestors must not trap it), so
       // queries go through the view's document-bound helpers.
-      expect(send.view.getByRole('alert').textContent).toContain('boom (agent-busy)')
+      expect(send.view.getByRole('alert').textContent).toContain('boom (session/agent-busy)')
       expect(send.view.queryByRole('button', { name: 'Retry' })).toBeNull()
       act(() => { vi.advanceTimersByTime(4000) })
       expect(send.view.queryByRole('alert')).toBeNull()
@@ -1504,27 +1280,33 @@ describe('strips and variants', () => {
     expect(view.container.querySelector('[class*="hero"]')).not.toBeNull()
   })
 
-  it('renders overlay anchor and left/right slot items', () => {
+  it('renders overlay, left/right, and footer slots at their layout positions', () => {
     const { view } = bench({
       overlay: <i data-testid="ov" />,
       leftItems: <i data-testid="li" />,
       rightItems: <i data-testid="ri" />,
+      footer: <i data-testid="foot" />,
     })
     expect(view.getByTestId('ov')).toBeTruthy()
     expect(view.getByTestId('li')).toBeTruthy()
     expect(view.getByTestId('ri')).toBeTruthy()
+    expect(view.getByTestId('foot')).toBeTruthy()
   })
 })
 
 describe('command launcher chrome and control seats', () => {
   it('renders the command launcher; the Access chip is absent without the permissions projection; the control seats render EMPTY without entries', () => {
     const { view, slotCalls } = bench()
-    expect(view.getByLabelText('命令')).toBeTruthy()
+    expect(view.getByLabelText('指令')).toBeTruthy()
     // Capability absent (no projection value): the chip renders nothing.
     expect(view.queryByLabelText(/^访问模式/)).toBeNull()
-    // Every seat dispatched, nothing rendered.
-    expect(slotCalls.map(c => c.key)).toEqual([
-      'conversation.input.attachments', 'conversation.input.plan', 'conversation.input.model',
+    // Every seat dispatched, nothing rendered (render passes may repeat; the
+    // seat set is the contract).
+    expect([...new Set(slotCalls.map(c => c.key))]).toEqual([
+      'conversation.input.overlay', 'conversation.input.attachments',
+      'conversation.input.plan', 'conversation.input.left',
+      'conversation.input.right', 'conversation.input.model',
+      'conversation.composer.dock',
     ])
     expect(view.queryByLabelText('Plan mode')).toBeNull()
     expect(view.queryByLabelText('Model')).toBeNull()
@@ -1532,9 +1314,9 @@ describe('command launcher chrome and control seats', () => {
 
   it('passes the textarea selection to the command menu launcher and reflects its expanded state', () => {
     const toggleCommandMenu = vi.fn()
-    const { view, textarea, menuLauncher } = bench({ draft: 'draft text', toggleCommandMenu })
-    textarea.setSelectionRange(2, 7)
-    const launcher = view.getByLabelText('命令')
+    const { view, shell, menuLauncher } = bench({ draft: 'draft text', toggleCommandMenu })
+    act(() => { shell.editor.update(() => { $selectDetectSpan({ start: 2, end: 7 }) }, { discrete: true }) })
+    const launcher = view.getByLabelText('指令')
     expect(launcher.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(launcher)
     expect(toggleCommandMenu).toHaveBeenCalledExactlyOnceWith({ start: 2, end: 7 })
@@ -1554,24 +1336,43 @@ describe('command launcher chrome and control seats', () => {
     }
     const { view } = bench({ permissions, command })
     const trigger = view.getByLabelText(/^访问模式/) as HTMLButtonElement
-    // Title-case display is presentation only; the menu ids stay machine names.
-    expect(trigger.textContent).toBe('Read Only')
+    // Product-label display is presentation only; the menu ids stay machine names.
+    expect(trigger.textContent).toBe('仅可查看')
     expect([...trigger.querySelectorAll('svg')]
       .every(icon => icon.closest('[aria-hidden="true"]') !== null)).toBe(true)
     fireEvent.click(trigger)
     const items = view.getAllByRole('menuitem')
-    expect(items.map(o => o.textContent)).toEqual(['Read Only', 'Workspace Write', 'Full access'])
+    expect(items.map(o => o.textContent)).toEqual(['仅可查看', '工作区内修改', '完全权限'])
     fireEvent.click(items[1]!)
     // Optimistic pick + disable until admission resolves (command stub resolves true).
     const busy = view.getByLabelText(/^访问模式/) as HTMLButtonElement
-    expect(busy.textContent).toBe('Workspace Write')
+    expect(busy.textContent).toBe('工作区内修改')
     expect(busy.disabled).toBe(true)
     expect(command).toHaveBeenCalledWith('/permission workspace-write')
     await act(async () => {})
     expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('requires explicit risk acknowledgement before submitting Full access', async () => {
+  it('the Access chip preserves host labels for built-in preset values', () => {
+    const permissions = {
+      options: [
+        { value: 'read-only', name: 'Review Only' },
+        { value: 'workspace-write', name: 'Project Files' },
+        { value: 'danger-full-access', name: 'Operator Mode' },
+        { value: 'custom-mode', name: 'custom-mode' },
+        { value: '__proto__', name: '__proto__' },
+      ],
+      currentValue: 'workspace-write',
+    }
+    const { view } = bench({ permissions })
+    const trigger = view.getByLabelText(/^访问模式/) as HTMLButtonElement
+    expect(trigger.textContent).toBe('Project Files')
+    fireEvent.click(trigger)
+    expect(view.getAllByRole('menuitem').map(item => item.textContent))
+      .toEqual(['Review Only', 'Project Files', 'Operator Mode', 'Custom Mode', '__proto__'])
+  })
+
+  it('requires explicit risk acknowledgement before submitting full access', async () => {
     const command = vi.fn(() => Promise.resolve(true))
     const permissions = {
       options: [
@@ -1582,11 +1383,11 @@ describe('command launcher chrome and control seats', () => {
     }
     const { view } = bench({ permissions, command })
     fireEvent.click(view.getByLabelText(/^访问模式/))
-    fireEvent.click(view.getByRole('menuitem', { name: 'Full access' }))
+    fireEvent.click(view.getByRole('menuitem', { name: '完全权限' }))
 
     expect(command).not.toHaveBeenCalled()
-    expect(view.getByRole('dialog', { name: '确认启用 Full access？' })).toBeTruthy()
-    const enable = view.getByRole('button', { name: '启用 Full access' }) as HTMLButtonElement
+    expect(view.getByRole('dialog', { name: '确认启用完全权限？' })).toBeTruthy()
+    const enable = view.getByRole('button', { name: '启用完全权限' }) as HTMLButtonElement
     expect(enable.disabled).toBe(true)
 
     fireEvent.click(view.getByRole('checkbox', { name: '我已了解风险，并愿意继续' }))
@@ -1596,11 +1397,11 @@ describe('command launcher chrome and control seats', () => {
     expect(command).toHaveBeenCalledOnce()
     expect(command).toHaveBeenCalledWith('/permission danger-full-access')
     expect(view.queryByRole('dialog')).toBeNull()
-    expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).textContent).toBe('Full access')
+    expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).textContent).toBe('完全权限')
     await act(async () => {})
   })
 
-  it('cancels a Full access selection without changing permission and resets acknowledgement', () => {
+  it('cancels a full access selection without changing permission and resets acknowledgement', () => {
     const command = vi.fn(() => Promise.resolve(true))
     const permissions = {
       options: [
@@ -1612,21 +1413,21 @@ describe('command launcher chrome and control seats', () => {
     const { view } = bench({ permissions, command })
     const openConfirmation = () => {
       fireEvent.click(view.getByLabelText(/^访问模式/))
-      fireEvent.click(view.getByRole('menuitem', { name: 'Full access' }))
+      fireEvent.click(view.getByRole('menuitem', { name: '完全权限' }))
     }
 
     openConfirmation()
     fireEvent.click(view.getByRole('checkbox'))
     fireEvent.click(view.getByRole('button', { name: '取消' }))
     expect(command).not.toHaveBeenCalled()
-    expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).textContent).toBe('Workspace Write')
+    expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).textContent).toBe('工作区内修改')
 
     openConfirmation()
     expect((view.getByRole('checkbox') as HTMLInputElement).checked).toBe(false)
-    expect((view.getByRole('button', { name: '启用 Full access' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByRole('button', { name: '启用完全权限' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('revokes an open Full access confirmation when the task locks', () => {
+  it('revokes an open full access confirmation when the task locks', () => {
     const command = vi.fn(() => Promise.resolve(true))
     const permissions = {
       options: [
@@ -1637,14 +1438,14 @@ describe('command launcher chrome and control seats', () => {
     }
     const { view, session } = bench({ permissions, command })
     fireEvent.click(view.getByLabelText(/^访问模式/))
-    fireEvent.click(view.getByRole('menuitem', { name: 'Full access' }))
+    fireEvent.click(view.getByRole('menuitem', { name: '完全权限' }))
     fireEvent.click(view.getByRole('checkbox'))
     act(() => { session.set(snapshotOf({ removed: true })) })
     expect(view.queryByRole('dialog')).toBeNull()
     expect(command).not.toHaveBeenCalled()
   })
 
-  it('resets an open Full access confirmation when switching tasks', () => {
+  it('resets an open full access confirmation when switching tasks', () => {
     const command = vi.fn(() => Promise.resolve(true))
     const permissions = {
       options: [
@@ -1655,7 +1456,7 @@ describe('command launcher chrome and control seats', () => {
     }
     const { view, props } = bench({ permissions, command })
     fireEvent.click(view.getByLabelText(/^访问模式/))
-    fireEvent.click(view.getByRole('menuitem', { name: 'Full access' }))
+    fireEvent.click(view.getByRole('menuitem', { name: '完全权限' }))
     fireEvent.click(view.getByRole('checkbox'))
     view.rerender(<InputBar {...props} sessionId={'s2' as SessionId} />)
     expect(view.queryByRole('dialog')).toBeNull()
@@ -1671,12 +1472,13 @@ describe('command launcher chrome and control seats', () => {
     expect(view.getByTestId('plan-entry')).toBeTruthy()
     expect(view.getByTestId('model-entry')).toBeTruthy()
     // The bar hands its chrome disable state to the filling entry.
-    const controls = slotCalls.filter(call => call.key !== 'conversation.input.attachments')
+    const controlKeys = new Set(['conversation.input.plan', 'conversation.input.model'])
+    const controls = slotCalls.filter(call => controlKeys.has(call.key))
     expect(controls.every(c => (c.owner as { locked: boolean }).locked)).toBe(true)
     expect(attachmentOwner(slotCalls).canAcceptDrop).toBe(false)
     cleanup()
     const live = bench({ running: true })
-    const liveControls = live.slotCalls.filter(call => call.key !== 'conversation.input.attachments')
+    const liveControls = live.slotCalls.filter(call => controlKeys.has(call.key))
     expect(liveControls.every(c => !(c.owner as { locked: boolean }).locked)).toBe(true)
     expect(attachmentOwner(live.slotCalls).canAcceptDrop).toBe(true)
   })
@@ -1684,7 +1486,7 @@ describe('command launcher chrome and control seats', () => {
   it('disabled locks the Access chip and command launcher (running does not)', () => {
     const permissions = { options: [{ value: 'workspace-write', name: 'workspace-write' }], currentValue: 'workspace-write' }
     const { view } = bench({ disabled: true, permissions })
-    expect((view.getByLabelText('命令') as HTMLButtonElement).disabled).toBe(true)
+    expect((view.getByLabelText('指令') as HTMLButtonElement).disabled).toBe(true)
     expect((view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(true)
     cleanup()
     const live = bench({ running: true, permissions })

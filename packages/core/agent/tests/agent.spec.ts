@@ -124,13 +124,13 @@ describe('Inbox', () => {
     const nextStep = createUserMessage({ content: [{ type: 'text', text: 'step' }], source: { kind: 'user' } })
     inbox.append('next-turn', nextTurn)
     inbox.append('next-step', nextStep)
-    const beforeClear = session.events.length
+    const beforeClear = session.snapshotEvents().length
 
     inbox.clear()
 
     expect(inbox.hasPending).toBe(false)
     expect(discarded).toEqual([nextStep, nextTurn])
-    expect(session.events.slice(beforeClear).map(event => event.type === 'agent/inbox/spliced'
+    expect(session.snapshotEvents().slice(beforeClear).map(event => event.type === 'agent/inbox/spliced'
       ? event.data
       : event.type)).toEqual([
       { target: 'next-step', start: 0, removedCount: 1, inserted: [], outcome: 'canceled' },
@@ -138,7 +138,7 @@ describe('Inbox', () => {
     ])
 
     inbox.clear()
-    expect(session.events).toHaveLength(beforeClear + 2)
+    expect(session.snapshotEvents()).toHaveLength(beforeClear + 2)
   })
 })
 
@@ -149,6 +149,7 @@ describe('AgentRegistry', () => {
     await agentFiber
     await ctx.plugin(TypertRegistry)
     const agent = stubAgent('remote-agent')
+    Object.defineProperty(agent, 'ctx', { value: agent.ctx.extend({ agent }) })
     const disposeAgent = ctx.agents.register(agent)
 
     const lookup = ctx.typert.lookups.get('agent')
@@ -159,7 +160,10 @@ describe('AgentRegistry', () => {
       wireTypeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
     })
     expect(lookup?.resolve(agent.id)).toBe(agent)
-    expect(ctx.typert.contexts.getHost('agent')?.resolve(agent.id)).toBe(agent.ctx)
+    const context = ctx.typert.contexts.getHost('agent')
+    expect(context?.identity(agent.ctx)).toBe(agent.id)
+    expect(context?.identity(ctx)).toBeUndefined()
+    expect(context?.resolve(agent.id)).toBe(agent.ctx)
 
     disposeAgent()
     expect(lookup?.resolve(agent.id)).toBeUndefined()

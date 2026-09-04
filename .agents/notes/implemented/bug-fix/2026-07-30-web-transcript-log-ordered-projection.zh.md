@@ -37,9 +37,9 @@ import type { CompactionCheckpointSource } from '@deepseek-ai/dsh-compaction/che
 const COMPACT_PLUGIN: CompactionCheckpointSource['plugin'] = 'compact'
 ```
 
-重命名 Service Definition 的插件 id 现在会在客户端产生编译错误：`TS2322: Type '"compact"' is not assignable to type '"compaction"'`。该导入必须保持**仅类型**——任何既非平台模块又非 inline-safe wire 层的 `@deepseek-ai` 包值导入都会被客户端纯度门禁（`packages/client/tsdown.client.ts`）拒绝，而它自己的报错信息就记录着仅类型导入会被擦除、永不抵达该门禁。仅类型的叶子导入同时需要 `tsconfig.base.json` 的一条 `paths` 条目和 `packages/client/runtime/tsconfig.json` `references` 中的 `{"path": "../../compaction/compaction"}`：composite 的 `rootDir` 规则同样适用于被擦除的导入，缺少该引用时的诊断是 `TS6059`/`TS6307`。
+重命名 Service Definition 的插件 id 现在会在客户端产生编译错误：`TS2322: Type '"compact"' is not assignable to type '"compaction"'`。该导入必须保持**仅类型**——任何既非平台模块又非 inline-safe wire 层的 `@deepseek-ai` 包值导入都会被客户端纯度门禁（`packages/client/tsdown.client.ts`）拒绝，而它自己的报错信息就记录着仅类型导入会被擦除、永不抵达该门禁。仅类型的叶子导入同时需要 `tsconfig.base.json` 的一条 `paths` 条目和 `packages/client/ui-chat/tsconfig.json` `references` 中的 `{"path": "../../compaction/compaction"}`：composite 的 `rootDir` 规则同样适用于被擦除的导入，缺少该引用时的诊断是 `TS6059`/`TS6307`。
 
-`packages/client/ui-conversation/tests/conversation-node-definitions.client.spec.ts` 是行为侧的另一半，用检查点与溯源记录驱动压缩 Definition，并证明后续加载的旧分页可以补齐缺失的摘要数据。Definition 仅类型导入该叶子路径，使客户端继续与 compact 包根及经由它可达的宿主侧 `Context` 合并隔离。
+`packages/client/ui-chat/tests/conversation-node-definitions.client.spec.ts` 是行为侧的另一半，用检查点与溯源记录驱动压缩 Definition，并证明后续加载的旧分页可以补齐缺失的摘要数据。Definition 仅类型导入该叶子路径，使客户端继续与 compact 包根及经由它可达的宿主侧 `Context` 合并隔离。
 
 因此与终端的分歧很窄：两个前端都从同一份声明识别检查点——终端在宿主侧值导入 `isCompactCheckpointSource`（那里不适用任何门禁），客户端钉住类型。
 
@@ -51,9 +51,9 @@ const COMPACT_PLUGIN: CompactionCheckpointSource['plugin'] = 'compact'
 
 **从新叶子值导入该谓词**，并把 `dsh-compaction` 加入客户端 `INLINE_SAFE` 白名单。已拒绝：客户端需要的是插件 id，不是谓词——一个类型就够了，而被擦除的导入根本不会抵达纯度门禁，因此无需向它放行任何东西。白名单只在值导入时才有意义，而在那里它是笔糟糕的交换：`INLINE_SAFE` 按模块说明符*前缀*匹配，因此放行该包会连它那个会导入 cordis 的根部一起放行。
 
-**一条纯形状规则**——任何 replacement `user/message` 都是压缩。已拒绝：它今天正确只因为压缩是 replacement `user/message` 的唯一生产者，一旦这点改变便无任何机制能捕获。那个 pin 测试只花一个文件，就精确消除了这一风险。
+**一条纯形状规则**——任何 replacement `user/message` 都是压缩。已拒绝：它正确只因为压缩是 replacement `user/message` 的唯一生产者，一旦这点改变便无任何机制能捕获。那个 pin 测试只花一个文件，就精确消除了这一风险。
 
-**在宿主侧给检查点打标**，经投影或线协议。已拒绝：这最贴合“经 cordis 服务协作”的规则，但客户端今天折叠的是原始 `SessionEvent`，因此这意味着一次线协议约定变更——为一个纯谓词付出的代价不成比例。
+**在宿主侧给检查点打标**，经投影或线协议。已拒绝：这最贴合“经 cordis 服务协作”的规则，但客户端折叠的是原始 `SessionEvent`，因此这意味着一次线协议约定变更——为一个纯谓词付出的代价不成比例。
 
 **把冻结节点的归属移进适配器**（`nodes(extraNodes)`），像那个未合并分支所做的那样。已拒绝：被打断的节点来自 `Session` 已经在窗口上运行的 `turn/end` 清扫，而在按 seq 单调的记录之上，简单形态就是正确的——适配器返回节点，会话按 seq 归并冻结节点。加宽适配器签名什么也换不到，还会把清扫与它的产物拆开。
 

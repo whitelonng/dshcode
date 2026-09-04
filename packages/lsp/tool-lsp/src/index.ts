@@ -13,11 +13,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { assertNever } from '@deepseek-ai/dsh-llm'
 import { LspError } from '@deepseek-ai/dsh-lsp'
 import type {} from '@deepseek-ai/dsh-lsp'
-import type {} from '@deepseek-ai/dsh-system-prompt'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import {
   DEFAULT_MAX_LOCATIONS,
   DEFAULT_MAX_RESULT_CHARS,
@@ -101,7 +100,11 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveInteger('maxResultChars', resolved.maxResultChars)
   assertTimer('timeoutMs', resolved.timeoutMs)
 
-  ctx.systemPrompt.section({ name: 'tool:lsp', order: 112, text: LSP_PROMPT_TEXT })
+  ctx.systemPrompt.section({
+    name: 'tool:lsp',
+    order: ctx.systemPrompt.getSectionOrder('TOOL_LSP'),
+    text: LSP_PROMPT_TEXT,
+  })
 
   ctx.tools.register(defineTool({
     name: 'lsp',

@@ -1,18 +1,37 @@
+---
+description: "Per-message ratings and notes for finalized assistant messages, for users and maintainers choosing, composing, or debugging the feedback service."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-message-feedback
 
 English | [中文](README.zh.md)
 
-Host-owned editable feedback for one finalized assistant message. The package registers `ctx.messageFeedback`, persists one lifecycle-bound sidecar row per Session in storage-domain, and publishes the Host `messageFeedback.list`, `messageFeedback.put`, and `messageFeedback.delete` unary Remote contract. It is separate from the immutable Session-level `feedback/record` event and performs no telemetry handoff. The [message-feedback sidecar Agent Note](../../../.agents/notes/implemented/architecture/2026-08-10-message-feedback-sidecar.md) owns the design boundary.
+## Summary
 
-Public request, value, version, and failure types are exported from the package root and `@deepseek-ai/dsh-message-feedback/types`; [`src/types.ts`](src/types.ts) is their source.
+`dsh-message-feedback` lets product surfaces offer per-message feedback: a user marks an assistant message positive or negative and can attach a short note, and the rating stays with that message. Ratings are stored with the session, survive restarts, and never enter model history or telemetry. Product surfaces read, create, and change ratings through the `messageFeedback` service, whose `list`, `put`, and `delete` operations are the whole surface. The one deployment setting is the maximum note length (`maxNoteBytes`), which the Web bundle sets to 8192. Browser controls live in a separate client package; this package provides the service itself.
 
-## Configuration
+## Table of Contents
 
-| key | meaning |
-|---|---|
-| `maxNoteBytes` | Required positive safe integer: maximum UTF-8 byte length of one optional note. |
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-Notes must contain at least one non-whitespace character, but accepted text is stored verbatim rather than trimmed. Omitting `note` means the desired value has no note, so a version-matched material `put` clears an existing note. Note validation precedes Session lookup and can therefore return `note-blank` or `note-too-large` for a missing Session without touching persistence.
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Choose this service when a product surface should let users rate and annotate individual assistant messages. Feedback attaches only to a finalized message — one that has already been sent — and using the service never starts or resumes an agent. A custom app mounts the service together with session persistence and storage; the shipped Web bundle already composes all of it with `maxNoteBytes: 8192`.
+
+### Configuration
+
+| Field | Default | Meaning |
+|---|---|---|
+| `maxNoteBytes` | required | Maximum UTF-8 byte length accepted for one optional note. |
 
 ```yaml
 - id: message-feedback
@@ -21,42 +40,83 @@ Notes must contain at least one non-whitespace character, but accepted text is s
     maxNoteBytes: 8192
 ```
 
-The service injects `storageDomain`, `sessionPersistence`, and `sessions`. Its durable domain is `message_feedback`, with one `sessions` table row per `SessionId`.
+A note must contain at least one non-whitespace character and fit within the configured byte length; a blank note is rejected with `note-blank` and an oversized one with `note-too-large`. Accepted text is stored exactly as submitted — nothing is trimmed. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-message-feedback) is the exhaustive source for every accepted field and its JSDoc.
 
-## Data, lifecycle, and durability
+### Reading and changing feedback
 
-`MessageFeedbackItem` contains `messageId`, `rating: 'positive' | 'negative'`, optional `note`, an opaque equality-only `version`, and Host-assigned `createdAt`/`updatedAt` Unix-millisecond timestamps. A material update preserves `createdAt`, replaces `version`, and keeps `updatedAt` from moving backward. `list` returns fresh immutable snapshots in first-creation order; updating an item retains its place, while deleting and later recreating it appends a new item.
+Callers use three operations to read and change feedback for a session:
 
-Each stored row carries the inspected Session header identity `{createdAt, cwd}`. A mismatch is treated as absence: `list` returns an empty `items` array, `delete` returns the absent postcondition, and `put` may replace the stale row with one bound to the current identity. This fences a reused `SessionId` when its header identity differs. Forks use a distinct Session identity and receive no feedback-row copy.
-
-`SessionPersistence.inspect()` supplies a cold-safe observation without publishing or resuming an Agent and without committing cold repair. For a Session without a live owner, `listSnapshots()` first decides definite absence; an `inspect()` failure for a catalogued Session remains an infrastructure failure rather than being guessed into `session-not-found`. `put` accepts only a non-empty, append-origin `assistant/message` with the requested `MessageId`; replacement-origin messages, empty usage-only assistant records, and non-assistant records return `target-not-found`.
-
-After initial validation, `put` establishes a durability barrier before writing the sidecar. A matching live Session commits through the canonical `ctx.sessions.flush` checkpoint, then both live and cold paths are physically read from sequence zero through `SessionPersistence.readFrom`. The resulting observation's header identity and target are validated again. A missing flush participant, changed identity, vanished target, or physical-read failure prevents the sidecar commit, so durable feedback never precedes the durable target message.
-
-Message feedback is not Session-log content or a Session projection. It emits no `feedback/record` event, does not enter model history, and does not trigger `FEEDBACK_ONLY` telemetry release.
-
-## Service and Host Remote contract
-
-The same three `MessageFeedbackService` methods are published by `TypertRemoteService` and `@Remote`; the Host endpoint names are `messageFeedback.list`, `messageFeedback.put`, and `messageFeedback.delete`. Every method returns a discriminated business union: `{ ok: true, value }` or `{ ok: false, error }`. Operational storage, corruption, or missing-durability-listener failures reject instead of being mislabeled as business errors.
-
-| Method | Request | Success `value` | Rejected `error.code` |
+| Operation | Request | Success | Rejected when |
 |---|---|---|---|
-| `list` | `MessageFeedbackListRequest { sessionId }` | `MessageFeedbackListValue { items }` | `session-not-found` |
-| `put` | `MessageFeedbackPutRequest { sessionId, messageId, rating, note?, ifVersion }` | committed `MessageFeedbackItem` | `session-not-found`, `target-not-found`, `version-conflict`, `note-blank`, `note-too-large` |
-| `delete` | `MessageFeedbackDeleteRequest { sessionId, messageId, ifVersion }` | `MessageFeedbackDeleteValue { absent: true }` | `session-not-found`, `version-conflict` |
+| `list` | the session id | the current ratings and notes, in creation order | the session is not found |
+| `put` | session, message, rating, optional note, expected version | the stored rating and note | session not found, message is not a valid target, version conflict, blank or oversized note |
+| `delete` | session, message, expected version | the rating is absent | session not found, version conflict |
 
-`MessageFeedbackVersionConflict` returns the authoritative `current` item, or `null` when no item exists. This lets a caller reconcile the current rating, note, and version without a second `list` request. `MessageFeedbackNoteTooLarge` returns both `maxBytes` and `actualBytes`. The Client Remote aggregate does not mount the generated client contribution yet; Host callers can use the service/Remote contract without that client assembly.
+Every change must be based on the version the service returned for that rating: a change based on an older version is rejected with `version-conflict`, and the reply carries the current rating so the caller can see what changed without another read. Deleting a rating that is already absent succeeds, and concurrent changes to different messages do not conflict. An omitted note clears an existing note.
 
-## Compare-and-set and idempotency
+### What you can rate
 
-`ifVersion: null` requests creation only; every request for an existing item requires its exact current version, including a no-op whose desired value already matches. The check is per message rather than per Session, so changing one item does not conflict with another. Every material create or update assigns a fresh opaque UUID token, preventing stale writes from crossing an ABA value cycle.
+A rating attaches to one finalized assistant message: the message must exist and be an assistant message that was sent. User messages, empty assistant placeholders, and replaced messages are not valid targets and are rejected with `target-not-found`. Once recorded, the rating and note stay with that message and survive restarts; a fork of the session starts with no feedback.
 
-A matching-version no-op returns the already stored item with unchanged version and timestamps. After a lost success response, a retry with the old token receives `version-conflict.current`; the caller can compare that authoritative item with its desired value without an extra read. `delete` ignores `ifVersion` when the item is already absent and always returns the stable `{ absent: true }` postcondition after success.
+### Durability
 
-A per-Session promise queue encloses inspection, durability validation, sidecar read, comparison, and whole-row write. These semantics serialize concurrent mutations through one service instance; storage-domain itself has no cross-process conditional write.
+A rating is committed only after the message it refers to is durably stored, so feedback never points at a message that can be lost. Reading or writing feedback never starts or resumes an agent; the service inspects the persisted session directly.
 
-Plugin disposal closes mutation admission, drains every operation already accepted into the per-Session queues, and only then closes the storage domain. A mutation submitted after disposal begins rejects as a lifecycle failure instead of entering a closing domain.
+-----
 
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+### Design concept
+
+The service keeps feedback outside the session log entirely: each session owns one sidecar row in a storage domain, so a rating can never be confused with conversation content, model history, or telemetry. The sidecar is only ever committed after the message it references is durable — the row extends the target log instead of preceding it. Every operation returns a business result that distinguishes a handled failure (missing session, invalid target, stale version, bad note) from an infrastructure failure, which rejects instead of being mislabeled.
+
+### What a sidecar holds
+
+One row per session binds the inspected session identity (`createdAt`, `cwd`) to its feedback items; the identity fences a reused session id, so a row from an earlier lifecycle is invisible and a fork starts with no feedback. Items are immutable values — a change writes a new version of the item, preserving its creation time — and the row schema rejects duplicate message ids and reused versions so lookup stays unambiguous. The exact row schema and validation live in [`src/spec.ts`](src/spec.ts).
+
+### Concurrency
+
+Mutations are optimistic and per message: a caller sends the version it last observed, a stale version is rejected with the authoritative current item so the caller reconciles without another read, and every material change mints a fresh version token so a stale write can never masquerade as current. A per-session queue serializes the whole read-compare-write through one service instance; storage provides no cross-process conditional write, which is the Known Limitation below.
+
+### Durability and target validation
+
+A write is staged, verified, then committed: the target message is flushed through the canonical checkpoint, the physical log prefix is re-read, and only then is the sidecar row written — feedback can never reference a message that is not durable. Cold sessions are inspected without resuming an agent, absence is decided from the persistence catalog rather than guessed, and only a real, sent assistant message is a valid target. The flush and inspect path lives in [`src/index.ts`](src/index.ts).
+
+### Failure modes
+
+The service fails closed: disposal drains in-flight writes before closing the domain, a write submitted after disposal starts is rejected as a lifecycle failure, and invalid configuration or a read before domain initialization fails loudly.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Service class: config validation, per-Session queue, durability barrier, `@Remote` methods |
+| [`src/types.ts`](src/types.ts) | Public request, value, and failure vocabulary (types only, for generated Remote clients) |
+| [`src/spec.ts`](src/spec.ts) | Storage-domain declaration: `message_feedback` domain, `sessions` table, row schemas |
+| — | No runtime invariant companion is published; the private typed writer owns current row mutations, the domain schema validates rows on reopen, and no second authority exists. |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the subsystem types and design boundary to the persistence primitives and the browser consumer that drives this service.
+
+- [Feedback subsystem](../../../docs/subsystems/feedback.md) — the public types, Remote contract, and Web consumer details.
+- [Message-feedback sidecar decision](../../../.agents/notes/implemented/architecture/2026-08-10-message-feedback-sidecar.md) — the design boundary that keeps this sidecar out of Session-log content.
+- [Session persistence subsystem](../../../docs/subsystems/persistence.md) — `inspect`, `readFrom`, and `flush` semantics behind the durability barrier.
+- [dsh-client-ui-message-feedback](../../client/ui-message-feedback/README.md) — the browser consumer that drives the Host Remote contract.
+- [Feedback package map](../README.md) — where per-message feedback sits next to the log-only capture command.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Local message-feedback state
@@ -75,10 +135,28 @@ Independent. Listing or mutating message feedback does not touch a model request
 
 ## Known Limitations and Deferred Work
 
-- **Client aggregate and UI are absent** — the Host Remote contract ships, but the Client Remote aggregate contribution and any UI consumer are separately owned and deferred.
-- **Compare-and-set is single-process** — the per-Session queue serializes one service instance only; multiple Host processes writing one storage root can still lose updates because storage-domain exposes no cross-process conditional write.
-- **No durable Session deletion cascade** — Session persistence has no deletion API, and `session/disposed`/`host/session-removed` mean detach rather than durable deletion. The service therefore retains empty rows and may leave orphan rows after out-of-band log removal instead of deleting valid feedback on detach.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the service is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
+
+- **Compare-and-set is single-process** — the per-Session queue serializes one service instance only; storage-domain has no cross-process conditional write, so multiple Host processes writing one storage root can still lose updates.
+- **No durable Session deletion cascade** — Session persistence has no deletion API, and `session/disposed`/`api-session/removed` mean detach rather than durable deletion. The service therefore retains empty rows and may leave orphan rows after out-of-band log removal instead of deleting valid feedback on detach.
 - **Detach/catalog retirement window** — a request in the narrow interval after live detach but before the persistence catalog materializes the header can receive `session-not-found`; callers retry after retirement materialization.
 - **Header identity is not a content fingerprint** — `{createdAt, cwd}` detects reuse only when those fields differ; a cloned log retaining the same header identity is indistinguishable.
 - **Trusted caller boundary** — `list`/`put`/`delete` carry no authenticated actor or audit identity. A deployment must expose the Host gateway only through its trusted or separately authenticated boundary until authorization and attribution are added.
 - **Catalog and row bounds** — a cold request scans the complete Session snapshot catalog because persistence has no lookup-by-id metadata operation. `maxNoteBytes` bounds one note, but the item count and aggregate retained bytes of one Session row are not capped; an indexed metadata read and deployment-owned row bound remain deferred until a concrete consumer defines their policy.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers; it is explicitly non-authoritative. Shipped behavior, limits, and rationale live in the sections above, the package code, and the linked Agent Note.
+
+- The browser controls and the client Remote mount live in `dsh-client-ui-message-feedback` and `dsh-api-remotes`; their open items belong to those packages' notes.
+- The trusted-caller limitation is the open authorization direction: the Host gateway records no actor or audit identity, and any authentication layer must land at the deployment boundary before the service exposes per-user attribution.
+- Note validation precedes Session lookup by design, so `note-blank` and `note-too-large` win over `session-not-found` for a missing Session; tests pin this order.
+
+</details>

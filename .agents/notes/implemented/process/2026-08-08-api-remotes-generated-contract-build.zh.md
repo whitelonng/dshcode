@@ -43,7 +43,7 @@ packages/api/remotes/
       └─ index.ts
 ~~~
 
-包根 `tsconfig.json` 是只引用两个具体 project 的 solution，不进入任何 aggregate 或直接消费方的依赖图。根 Host aggregate 与 `host/apiproxy` 引用 `api/remotes/tsconfig.host.json`；根 Client aggregate 与 `client/ui-goal` 引用 `api/remotes/tsconfig.client.json`。`ui-goal` 本身仍是普通的单一 Client project。workspace constraints 门禁遍历可达的 Project Reference 图；凡已声明 face 的 project 引用了拆分包的 solution 根或另一侧 leaf，门禁都会拒绝，而只有 `tsconfig.json` 的目标仍可由任一 face 引用。
+包根 `tsconfig.json` 是只引用两个具体 project 的 solution，不进入任何 aggregate 或直接消费方的依赖图。根 Host aggregate 引用 `api/remotes/tsconfig.host.json`，根 Client aggregate 与直接 Client 消费方引用 `api/remotes/tsconfig.client.json`。`session-log-export` 使用相同的 solution 与 leaf 结构，让 Node archive 实现不进入浏览器 controller。workspace constraints 门禁遍历可达的 Project Reference 图；凡已声明 face 的 project 引用了拆分包的 solution 根或另一侧 leaf，门禁都会拒绝，而只有 `tsconfig.json` 的目标仍可由任一 face 引用。
 
 两个 project 使用互不重叠的 `files` 和不同的 `.tsbuildinfo`，因此可以共享 `lib/types` 而不重复发射任何源码。若未来需要两侧共用一份实现，应把实现移入中立 package，不能把同一源码同时交给两个 emitting project。
 

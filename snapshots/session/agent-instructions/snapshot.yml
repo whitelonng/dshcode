@@ -1,0 +1,14 @@
+version: 1
+scenario: agent-instructions
+profile: headless
+composition: agent-instructions
+recording: authored
+header:
+  class: agent-instructions
+  pin: true
+  changes: 1
+replay:
+  override: true
+platform: posix
+workspace:
+  setup: delimiter-path

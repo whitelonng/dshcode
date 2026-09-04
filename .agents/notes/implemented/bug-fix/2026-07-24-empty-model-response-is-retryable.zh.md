@@ -33,4 +33,4 @@ Status: implemented
 
 - 一个偶发异常的提供方会消耗一次有界重试，而不是一个没有输出的轮次；一个持续返回空内容的模型则会产生用户可据以行动的 `EMPTY_RESPONSE` 轮次失败。
 - 一个确实打算什么都不说的模型（罕见，但在一次工具结果之后有可能出现）会被重试，若始终为空，则该轮次失败。这个取舍是经过审慎权衡后接受的：一条空的 assistant 消息与提供方缺陷无法区分，且对用户毫无价值。
-- `empty-response-retry` ACP（Agent Client Protocol）快照（一个人工编写的无密钥场景，配有确定性的 1 ms 零抖动重试 overlay，`examples/acp-agent/retry.cordis.yml`）钉住了产品可见的行为：持久的 `llm/retry` 事件、被丢弃的尝试不产生任何 ACP 输出、恢复后的回复，以及一次正常完成的轮次。
+- [`empty-response-retry` headless 快照](../../../../snapshots/session/empty-response-retry/)是配有确定性 1 ms 零抖动重试 overlay 的人工无密钥场景。它钉住持久的 `llm/retry` 事件、被丢弃的尝试不产生输出、恢复后的回复，以及一次正常完成的轮次。

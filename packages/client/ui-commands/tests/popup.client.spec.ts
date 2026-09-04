@@ -1,11 +1,3 @@
-/**
- * PopupSelectController behavior: one options load per
- * open with local search filtering, filtered highlight movement,
- * single-flight select with open-time context, consume-on-success (CAS miss
- * benign), failure-keeps-open retry semantics for both options and onSelect,
- * and binding-identity revocation of late settlements after
- * dismiss/reopen/dispose.
- */
 import { describe, expect, it, vi } from 'vitest'
 import type { SelectOption } from '../src/client/contract.ts'
 import type { PopupSpec, TokenSegment } from '../src/client/popup.ts'

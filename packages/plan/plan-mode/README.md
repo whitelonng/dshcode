@@ -1,51 +1,135 @@
+---
+description: "Plan mode for users and maintainers choosing, configuring, or debugging the per-agent planning feature with deployment guidance, a /plan command, and a user-reviewed exit."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-plan-mode
 
 English | [中文](README.zh.md)
 
-Logged, per-agent plan collaboration state with deployment-owned guidance, direct `/plan [message]` entry and `/plan off` exit commands, and the reviewed `exit_plan_mode` exit. Plan mode is soft guidance; sandbox mode and approval policy enforce restrictions independently and do not read or write plan state.
+## Summary
 
-## Durable state
+`dsh-plan-mode` adds plan mode to the agent: while it is active, the agent explores and designs before executing, guided by instructions the deployment writes, and presents the finished plan for your approval before carrying it out. You enter plan mode with `/plan` (optionally with a message or images) and leave it with `/plan off`; the finished plan arrives as a review where you can approve it or send the agent back to keep planning. Plan mode is guidance, not enforcement: every tool stays available, so sandbox mode and approval prompts remain the way to impose limits. Choose it when the agent should think before acting, and plan mode carries over when a session resumes or forks.
 
-`plan/mode` (`{ active: boolean }`) is a log-only, whole-value-replace `SessionEventMap` member. `foldPlanMode(events)` returns the last logged value or `false`, so resume, fork, and compaction recover plan state directly from the session log. UIs observe committed flips through `session/event`.
+## Table of Contents
 
-`ctx.planMode.set(agent, active)` appends the standalone `plan/mode` event immediately when the agent is idle, because no in-turn pre-step runs before the next prompt. While the agent is running, it holds a pending selection for the next accepted in-turn pre-step. It returns which happened (`committed`/`queued`), a `cancelled` reversal, or a `noop`. `get(agent)` returns `{ active, pending? }`, separating the logged state used to assemble the current step from a user's mid-turn selection. Initial and continuation pre-steps both apply pending selections; a same-step request-recovery retry reuses its frozen assembly and leaves the selection pending for the next pre-step. A changed user selection contributes one plugin-sourced `user/message` notice when the last logged request header described the other state (both commit paths).
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-## Model and human interactions
+-----
 
-While active, `plan:policy` renders the configured `section`. The plugin always registers `exit_plan_mode`, keeping tool schemas stable across the transition; its execute path accepts only active plan mode and leaves it only after an exact user approval through `ctx.userQuestions`.
+<a id="use-this-package"></a>
+## Use this package
 
-The review question declares the `plan-review` presentation intent, naming `Approve` as the label that approves it, so a capable UI presents the plan as a decision instead of a generic question; the answer the tool reads is the same either way. A dismissed review — the user closing the request to speak instead — is reported to the model as such, telling it to stay in plan mode and wait for the message; every other review failure keeps the seam's own message.
+When plan mode is active, the agent works under your instructions and presents its plan for review instead of executing right away. The common path: configure the guidance text, enter plan mode with `/plan`, and review the finished plan when the agent calls `exit_plan_mode`.
 
-When `ctx.commands` is composed, the package registers `/plan [message]` and reserves the exact argument `off` for direct exit. Bare `/plan` selects plan mode; any other non-empty argument selects it first and is then submitted through `agent.steer()`, so it becomes the next step's ordinary logged user message under plan guidance. `/plan off` selects inactive without sending model input; it also cancels a pending entry before plan mode reaches a request. The command declares `input.images`: composer image attachments ride the steered message ahead of its text block. Bare `/plan` with images steers an image-only user message, while `/plan off` with images returns a direct error before any mode change so the composer keeps them.
+### When to choose it
 
-The Web client consumes the plugin-owned `/plan` command; other entry points may drive the same service directly without defining a second mode vocabulary.
+Choose plan mode when the agent should explore and design before executing and you want to approve the plan first. It does not restrict the agent: every tool stays callable, so use sandbox mode and approval prompts when you need enforced limits. Skip it when the agent should act on your requests immediately, without a planning phase.
 
-## Session projection
+### Minimal configuration
 
-When the composition mounts `ctx.sessionProjections` ([`@deepseek-ai/dsh-session-projection`](../../session/session-projection/README.md)), this package registers the `plan` projection unit under an injected child. A `command/run` record named `plan` with recorded `args` starts a candidate target (`off` → inactive, anything else → active); its paired `command/done` retains a successful selection and drops an error; `plan/mode` commits the logged state and clears the retained selection. Every other event returns the same state reference. `view` derives `{ active, pending }`, where `pending` is true only while an unsettled or successful selection differs from the logged state. This remains a pure replay quantity, so host restarts, other tabs, and cold reads recover it from the log alone, and a rejected `/plan off` with images cannot leave a pending exit. The key merges into `SessionProjectionMap` from `src/types.ts` (served to host consumers via `./types` and client aggregates via `./client`); the framework drives the unit and carriers serve the value on the history tail page and the `session/projection` push frame. Compositions without the registry are unaffected.
-
-## Configuration
+The only required configuration is the guidance text the agent follows while planning; anything else you add fails at load.
 
 ```yaml
-- id: plan-mode
-  name: '@deepseek-ai/dsh-plan-mode'
+- name: '@deepseek-ai/dsh-plan-mode'
   config:
     section: |
       You are in plan mode. Explore and design before presenting the complete
       plan through exit_plan_mode.
 ```
 
-`section` is required and non-empty. Unknown keys fail at load. The package does not accept arbitrary named modes, tool filters, sandbox settings, or approval policy.
+| Field | Default | Meaning |
+|---|---|---|
+| `section` | required | Guidance rendered as the `plan:policy` prompt section while plan mode is active |
 
-Design: [plan-specific collaboration state](../../../.agents/notes/implemented/simplification/2026-07-22-plan-specific-collaboration-state.md).
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-plan-mode) is the exhaustive source for every accepted field and its JSDoc.
 
+<a id="model-and-human-interactions"></a>
+### Entering and leaving plan mode
+
+Type `/plan` to enter plan mode, or `/plan <message>` to enter with an instruction — the message becomes your next request under plan guidance. Type `/plan off` to leave plan mode directly; it also cancels a plan-mode entry that has not taken effect yet.
+
+You can attach images to a `/plan` message, and they are included with your instruction. `/plan off` with images is rejected so the images are not lost. The `/plan` command is available wherever slash commands are supported, such as the Web client.
+
+### The reviewed exit
+
+When the agent has a finished plan, it calls `exit_plan_mode` with the plan written as markdown and starting with a heading. You review that exact plan and choose `Approve` to leave plan mode, or `Keep planning` to send the agent back with feedback.
+
+Choosing `Keep planning` (optionally with free-text feedback) sends the agent back to revise the plan; closing the review to type a message instead tells the agent to wait for your next message. If no interactive review is available, `exit_plan_mode` cannot run and you can still leave plan mode with `/plan off`.
+
+### Observing plan state
+
+Interfaces can show whether plan mode is active and whether a mode change you requested is still waiting to take effect. The state is the same in every tab and survives restarts.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design decisions behind the package and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design philosophy
+
+Plan mode is a product package, not a capability seam: there is no swappable backend, so the state, guidance, command, and exit tool live in one place. The durable stance is one log-only whole-value-replace event, never a live mirror, so resume, fork, and compaction recover it by folding the log. Guidance is a soft layer — the package registers one prompt section and one tool, and restrains through text rather than filtering capabilities.
+
+### Durable state and step-boundary appends
+
+The package persists one log-only whole-value event, `plan/mode`, and the last logged value is the state. A mode change appends immediately when no turn is open; during an open turn it stays pending until the next accepted in-turn pre-step — the only append point while an agent runs — and an append failure cannot block the turn. The `set`/`get` service methods and their exact return states live in [`src/index.ts`](src/index.ts) and read the registered `plan` projection; the first dependent access fails explicitly when the registry or key is absent.
+
+### The `/plan` command
+
+The command child activates only when a commands service is composed. It maps bare `/plan` to active, the exact argument `off` to inactive without model input, and any other non-empty argument to active plus the trimmed text submitted through `agent.steer()` as the next step's ordinary logged user message; image attachments ride the steered message, and `/plan off` with images fails before any mode change. Entry points other than the command may drive `ctx.planMode` directly; the exact branch handling is in [`src/index.ts`](src/index.ts).
+
+### The exit tool
+
+`exit_plan_mode` stays registered while plan mode is inactive, so entering or leaving changes only the prompt section, never the request tool catalog. An approved review records a silent pending exit that the next accepted in-turn pre-step appends, keeping plan guidance for the rest of the current tool batch. Without a user-questions channel, or after a service reload while the review is pending, the call fails closed and `/plan off` remains the manual escape.
+
+### Session projection unit
+
+When `ctx.sessionProjections` is composed, the package registers the `plan` unit through optional injection. The unit turns logged `/plan` command runs into a candidate target, commits the logged state on `plan/mode`, and derives `{ active, pending }` for `view`, where `pending` is true only while an unsettled or successful selection differs from the logged state — a pure replay quantity recoverable from the log alone. The key merges into `SessionProjectionMap` from [`src/types.ts`](src/types.ts); the framework drives the unit, and unloading the plugin fiber unregisters the key. Plan-mode reads require this unit and the `turnBoundary` unit, and fail explicitly if the registry or either key is absent.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, the `ctx.planMode` service, `plan:policy` section, `/plan` command, `exit_plan_mode` tool |
+| [`src/types.ts`](src/types.ts) | The `plan` projection-key declaration and `PlanProjection` wire value |
+| [`src/client.ts`](src/client.ts) | Client-namespace re-export of the types outlet |
+| [`src/invariant.ts`](src/invariant.ts) | Invariant companion: validates the `plan/mode` payload shape |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the subsystem semantics to the generated catalogs and the design decision.
+
+- [Plan mode subsystem reference](../../../docs/subsystems/plan.md) — how plan mode behaves, its configuration, and the exit tool's contract.
+- [plan/ package map](../README.md) — the group and its single package.
+- [exit_plan_mode tool catalog entry](../../../docs/tool-catalog.md#deepseek-aidsh-plan-mode) — the exact schema the model receives.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-plan-mode) — every accepted config field and its meaning.
+- [Plan-specific collaboration state](../../../.agents/notes/implemented/simplification/2026-07-22-plan-specific-collaboration-state.md) — the design decision behind plan mode.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Plan policy system prompt
 
 #### What the model sees
 
-While plan mode is active, the model sees the deployment's exact `section` text at prompt order 50; inactive mode contributes no text.
+While plan mode is active, the model sees the deployment's exact `section` text at first-party prompt order 500; inactive mode contributes no text.
 
 ##### Configuration example
 
@@ -59,7 +143,7 @@ Inactive mode adds no tokens; active mode adds the configured section to every r
 
 #### KV Cache effect
 
-The section is stable within plan mode, but entering or leaving changes the system prompt from order 50 onward.
+The section is stable within plan mode, but entering or leaving changes the system prompt from first-party order 500 onward.
 
 ### Human command
 
@@ -91,8 +175,27 @@ Mode transitions do not change the tool catalog; plan arguments and review resul
 
 ## Known Limitations and Deferred Work
 
-- Plan mode guides rather than enforces; deployments that need enforced restrictions must configure sandbox and approval controls independently.
-- A selection made after the turn's final accepted pre-step is lost if the process exits before another accepted in-turn pre-step, so the UI must reapply it.
-- Forked agents inherit logged plan state, while newly spawned agents begin inactive; there is no creation-time plan option.
-- A live child owned by another agent cannot open the `exit_plan_mode` review. The failed call tells the child to include the unresolved decision in its final result; durable fork lineage alone does not prevent a session resumed as a runtime root from opening the review.
-- Only the Web UI has a specialized `plan-review` renderer; another interaction provider may present the same request through its generic option flow.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits describe when plan mode does not behave as you might expect or needs extra care. They are current package constraints, not a roadmap.
+
+- **Guidance, not enforcement** — plan mode restrains through text only; deployments that need enforced restrictions configure sandbox mode and approval policy independently.
+- **Pending selections are process-local** — a selection made after the turn's final accepted pre-step is lost if the process exits before another accepted in-turn pre-step; the UI must reapply it.
+- **No creation-time plan option** — forked agents inherit logged plan state, while newly spawned agents begin inactive.
+- **Live children cannot open the review** — a child owned by another live agent fails the `exit_plan_mode` call and is told to include the unresolved decision in its final result; durable fork lineage alone does not prevent a session resumed as a runtime root from opening the review.
+- **One specialized review renderer** — only the Web UI has a `plan-review` presentation; another interaction provider presents the same request through its generic option flow.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers: open design questions and directions that are not decided. It is explicitly non-authoritative — shipped behavior, limits, and accepted rationale live in the sections above, the package code, and the linked Agent Note.
+
+#### Future: a second collaboration mode
+
+The design note rejected a generic named-mode registry because the product shipped only `plan`; a future collaboration state would establish a shared seam only from two concrete cases, and any extraction must keep `plan/mode`'s log-only fold, the boundary append, and the reviewed exit intact.
+
+</details>

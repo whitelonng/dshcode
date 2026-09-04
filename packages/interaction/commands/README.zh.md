@@ -1,23 +1,118 @@
+---
+description: "面向交互式 UI 的人类斜杠命令注册表：插件拥有的命令直接针对 agent 执行，不产生模型消息；供组合或扩展命令面的用户与维护者阅读。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-commands
 
 [English](README.md) | 中文
 
-由插件负责、供交互式 UI 适配器使用的面向用户命令注册表。[插件命令注册 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-plugin-command-registration.zh.md)定义了其边界与分发约定。
+## 概述
 
-## 服务约定
+`dsh-commands` 让用户能在交互式 Harness UI 中输入 `/command [input]`，并直接针对接收命令的 agent（智能体）执行，不产生模型消息。插件注册命令时提供名称、描述、可选的输入提示与图片接受标志，以及可中止的处理器；交互式适配器按 agent 发现并分派这些命令。挂载在 agent 上下文之下的命令生产插件可以注册精确限定到该 agent 的命令，它会遮蔽同名的全局定义。每次命令执行都会记录在接收 agent 的会话日志中，结果由适配器渲染，绝不进入模型历史。斜杠命令随 `dsh` CLI 与 Web 客户端一起提供。
 
-`ctx.commands.register(definition)` 注册一个小写命令名称、描述、可选的非结构化输入描述符（`hint`，以及声明调用是否可携带 composer 图片附件的 `images` 标志）、可选的 `recordInput` 策略，以及可中止的处理器。`recordInput` 默认为 true；若载荷由命令的权威领域事件持有，该命令会将 `recordInput` 设为 false，让 `command/run` 省略 `args`，避免重复记录输入。每个已注册命令都可供所有已组合的命令适配器使用；与某项部署不兼容的插件不会在此注册。普通上下文中的注册全局生效。在 `agent.ctx` 下挂载的命令生产插件会声明自身的 `commands` 注入，并创建精确限定到该 agent（智能体）的定义；该定义会遮蔽同名的全局定义。这种子级注入形态保留了 agent 作用域，同时不会让核心 agent loop（智能体循环）依赖 UI 服务。同一层中的名称重复会在注册时失败。每个 disposer 都是 Cordis effect 返回的确切 disposer；注册或移除命令时，系统会通知每个 `commands/change` 观察者，使运行中的适配器能够刷新发现结果。观察者失败会写入日志，既不能否决注册表变更，也不能阻止后续观察者运行。
+## 目录
 
-`list(agent)` 在应用作用域遮蔽后，返回按名称排序的不可变描述符（描述符携带 `input.images`，使 composer 能在分发前就拒绝把图片提交给未声明的命令）。`find(agent, name)` 返回相应定义。`execute(agent, line, images, signal)` 使用 `parseCommand()`，且只运行已知命令，返回已结算的 `CommandExecution`（规范化结果加生命周期配对 `commandId`）；语法无效或名称未知时返回 `undefined`。`images` 携带本次提交的 base64 编码 composer 图片（来自 `@deepseek-ai/dsh-attachment/types` 的 `EncodedImageAttachment`）；执行器负责声明的强制执行：把图片发给未声明的命令、`attachments` 存储缺失、或批量超出限制，都会在处理器运行前以错误结果结算，被拒绝的批量不会发布任何持久化对象。通过准入的批量经 `admitEncodedImages` 提交，并以冻结的有序 `ImageBlock` 数组挂在 `invocation.attachments` 上交给处理器；处理器负责它们的模型可见用途，当其语法无法使用这些图片时返回错误，使分发方 composer 保留原件。已解析命令的生命周期会以 log-only 事件对的形式记录在接收 agent 的会话日志中：`command/run`（进入处理器前记录，携带新生成的 `commandId`、解析器的结构化名称、发起方 `CommandSource`，以及 `args`（`recordInput` 为 false 时省略））与 `command/done`（结算时记录，携带结果类型与原样文本；成功结果还可通过 `sourceEventSeq` 指向更早的一条非命令权威领域事件；处理器抛出或被中止时以 `kind: 'error'` 结算）。未通过准入的输入不记录任何事件。两者都直接独立追加到接收 agent 的会话中：没有轮次包裹它们，持久化机制会在常规检查点和销毁期间排空这些事件。
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
-`parseCommand()` 识别位于第 0 字节的斜杠、由小写字母、数字、`_` 或 `-` 构成的名称，以及名称后紧接输入末尾或空白的形式。它将名称后的每个字节作为 `rawInput` 返回，其中包括分隔空白；消费方负责各命令专用的语法，只能执行该语法允许的规范化。
+-----
 
-处理器返回 `success` 或 `error`，并可附带 UI 文本。若更丰富的呈现由一条更早的领域事件持有，成功的处理器还可返回 `sourceEventSeq`；生命周期不变量要求该引用指向同一会话中更早的一条非命令事件。适配器直接渲染结果，结果绝不进入模型历史。注册表绝不会隐式地把 `rawInput` 提交给 agent；命令生产方可以通过接收命令的 `Agent` 显式安排模型可见工作，此时该生产方负责由此产生的消息约定。注册表会同时等待处理器完成和所提供的中止信号，以先发生者为准，但不响应中止的处理器可能在调用方停止等待后继续产生自身的外部副作用。
+<a id="use-this-package"></a>
+## 使用本包
 
-## 组合
+当交互式 UI 希望用户用斜杠命令而非模型提示词驱动 agent 侧行为时，组合此服务。无 UI 的演示主干和 ACP（Agent Client Protocol）自动化不提供命令适配器，也不需要它。
 
-随产品交付的 `dsh` 基础组合会挂载此服务，Web 客户端通过它分派命令。无 UI 的演示主干和 ACP（Agent Client Protocol）自动化不提供命令适配器。自定义交互式组合与命令生产方会显式挂载 `@deepseek-ai/dsh-commands`。
+### 注册命令
 
+插件用 `ctx.commands.register()` 注册命令：小写名称、在发现界面中展示的描述、可选的 `input` 提示，以及针对接收 agent 运行的处理器。
+
+```text
+ctx.commands.register({
+  name: 'plan',
+  description: 'Enter plan mode',
+  input: { hint: '<message>' },
+  handler: ({ agent, rawInput }) => {
+    // Runs directly against the agent; no model message is created.
+    return { kind: 'success', text: 'plan mode selected' }
+  },
+})
+```
+
+处理器返回 `success` 或 `error`，并可附带由适配器渲染的 UI 文本。`recordInput` 默认为 true；若载荷由命令自己的权威领域事件持有，命令会将 `recordInput` 设为 false，避免会话日志重复记录该输入。同一作用域内重复注册同名命令会抛出异常。
+
+### 命令语法
+
+命令行的第 0 字节必须是斜杠，随后是小写名称（可含字母、数字、`_` 或 `-`），再之后是输入末尾或空白。名称之后的每个字节——包括分隔空白——都是该命令的 `rawInput`，命令自己拥有其专属语法。不符合命令语法、或名称未知的行会被适配器拒绝，而不是变成模型提示词。
+
+### 限定到 agent 的命令
+
+普通注册全局生效。挂载在 agent 自身上下文之下的命令生产插件会声明 `commands` 注入，并注册精确限定到该 agent 的命令；该定义只对这个 agent 遮蔽同名的全局定义。
+
+### 图片附件
+
+命令可以声明 `input.images` 以接受 composer 图片附件。执行器负责声明的强制执行：把图片发给未声明的命令、附件存储缺失或批量超出限制，都会在处理器运行前以错误结果结算。通过准入的图片以冻结的有序 `ImageBlock` 数组挂在 `invocation.attachments` 上交给处理器，其模型可见用途由处理器负责——注册表本身绝不定时调度它们。
+
+### 从适配器分派
+
+交互式适配器调用 `execute(agent, line, images, signal)`，传入确切的接收 agent、完整命令行与本次提交的图片。它返回已结算的 `CommandExecution`——规范化结果加生命周期配对 `commandId`——语法无效或名称未知时返回 `undefined`。`list(agent)` 与 `find(agent, name)` 在应用 agent 作用域遮蔽后服务发现。
+
+### 取消
+
+调用方的中止信号会让注册表停止等待处理器；无视信号的处理器可能在调用方停止等待后继续产生自身的外部副作用。被取消或抛异常的处理器在日志中以 `command/done` 错误结算。
+
+-----
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>实现细节——点击展开</summary>
+
+可观察行为已在[使用本包](#use-this-package)中说明；本节解释注册表的构建方式与其约定的归属。
+
+### 源码地图
+
+| 文件 | 职责 |
+|---|---|
+| [`src/index.ts`](src/index.ts) | `CommandRuntime` 服务：注册、作用域、分派、生命周期事件 |
+| [`src/types.ts`](src/types.ts) | 命令定义、描述符、执行与结果类型 |
+| [`src/brand.ts`](src/brand.ts) | 生命周期配对 id 的 `CommandId` brand |
+| [`src/invariant.ts`](src/invariant.ts) | 不变式伴生插件：按会话日志配对 `command/run` 与 `command/done` |
+
+### 生命周期事件
+
+`execute()` 会生成一个 `commandId`，在处理器运行前追加 `command/run`，并在结算时追加携带结果类型与原样文本的 `command/done`；确切载荷字段见 [`src/index.ts`](src/index.ts)。成功结果可以通过 `sourceEventSeq` 指向更早的一条非命令权威领域事件；处理器抛出或被中止时以 `kind: 'error'` 结算。两个事件都是直接独立追加的仅写日志事件：没有轮次包裹它们，持久化机制会在常规检查点和销毁期间排空这些事件。未通过准入的输入（语法无效或名称未知）不记录任何事件。
+
+### 作用域
+
+注册表通过 `ScopedLayers` 维护全局层与按 agent 的作用域层，并按 agent 合并视图。子级注入形态——挂载在 `agent.ctx` 之下的命令生产插件声明自身的 `commands` 注入——保留了 agent 作用域，同时不会让核心 agent loop 依赖 UI 服务。同一层内的名称重复会在注册时失败；注册或移除命令时，系统会通知每个 `commands/change` 观察者，使运行中的适配器能够刷新发现结果。观察者失败会写入日志，既不能否决注册表变更，也不能阻止后续观察者运行。
+
+### 图片准入
+
+图片强制执行发生在执行器而非 composer 中：通过准入的批量经 `admitEncodedImages` 提交给 `attachments` 存储，被拒绝的批量不发布任何持久化对象；取消会在处理器运行前被处理，因此重试的调用方绝不会重复状态。无法使用图片的处理器会返回错误，使分发方 composer 保留原件。
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 进一步探索
+
+当包级约定不够用时阅读以下页面。它们从共享命令词汇逐步进入设计证据与相邻表面。
+
+- [命令子系统参考](../../../docs/subsystems/commands.zh.md)——注册表语义、输入元数据与 `ctx.commands` 的 cordis 接口面。
+- [命令注册 Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-plugin-command-registration.zh.md)——此服务背后的边界与分发约定。
+- [交互组映射](../README.zh.md)——相邻的审批、权限与问答包。
+- [Plan mode 包](../../plan/plan-mode/README.zh.md)——一个驱动模型可见工作的随附命令生产方。
+
+-----
+
+<a id="model-experience"></a>
 ## 模型体验
 
 ### 直接面向用户的命令
@@ -34,7 +129,22 @@
 
 注册表元数据、命令输入和直接输出绝不会进入模型请求，也不会影响其缓存。发生变更的领域负责之后产生的所有缓存影响。
 
-## 已知限制与暂缓事项
+## 已知限制与延期工作
+
+<a id="known-limitations-and-deferred-work"></a>
+
+
+这些限制说明注册表不提供什么。它们是当前包约束，不是 UI 积压事项。
 
 - **仅支持非结构化文本输入**：表单、补全 schema 和类型化参数仍由各命令自行解析。
 - **副作用采用协作式取消**：中止后，分发会停止等待；处理器必须遵循信号，才能停止已经进入外部系统的工作。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+无。
+
+</details>

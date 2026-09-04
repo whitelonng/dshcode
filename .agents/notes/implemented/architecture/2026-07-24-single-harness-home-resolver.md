@@ -23,7 +23,7 @@ explicit configured path  >  $DSH_HOME  >  ~/.dsh
 
 An empty or whitespace-only `$DSH_HOME` is treated as unset; otherwise `resolve('')` would silently place the home at the current working directory. The harness keeps all user data under one root; there is no XDG config/data/cache split. `dshHomePath(...segments)` joins deployment-owned children onto that root, and `dsh-app-boot` exposes it to Loader `!!js` config expressions before mounting entries, so shipped compositions derive `sessions` and `storages` without copying the resolver. `dshHomeDisplay()` names a resolved root symbolically for user-facing paths — `~/.dsh` for the default home, `$DSH_HOME` for any configured home — so the user-global `AGENTS.md` label never leaks an absolute machine path. It replaces agent-instructions's bespoke default-vs-`$DSH_HOME` check.
 
-`@deepseek-ai/dsh-home` is deleted. Its three importers (`dsh-tool-bash`, `dsh-skill-filesystem`, `dsh-agent-spine-demo`) import `resolveDshHome` from `dsh-home-paths`.
+`@deepseek-ai/dsh-home` is deleted. Home-owning providers and boot packages import `resolveDshHome` from `dsh-home-paths`; composition bundles contain only the resolved configuration rows.
 
 `dsh-telemetry` and its separate home policy are absent under the [SDK project toolchain removal](../simplification/2026-08-11-remove-sdk-project-toolchain.md), leaving this resolver as the sole home policy.
 

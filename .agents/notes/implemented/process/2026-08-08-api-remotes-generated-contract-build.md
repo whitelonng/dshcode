@@ -43,7 +43,7 @@ packages/api/remotes/
       └─ index.ts
 ~~~
 
-The package-root `tsconfig.json` is a solution that only references the two concrete projects; it enters neither aggregate nor any direct consumer's dependency graph. The root Host aggregate and `host/apiproxy` reference `api/remotes/tsconfig.host.json`, while the root Client aggregate and `client/ui-goal` reference `api/remotes/tsconfig.client.json`. `ui-goal` itself remains an ordinary single Client project. The workspace constraints gate walks the reachable Project Reference graph and rejects any face-declared project that references a split package's solution root or opposite leaf; targets with only `tsconfig.json` remain valid from either face.
+The package-root `tsconfig.json` is a solution that only references the two concrete projects; it enters neither aggregate nor any direct consumer's dependency graph. The root Host aggregate references `api/remotes/tsconfig.host.json`, while the root Client aggregate and direct Client consumers reference `api/remotes/tsconfig.client.json`. `session-log-export` uses the same solution-and-leaves structure to keep its Node archive implementation out of its browser controller. The workspace constraints gate walks the reachable Project Reference graph and rejects any face-declared project that references a split package's solution root or opposite leaf; targets with only `tsconfig.json` remain valid from either face.
 
 The two projects use disjoint `files` and separate `.tsbuildinfo` files, so they can share `lib/types` without emitting any source file twice. If both sides later need a shared implementation, move that implementation into a neutral package instead of giving the same source to two emitting projects.
 

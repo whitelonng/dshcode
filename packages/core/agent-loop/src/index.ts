@@ -8,6 +8,8 @@
 import { Context, FiberState, Service } from '@deepseek-ai/cordis'
 import { randomUUID } from 'node:crypto'
 import z from '@deepseek-ai/schemastery'
+import { z as zod } from 'zod'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import { emitAgentEvent } from '@deepseek-ai/dsh-agent'
 import type {
   Agent,
@@ -18,13 +20,16 @@ import type {
   CreateAgentOptions,
   ResumeAgentOptions,
   SessionStartSource,
+  TurnBoundaryProjection,
 } from '@deepseek-ai/dsh-agent'
-import { errorChain } from '@deepseek-ai/dsh-llm'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
-import { SessionId, SessionPreparation } from '@deepseek-ai/dsh-session'
-import type { Session, SessionHeader } from '@deepseek-ai/dsh-session'
+import { errorChain, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-settings'
+import { SessionPreparation, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { Session, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-session-projection'
+import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { ReactLoopAgent } from './agent.ts'
 import { DEFAULT_MAX_PARALLEL_TOOL_CALLS } from './constants.ts'
@@ -35,6 +40,57 @@ const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
   FiberState.DISPOSED,
   FiberState.FAILED,
 ])
+
+const turnBoundaryProjectionSchema: zod.ZodType<TurnBoundaryProjection> = zod.object({
+  openTurnStartSeq: zod.number().int().nonnegative().transform(SessionSeq).nullable(),
+  lastStepStartSeq: zod.number().int().nonnegative().transform(SessionSeq).nullable(),
+  lastStepBoundary: zod.object({
+    kind: zod.union([zod.literal('start'), zod.literal('end')]),
+    seq: zod.number().int().nonnegative().transform(SessionSeq),
+  }).nullable(),
+  lastTurn: zod.number().int().nonnegative(),
+})
+
+/** Host projection of agent turn and step boundaries. */
+export const turnBoundaryProjectionDefinition = {
+  key: 'turnBoundary',
+  stateVersion: 2,
+  stateSchema: turnBoundaryProjectionSchema,
+  init: () => ({
+    openTurnStartSeq: null,
+    lastStepStartSeq: null,
+    lastStepBoundary: null,
+    lastTurn: 0,
+  }),
+  apply: (state, event) => {
+    switch (event.type) {
+      case 'turn/start':
+        return {
+          ...state,
+          openTurnStartSeq: event.seq,
+          lastTurn: event.data.turn,
+        }
+      case 'turn/end':
+        return {
+          ...state,
+          openTurnStartSeq: null,
+        }
+      case 'step/start':
+        return {
+          ...state,
+          lastStepStartSeq: event.seq,
+          lastStepBoundary: { kind: 'start', seq: event.seq },
+        }
+      case 'step/end':
+        return {
+          ...state,
+          lastStepBoundary: { kind: 'end', seq: event.seq },
+        }
+      default:
+        return state
+    }
+  },
+} satisfies ProjectionDefinition<'turnBoundary', TurnBoundaryProjection>
 
 /** Factory-level ownership: live agent teardowns plus config startup work. */
 class FactoryOwnership {
@@ -234,7 +290,7 @@ function applyLauncherIdentities(
 }
 
 /** Settings namespace carrying the tool-call parallelism a user owns. */
-export const AGENT_LOOP_SETTINGS_NAMESPACE = settingsNamespace('agent-loop')
+export const AGENT_LOOP_SETTINGS_NAMESPACE = 'agent-loop'
 
 /**
  * The agent-loop fields a user owns. Deliberately a strict subset of
@@ -294,7 +350,7 @@ function validateConfiguredAgents(agents: Config['agents']): void {
 
 /** Concrete agent factory and driver service. */
 export class AgentLoop extends Service implements AgentFactory {
-  static inject = ['agents', 'sessions', 'llm', 'tools', 'systemPrompt']
+  static inject = ['agents', 'sessions', 'llm', 'tools', 'systemPrompt', 'sessionProjections']
 
   /** Runtime schema for declarative agents. */
   static Config = z.object({
@@ -304,6 +360,7 @@ export class AgentLoop extends Service implements AgentFactory {
       sessionId: z.string().min(1),
       provider: z.string(),
       model: z.string(),
+      reasoningEffort: z.string().min(1) as z<ReturnType<typeof ReasoningEffortId>>,
       maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
       cwd: z.string(),
       resumeSessionId: z.string(),
@@ -318,6 +375,7 @@ export class AgentLoop extends Service implements AgentFactory {
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'agentLoop')
+
     const entry: AgentLoopSettings = {
       maxParallelToolCalls: resolveMaxParallelToolCalls(config.maxParallelToolCalls),
     }
@@ -332,18 +390,23 @@ export class AgentLoop extends Service implements AgentFactory {
         return source().maxParallelToolCalls
       },
     }
-    installSettingsSection(ctx, AGENT_LOOP_SETTINGS_NAMESPACE, AGENT_LOOP_SETTINGS_SCHEMA, entry, {
-      // The schema admits any integer above zero; `resolveMaxParallelToolCalls`
-      // owns the whole rule, so refusing here keeps the running scheduler on
-      // its last good cap instead of failing at the next tool group.
-      validate: value => void resolveMaxParallelToolCalls(value.maxParallelToolCalls),
-      setSource: (current) => {
-        source = current
-      },
-      // Nothing is derived from the cap: the getter above is the only reader.
-      onChange: () => {},
+    ctx.inject(['settings'], (settingsCtx) => {
+      settingsCtx.settings.installSection(ctx, AGENT_LOOP_SETTINGS_NAMESPACE, AGENT_LOOP_SETTINGS_SCHEMA, entry, {
+        // The schema admits any integer above zero; `resolveMaxParallelToolCalls`
+        // owns the whole rule, so refusing here keeps the running scheduler on
+        // its last good cap instead of failing at the next tool group.
+        validate: value => void resolveMaxParallelToolCalls(value.maxParallelToolCalls),
+        setSource: (current) => {
+          source = current
+        },
+        // Nothing is derived from the cap: the getter above is the only reader.
+        onChange: () => {},
+      })
     })
     validateConfiguredAgents(this.config.agents)
+    // Register only after every config validation above has passed, so a
+    // rejected constructor leaves no projection unit behind.
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
     this.ownership = new FactoryOwnership(ctx.fiber)
     this.runtime = { ctx }
     ctx.effect(() => () => this.ownership.dispose(), 'agentLoop.transactions()')
@@ -355,7 +418,7 @@ export class AgentLoop extends Service implements AgentFactory {
     for (const { id, sessionId, cwd, resumeSessionId, ...options } of this.config.agents) {
       const meta = cwd === undefined ? {} : { cwd }
       if (resumeSessionId === undefined || resumeSessionId === '') {
-        const configuredId = sessionId ?? SessionId(`${id}-session-${randomUUID()}`)
+        const configuredId = sessionId ?? brandString<SessionId>(`${id}-session-${randomUUID()}`)
         const persistence = sessionId === undefined ? undefined : ctx.get('sessionPersistence')
         if (persistence === undefined) {
           this.create(configuredId, options, meta)
@@ -607,6 +670,7 @@ export class AgentLoop extends Service implements AgentFactory {
     const preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(options.sessionId, {
       ...options.seed === undefined ? {} : { seed: options.seed },
       ...options.meta === undefined ? {} : { meta: options.meta },
+      ...options.inheritedEventCount === undefined ? {} : { inheritedEventCount: options.inheritedEventCount },
     }))
     const published = this.setupAndPublish(
       ownerCtx,

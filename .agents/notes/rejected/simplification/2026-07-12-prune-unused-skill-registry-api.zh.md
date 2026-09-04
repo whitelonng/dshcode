@@ -21,7 +21,7 @@ skill（技能）服务的嵌入式运行时子系统中，`ctx.skills.register(
 ## 验收标准
 
 - skill 收集只有一条提供方驱动的路径，已完成缓存仅以 cwd 为键，revision epoch 仅用于使进行中的发现操作失效；保留的 skill 字段要么有生产读取方，要么有记录在案的有意扩展约定。
-- agent 作用域的系统提示词段、变量、工具提供方、工具守卫，以及原生模式和 Code Mode 下的 structured-output 提交行为保持不变。
+- agent 作用域的系统提示词段、变量、工具提供方、工具守卫，以及原生模式和 PTC mode 下的 structured-output 提交行为保持不变。
 - 类型检查、覆盖率、快照、doc-sync（文档同步门禁）、module-graph 校验、构建与 hygiene 全部通过。
 
 ## 风险

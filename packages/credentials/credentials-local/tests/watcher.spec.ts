@@ -25,7 +25,6 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   }
 })
 
-/** Credential documents are seeded owner-only, exactly as the provider creates them. */
 function writeCredentials(file: string, text: string): Promise<void> {
   return writeFile(file, text, { mode: 0o600 })
 }

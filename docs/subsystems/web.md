@@ -124,13 +124,19 @@ A provider's `available(): boolean` is a cheap LOCAL check (credential presence,
 
 Selection never depends on registration, config, or HMR order: a capability has an explicit provider id (config `searchProvider`/`fetchProvider`, or the matching env var feeding the same field), or auto-selects when exactly one usable provider is registered; multiple usable providers with no configured id is `WEB_PROVIDER_AMBIGUOUS`, not first-wins.
 
+## Fetch network policy
+
+The shipped Cordis, Code, and Standard presets expose `web_fetch` in every sandbox and approval mode without per-call confirmation. File sandbox presets do not govern Web network access. A deployment that needs confirmation must add a `tools/pre-execute` policy or disable fetch.
+
+The HTTP provider resolves each actual request, rejects non-public answers including private IPv4 reached through the active DNS64 prefix, pins the validated address set, and repeats enforcement for each same-origin redirect. A cross-origin redirect requires a new tool call and fresh public-address validation. These checks prevent SSRF access to non-public destinations but do not stop a model from sending data to a public URL.
+
 ## Errors
 
 `WebError extends HarnessError` ([core.md](core.md) error taxonomy) with a `code: string` (open, like every other seam's error — `LlmError`, `SubagentError`), not a closed union: a provider may raise its own codes without editing `dsh-web`, and consumers must tolerate an unknown code. The codes split by owner. Seam-neutral codes are raised by the shared `WebRuntime` contract: `WEB_PROVIDER_UNAVAILABLE`, `WEB_PROVIDER_CONFIGURED_MISSING`, `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`, `WEB_PROVIDER_AMBIGUOUS`, `WEB_DUPLICATE_PROVIDER` (a registration-time programming error, the analogue of `LlmRuntime`'s `DUPLICATE_ADAPTER`), `WEB_ABORTED`, and `WEB_PROVIDER_ERROR` (the catch-all for a provider's own failure surfaced through the seam, including network/transport failure — DNS, connection refused, TLS). Fetch-transport codes are owned by the `dsh-web-fetch-http` implementation and a different fetch backend need not raise them: `WEB_INVALID_URL`, `WEB_BLOCKED_URL`, `WEB_REDIRECT_BLOCKED`, `WEB_FETCH_TOO_LARGE`, `WEB_FETCH_TIMEOUT`, `WEB_UNSUPPORTED_CONTENT_TYPE`.
 
 ## The service
 
-`WebRuntime` registers search and fetch providers, rejects duplicate ids with `WEB_DUPLICATE_PROVIDER`, and resolves providers at execution time with structured selection errors. The local fetch backend accepts only HTTP(S), rejects credentials, caps redirects, bytes, characters, and time, revalidates every same-origin redirect hop, and decodes the body; the tool owns presentation. The local backend does not block private-network targets; do not enable `web_fetch` where it can reach sensitive internal ones.
+`WebRuntime` registers search and fetch providers, rejects duplicate ids with `WEB_DUPLICATE_PROVIDER`, and resolves providers at execution time with structured selection errors. The local fetch backend accepts only HTTP(S), rejects credentials, resolves each hostname once, rejects any answer set containing a non-public IPv4 or IPv6 destination or an active-prefix NAT64 translation to non-public IPv4, pins the request connection to the validated addresses, repeats those checks for every same-origin redirect hop, caps redirects, bytes, characters, and time, and decodes the body; the tool owns presentation.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

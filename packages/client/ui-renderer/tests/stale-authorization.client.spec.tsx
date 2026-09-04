@@ -9,7 +9,9 @@ import type { ReactNode } from 'react'
 import {
   StaleAuthorizationError, type SlotEntryDef, type SlotSpec, type StoredEntry,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import type { RenderOpts, SlotRendererHost } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {
+  RenderOpts, SlotRendererHost, SlotScopeAdapter, StandardSourceBinding,
+} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { createSlotRenderer } from '../src/client/scoped-slots.tsx'
 
 type RenderSlotFn = (key: string, owner: object, opts?: RenderOpts) => ReactNode
@@ -21,7 +23,20 @@ function makeHost() {
   const versions = new Map<string, number>()
   const subs = new Map<string, Set<() => void>>()
   const live = new Set<StoredEntry>()
-  const absentInfo = { sessionId: undefined, hooks: {}, props: {} }
+  const absentBinding: StandardSourceBinding = {
+    key: undefined,
+    hooks: {},
+    keyedHooks: {},
+    props: {},
+  }
+  const bindingSource = {
+    getSnapshot: () => absentBinding,
+    subscribe: () => () => {},
+  }
+  const sessionAdapter: SlotScopeAdapter = {
+    current: bindingSource,
+    resolve: () => undefined,
+  }
   const bump = (key: string) => {
     versions.set(key, (versions.get(key) ?? 0) + 1)
     for (const fn of [...(subs.get(key) ?? [])]) fn()
@@ -42,13 +57,9 @@ function makeHost() {
     specOf: () => ({ kind: 'single', scope: 'root' }),
     isLive: entry => live.has(entry),
     storeOf: () => undefined,
-    sessions: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-      provideInfo: { getSnapshot: () => absentInfo, subscribe: () => () => {} },
-    },
-    workspaces: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-    },
+    root: bindingSource,
+    scopeRevision: { getSnapshot: () => 0, subscribe: () => () => {} },
+    scope: () => sessionAdapter,
   }
   return {
     host,

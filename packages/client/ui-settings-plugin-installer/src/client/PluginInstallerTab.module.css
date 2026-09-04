@@ -20,7 +20,7 @@
   min-width: 0;
   height: 36px;
   padding: 0 12px;
-  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 12%));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 12%));
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
   color: var(--dsw-alias-label-primary, #0f1115);
@@ -66,7 +66,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 12px 14px;
-  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
 }
@@ -144,7 +144,7 @@
 
 .notice {
   max-width: 620px;
-  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
   border-radius: 10px;
   padding: 14px 16px;
   background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
@@ -180,13 +180,14 @@
   gap: 6px;
   margin-top: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
   border-radius: 8px;
   background: var(--dsw-alias-bg-danger, rgb(220 38 38 / 8%));
 }
 
 .badge {
   border-radius: 999px;
+  corner-shape: round;
   padding: 1px 8px;
   background: var(--dsw-alias-state-error-primary, #dc2626);
   color: var(--dsw-alias-label-on-danger, #ffffff);
@@ -214,6 +215,7 @@
 .progressTrack {
   height: 6px;
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 6%));
   overflow: hidden;
 }
@@ -221,6 +223,7 @@
 .progressBar {
   height: 100%;
   border-radius: 999px;
+  corner-shape: round;
   background: var(--dsw-alias-state-business-primary, #3964fe);
   transition: width 200ms var(--ds-ease-in-out, ease-in-out);
 }
@@ -280,6 +283,7 @@
 
 .count {
   border-radius: 999px;
+  corner-shape: round;
   padding: 0 8px;
   background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
   color: var(--dsw-alias-label-tertiary, #81858c);
@@ -302,7 +306,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 12%));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 12%));
   border-radius: 8px;
   padding: 0 10px;
   background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
@@ -347,6 +351,7 @@
   flex: none;
   border: 0;
   border-radius: 999px;
+  corner-shape: round;
   padding: 0;
   background: var(--dsw-alias-border-l1, rgb(0 0 0 / 20%));
   cursor: pointer;
@@ -368,6 +373,7 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-bg-layer-1, #ffffff);
   box-shadow: var(--dsw-shadow-lv1, rgb(0 0 0 / 12%) 0 1px 3px);
 }

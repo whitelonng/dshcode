@@ -8,7 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
 // ---- Mock MCP SDK ----
@@ -115,8 +115,8 @@ function listing(...names: string[]): { tools: { name: string; inputSchema: { ty
 }
 
 let callSeq = 0
-function nextCallId(): CallId {
-  return CallId(`reconnect-${++callSeq}`)
+function nextCallId(): ToolCallId {
+  return ToolCallId(`reconnect-${++callSeq}`)
 }
 
 // ---- Tests ----

@@ -24,8 +24,25 @@
  */
 
 import { z } from 'zod'
-import { isTokenDelta } from '@deepseek-ai/dsh-llm/message'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm/types'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
+
+/* jscpd:ignore-start -- Session Stats owns its whole-log timing projection independently. */
+
+/** Whether a stream chunk carries a non-empty first-token delta. */
+function isTokenDelta(chunk: StreamChunk): boolean {
+  switch (chunk.type) {
+    case 'text-delta':
+    case 'reasoning-delta':
+      return chunk.text !== ''
+    case 'tool-call-delta':
+      return chunk.argumentsDelta !== '' || chunk.name !== undefined
+    default:
+      return false
+  }
+}
+
+/* jscpd:ignore-end */
 
 /** Accumulated whole-log figures (the view is exactly these totals). */
 interface SessionStatsTotals {

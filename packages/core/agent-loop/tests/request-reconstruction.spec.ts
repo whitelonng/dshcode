@@ -15,6 +15,7 @@ import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
 
 async function harness(adapter: MockAdapter, persona = 'stable base') {
@@ -28,6 +29,7 @@ async function harnessRoutes(
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt, { persona })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -92,7 +94,7 @@ describe('request stability across the loop', () => {
       expect(Object.isFrozen(request.messages)).toBe(true)
     }
     // One anchoring header snapshot; no further header events (nothing changed).
-    const headerEvents = agent.session.events.filter(e => e.type === 'request/header')
+    const headerEvents = agent.session.snapshotEvents().filter(e => e.type === 'request/header')
     expect(headerEvents).toHaveLength(1)
     expect(headerEvents[0]?.type === 'request/header' && headerEvents[0].data.reason).toBe('initial')
   })
@@ -109,6 +111,91 @@ describe('request stability across the loop', () => {
 
     expect(adapter.requests).toHaveLength(2)
     expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
+    expect(agent.session.snapshotEvents().flatMap(event =>
+      event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial'])
+  })
+
+  it('starts a new request series only when the admitted step explicitly asks for one', async () => {
+    const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    ctx.on('agent/pre-step', async ({ turn }, next) => {
+      const decision = await next()
+      return decision.kind === 'enter' && turn === 2
+        ? { ...decision, startsRequestSeries: true }
+        : decision
+    })
+
+    send(agent, 'first')
+    await waitForIdle(ctx, agent)
+    send(agent, 'second series')
+    await waitForIdle(ctx, agent)
+
+    expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
+    expect(agent.session.snapshotEvents().flatMap(event =>
+      event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial', 'series'])
+  })
+
+  it('retains the explicit series boundary when that request also changes its header', async () => {
+    const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    ctx.on('agent/pre-step', async ({ turn }, next) => {
+      const decision = await next()
+      return decision.kind === 'enter' && turn === 2
+        ? { ...decision, startsRequestSeries: true }
+        : decision
+    })
+    ctx.on('agent/request', async ({ turn }, next) => {
+      const config = await next()
+      return turn === 2 ? { ...config, maxTokens: 1_024 } : config
+    })
+
+    send(agent, 'first')
+    await waitForIdle(ctx, agent)
+    send(agent, 'second series')
+    await waitForIdle(ctx, agent)
+
+    expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
+    expect(agent.session.snapshotEvents().flatMap(event => event.type === 'request/header'
+      ? [{ reason: event.data.reason, startsSeries: event.data.startsSeries }]
+      : [])).toEqual([
+      { reason: 'initial', startsSeries: undefined },
+      { reason: 'change', startsSeries: true },
+    ])
+  })
+
+  it('keeps the series declaration when an outer listener rebuilds the enter decision', async () => {
+    const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    // Context-appending wrapper in the tool-cordis / session-reference shape:
+    // it rebuilds the downstream decision, so it must spread it to keep fields
+    // it does not own — a bare `{ kind: 'enter', messages }` drops the series.
+    ctx.on('agent/pre-step', async (_payload, next) => {
+      const decision = await next()
+      if (decision.kind === 'reject') return decision
+      const appended = createUserMessage({
+        content: [{ type: 'text', text: 'appended reference context' }],
+        source: { kind: 'plugin', plugin: 'outer-wrapper' },
+      })
+      return { ...decision, messages: [...decision.messages, appended] }
+    }, { prepend: true })
+    ctx.on('agent/pre-step', async ({ turn }, next) => {
+      const decision = await next()
+      return decision.kind === 'enter' && turn === 2
+        ? { ...decision, startsRequestSeries: true }
+        : decision
+    })
+
+    send(agent, 'first')
+    await waitForIdle(ctx, agent)
+    send(agent, 'second series')
+    await waitForIdle(ctx, agent)
+
+    expectPrefixExtension(adapter.requests[0]!, adapter.requests[1]!)
+    expect(agent.session.snapshotEvents().flatMap(event =>
+      event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial', 'series'])
   })
 
   it('logs adapter defaults, supports per-turn effort changes, and restores the effective value', async () => {
@@ -136,7 +223,7 @@ describe('request stability across the loop', () => {
       ReasoningEffortId('high'),
       ReasoningEffortId('max'),
     ])
-    const headers = agent.session.events.filter(event => event.type === 'request/header')
+    const headers = agent.session.snapshotEvents().filter(event => event.type === 'request/header')
     expect(headers.map(event => event.data.header.config.reasoningEffort)).toEqual([
       ReasoningEffortId('high'),
       ReasoningEffortId('max'),
@@ -155,7 +242,7 @@ describe('request stability across the loop', () => {
       const resumedCtx = await harness(resumedAdapter)
       const resumedHandle = await resumedCtx.agents.create({
         sessionId: SessionId(`effort-${model}`),
-        seed: structuredClone(agent.session.events),
+        seed: structuredClone(agent.session.snapshotEvents()),
         agentOptions: { provider: 'mock', model },
       })
       send(resumedHandle.agent, 'resumed')
@@ -163,7 +250,7 @@ describe('request stability across the loop', () => {
 
       expect(resumedAdapter.requests[0]?.model).toBe(model)
       expect(resumedAdapter.requests[0]?.reasoningEffort).toBe(effort)
-      const resumedHeaders = resumedHandle.agent.session.events.filter(event => event.type === 'request/header')
+      const resumedHeaders = resumedHandle.agent.session.snapshotEvents().filter(event => event.type === 'request/header')
       expect(resumedHeaders.at(-1)?.data.header.config.reasoningEffort).toBe(effort)
       expect(resumedHeaders.at(-1)?.data.reason).toBe('resume')
     }
@@ -181,7 +268,7 @@ describe('request stability across the loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(adapter.requests[0]?.maxTokens).toBe(256_000)
-    const header = agent.session.events.find(event => event.type === 'request/header')
+    const header = agent.session.snapshotEvents().find(event => event.type === 'request/header')
     expect(header?.type === 'request/header' && header.data.header.config.maxTokens).toBe(256_000)
     expect(header?.type === 'request/header' && header.data.header.adapterDefaults)
       .toEqual({ maxTokens: true })
@@ -212,7 +299,7 @@ describe('request stability across the loop', () => {
 
     expect(deepseek.requests[0]?.maxTokens).toBe(256_000)
     expect(other.requests[0]?.maxTokens).toBe(8_192)
-    const headers = agent.session.events.filter(event => event.type === 'request/header')
+    const headers = agent.session.snapshotEvents().filter(event => event.type === 'request/header')
     expect(headers.map(event => event.data.header.config.maxTokens)).toEqual([256_000, 8_192])
     expect(headers.map(event => event.data.header.adapterDefaults)).toEqual([
       { maxTokens: true },
@@ -246,7 +333,7 @@ describe('request stability across the loop', () => {
 
     expect(deepseek.requests[0]?.maxTokens).toBe(4_096)
     expect(other.requests[0]?.maxTokens).toBe(4_096)
-    const headers = agent.session.events.filter(event => event.type === 'request/header')
+    const headers = agent.session.snapshotEvents().filter(event => event.type === 'request/header')
     expect(headers.map(event => event.data.header.config.maxTokens)).toEqual([4_096, 4_096])
     expect(headers.map(event => event.data.header.adapterDefaults)).toEqual([undefined, undefined])
   })
@@ -255,6 +342,7 @@ describe('request stability across the loop', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt, { persona: 'stable base' })
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -297,7 +385,7 @@ describe('request stability across the loop', () => {
       ReasoningEffortId('high'),
     ])
     expect(second.requests).toHaveLength(0)
-    const headers = agent.session.events.filter(event => event.type === 'request/header')
+    const headers = agent.session.snapshotEvents().filter(event => event.type === 'request/header')
     expect(headers.at(-1)?.data.header.config.reasoningEffort).toBe(ReasoningEffortId('high'))
   })
 
@@ -335,7 +423,7 @@ describe('request stability across the loop', () => {
     expect(signal.aborted).toBe(true)
     expect(handle.agent.status).toBe('idle')
     expect(adapter.requests).toHaveLength(0)
-    expect(handle.agent.session.events.some(event => event.type === 'request/header')).toBe(false)
+    expect(handle.agent.session.snapshotEvents().some(event => event.type === 'request/header')).toBe(false)
   })
 
   it.each(['plain error', 'LLM error'] as const)(
@@ -358,7 +446,7 @@ describe('request stability across the loop', () => {
       send(agent, 'go')
       await waitForIdle(ctx, agent)
 
-      expect(agent.session.events.findLast(event => event.type === 'turn/end')).toMatchObject({
+      expect(agent.session.snapshotEvents().findLast(event => event.type === 'turn/end')).toMatchObject({
         data: {
           reason: failure instanceof LlmError
             ? { kind: 'error', error: failure.failure }
@@ -373,6 +461,7 @@ describe('request stability across the loop', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt, { persona: 'stable base' })
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -407,6 +496,10 @@ describe('request stability across the loop', () => {
     const adapter = new MockAdapter([textResponse('one'), textResponse('two')])
     const ctx = await harness(adapter)
     const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
+    ctx.on('agent/request', async ({ turn }, next) => {
+      const config = await next()
+      return turn === 2 ? { ...config, maxTokens: 1_024 } : config
+    })
 
     send(agent, 'first')
     await waitForIdle(ctx, agent)
@@ -426,11 +519,49 @@ describe('request stability across the loop', () => {
     const second = adapter.requests[1]!
     // The rewritten history: summary replaces turn 1's user+assistant pair.
     expect(second.messages[0]!.content.some(b => b.type === 'text' && b.text.includes('[summary of turn 1]'))).toBe(true)
-    // No header event beyond the anchor: the replace is itself in the log.
-    expect(agent.session.events.filter(e => e.type === 'request/header')).toHaveLength(1)
+    expect(agent.session.snapshotEvents().flatMap(event => event.type === 'request/header'
+      ? [{ reason: event.data.reason, startsSeries: event.data.startsSeries }]
+      : [])).toEqual([
+      { reason: 'initial', startsSeries: undefined },
+      { reason: 'change', startsSeries: true },
+    ])
   })
 
-  it('a real system-prompt change is a full changed-header snapshot; a stable prompt logs nothing', async () => {
+  it('starts a new request series when compaction rewrites a retry in the same step', async () => {
+    const adapter = new MockAdapter([
+      () => { throw new LlmError('request is too large', 'CONTEXT_LENGTH') },
+      textResponse('recovered'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('same-step-compaction'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+    ctx.on('agent/request-error', async ({ agent: subject }) => {
+      const first = subject.session.surface.nodes[0]
+      if (first === undefined) throw new Error('request has no surface message to compact')
+      subject.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text: '[summary for retry]' }],
+        source: { kind: 'plugin', plugin: 'test-compact' },
+      }), {
+        surfaceOp: { op: 'replace', start: first, end: first },
+        sourceEventSeqs: [first],
+      })
+      return { kind: 'retry' }
+    })
+
+    send(agent, 'first series')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[1]?.messages[0]?.content).toContainEqual({
+      type: 'text', text: '[summary for retry]',
+    })
+    expect(agent.session.snapshotEvents().flatMap(event =>
+      event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial', 'series'])
+  })
+
+  it('a real system-prompt change is a full changed-header snapshot; a stable new turn reuses it', async () => {
     const adapter = new MockAdapter([textResponse('one'), textResponse('two'), textResponse('three')])
     const ctx = await harness(adapter)
     const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
@@ -439,14 +570,14 @@ describe('request stability across the loop', () => {
     await waitForIdle(ctx, agent)
     send(agent, 'second')
     await waitForIdle(ctx, agent)
-    // Identical assembly re-rendered per step is NOT a change.
-    expect(agent.session.events.filter(e => e.type === 'request/header')).toHaveLength(1)
+    expect(agent.session.snapshotEvents().flatMap(event =>
+      event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial'])
 
     ctx.systemPrompt.section({ name: 'extra', order: 2, text: 'new guidance' })
     send(agent, 'third')
     await waitForIdle(ctx, agent)
 
-    const snapshots = agent.session.events.filter(e => e.type === 'request/header')
+    const snapshots = agent.session.snapshotEvents().filter(e => e.type === 'request/header')
     expect(snapshots).toHaveLength(2)
     expect(snapshots[1]?.data.reason).toBe('change')
     expect(adapter.requests[2]!.system).toContain('new guidance')
@@ -473,7 +604,7 @@ describe('request stability across the loop', () => {
     const first = adapter.requests[0]!
     // The inject landed in the log after the boundary: not in THIS request…
     expect(first.messages.some(m => m.content.some(b => b.type === 'text' && b.text.includes('[late context]')))).toBe(false)
-    expect(agent.session.events.some(e => e.type === 'user/message' && e.data.source.kind === 'plugin')).toBe(true)
+    expect(agent.session.snapshotEvents().some(e => e.type === 'user/message' && e.data.source.kind === 'plugin')).toBe(true)
 
     send(agent, 'second')
     await waitForIdle(ctx, agent)
@@ -500,7 +631,7 @@ describe('request stability across the loop', () => {
     send(agent, 'go')
     await waitForIdle(ctx, agent)
 
-    const turnEnd = agent.session.events.findLast(event => event.type === 'turn/end')
+    const turnEnd = agent.session.snapshotEvents().findLast(event => event.type === 'turn/end')
     expect(turnEnd).toMatchObject({ data: { reason: { kind: 'error' } } })
     if (turnEnd?.type !== 'turn/end' || turnEnd.data.reason.kind !== 'error') throw new Error()
     expect(turnEnd.data.reason.error.message).toMatch(/not extensible|frozen|read only|readonly/i)
@@ -519,14 +650,14 @@ describe('request stability across the loop', () => {
     const ctx2 = await harness(adapter2)
     const handle = await ctx2.agents.create({
       sessionId: SessionId('gen2-session'),
-      seed: [...agent.session.events],
+      seed: agent.session.snapshotEvents(),
       agentOptions: { provider: 'mock', model: 'mock' },
     })
     const agent2 = handle.agent
     send(agent2, 'second')
     await waitForIdle(ctx2, agent2)
 
-    const snapshots = agent2.session.events.filter(e => e.type === 'request/header')
+    const snapshots = agent2.session.snapshotEvents().filter(e => e.type === 'request/header')
     expect(snapshots).toHaveLength(2)
     expect(snapshots[1]?.data.reason).toBe('resume')
     // Identical header across the restart: byte-identical continuation.
@@ -556,9 +687,10 @@ describe('request stability across the loop', () => {
     send(agent, 'second')
     await waitForIdle(ctx, agent)
 
-    // No changed snapshot was logged (nothing really changed), and the session's own
-    // fold is immutable state.
-    expect(agent.session.events.filter(e => e.type === 'request/header')).toHaveLength(1)
+    // The second turn reuses the same series and header; the session's own
+    // fold remains immutable state.
+    expect(agent.session.snapshotEvents().flatMap(event =>
+      event.type === 'request/header' ? [event.data.reason] : [])).toEqual(['initial'])
     expect(Object.isFrozen(agent.session.requestHeader())).toBe(true)
     expect(adapter.requests[1]!.temperature).toBeUndefined()
   })
@@ -583,7 +715,7 @@ describe('request stability across the loop', () => {
     await waitForIdle(ctx, agent)
 
     expect(adapter.requests).toHaveLength(3)
-    const events = agent.session.events
+    const events = agent.session.snapshotEvents()
     const stepStarts = events.filter(e => e.type === 'step/start')
     expect(stepStarts).toHaveLength(3)
 
@@ -639,7 +771,7 @@ describe('request/context capacity records', () => {
     send(agent, 'second')
     await waitForIdle(ctx, agent)
 
-    const records = agent.session.events.filter(event => event.type === 'request/context')
+    const records = agent.session.snapshotEvents().filter(event => event.type === 'request/context')
     expect(records).toHaveLength(1)
     expect(records[0]?.data).toEqual({ provider: 'mock', model: 'mock', contextWindow: 128_000 })
     // Log-only: not a SurfaceEventType, so it can never reach a model request
@@ -664,7 +796,7 @@ describe('request/context capacity records', () => {
     send(agent, 'second')
     await waitForIdle(ctx, agent)
 
-    expect(agent.session.events
+    expect(agent.session.snapshotEvents()
       .filter(event => event.type === 'request/context')
       .map(event => event.data.contextWindow)).toEqual([64_000, 256_000])
   })
@@ -676,7 +808,7 @@ describe('request/context capacity records', () => {
     await waitForIdle(ctx, agent)
     send(agent, 'second')
     await waitForIdle(ctx, agent)
-    expect(agent.session.events
+    expect(agent.session.snapshotEvents()
       .filter(event => event.type === 'request/context')
       .map(event => event.data)).toEqual([{ provider: 'mock', model: 'mock' }])
   })
@@ -696,7 +828,7 @@ describe('request/context capacity records', () => {
     send(agent, 'second')
     await waitForIdle(ctx, agent)
 
-    expect(agent.session.events
+    expect(agent.session.snapshotEvents()
       .filter(event => event.type === 'request/context')
       .map(event => event.data)).toEqual([
       { provider: 'mock', model: 'known', contextWindow: 64_000 },

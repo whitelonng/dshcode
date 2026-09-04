@@ -2,7 +2,8 @@
 // Reuses the existing recorded workflow parent/child model fixtures; the real
 // workflow tool, worker, subagent provider, Session log, browser plugin graph,
 // and navigation all execute during replay.
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
@@ -15,16 +16,51 @@ import {
   type WebScaffold,
 } from './scaffold.ts'
 import {
-  connectFreshWorkspace, newEnglishPage, REPO_ROOT, saveFailureShot,
+  connectFreshWorkspace, expandTurnProcesses, newEnglishPage, REPO_ROOT, saveFailureShot,
 } from './support.ts'
 
 const MODE = webSnapshotMode()
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/workflow-run', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/workflow-run', import.meta.url))
 const UI_LIVE_EXPECTED = join(SNAPSHOT_DIR, 'ui-live.expected.md')
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
-const PARENT_FIXTURE = join(REPO_ROOT, 'examples/acp-agent/tests/snapshots/workflow-run/session.jsonl')
-const CHILD_FIXTURE = join(REPO_ROOT, 'examples/acp-agent/tests/snapshots/workflow-run/session.1.jsonl')
+const PARENT_FIXTURE = join(REPO_ROOT, 'snapshots/session/workflow-run/session.jsonl')
+const CHILD_FIXTURE = join(REPO_ROOT, 'snapshots/session/workflow-run/session.1.jsonl')
 const CHILD_PROMPT = 'Reply with exactly the word WF_CHILD_OK and nothing else.'
+// Zero-content reasoning deltas streamed into the child replay before its
+// recorded block-end. The member row renders as an open-session button only
+// while the child session still runs, and everything between the member's
+// appearance and the click (live golden capture, disclosure toggles, styling
+// measurements) must fit inside that window. The recorded 26-chunk stream
+// lives ~1.3s at the scaffold's paceMs — enough on an idle machine, but on a
+// loaded CI host the section takes several seconds and the click lands at the
+// window's closing edge, racing the child's teardown: the navigation then
+// opens a session whose transcript never renders and the scenario fails
+// downstream. 150 padded chunks add a deterministic ~7.5s at paceMs 50. Every
+// asserted surface is unchanged: each padded delta is empty and the recorded
+// block-end carries the canonical text the transcript folds.
+const CHILD_LIVE_WINDOW_PAD_CHUNKS = 150
+
+/**
+ * Write the child fixture with its reasoning-chunk row padded to
+ * {@link CHILD_LIVE_WINDOW_PAD_CHUNKS} extra empty deltas, into a fresh
+ * directory the caller owns. The committed fixture stays untouched; only the
+ * streamed duration changes.
+ * @param fixtureText - raw committed child session.jsonl contents.
+ * @returns the padded fixture directory (remove after use).
+ */
+async function stagePaddedChildFixture(fixtureText: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-workflow-run-child-'))
+  const padded = fixtureText.split('\n').map((line) => {
+    if (!line.includes('"reasoning-chunks"')) return line
+    const event = JSON.parse(line) as { data: { dt: number[]; texts: string[] } }
+    const pad = Array.from({ length: CHILD_LIVE_WINDOW_PAD_CHUNKS }, () => 0)
+    event.data.dt = [...event.data.dt, ...pad]
+    event.data.texts = [...event.data.texts, ...pad.map(() => '')]
+    return JSON.stringify(event)
+  }).join('\n')
+  await writeFile(join(dir, 'session.1.jsonl'), padded)
+  return dir
+}
 
 describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () => {
   let scaffold: WebScaffold
@@ -32,6 +68,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
   let prompt: string
+  let childFixtureDir: string
 
   const waitForParentSettlement = (): Promise<SessionId> => new Promise((resolve, reject) => {
     let dispose = (): void => {}
@@ -50,15 +87,17 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     const prompts = fixtureUserPrompts(await readFile(PARENT_FIXTURE, 'utf8'))
     expect(prompts).toHaveLength(1)
     prompt = prompts[0]!
+    childFixtureDir = await stagePaddedChildFixture(await readFile(CHILD_FIXTURE, 'utf8'))
     scaffold = await launchWebScaffold({
       replayFixture: PARENT_FIXTURE,
-      replayChildFixtures: [CHILD_FIXTURE],
+      replayChildFixtures: [join(childFixtureDir, 'session.1.jsonl')],
       paceMs: 50,
+      compareReplaySession: false,
     })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, 120_000)
@@ -66,12 +105,13 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
   afterAll(async () => {
     await browser?.close()
     await scaffold?.close()
+    if (childFixtureDir !== undefined) await rm(childFixtureDir, { recursive: true, force: true })
   })
 
   it('shows the live member, opens its local child, then retains the settled record beside the tool row', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workflow-run-live'))
     const settled = waitForParentSettlement()
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     await input.fill(prompt)
     await input.press('Enter')
 
@@ -160,6 +200,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     const sessions = page.getByRole('tree', { name: 'Sessions' })
     await sessions.getByRole('treeitem', { name: /Use the workflow tool exactly/ }).click()
     await settled
+    await expandTurnProcesses(page)
     await page.locator('[data-workflow-run][data-run-status="completed"]').waitFor()
 
     expect(await page.locator('[data-chat-flow-kind="tool-call"]').count()).toBeGreaterThanOrEqual(1)
@@ -185,6 +226,7 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workflow-run-history'))
     await page.reload({ waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+    await expandTurnProcesses(page)
     const workflow = page.getByRole('button', { name: /^snapshot-flow/ })
     await workflow.waitFor({ timeout: 15_000 })
     expect(await workflow.getAttribute('aria-expanded')).toBe('false')

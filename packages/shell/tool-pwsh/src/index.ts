@@ -26,7 +26,6 @@ import { defineTool, TOOL_ABORTED } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, TerminalCallView, ToolExecution, ToolResult, ToolResultView } from '@deepseek-ai/dsh-tools'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-shell-env'
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -116,11 +115,10 @@ function pwshDescription(backgroundEnabled: boolean, escalationModes: readonly S
   if (escalationModes.length === 0) return base
   // The language-mode and named-pipe contracts below are Windows-restricted-token
   // behavior, but the gate is 'any confining executor is mounted'
-  // (escalationModes non-empty). The conflation is safe today because every
-  // shipped composition pairing tool-pwsh with a confining executor is
-  // win32-only; a future POSIX pwsh-sandbox composition must gate both
-  // sentences on the platform instead (tracked in the pwsh-tool-and-executor
-  // Agent Note).
+  // (escalationModes non-empty). Every shipped composition pairing tool-pwsh
+  // with a confining executor is win32-only, so the gate is equivalent. A POSIX
+  // pwsh-sandbox composition must gate both sentences on the platform instead
+  // (tracked in the pwsh-tool-and-executor Agent Note).
   return base + ' Under the Windows sandbox, read-only pwsh runs in PowerShell ConstrainedLanguage mode, while '
     + 'workspace-write stays in FullLanguage unless host policy says otherwise. In read-only, prefer cmdlets and core types (`[string]`, `[datetime]`, `[regex]`, `[guid]`); '
     + '.NET static calls (`[System.IO.*]::`, `[math]::`), `Add-Type`, COM objects, and reflection fail '
@@ -244,7 +242,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
   ctx.systemPrompt.section({
     name: 'tool:pwsh',
-    order: 105,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_PWSH'),
     text: 'Non-zero exits are reported as `[exit code: N]` markers; investigate failures before moving on. '
       + 'On Windows a killed process settles as `[exit code: 1]` without a signal marker; treat a bare exit 1 after an interruption as a termination, not a command failure.',
   })

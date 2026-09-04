@@ -32,7 +32,9 @@ All three publish to the `@deepseek-ai` scope on npmjs.com, and access is per se
 
 Each sequence has one bump-and-commit command: it derives the target version, writes it into the relevant manifests, runs `pnpm install --lockfile-only`, and commits the manifests with the lockfile. The published version is therefore readable from the repository. A human creates the tag after the commit merges to master; CI never writes to the repository and needs no write permission.
 
-`release:dsh` accepts `major`, `minor`, `patch`, or an explicit version, and writes one version across the publishable family, every private package under `packages/*/*`, **and the workspace root**. Private packages receive no release tag and remain outside pack and publish; they follow the version because the workspace constraint requires every dsh package's version to equal the root's. The root check accepts a prerelease segment. A prerelease such as `0.0.1-rc.1` drives pack, the installed-artifact probe, and one real private publication before numbered versions follow. The dist-tag decision is the one `landlock-run-release.yml` already made: a version with a prerelease segment publishes under `--tag next`, anything else takes `latest`.
+`release:dsh` accepts `major`, `minor`, `patch`, or an explicit version, and writes one version across the publishable family, every private package under `packages/*/*`, **and the workspace root**. Private packages receive no release tag and remain outside pack and publish; they follow the version because the workspace constraint requires every dsh package's version to equal the root's. The root check accepts a prerelease segment, so explicit versions such as `0.0.1-alpha.1`, `0.0.1-canary.1`, and `0.0.1-rc.1` drive the same pack, installed-artifact probe, and publication path. `dsh` publication maps `alpha` and `canary` to their matching npm dist-tags, maps other prereleases including `rc` to `next`, and leaves stable versions to npm's `latest` default. Other release families retain their own dist-tag policy.
+
+For equal release numbers, SemVer compares alphanumeric prerelease identifiers lexically: `alpha` is lower than `canary`, `canary` is lower than `rc`, and every prerelease is lower than the stable version. npm dist-tags are mutable aliases and do not participate in version precedence.
 
 ### vendor: publish what changed, and let tags be the ledger
 
@@ -79,6 +81,12 @@ Two registry behaviours shape how a publish is attempted. Writes are spaced by a
 Every reference to a workspace member uses `workspace:^`, so `pnpm pack` substitutes a range matching the target version: sibling `peerDependencies` follow the family version, and a reference to a vendored package follows that package's own line. The Landlock platform packages keep `workspace:*`, which publishes the exact version, because a platform package and its entry must agree exactly.
 
 `scripts/check-workspace-constraints.ts` requires the protocol, so a new package cannot reintroduce a hand-written range; the invariant-companion rule requires `workspace:^` for `@deepseek-ai/dsh-invariants` for the same reason.
+
+### Published dependency faces use an explicit policy
+
+[`verify-package-dependencies`](../../../../scripts/verify-package-dependencies.ts) classifies workspace relationships by their published Client and Host use, keeps only Cordis as a peer in covered packages, and applies a small explicit Host roster. [Published dependency faces and bounded peer relays](2026-08-26-published-dependency-faces.md) owns the selection rules and rationale.
+
+`pnpm run benchmark:npm-resolution` measures this graph manually with the installed npm executable. `pnpm run benchmark:npm-resolution:next` additionally tries each reachable unconfigured Host package and serially remeasures the leading candidates. Both commands use a loopback metadata registry and reject archive requests, so their duration excludes package downloads. Neither command is an aggregate gate because scheduler load and metadata completion order make wall-clock thresholds nondeterministic.
 
 ### An optional dependency is never loaded at module scope
 
@@ -146,7 +154,7 @@ This Agent Note replaces the version scheme and the release-set boundary in [art
 
 **Verifying only the packed install, with no local registry.** The reference flow unpacks tarballs into a tree and drives it with plain Node, which bypasses version-range resolution. Running a local registry in CI to cover that layer was rejected: artifact correctness is covered by existing tests, the publication path is exercised by the master rehearsal, and a pull request only needs to prove the release set packs. Installing from `file:` specifiers still exercises range resolution for every internal dependency.
 
-**Selecting a subset by entry closure.** Crawling `dependencies` from `@deepseek-ai/dsh` and `@deepseek-ai/dsh-web-frontend` yields 156 packages, 61 fewer than the whole set. But this repository's plugins are mounted by name from `cordis.yml` rather than imported: `vendor/cordis-plugin-group` and `vendor/cordis-plugin-logger-console` fall outside the dependency closure while being required at runtime. Selecting by code dependency fails as "the consumer installs it and it will not start", and it would need a standing proof that no mounted package was missed. Under a private scope the extra packages are invisible outside the organization. `python/`, the root `examples/`, `docs/`, and `website/` are not members.
+**Selecting a subset by entry closure.** Crawling `dependencies` from `@deepseek-ai/dsh` and `@deepseek-ai/dsh-web-frontend` yields 156 packages, 61 fewer than the whole set. But this repository's plugins are mounted by name from `cordis.yml` rather than imported: `vendor/cordis-plugin-group` and `vendor/cordis-plugin-logger-console` fall outside the dependency closure while being required at runtime. Selecting by code dependency fails as "the consumer installs it and it will not start", and it would need a standing proof that no mounted package was missed. Under a private scope the extra packages are invisible outside the organization. `python/`, `docs/`, and `website/` are not release-family members.
 
 **Extending `scripts/publish-npm-baseline.ts`.** It is a local publication script that packs and publishes in one process, the opposite of separating credential-free packing from protected publication. Its verified parts — payload validation and installed-artifact probes — are reused so `pnpm run duplication` does not report clones.
 

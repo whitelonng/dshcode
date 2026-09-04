@@ -12,11 +12,11 @@ Web「通用」设置页将「权限」显示为禁用的骨架控件，尽管 `
 
 `dsh-permission-presets` 拥有一个 `permission` Settings namespace，其中只有 `defaultPreset` 字段。它的基础值是 `Config.defaultPreset`；省略该配置时，则使用与组合后的沙箱和审批默认值匹配的 preset。schema 的 enum 从已配置的 preset 表派生，因此 Settings 既能校验已存储的值，Web 客户端也能发现部署中的实际选项，而无需重复定义。
 
-服务会在 `session/created` 时同步读取当前 Settings 值。真正的新会话会收到三个显式事件：`permission/preset`、`sandbox/mode` 和 `approval/policy`。这些事实将创建时选中的权限固定下来，因此后续 Settings 变更只影响之后的会话。带 seed 或只完成部分初始化的会话会保留其有效调节项，只补齐缺失的事实；恢复时绝不会采用最新的用户默认值。`Session` 甚至会用 `session/end-seed` 标记显式为空的构造器 seed，因此不能把空的持久化日志误认为新会话。
+服务会在 `session/created` 时同步读取当前 Settings 值。真正的新会话会收到三个显式事件：`permission/preset`、`sandbox/mode` 和 `approval/policy`。这些事实将创建时选中的权限固定下来，因此后续 Settings 变更只影响之后的会话。带 seed 或只完成部分初始化的会话会保留其有效调节项，只补齐缺失的事实；恢复时绝不会采用最新的用户默认值。`Session` 甚至会用 `session/end-seed` 标记显式为空的构造器 seed，因此不能把空的持久化日志误认为新会话。`permissions` 投影把该边界与三个权限事实一同折叠，使会话固定只读一份增量状态，无需重扫日志。
 
 现有 `/permission` 命令和 `permissions` 投影仍是当前会话的操作路径。浏览器插件现在向 `settings.general.item` 贡献「权限」行，从脱敏后的 Settings 描述符读取动态 enum，并只通过经过 revision 校验的 `settings.mutate` 写入 `defaultPreset`。该行通过 slot 的 `hooks` 格注入 observable，而不是绑定渲染器专用钩子；权限服务挂载时会遍历并固定所有已存活会话，因此 HMR（热模块替换）不会遗留未固定的会话。无归属的「通用」设置包不贡献任何占位行。
 
-ApiProxy 在可配置提供方 namespace 之外，将 `permission` 显式加入 Web Settings allowlist。这是局部的边界决策，而不是通用注册标志或 `local-client` 访问模型：注册其他 Settings namespace 仍不会将其暴露。权限变更通过转发的 `settings/document-updated` 到达客户端（[转发的 Remote 事件](../architecture/2026-08-10-remote-event-delivery.zh.md)），不会宣告模型拓扑。
+Settings Controller 通过脱敏的 Remote 视图暴露已注册的 `permission` namespace。这是局部的呈现决策，而不是通用注册标志或 `local-client` 访问模型。权限变更通过转发的 `settings/document-updated` 到达客户端（[转发的 Remote 事件](../architecture/2026-08-10-remote-event-delivery.zh.md)），不会宣告模型拓扑。
 
 ## 后果
 

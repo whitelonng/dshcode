@@ -6,10 +6,12 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import SessionQueryEngine from '@deepseek-ai/dsh-session-query'
 import SubagentService from '@deepseek-ai/dsh-subagent'
 import * as SubagentFork from '@deepseek-ai/dsh-subagent-fork-in-process'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
@@ -37,6 +39,17 @@ const TOOL_NAMES = [
 const roots: string[] = []
 let callNumber = 0
 
+/** Session query implementation whose search faces are outside these tests. */
+class TestSessionQuery extends SessionQueryEngine {
+  override searchSessions(): Promise<never> {
+    return Promise.reject(new Error('session search is not configured in this test'))
+  }
+
+  override searchEvents(): Promise<never> {
+    return Promise.reject(new Error('event search is not configured in this test'))
+  }
+}
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
@@ -44,9 +57,11 @@ afterEach(() => {
 async function setup(script: ConstructorParameters<typeof MockAdapter>[0], legacyControl = false) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-'))
   roots.push(storageRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
+  await ctx.plugin(TestSessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentService)
   if (legacyControl) await ctx.plugin(ToolSubagentControl)
@@ -68,7 +83,7 @@ function execute(
   signal: AbortSignal = SIGNAL,
 ) {
   return ctx.tools.execute({
-    callId: CallId(`team-call-${++callNumber}`),
+    callId: ToolCallId(`team-call-${++callNumber}`),
     name,
     arguments: args,
     signal,
@@ -136,6 +151,11 @@ describe('dsh-tool-team', () => {
     expect(childAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
     expect(renderPrompt(childAssembly)).toContain('Your Team role is teammate; your Team name is tool-worker')
+    const initialPrompt = child.session.snapshotEvents().find(event => event.type === 'user/message'
+      && event.data.source.kind === 'user')
+    expect(initialPrompt?.type === 'user/message'
+      ? initialPrompt.data.content.flatMap(block => block.type === 'text' ? [block.text] : [])
+      : []).toEqual(['stay available'])
 
     const denied = await execute(ctx, child, 'spawn_teammate', {
       name: 'nested', description: 'not allowed', prompt: 'no',
@@ -359,7 +379,7 @@ describe('dsh-tool-team', () => {
 
     await fiber.dispose()
     const legacySchema = (await assembly(ctx, lead)).tools.find(schema => schema.name === 'send_message')
-    expect(JSON.stringify(legacySchema)).toContain('subagent_id')
+    expect(JSON.stringify(legacySchema)).toContain('agent_id')
   })
 
   it('rolls back partial scoped installation after a same-scope collision', async () => {

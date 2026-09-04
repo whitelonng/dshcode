@@ -82,7 +82,6 @@
   padding: 4px;
   /* Surface tokens match the Menu primitive card (ui-primitives
    * Menu.module.css) so every dropdown reads as the same material. */
-  border: 1px solid var(--dsw-alias-border-inverted);
   border-radius: 12px;
   background: var(--dsw-specific-menu);
   box-shadow: var(--dsw-shadow-lv3);
@@ -229,7 +228,7 @@
 .badge {
   flex: 0 0 auto;
   padding: 0 5px;
-  border: 1px solid var(--dsw-alias-border-l3);
+  border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: 4px;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;

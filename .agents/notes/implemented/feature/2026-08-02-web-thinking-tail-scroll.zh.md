@@ -28,4 +28,4 @@ Web Think 行在结算与流式 block 中都把 reasoning 首行渲染成折叠�
 
 ## 测试
 
-`packages/client/ui-conversation/tests/reasoning-row.client.spec.tsx` 固定最新行选择、算出的右端滚动位置，以及结算后恢复首行和 `scrollLeft = 0`。`apps/web/tests/lifecycle-chrome.e2e.ts` 中的无密钥组装态 Chromium 场景以可观察节奏回放真实录制的 reasoning chunks，把视口收窄到摘要溢出，并断言实时折叠 Think 行到达真实浏览器的滚动边界。其结算态 replay golden 保持不变，证明历史摘要约定仍然稳定。
+`packages/client/ui-chat/tests/reasoning-row.client.spec.tsx` 固定最新行选择、算出的右端滚动位置，以及结算后恢复首行和 `scrollLeft = 0`。`apps/web/tests/lifecycle-chrome.e2e.ts` 中的无密钥组装态 Chromium 场景以可观察节奏回放真实录制的 reasoning chunks，把视口收窄到摘要溢出，并断言实时折叠 Think 行到达真实浏览器的滚动边界。其结算态 replay golden 保持不变，证明历史摘要约定仍然稳定。

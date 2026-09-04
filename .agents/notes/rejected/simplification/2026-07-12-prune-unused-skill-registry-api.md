@@ -21,7 +21,7 @@ Amend the skill-system Agent Note, README, JSDoc, catalogs, and tests. Agent-sco
 ## Acceptance criteria
 
 - Skill collection has one provider-backed path, a cwd-only completed-cache key, and a revision epoch only for in-flight invalidation; retained skill fields have a production reader or a recorded deliberate extension contract.
-- Agent-scoped prompt sections, variables, tool providers, tool guards, and structured-output commit behavior in native and Code Mode remain unchanged.
+- Agent-scoped prompt sections, variables, tool providers, tool guards, and structured-output commit behavior in native and PTC mode remain unchanged.
 - Typecheck, coverage, snapshots, doc-sync, module-graph verification, build, and hygiene pass.
 
 ## Risks

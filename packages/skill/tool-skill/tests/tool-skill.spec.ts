@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, CallId, type Message } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId, type Message } from '@deepseek-ai/dsh-llm'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import { Session, SessionId, type SessionEvent, type UserMessage } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
@@ -38,7 +38,7 @@ async function setup(home: string, config: toolSkill.Config = {}): Promise<Conte
 
 function agentForCwd(cwd: string): Agent {
   const id = SessionId(`tool-skill-${cwd}`)
-  const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd })
+  const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd, isSeeded: false })
   return {
     ctx: new Context(),
     id,
@@ -110,7 +110,7 @@ async function proposeStep(
 }
 
 function catalogMessages(session: Session): Extract<SessionEvent, { type: 'user/message' }>[] {
-  return session.events.filter((event): event is Extract<SessionEvent, { type: 'user/message' }> => event.type === 'user/message'
+  return session.snapshotEvents().filter((event): event is Extract<SessionEvent, { type: 'user/message' }> => event.type === 'user/message'
     && event.data.source.kind === 'skill-catalog')
 }
 
@@ -544,7 +544,7 @@ describe('dsh-tool-skill', () => {
   })
 
   it('treats a malformed durable catalog as unrecognizable instead of failing the step', async () => {
-    // Seeds reach `agent.session.events` from JSONL/SQLite on resume or fork,
+    // Seeds reach `agent.session.snapshotEvents()` from persistence on resume or fork,
     // and seed validation only guarantees a source object with a non-empty
     // `kind`. A catalog whose entries are missing or wrongly shaped must be
     // skipped like any foreign record; throwing here would fail every later
@@ -583,6 +583,18 @@ describe('dsh-tool-skill', () => {
     expect(published[0]?.data.source).toMatchObject({ kind: 'skill-catalog', form: 'catalog' })
     expect(published[0]?.data.source).not.toHaveProperty('update')
     expect(JSON.stringify(published[0]?.data.content)).toContain('live-skill')
+  })
+
+  it('rejects a missing event below the current Session length', async () => {
+    const home = await tempDir('tool-catalog-missing-event')
+    const ctx = await setup(home)
+    const session = Session.create(SessionId('catalog-missing-event'))
+    const agent = sessionAgent(session)
+    openMessageTurn(session)
+    Object.defineProperty(session, 'eventAt', { value: () => undefined })
+
+    await expect(fireStep(ctx, agent, 1, 1))
+      .rejects.toThrow('skill catalog cannot read seq 1 below the current Session length')
   })
 
   it('re-establishes the current catalog after compaction hides its durable message', async () => {
@@ -630,7 +642,7 @@ describe('dsh-tool-skill', () => {
 
     const result = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('body-refresh'),
+      callId: ToolCallId('body-refresh'),
       name: 'skill',
       arguments: { name: 'body-skill' },
       agent,
@@ -658,7 +670,7 @@ describe('dsh-tool-skill', () => {
 
     const scoped = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('scoped-load'),
+      callId: ToolCallId('scoped-load'),
       name: 'skill',
       arguments: { name: 'preset-only-skill' },
       agent,
@@ -668,7 +680,7 @@ describe('dsh-tool-skill', () => {
 
     const foreign = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('foreign-load'),
+      callId: ToolCallId('foreign-load'),
       name: 'skill',
       arguments: { name: 'preset-only-skill' },
       agent: agentForCwd('/workspace/other'),
@@ -766,7 +778,7 @@ describe('dsh-tool-skill', () => {
 
     const result = await ctx.tools.execute({
       signal: testToolSignal,
-      callId: CallId('c1'),
+      callId: ToolCallId('c1'),
       name: 'skill',
       arguments: { name: 'project-skill' },
       agent: { session: { header: { cwd: project } } } as never,
@@ -825,9 +837,9 @@ describe('dsh-tool-skill', () => {
       content: 'Provider instructions.',
     })
 
-    const opaque = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c2'), name: 'skill', arguments: { name: 'opaque-skill' } })
-    const url = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c3'), name: 'skill', arguments: { name: 'url-skill' } })
-    const provider = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c4'), name: 'skill', arguments: { name: 'provider-skill' } })
+    const opaque = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c2'), name: 'skill', arguments: { name: 'opaque-skill' } })
+    const url = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c3'), name: 'skill', arguments: { name: 'url-skill' } })
+    const provider = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c4'), name: 'skill', arguments: { name: 'provider-skill' } })
 
     if (opaque.content[0]?.type !== 'text' || url.content[0]?.type !== 'text' || provider.content[0]?.type !== 'text') {
       throw new Error('expected text tool results')
@@ -849,7 +861,7 @@ describe('dsh-tool-skill', () => {
       content: 'Rogue instructions.',
     })
 
-    const result = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c5'), name: 'skill', arguments: { name: 'rogue-resource-skill' } })
+    const result = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c5'), name: 'skill', arguments: { name: 'rogue-resource-skill' } })
 
     expect(result.isError).toBe(true)
     expect(result.error?.info?.code).toBe('INVALID_TOOL_OUTPUT')
@@ -871,10 +883,10 @@ describe('dsh-tool-skill', () => {
       content: 'Model-only instructions.',
     })
 
-    const unknown = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c1'), name: 'skill', arguments: { name: 'missing' } })
-    const invalid = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c2'), name: 'skill', arguments: { name: 'Bad_Name' } })
-    const disabled = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c3'), name: 'skill', arguments: { name: 'hidden-skill' } })
-    const modelOnly = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c4'), name: 'skill', arguments: { name: 'model-only-skill' } })
+    const unknown = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c1'), name: 'skill', arguments: { name: 'missing' } })
+    const invalid = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c2'), name: 'skill', arguments: { name: 'Bad_Name' } })
+    const disabled = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c3'), name: 'skill', arguments: { name: 'hidden-skill' } })
+    const modelOnly = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c4'), name: 'skill', arguments: { name: 'model-only-skill' } })
 
     expect(unknown.isError).toBe(true)
     expect(invalid.isError).toBe(true)
@@ -933,9 +945,9 @@ describe('dsh-tool-skill', () => {
       },
     }))
 
-    const denied = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c6'), name: 'skill', arguments: { name: 'denied-skill' } })
-    const raced = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c7'), name: 'skill', arguments: { name: 'policy-race-skill' } })
-    const vanished = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('c8'), name: 'skill', arguments: { name: 'vanishing-skill' } })
+    const denied = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c6'), name: 'skill', arguments: { name: 'denied-skill' } })
+    const raced = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c7'), name: 'skill', arguments: { name: 'policy-race-skill' } })
+    const vanished = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('c8'), name: 'skill', arguments: { name: 'vanishing-skill' } })
 
     expect(denied.isError).toBe(true)
     expect(raced.isError).toBe(true)

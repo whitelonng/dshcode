@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import sharp, { type Sharp } from 'sharp'
-import { AttachmentError, ImageVariantId } from '@deepseek-ai/dsh-attachment'
+import { AttachmentError, ImageVariantId, requestImageDimensions } from '@deepseek-ai/dsh-attachment'
 import type {
   ImageMediaType,
   ImageAttachmentRef,
@@ -12,14 +12,17 @@ import type {
   RequestImageAttachment,
   StoredImageAttachment,
 } from '@deepseek-ai/dsh-attachment'
-import { hasLowColourCount } from './normalization.ts'
-import { encodeFirstWithinLimit, isExhaustedEncoding } from './encoding.ts'
+import {
+  IMAGE_ENCODING_QUALITIES,
+  WEBP_ENCODING_EFFORT,
+  encodeFirstWithinLimit,
+  encodingLadder,
+  isExhaustedEncoding,
+} from './encoding.ts'
 import { detectImage, encodedAlphaIsCompatible, probeImage } from './image.ts'
 
 /** Transform version included in every cache and upload-index identity. */
-export const REQUEST_IMAGE_TRANSFORM_VERSION = 'request-image-v4'
-/** DeepSeek request versions normally fit at these two preferred qualities. */
-export const REQUEST_IMAGE_QUALITIES = [85, 80] as const
+export const REQUEST_IMAGE_TRANSFORM_VERSION = 'request-image-v5'
 
 interface EncodedRequestImage {
   data: Uint8Array
@@ -34,38 +37,6 @@ interface VerifiedRequestImage extends EncodedRequestImage {
 
 function digest(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex')
-}
-
-/**
- * Compute aspect-preserving integer dimensions within a hard total-pixel budget.
- * @param width - positive source width.
- * @param height - positive source height.
- * @param maxPixels - positive width-times-height cap.
- * @returns inward-rounded dimensions; small images are not enlarged.
- */
-export function requestImageDimensions(
-  width: number,
-  height: number,
-  maxPixels: number,
-): { width: number; height: number } {
-  const scale = Math.min(1, Math.sqrt(maxPixels / (width * height)))
-  if (scale === 1) return { width, height }
-  if (width >= height) {
-    let projectedWidth = Math.max(1, Math.floor(width * scale))
-    let projectedHeight = Math.max(1, Math.round(projectedWidth * height / width))
-    while (projectedWidth * projectedHeight > maxPixels && projectedWidth > 1) {
-      projectedWidth -= 1
-      projectedHeight = Math.max(1, Math.round(projectedWidth * height / width))
-    }
-    return { width: projectedWidth, height: projectedHeight }
-  }
-  let projectedHeight = Math.max(1, Math.floor(height * scale))
-  let projectedWidth = Math.max(1, Math.round(projectedHeight * width / height))
-  while (projectedWidth * projectedHeight > maxPixels && projectedHeight > 1) {
-    projectedHeight -= 1
-    projectedWidth = Math.max(1, Math.round(projectedHeight * width / height))
-  }
-  return { width: projectedWidth, height: projectedHeight }
 }
 
 function checkedInteger(value: number, name: string): number {
@@ -87,10 +58,10 @@ function descriptor(attachment: ImageAttachmentRef, policy: ImageRequestPolicy):
     routePixelBudget: policy.maxPixels,
     encodedByteBudget: policy.maxBytes,
     encoding: {
-      png: { compressionLevel: 9, palette: 'opaque-only' },
-      webpQualities: REQUEST_IMAGE_QUALITIES,
-      jpegQualities: REQUEST_IMAGE_QUALITIES,
-      order: ['low-colour:png-webp', 'alpha:webp', 'opaque:jpeg'],
+      webpQualities: IMAGE_ENCODING_QUALITIES,
+      webpEffort: WEBP_ENCODING_EFFORT,
+      jpegQualities: IMAGE_ENCODING_QUALITIES,
+      order: ['alpha:webp', 'opaque:jpeg'],
       colourspace: 'srgb',
     },
   })
@@ -118,45 +89,12 @@ function sourcePipeline(attachment: StoredImageAttachment): Sharp {
   return sharp(attachment.data, { failOn: 'error', limitInputPixels: false }).toColourspace('srgb')
 }
 
-async function encoded(
-  image: Sharp,
-  mediaType: 'image/png' | 'image/jpeg' | 'image/webp',
-  quality?: number,
-  palette = true,
-): Promise<EncodedRequestImage> {
-  const output = mediaType === 'image/png'
-    ? image.png({ compressionLevel: 9, palette })
-    : mediaType === 'image/webp'
-      ? image.webp({ quality })
-      : image.jpeg({ quality })
-  const { data, info } = await output.toBuffer({ resolveWithObject: true })
-  return { data: new Uint8Array(data), mediaType, width: info.width, height: info.height }
-}
-
-function encodingAttempts(
-  attachment: StoredImageAttachment,
-  width: number,
-  height: number,
-  hasAlpha: boolean,
-  lowColour: boolean,
-): Array<() => Promise<EncodedRequestImage>> {
-  const prepared = pipeline(attachment, width, height)
-  const webp = REQUEST_IMAGE_QUALITIES.map(quality => (
-    () => encoded(prepared.clone(), 'image/webp', quality)
-  ))
-  if (lowColour) return [() => encoded(prepared.clone(), 'image/png', undefined, !hasAlpha), ...webp]
-  if (hasAlpha) return webp
-  return REQUEST_IMAGE_QUALITIES.map(quality => (
-    () => encoded(prepared.clone(), 'image/jpeg', quality)
-  ))
-}
-
 async function createRequestImage(
   attachment: StoredImageAttachment,
   policy: ImageRequestPolicy,
   hasAlpha: boolean,
 ): Promise<EncodedRequestImage> {
-  let dimensions = requestImageDimensions(attachment.ref.width, attachment.ref.height, policy.maxPixels)
+  const dimensions = requestImageDimensions(attachment.ref.width, attachment.ref.height, policy.maxPixels)
   if (dimensions.width === attachment.ref.width
     && dimensions.height === attachment.ref.height
     && attachment.data.byteLength <= policy.maxBytes) {
@@ -167,21 +105,11 @@ async function createRequestImage(
       height: attachment.ref.height,
     }
   }
-  const lowColour = await hasLowColourCount(sourcePipeline(attachment))
-  for (;;) {
-    const encodedVersion = await encodeFirstWithinLimit(
-      encodingAttempts(attachment, dimensions.width, dimensions.height, hasAlpha, lowColour),
-      policy.maxBytes,
-    )
-    if (!isExhaustedEncoding(encodedVersion)) return encodedVersion
-    if (dimensions.width === 1 && dimensions.height === 1) break
-    const scale = Math.min(0.9, Math.sqrt(policy.maxBytes / encodedVersion.smallest.data.byteLength) * 0.95)
-    dimensions = {
-      width: Math.max(1, Math.floor(dimensions.width * scale)),
-      height: Math.max(1, Math.floor(dimensions.height * scale)),
-    }
-  }
-  throw new AttachmentError('Image cannot be encoded within the model-request byte budget.', 'IMAGE_TOO_LARGE')
+  const encodedVersion = await encodeFirstWithinLimit(
+    encodingLadder(pipeline(attachment, dimensions.width, dimensions.height), hasAlpha),
+    policy.maxBytes,
+  )
+  return isExhaustedEncoding(encodedVersion) ? encodedVersion.smallest : encodedVersion
 }
 
 function cachePath(root: string, hash: string): string {
@@ -199,7 +127,7 @@ async function readCached(
     const data = new Uint8Array(await readFile(path, { signal }))
     const detected = await probeImage(data)
     const maximum = requestImageDimensions(attachment.ref.width, attachment.ref.height, policy.maxPixels)
-    if (data.byteLength > policy.maxBytes || detected.depth !== 'uchar' || detected.space !== 'srgb'
+    if (detected.depth !== 'uchar' || detected.space !== 'srgb'
       || detected.width > maximum.width || detected.height > maximum.height
       || !encodedAlphaIsCompatible(expectedAlpha, detected)) return undefined
     return { data, mediaType: detected.mediaType, width: detected.width, height: detected.height, hasAlpha: detected.hasAlpha }

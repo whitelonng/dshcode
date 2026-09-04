@@ -5,10 +5,10 @@
  */
 
 import {
-  SessionId,
   type SessionEventType,
   type SessionId as SessionIdValue,
 } from '@deepseek-ai/dsh-session'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import {
   SessionQueryError,
   type SessionAvailability,
@@ -89,7 +89,7 @@ function buildSessionFilters(args: SessionSearchArgs): SessionResultFilter[] {
   const filters: SessionResultFilter[] = []
   if (args.session_ids !== undefined) {
     assertNonEmptyArray('session_ids', args.session_ids)
-    filters.push({ kind: 'id', values: args.session_ids.map(SessionId) })
+    filters.push({ kind: 'id', values: args.session_ids.map(value => brandString<SessionIdValue>(value)) })
   }
   const created = timestampRange('created_at', args.created_at_from, args.created_at_to)
   if (created !== undefined) filters.push({ kind: 'created-at', ...created })
@@ -103,7 +103,7 @@ function buildSessionFilters(args: SessionSearchArgs): SessionResultFilter[] {
 function materializeParentSessionIds(values: readonly string[] | undefined): SessionIdValue[] | undefined {
   if (values === undefined) return undefined
   assertNonEmptyArray('parent_session_ids', values)
-  return [...new Set(values.map(SessionId))]
+  return [...new Set(values.map(value => brandString<SessionIdValue>(value)))]
 }
 
 function buildEventFilters(input: EventFilterInput): SessionEventMetadataFilter[] {

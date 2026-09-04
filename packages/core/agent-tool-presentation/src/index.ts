@@ -7,13 +7,13 @@
  * consumers, so it cannot move into a preset. What a preset CAN own is the
  * presentation: `ctx.tools.presentAs()` declares it for the mounting SCOPE,
  * which is the preset's standing mount, so the declaration covers every agent
- * joined to that preset and a Code Mode preset runs beside native ones in one
+ * joined to that preset and a PTC mode preset runs beside native ones in one
  * process. One row per composition, not one per session.
  *
- * A code mode needs a TypeScript code runtime, which is a host-plane service
+ * A PTC mode needs a TypeScript code runtime, which is a host-plane service
  * ([`dsh-code-runtime-worker-thread`](../../code-runtime/code-runtime-worker/README.md)).
  * This row therefore waits for it rather than assuming it: a preset selecting
- * Code Mode against a deployment that composes no runtime fails at mount, named
+ * PTC mode against a deployment that composes no runtime fails at mount, named
  * in the preset's own activation audit, instead of at the first prompt.
  * @module @deepseek-ai/dsh-agent-tool-presentation
  */
@@ -38,7 +38,7 @@ export const inject = ['tools']
 export interface Config {
   /**
    * The form this agent's model sees. `native` sends every visible schema,
-   * `code` sends only `run_code` plus a generated SDK, `both` sends both.
+   * `ptc` sends only `run_code` plus a generated SDK, `both` sends both.
    * Required rather than defaulted: the deployment default is what a preset
    * without this row already gets, so an omitted value would mean the row was
    * composed for nothing.
@@ -48,7 +48,7 @@ export interface Config {
 
 /** Runtime schema. */
 export const Config: z<Config> = z.object({
-  mode: z.union(['native', 'code', 'both'] as const).required(),
+  mode: z.union(['native', 'ptc', 'both'] as const).required(),
 })
 
 /**

@@ -12,7 +12,7 @@ tmux exposes this without a daemon: `$TMUX_PANE` names the process's pane, and `
 
 ## Decision
 
-`@deepseek-ai/dsh-tmux-context` is an opt-in function plugin in `packages/context/tmux-context/`, alongside the other bounded request-context enrichments that define neither a tool nor a service. The shipped TUI mounts it because terminal-multiplexer context is specific to that surface; `dsh-agent-spine-demo` and the Web/headless surfaces stay silent.
+`@deepseek-ai/dsh-tmux-context` is an opt-in function plugin in `packages/context/tmux-context/`, alongside the other bounded request-context enrichments that define neither a tool nor a service. Shipped profile trees do not mount it by default because terminal-multiplexer context is surface-specific; a composition that needs it adds its row explicitly.
 
 **Pull on the first step of each turn, not a tmux push.** The plugin prepends an `agent/pre-step` listener and acts only when `step === 1`. A pull model needs no background process, no hook installation in the user's tmux, and no teardown; it re-reads current state each turn so a moved, renamed, or re-laid-out pane is picked up naturally. Gating on the first step makes the reading per-turn: a location is stable within a turn, and re-querying every step would add cost without new information. A pane moved mid-turn is reflected on the next turn, which is the accepted tradeoff for the simpler design.
 

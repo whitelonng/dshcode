@@ -11,9 +11,9 @@
  * fails loud — aggregated into this plugin's activation throw for existing
  * entries, contained to a logged error per package in steady state.
  *
- * Scanning is incremental per entry name, mirroring the client-modules node
- * half: every cordis `internal/plugin` emission marks the fiber's entry name
- * dirty and a microtask flush reconciles each dirty name against the live
+ * Scanning is incremental per entry name. Every cordis `internal/plugin`
+ * emission marks the fiber's entry name dirty, and a microtask flush
+ * reconciles each dirty name against the live
  * loader entries; the activation pass seeds the same dirty set with all
  * current entries. Package verdicts and imported manifests are cached per
  * package name and never expire — plugin-set changes take effect on restart.

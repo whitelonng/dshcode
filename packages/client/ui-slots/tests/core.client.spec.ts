@@ -1,11 +1,8 @@
-// SlotCore terminal-design behavior: the single register composition API —
-// a-priori 'root', children declaration/authorization, load-time validation,
-// one-axis lifecycle cascade, store scope pinning, subscription API.
 import { describe, expect, it, vi } from 'vitest'
 import type { SlotComponent, StoreHandle } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotCore } from '@deepseek-ai/dsh-client-ui-slots'
 
-// 'root' is NOT merged here: the runtime package owns the built-in row, and
+// 'root' is NOT merged here: ui-renderer owns the built-in row, and
 // the client aggregate program would see both merges collide.
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
@@ -23,7 +20,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 // RendersCheck would demand a renderSlot consumer).
 const Comp: SlotComponent<object> = () => null
 
-/** A minimal structurally-valid store handle (identity is what the ledger tracks). */
 function fakeHandle(): StoreHandle<{ n: number }, Record<string, (d: { n: number }) => void>> {
   return {
     spec: { init: () => ({ n: 0 }), actions: {} },
@@ -31,7 +27,6 @@ function fakeHandle(): StoreHandle<{ n: number }, Record<string, (d: { n: number
   }
 }
 
-/** Register a root-frame entry declaring the four test child slots. */
 function mountFrame(core: SlotCore) {
   return core.register({
     name: 'root',

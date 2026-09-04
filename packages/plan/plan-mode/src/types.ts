@@ -1,12 +1,14 @@
 /**
  * Pure types of the plan domain: the ONE home of the `plan` projection-key
- * declaration, free of this package's host-side value imports (cordis
- * service, dsh-tools, dsh-agent). Two namespace projections serve it —
- * `./types` for host consumers, `./client` for client aggregates — with zero
- * content duplication.
+ * declaration, free of this package's host-side value imports (cordis,
+ * dsh-tools, dsh-agent). Two namespace projections serve it — `./types` for
+ * host consumers and `./client` for client aggregates — with zero content
+ * duplication.
  *
  * @module @deepseek-ai/dsh-plan-mode/types
  */
+
+import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 
 /**
  * The plan projection's wire value. `active` is the logged state in force
@@ -21,7 +23,23 @@ export interface PlanProjection {
   pending: boolean
 }
 
+/** Host state used to derive {@link PlanProjection}. */
+export interface PlanUnitState {
+  /** Logged plan mode. */
+  active: boolean
+  /** The selection's target mode; null when no selection is outstanding. */
+  wanted: boolean | null
+  /** The latest plan command awaiting its paired settlement. */
+  running: { commandId: CommandId; wanted: boolean } | null
+  /** Active state recorded by the latest `request/header`, or null. */
+  activeAtLastHeader: boolean | null
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** Host plan-mode fold state. */
+    plan: PlanUnitState
+  }
   interface SessionProjectionMap {
     /** Plan collaboration state folded from the plan command lifecycle and `plan/mode` events. */
     plan: PlanProjection

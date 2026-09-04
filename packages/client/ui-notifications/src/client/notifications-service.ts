@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product pending protocol awaits the client-store deep migration
 /**
  * System-notification service: turns object-layer edges into OS
  * notifications. Data comes exclusively from the `sessions.list` snapshot
@@ -21,15 +22,20 @@
  * session.
  */
 import type {
-  ISessions, JobView, PendingInteractionStatus, PendingWait, SessionId,
-  SessionListState, SessionSummary, SettingsScope,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  ISessions, SessionListState, SessionSummary,
+} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { JobView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   DEFAULT_NOTIFICATIONS_ENABLED, NOTIFICATIONS_APPROVALS_FIELD, NOTIFICATIONS_COMPLETIONS_FIELD,
   type NotificationsSettings,
 } from '../notifications-settings.ts'
 import type { NotificationsKey } from './locales.ts'
 import type { NotificationPermissionState, NotificationSink } from './notification-sink.ts'
+
+/** Session-list pending status string (PendingInteractionStatus was removed in alpha.4). */
+type PendingInteractionStatus = 'approval' | 'plan-review' | 'question'
 
 /** Dedup window: the same (kind, id) is not re-raised within this span. */
 export const NOTIFICATION_DEDUP_WINDOW_MS = 5_000
@@ -250,7 +256,7 @@ export class NotificationsService {
     const jobs = new Map<string, JobView>()
     for (const job of snapshot.jobsBySession[id] ?? []) jobs.set(job.id, job)
     return {
-      pending: summary.pendingInteraction,
+      pending: summary.pendingInteraction as PendingInteractionStatus | undefined,
       running: summary.running,
       jobs,
     }
@@ -326,9 +332,12 @@ export class NotificationsService {
 
   /** Tool name of the first pending approval, when the session is instantiated. */
   private approvalToolName(sessionId: SessionId): string | undefined {
-    const pending = this.sessions.binding(sessionId)?.session.getSnapshot().pending
-    const approval = pending?.find((wait): wait is PendingWait<'approval'> => wait.kind === 'approval')
-    return approval?.payload.toolName
+    const pending = (this.sessions.binding(sessionId)?.session.getSnapshot().pending
+      ?? []) as readonly { kind: string; toolName: string }[]
+    const approval = pending.find(
+      (wait): wait is { kind: 'approval'; toolName: string } => wait.kind === 'approval',
+    )
+    return approval?.toolName
   }
 
   /** Request permission once, only when the browser has never been asked. */

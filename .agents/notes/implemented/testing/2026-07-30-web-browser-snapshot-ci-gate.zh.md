@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[无密钥 Web 浏览器 e2e 车道](2026-07-24-web-gui-browser-e2e-lane.zh.md)只由本地 `pnpm run test:web` 运行，PR CI 不比较 `apps/web/tests/snapshots/**/*.expected.md`。因此，改变用户可见 Web 输出的 PR 可以在漏刷预期输出时保持绿色；后来任意分支显式运行 `DSH_SNAPSHOT=refresh`，都会替前序变更补账并产生与本分支无关的 diff。普通本地运行已经默认使用只读 replay，缺口是 PR 级的强制执行，而不是禁止 refresh 写入。
+[无密钥 Web 浏览器 e2e 车道](2026-07-24-web-gui-browser-e2e-lane.zh.md)只由本地 `pnpm run test:web` 运行，PR CI 不比较 `snapshots/web/` 或 `apps/web/tests/expected/` 下的 Web 预期输出。因此，改变用户可见 Web 输出的 PR 可以在漏刷预期输出时保持绿色；后来任意分支显式运行 `DSH_SNAPSHOT=refresh`，都会替前序变更补账并产生与本分支无关的 diff。普通本地运行已经默认使用只读 replay，缺口是 PR 级的强制执行，而不是禁止 refresh 写入。
 
 ## 决策
 

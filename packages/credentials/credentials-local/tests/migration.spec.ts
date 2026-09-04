@@ -4,16 +4,16 @@
 // keeps the loud rejection local.spec exercises.
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
-import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
+import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { LocalCredentialProvider, renderFlatLayoutMigration } from '../src/index.ts'
 
 /** Credential documents are seeded owner-only, exactly as the provider creates them. */
 function writeCredentials(file: string, text: string): Promise<void> {
-  return writeFile(file, text, { mode: 0o600 })
+  return writeFileAtomic(file, text, { mode: 0o600, dirMode: 0o700 })
 }
 
 const cleanups: Array<() => Promise<void>> = []

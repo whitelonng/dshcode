@@ -8,7 +8,7 @@ const translate = (bundle: typeof en) => (key: keyof typeof en): string => bundl
 describe('preset display copy', () => {
   it.each([
     ['standard', 'presetStandardName', 'presetStandardDescription'],
-    ['code', 'presetCodeName', 'presetCodeDescription'],
+    ['ptc', 'presetPtcName', 'presetPtcDescription'],
     ['minimal', 'presetMinimalName', 'presetMinimalDescription'],
     ['cordis', 'presetCordisName', 'presetCordisDescription'],
   ] as const)('localizes the shipped %s preset in English and Chinese', (id, nameKey, descriptionKey) => {

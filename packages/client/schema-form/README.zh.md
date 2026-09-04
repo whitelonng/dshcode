@@ -1,13 +1,65 @@
+---
+description: "settings 编辑器的浏览器侧 schema 与草稿编辑层：还原 settings.describe 的 schemastery 封装、按 settings 路径解析 schema 节点，并以路径级覆盖语义不可变地编辑草稿。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-schema-form
 
 [English](README.md) | 中文
 
-面向 settings 编辑器的 schema／草稿模型层。wire 侧的 `settings.describe` 携带每个 namespace 的序列化 schemastery schema（`schema.toJSON()` 的 ref 封装）；`rehydrateSchema` 用 `new Schema(json)` 将其还原（rehydrate）为活的校验器——在宿主上校验分节的那份 schema 对象，就是在浏览器里校验草稿的那份对象，因此客户端校验绝不会偏离 Service Definition 的校验。编辑器各自渲染自己的控件（Models 页围绕它在此探测到的字段手写自己的卡片）；该包不含任何 React，也不做任何渲染。
+## 概述
 
-## 约定
+面向 settings 编辑器的 schema／草稿模型层。`rehydrateSchema` 把 wire 侧 `settings.describe` 的封装还原为活的 schemastery 校验器，因此在宿主上校验分节的那份 schema 对象，就是在浏览器里校验草稿的那份对象，客户端校验零漂移。`nodeAtPath` 解析可配置提供方目录 `settingsPath` 所寻址的 schema 节点，`setPath`／`deletePath`／`hasPath` 以存在性覆盖语义不可变地编辑草稿。`validateDraft` 运行还原出的校验器并返回失败消息，页面得以在写入前拒绝无效草稿。该包不含任何 React，也不做任何渲染：编辑器在这些辅助函数之上自建控件。
 
-编辑的单元是**用户分节草稿**：一个以不可变方式编辑的普通对象（`setPath` 会物化中间对象，`deletePath` 即逐字段重置——去掉该键，解析值便回退到组合 base 与 schema 默认值）。字段只要出现在草稿中就被标记为**已覆盖**（`hasPath`）——判定采用存在性语义而非值比较，与 settings seam 的分层方式严格对应。`nodeAtPath` 解析可配置提供方目录 `settingsPath` 所寻址的 schema 节点（object 属性按名称解析，dict 条目经由 `inner`），编辑器因此可以在决定渲染什么之前，先探测某提供方的 profile 携带哪些字段（及其 `meta.role`）；无法解析的路径返回 `undefined`，调用方因此会明确进入降级路径，而不是渲染出错误的子树。`validateDraft(schema, draft)` 运行还原出的校验器并返回其失败消息，页面因此可以在写入前拒绝无效草稿。
+## 目录
 
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [延伸阅读](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## 使用本包
+
+从包根导入这些辅助函数，并在编辑器组件的控制器里驱动它们。
+
+### 何时选择它
+
+当某个 settings 界面要编辑它并不完全拥有的 namespace 时选择本包：可配置提供方的 Models 页在决定渲染什么之前，通过 `nodeAtPath` 探测提供方 profile。若编辑器完全了解目标 namespace，直接围绕 settings scope 手写带类型的表单更简单，此时不必使用本包。
+
+### 最小配置
+
+无需挂载：本包不向任何组合注册内容。它的 invariant 伴生（`./invariant` 入口上的 `apply`）是空安装器——纯辅助库不拥有任何跨插件可变关系。
+
+-----
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>实现内部——点击展开</summary>
+
+[`src/model.ts`](src/model.ts) 承载全部 API：`rehydrateSchema` 用 `new Schema(json)` 复原 `schema.toJSON()` 的 ref 封装；草稿辅助函数在 `setPath` 时物化中间对象、在 `deletePath` 时删除键，并把字段是否存在视为覆盖状态。settings seam 的分层方式赋予存在性语义以意义：不存在的键回退到组合 base 与 schema 默认值。
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## 延伸阅读
+
+- [Web 客户端架构](../../../docs/subsystems/web-client.zh.md)
+- [Settings seam](../../../packages/settings/settings/README.zh.md)
+- [Web 配置平面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md)
+- [新增包指南](../../../docs/cookbook/adding-a-package.zh.md)
+
+-----
+
+<a id="model-experience"></a>
 ## 模型体验
 
 无。该包支撑的是浏览器配置编辑器；这里没有任何内容进入模型请求。
@@ -18,6 +70,18 @@
 
 ## 已知限制与暂缓事项
 
-- **重建 schema 会执行所收到的封装**——`rehydrateSchema` 会重建一个活的 schemastery 校验器，而 schemastery 通过 `new Function` 复活序列化过的回调函数，因此 schema 信封是可执行内容，而不是不可执行数据。只有该封装来自提供该页面的同一受信任宿主时才安全；该协议没有跨信任边界使用的不可执行表示。
-- **校验是草稿级的，而非逐字段**——`validateDraft` 报告 schemastery 的第一条失败消息及其 `$.path`；它不会把错误映射到各个控件。
-- **没有通用渲染器**——消费方在这些辅助函数上构建功能专用表单。[Web 配置面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md) 记录该权衡。
+<a id="known-limitations-and-deferred-work"></a>
+
+- **还原会执行所服务的封装** — `rehydrateSchema` 重建活的 schemastery 校验器，而 schemastery 通过 `new Function` 复原序列化回调，因此 schema 封装是可执行内容而非惰性数据。只有来自服务页面的同一可信宿主的封装才是安全的；协议不提供跨信任的惰性表示。
+- **校验是草稿级而非逐字段** — `validateDraft` 报告 schemastery 的第一条失败消息（含 `$.path`），不会把错误映射到单个控件。
+- **没有通用渲染器** — 消费者在这些辅助函数之上构建特性专属表单。[Web 配置平面 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.zh.md) 记录了这一取舍。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者工作上下文——点击展开</summary>
+
+无。
+
+</details>

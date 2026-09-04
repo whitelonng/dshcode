@@ -6,7 +6,7 @@ The Cordis framework and its foundation libraries are vendored under [`vendor/`]
 
 ## Name mapping
 
-| Directory | Upstream name | Published name | Version | Role |
+| Directory | Upstream name | Published name | Upstream version | Role |
 |---|---|---|---|---|
 | `vendor/cordis/` | `cordis` | `@deepseek-ai/cordis` | 4.0.0-rc.7 | Framework core: `Context`, `Service`, `Fiber`, events |
 | `vendor/cosmokit/` | `cosmokit` | `@deepseek-ai/cosmokit` | 1.8.1 | Shared utilities the framework and Schemastery build on |
@@ -22,7 +22,7 @@ Subpath exports keep their path: `@cordisjs/plugin-loader/repository` becomes `@
 
 ## What the rename does not touch
 
-- **Directory names and versions.** `vendor/hmr/` stays `vendor/hmr/`, and every package keeps the upstream version its manifest table row records, so the vendored tree still reads as an upstream snapshot.
+- **Directory names and upstream source versions.** `vendor/hmr/` stays `vendor/hmr/`, and the table records the upstream version of the pinned source snapshot, so the manifest reads as an upstream snapshot; the vendored `package.json`'s own `version` field is the harness's released manifest version, which `pnpm run release:vendor` bumps and a re-sync restores to the upstream version.
 - **Dependency ranges.** A dependency entry changes its key, never its range: `"cordis": "^4.0.0-rc.7"` becomes `"@deepseek-ai/cordis": "^4.0.0-rc.7"`. `linkWorkspacePackages` resolves those preserved ranges to the pinned workspaces.
 - **The Loader's `cordis:` builtin prefix.** `cordis:include` and `cordis:group` are a protocol prefix, not a package name.
 - **The `cordis.yml` configuration family**, including `*.cordis.yml`, `*.cordis.snapshot.yml`, and `cordis.patch.yml`.

@@ -18,7 +18,7 @@
       "path": "../../feedback/message-feedback"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../core/session"
     },
     {
       "path": "../../typert/protocol"
@@ -27,7 +27,13 @@
       "path": "../locale"
     },
     {
-      "path": "../runtime"
+      "path": "../ui-chat"
+    },
+    {
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-session"
     },
     {
       "path": "../ui-conversation"

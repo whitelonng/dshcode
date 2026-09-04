@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../store"
+    },
+    {
       "path": "../../../vendor/cordis"
     },
     {
@@ -25,9 +28,6 @@
     },
     {
       "path": "../ui-renderer"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     },
     {
       "path": "../web-react"

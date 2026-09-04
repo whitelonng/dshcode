@@ -2,9 +2,9 @@
 
 English | [中文](persistence.zh.md)
 
-The **durability seam** for the event log. [session.md](session.md) describes the in-memory `Session` — the append-only `SessionEvent` log that is the source of truth. This page describes how that log is made durable: the abstract `SessionPersistence` service, its backends, the flush checkpoint, crash recovery, and the metadata header that travels alongside the log. The event vocabulary the log carries is enumerated, member by member, in the generated [persistence log event catalog](../persistence-catalog.md).
+The **durability seam** for the event log. [session.md](session.md) describes the in-memory `Session` — the append-only `SessionEvent` log that is the source of truth. This page describes how that log is made durable: the abstract `SessionPersistence` service, its provider model and shipped JSONL backend, the flush checkpoint, crash recovery, and the metadata header that travels alongside the log. The event vocabulary the log carries is enumerated, member by member, in the generated [persistence log event catalog](../persistence-catalog.md).
 
-The seam is a [capability seam](../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md): one abstract service ([dsh-session-persistence](../../packages/session/session-persistence), `ctx.sessionPersistence`) defining locate/create/append, reusable Session preparation, logical load/inspect, physical suffix reads, and lightweight list/snapshot observation over the existing `SessionEvent` — **no parallel persisted event type** — and three interchangeable providers implementing the same contract. See the [session-persistence Agent Note](../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md).
+The seam is a [capability seam](../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md): one abstract service ([dsh-session-persistence](../../packages/session/session-persistence), `ctx.sessionPersistence`) defines locate/create/append, reusable Session preparation, logical load/inspect, physical suffix reads, and lightweight list/snapshot observation over the existing `SessionEvent` — **no parallel persisted event type**. The repository ships [dsh-session-persistence-jsonl](../../packages/session/session-persistence-jsonl) as its provider; out-of-tree providers may implement the same service contract. See the [session-persistence Agent Note](../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md).
 
 ## The flush checkpoint
 
@@ -20,7 +20,7 @@ Repair applies only to cold sessions. For a live id, `SessionPersistence.load(id
 
 ## `SessionLocation` — optional per-session artifact target
 
-`SessionPersistence.locate(meta)` synchronously resolves a backend-owned independent artifact without reading, creating, or flushing it. JSONL returns the absolute transcript path inside its project/session directory; SQLite returns `undefined` because sessions share one database. A returned path can therefore name a file that does not yet exist or lacks the current unflushed turn; it is a location hint, not authorization or a freshness guarantee.
+`SessionPersistence.locate(meta)` synchronously resolves a backend-owned independent artifact without reading, creating, or flushing it. JSONL returns the absolute transcript path inside its project/session directory; a backend without one independent artifact per session returns `undefined`. A returned path can therefore name a file that does not yet exist or lacks the current unflushed turn; it is a location hint, not authorization or a freshness guarantee.
 
 ```ts type-equiv
 /**
@@ -40,7 +40,7 @@ interface SessionLocation {
 
 ## `SessionHeader` — metadata beside the log
 
-Per-session metadata travels **separately** from the event log: format version, cwd, lineage, and the seed boundary are storage concerns, not conversation events, so they stay out of `SessionEventMap` and never reach `deriveMessages()`. The header is attached to a `Session` via `session.header`.
+Per-session metadata travels **separately** from the event log: the header carries format version, cwd, and the `isSeeded` lineage bit, while body-bearing storage values carry the exact inherited cut beside it. Neither belongs to `SessionEventMap` or reaches `deriveMessages()`. The logical header is attached through `session.header`; the Session exposes its cut as `inheritedEventCount`.
 
 Source: [`packages/core/session/src/types.ts`](../../packages/core/session/src/types.ts)
 
@@ -64,10 +64,10 @@ interface SessionHeader {
   /** The session this one was forked from (seed lineage), if any. */
   readonly parentSession?: SessionId
   /**
-   * How many leading events were inherited through a seed. Persisting this
-   * boundary lets resume and replay distinguish parent history from child work.
+   * Whether this Session contains a fork-inherited event prefix. The exact prefix
+   * length is Session state rather than ordinary header metadata.
    */
-  readonly seedLength?: number
+  readonly isSeeded: boolean
   /**
    * Coarse product classification for a session created as a subagent child.
    * This is presentation metadata, not proof that the child is continuable.
@@ -91,11 +91,11 @@ interface SessionHeader {
 
 ## Format refusal — logs a build cannot faithfully read
 
-A backend refuses a log it cannot faithfully interpret with `SessionFormatUnsupportedError`, distinct from `SessionPersistenceCorruptionError` because nothing is damaged. A header `version` ahead of `SESSION_FORMAT_VERSION` names the direction ("written by a newer harness — upgrade the harness to open it"); one behind it states that this build ships no upgrade path. After legacy-shape normalization, an event type outside this build's generated vocabulary (`KNOWN_SESSION_EVENT_TYPES`, emitted by `gen-persistence-catalog`) refuses the same way unless the event's envelope carries `ignorable: true` — silently skipping an unrecognized required event could change how the rest of the log must be read. The message appends the raw log path when the backend keeps one artifact per session, so the refused text stays reachable. The JSONL backend refuses a foreign version straight from the raw header line, before validating today's header shape or decoding any event row — a structurally different future format still reports the upgrade direction, never "corrupt"; SQLite gates whole-file structure through its own `SCHEMA_VERSION` pragma first. Design rationale and the deferred upgrader chain live in the [session-log-version-mechanism note](../../.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md).
+A backend refuses a log it cannot faithfully interpret with `SessionFormatUnsupportedError`, distinct from `SessionPersistenceCorruptionError` because nothing is damaged. A header `version` ahead of `SESSION_FORMAT_VERSION` names the direction ("written by a newer harness — upgrade the harness to open it"); one behind it states that this build ships no upgrade path. After legacy-shape normalization, an event type outside this build's generated vocabulary (`KNOWN_SESSION_EVENT_TYPES`, emitted by `gen-persistence-catalog`) refuses the same way unless the event's envelope carries `ignorable: true` — silently skipping an unrecognized required event could change how the rest of the log must be read. The message appends the raw log path when the backend keeps one artifact per session, so the refused text stays reachable. The JSONL backend refuses a foreign version straight from the raw header line, before validating this format version's header shape or decoding any event row — a structurally different future format still reports the upgrade direction, never "corrupt". An out-of-tree backend must enforce the equivalent direction-aware refusal at its own physical-format boundary. Design rationale and the deferred upgrader chain live in the [session-log-version-mechanism note](../../.agents/notes/implemented/architecture/2026-08-10-session-log-version-mechanism.md).
 
 ## `CreateSessionOptions` — seeding and metadata
 
-Creating a `Session` through the store takes a `seed` (initial replay or fork history) and `meta` (the storage-level fields the store folds into a `SessionHeader`). The store fills in `version`/`id` and defaults `createdAt`; the caller may supply the validated absolute `cwd`, the `parentSession` lineage, the `seedLength` seed boundary, the optional coarse `origin`, the `delegationDepth`, the `agentPreset` the agent was composed from, and an existing `createdAt`. `origin: 'subagent'` lets product navigation hide duplicate child rows; it does not prove that a descriptor is valid or that the child can resume.
+Creating a `Session` through the store takes a `seed` (initial replay or fork history), an optional exact `inheritedEventCount`, and `meta` (the storage-level fields the store folds into a `SessionHeader`). The store fills in `version`/`id` and defaults `createdAt`; the caller may supply the validated absolute `cwd`, `parentSession` lineage, `isSeeded` lineage bit, optional coarse `origin`, `delegationDepth`, `agentPreset`, and an existing `createdAt`. A seeded creation requires both an explicit seed and exact cut because child-owned setup events may follow the inherited prefix. `origin: 'subagent'` lets product navigation hide duplicate child rows; it does not prove that a descriptor is valid or that the child can resume.
 
 ```ts type-equiv
 /**
@@ -107,14 +107,19 @@ interface CreateSessionOptions {
   /** Initial replay or fork history supplied at construction. */
   readonly seed?: readonly SessionEvent[]
   /**
-   * Storage metadata read once before publication. `seedLength` is explicit
-   * because a resumed seed contains the full stored log, not only its inherited prefix.
+   * Exact fork-inherited prefix length when `meta.isSeeded` is true. A
+   * constructor seed may also contain child-owned setup events after this cut.
+   */
+  readonly inheritedEventCount?: SessionLogOffset
+  /**
+   * Storage metadata read once before publication. `isSeeded` marks fork
+   * lineage; supplying replay history alone does not make it inherited.
    */
   readonly meta?: {
     readonly cwd?: string
     readonly parentSession?: SessionId
     readonly createdAt?: number
-    readonly seedLength?: number
+    readonly isSeeded?: boolean
     readonly origin?: 'subagent'
     readonly delegationDepth?: number
     readonly agentPreset?: string
@@ -122,17 +127,29 @@ interface CreateSessionOptions {
 }
 ```
 
-Replay/fork is therefore `ctx.sessions.create(id, { seed: seedEvents })`; resuming a *persisted* session into a live agent is `ctx.agents.resume({ resumeSessionId })`.
+Plain replay is `ctx.sessions.create(id, { seed: seedEvents })`; a fork additionally supplies `inheritedEventCount` and `meta.isSeeded: true`. Resuming a *persisted* session into a live agent is `ctx.agents.resume({ resumeSessionId })`.
+
+## `SessionStorageMetadata` — logical header and inherited cut
+
+Every persistence result that reads a Session body carries `SessionStorageMetadata`: the current logical header plus the separately validated inherited-event cut. Header-only listing intentionally returns only `SessionHeader`.
+
+```ts type-equiv
+/** Logical Session header paired with its exact inherited cut for body-bearing storage operations. */
+interface SessionStorageMetadata {
+  /** Validated immutable Session header. */
+  readonly meta: SessionHeader
+  /** Number of leading events inherited from the Session's fork parent. */
+  readonly inheritedEventCount: SessionLogOffset
+}
+```
 
 ## `SessionRawArtifact` — verbatim stored artifact text
 
-A backend's own artifact text for one session, byte-identical to what it durably wrote (decoded from its physical encoding). `readRaw` returns it without reconstructing from parsed events, so backend-specific serialization (chunk packing, key order, line breaks) survives. Consumers first test `supportsRawArtifacts`: `false` means the backend does not provide this capability (for example SQLite), while `readRaw(...) === undefined` means a supported backend has no materialized artifact for that session.
+A backend's own artifact text for one session, byte-identical to what it durably wrote (decoded from its physical encoding). `readRaw` returns it without reconstructing from parsed events, so backend-specific serialization (chunk packing, key order, line breaks) survives. Consumers first test `supportsRawArtifacts`: `false` means the backend does not provide this capability, while `readRaw(...) === undefined` means a supported backend has no materialized artifact for that session.
 
 ```ts type-equiv
 /** A backend's own raw artifact text for one session, verbatim. */
-interface SessionRawArtifact {
-  /** The session header parsed from the artifact's own first line. */
-  readonly meta: SessionHeader
+interface SessionRawArtifact extends SessionStorageMetadata {
   /** The artifact's base filename on disk, without any physical encoding suffix. */
   readonly filename: string
   /** The artifact's full text content, decoded from the backend's physical encoding. */
@@ -154,6 +171,8 @@ interface RestoredSessionOptions {
   readonly seed: SessionEvent[]
   /** Fresh detached storage metadata to validate and freeze in place. */
   readonly meta: SessionHeader
+  /** Exact number of fork-inherited leading events decoded from storage. */
+  readonly inheritedEventCount: SessionLogOffset
   /** Select the persistence ownership-transfer path. */
   readonly seedSource: 'persistence'
 }
@@ -198,10 +217,22 @@ declare class SessionPreparation implements Disposable {
 
 ```ts type-equiv
 /** Immutable logical session prepared from persistence or a live owner. */
-interface SessionInspection {
-  /** Validated immutable session metadata. */
-  readonly meta: SessionHeader
+interface SessionInspection extends SessionStorageMetadata {
   /** Validated contiguous logical event log. */
+  readonly events: readonly SessionEvent[]
+}
+```
+
+## Detached stored-log suffixes
+
+`readFrom` returns a detached `SessionEventSuffix` anchored by the requested `fromSeq`. Its event list may start above zero or be empty, so it is not a complete `SessionInspection` and must not be restored as a whole Session.
+
+```ts type-equiv
+/** Detached logical suffix returned by one explicit stored-log offset read. */
+interface SessionEventSuffix extends SessionStorageMetadata {
+  /** First requested log offset; {@link events} contains only seqs at or after it. */
+  readonly fromSeq: SessionLogOffset
+  /** Valid contiguous stored events at or after {@link fromSeq}; not a complete Session log when the offset is nonzero. */
   readonly events: readonly SessionEvent[]
 }
 ```
@@ -228,12 +259,11 @@ interface SessionPersistenceSnapshot {
 }
 ```
 
-## The backends
+## The backend
 
-All implement the same abstract `SessionPersistence` (locate/create/append/prepare/load/inspect/readFrom/list/listSnapshots over `SessionEvent`, with optional cancellation on observation methods) and pass the shared `runPersistenceContract` suite:
+The shipped provider implements the abstract `SessionPersistence` contract (locate/create/append/prepare/load/inspect/readFrom/list/listSnapshots over `SessionEvent`, with optional cancellation on observation methods) and passes the shared `runPersistenceContract` suite:
 
 - **[dsh-session-persistence-jsonl](../../packages/session/session-persistence-jsonl)** — an append-only logical JSONL log per session, stored as checksummed concatenated Zstandard frames by default or raw lines by configuration, with crash-safe atomic writes, interrupted-turn recovery, and a read/replay path.
-- **[dsh-session-persistence-sqlite](../../packages/session/session-persistence-sqlite)** — an opt-in `node:sqlite` backend using schema 17 to store exact same-block delta runs in bounded physical `text-chunks`, `reasoning-chunks`, and `tool-call-chunks` rows. It reconstructs the complete logical event stream before returning it, packs only newly durable batches, and rejects older schemas rather than migrating them.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -252,8 +282,8 @@ Durable append-only session storage. Implementations preserve contiguous, lossle
 ```ts cordis-catalog
 /**
  * Resolve this backend's independent local artifact for a session without
- * reading, creating, flushing, or otherwise materializing it. Backends such
- * as SQLite that do not own one artifact per session return `undefined`.
+ * reading, creating, flushing, or otherwise materializing it. A backend
+ * that does not own one artifact per Session returns `undefined`.
  * @param meta - the immutable session header whose artifact is requested.
  * @returns the backend-specific absolute location, when one exists.
  */
@@ -282,14 +312,26 @@ readRaw(_id: SessionId, signal?: AbortSignal): Promise<SessionRawArtifact | unde
  * created-but-never-appended session is absent from {@link list}
  * — abandoned sessions leave nothing behind.
  * @param meta - the immutable header (id, version, cwd, lineage) to record.
+ * @param inheritedEventCount - exact fork-inherited prefix length. Required
+ * for a seeded header and omitted only for an unseeded header.
  */
-abstract create(meta: SessionHeader): Promise<void>
+abstract create(meta: SessionHeader, inheritedEventCount?: SessionLogOffset): Promise<void>
+
+/**
+ * Ensure a live session has a durable header even when it has no events.
+ * Ordinary sessions remain lazily materialized; lifecycle frontends call
+ * this only when an empty session itself is a durable resumable resource.
+ * @param _session - exact live session whose registered header is materialized.
+ */
+ensureMaterialized(_session: Session): Promise<void>
 
 /**
  * Durably persist a batch of events. Honors the append-only and contiguous-
  * seq contracts: the first event's `seq` MUST equal the stored next-seq
  * (after `load` has durably closed any interrupted turn). Rejects non-JSON-
  * serializable `event.data` with an error naming the offending event type.
+ * A seeded session's first materializing batch must reach its complete
+ * inherited prefix.
  * @param id - the session the batch belongs to.
  * @param events - the contiguous batch to persist, in seq order.
  */
@@ -350,6 +392,17 @@ abstract load(id: SessionId): Promise<SessionInspection>
 abstract inspect(id: SessionId, signal?: AbortSignal): Promise<SessionInspection>
 
 /**
+ * Borrow one exact inspection while retaining any reusable prepared source.
+ * A cold observation must pin the exact prepared Session that a later
+ * {@link prepare} reserves. Implementations must not degrade this operation
+ * to a detached {@link inspect} result.
+ * @param id - persisted session to observe.
+ * @param signal - optional cancellation for preparation work.
+ * @returns a disposable immutable observation.
+ */
+abstract borrowSession(id: SessionId, signal?: AbortSignal): Promise<BorrowedSessionSource>
+
+/**
  * Read the stored events from `fromSeq` onward — the read-from-seq
  * primitive for read models that resume from a watermark (e.g. a persisted
  * projection cache folding only the tail past its checkpoint). Unlike
@@ -358,16 +411,16 @@ abstract inspect(id: SessionId, signal?: AbortSignal): Promise<SessionInspection
  * publication. Only events from the valid contiguous stored prefix are
  * returned, so a torn fragment never reaches the caller. `fromSeq` at or
  * beyond the stored prefix returns an empty event list (never an error).
- * Backends whose medium can seek by seq
- * (SQLite) read only the suffix; sequential media (JSONL, both encodings)
- * still parse the whole artifact and skip forward — the primitive bounds
- * what is RETURNED and refolded, not every backend's physical read.
+ * A backend whose medium can seek by seq may read only the suffix;
+ * sequential media such as JSONL still parse the whole artifact and skip
+ * forward. The primitive bounds what is returned and refolded, not every
+ * backend's physical read.
  * @param id - the persisted session to read.
- * @param fromSeq - first event seq to include; a non-negative safe integer.
+ * @param fromSeq - first event offset to include.
  * @param signal - optional cancellation for queued and backend read work.
- * @returns the header and the stored events with `seq >= fromSeq`.
+ * @returns storage metadata, the requested offset, and stored events with `seq >= fromSeq`.
  */
-abstract readFrom(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<{ meta: SessionHeader; events: SessionEvent[] }>
+abstract readFrom(id: SessionId, fromSeq: SessionLogOffset, signal?: AbortSignal): Promise<SessionEventSuffix>
 
 /**
  * Lightweight listing from metadata, without a full-log parse.
@@ -389,7 +442,7 @@ abstract list(signal?: AbortSignal): Promise<SessionHeader[]>
 abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]>
 ```
 
-Types: [SessionEvent](session.md) · [SessionId](core.md)
+Types: [Session](session.md) · [SessionEvent](session.md) · [SessionId](core.md) · [SessionLogOffset](session.md)
 
 Source: [`packages/session/session-persistence/src/index.ts`](../../packages/session/session-persistence/src/index.ts)
 <!-- END GENERATED cordis-surface -->

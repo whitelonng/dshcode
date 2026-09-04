@@ -1,6 +1,6 @@
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
-import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
+import { snapshotJsonValue } from '@deepseek-ai/dsh-util-values'
 import { decodeWorkerJson, encodeWorkerJson, snapshotCodeJsonValue } from '../src/worker-json.ts'
 
 describe('snapshotCodeJsonValue', () => {

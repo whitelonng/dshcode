@@ -7,7 +7,7 @@
 
 import type { UserMessage } from '@deepseek-ai/dsh-llm/message'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
-import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { OptionalSessionSeq, SessionId } from '@deepseek-ai/dsh-session/types'
 
 /** Durable source session, cited event seqs, and snapshot facts for prepared cross-session context. */
 export interface SessionReferenceSource {
@@ -18,7 +18,7 @@ export interface SessionReferenceSource {
   references: {
     sessionId: string
     label: string
-    capturedThroughSeq: number | null
+    capturedThroughSeq: OptionalSessionSeq
     compacted: boolean
     originalMessages: number
     retainedMessages: number
@@ -51,6 +51,12 @@ export interface SessionReferenceCandidate {
   label: string
   /** Source session working directory, when recorded. */
   cwd?: string
+  /**
+   * True when {@link SessionReferenceCandidate.cwd} is recorded and equals the
+   * requesting agent's. Hosts that only surface a distinguishing location
+   * read this instead of comparing paths they never received.
+   */
+  sameWorkspace: boolean
   /** Source session creation time in Unix epoch milliseconds. */
   createdAt: number
 }

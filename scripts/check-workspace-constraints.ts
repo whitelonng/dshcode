@@ -53,14 +53,17 @@ const experimentalPackageDirectory = /^packages\/experimental\/[^/]+$/
 /** npm namespace reserved for private experimental packages. */
 const experimentalPackageNamePrefix = '@deepseek-ai/dsh-experimental-'
 /** Directories whose packages this repository publishes: one release member each. */
+// Fork note: apps/desktop stays out of the release set — the desktop shell is
+// a fork-private product published from its own sequence.
 const releaseMemberDirectory = /^(?:packages\/(?!experimental\/)[^/]+\/[^/]+|apps\/(?:cli|web)|vendor\/[^/]+)$/
 
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh': ['lib/*.js', 'lib/types/**/*.d.ts', 'config'],
-  // The Web build emits sourcemaps for browser debugging; publishing them is
-  // what the payload policy forbids, so the bundle ships without them.
-  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
+  // Sourcemaps stay out by payload policy; the worker-preview surface
+  // (dist/preview.html and dist/preview/) backs private experimental
+  // packages and is not published.
+  '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map', '!dist/preview.html', '!dist/preview'],
 }
 
 /** The subset of package.json fields this constraint check cares about. */
@@ -150,17 +153,21 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh-client-web': ['lib/**/*.css'],
   '@deepseek-ai/dsh-client-ui-theme': ['lib/styles'],
   // The CPython side ships as source .py files, published as-is rather than built.
-  '@deepseek-ai/dsh-code-runtime-python': ['py/**/*.py'],
-  // The Python runtime uses a distinct closed-resolution bin; the public CLI
-  // keeps config-owned bare-package resolution through lib/bin.js.
-  '@deepseek-ai/dsh-sdk-jsonrpc-demo': ['lib/packaged-bin.js'],
+  '@deepseek-ai/dsh-experimental-code-runtime-python': ['py/**/*.py'],
+  // The shipped preset compositions travel inside the roster package.
+  '@deepseek-ai/dsh-agent-presets': ['presets'],
+  // The Web Host mounts the default-off settings owner independently of each
+  // Agent-scoped delegation-tool instance.
+  '@deepseek-ai/dsh-tool-subagent': ['lib/model-selection-settings.js'],
   // The argv-prefix runner entry ships beside the lib as its own bundle;
   // sandbox-local resolves it through the package's ./runner export. tsdown
   // also shares its generated FFI code through a hashed runtime chunk.
   '@deepseek-ai/dsh-sandbox-windows-acl': ['lib/runner.js', 'lib/types-*.js'],
-  // SQLite loads every statement from immutable package resources at runtime.
-  '@deepseek-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
   '@deepseek-ai/dsh-skill-badge': ['assets'],
+  // tsdown shares the repository/pack code between the lib entry and the bin
+  // through a hashed chunk. The committed bin.js is the link target pnpm can
+  // resolve at install time, before the build produces lib/bin.js.
+  '@deepseek-ai/dsh-experimental-webworker-packer': ['bin.js', 'lib/repository-*.js'],
   '@deepseek-ai/dsh-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
 }
 
@@ -168,7 +175,7 @@ function sameStringList(actual: readonly string[] | undefined, expected: readonl
   return !!actual && actual.length === expected.length && actual.every((value, index) => value === expected[index])
 }
 
-function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
+export function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
   const declaredPatch = manifest.dsh?.bundle?.patch
   const bundleFiles = declaredPatch === undefined ? [] : [declaredPatch.replace(/^\.\//, '')]
   const extras = [
@@ -177,14 +184,18 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
   ]
   return [
     'lib/index.js',
-    // Every package publishes its invariant ownership companion as a separate
-    // bundle; the package-invariant gate validates the companion itself.
-    'lib/invariant.js',
+    // Packages with an invariant export publish its runtime as a separate
+    // bundle; the package-invariant gate validates the source/export pairing.
+    ...manifest.exports?.['./invariant'] ? ['lib/invariant.js'] : [],
     ...manifest.bin ? ['lib/bin.js'] : [],
-    ...manifest.exports?.['./worker'] ? ['lib/worker.cjs'] : [],
+    // Worker-thread packages ship a CJS worker entry; the browser worker
+    // bundle is an ES module a page loads with `new Worker(type: 'module')`.
+    // Keyed on the artifact path, like ./client below.
+    ...exportDefault(manifest, './worker') === './lib/worker.cjs' ? ['lib/worker.cjs'] : [],
+    ...exportDefault(manifest, './worker') === './lib/worker.js' ? ['lib/worker.js'] : [],
     // UI plugin packages ship their browser bundle beside the node lib
     // (single-artifact ruling: dist/ retired, ./client resolves lib/client.js).
-    // Keyed on the artifact path, not the subpath name: apiproxy's ./client is
+    // Keyed on the artifact path, not the subpath name: a package's ./client is
     // a browser-safe source channel, not a bundle.
     ...exportDefault(manifest, './client') === './lib/client.js' ? ['lib/client.js'] : [],
     // runtime's shell-held loader subpath ships as its own bundle beside the client half.
@@ -254,7 +265,12 @@ export function checkExperimentalManifest({ dir, manifest }: WorkspaceManifest):
   return errors
 }
 
-function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
+/**
+ * Check one workspace manifest against publication and dsh-package policy.
+ * @param workspace - package directory and parsed manifest.
+ * @returns path-qualified policy violations.
+ */
+export function checkWorkspaceManifest({ dir, manifest }: WorkspaceManifest): string[] {
   const errors = checkExperimentalManifest({ dir, manifest })
   const label = manifest.name ?? dir
   const isLandlockPackageDir = dir.startsWith('native/landlock-run/packages/')
@@ -475,7 +491,7 @@ export function main(): void {
   ]
   const errors = [
     ...checkRepositoryVersion(),
-    ...manifests.flatMap(checkWorkspace),
+    ...manifests.flatMap(checkWorkspaceManifest),
     ...checkWorkspaceProtocol(manifests),
     ...checkExperimentalDependencyIsolation(dependencyManifests),
     ...checkHierarchyShape(),

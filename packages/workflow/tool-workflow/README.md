@@ -1,32 +1,104 @@
+---
+description: "The model-facing workflow tool: run a JavaScript orchestration script that fans out subagents, for users and maintainers choosing or configuring model-driven orchestration."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-tool-workflow
 
 English | [中文](README.zh.md)
 
-The model-facing **`workflow` tool**: run a JavaScript orchestration script that fans out subagents, and return the script's final value. This package owns the model-facing schema and run lifecycle over [`ctx.workflowEngine`](../workflow/README.md); script parsing, execution, caps, and cancellation live behind the seam, while the consumer retains ownership of the parent-facing schema and result envelope.
+## Summary
 
-## What the model sees
+`dsh-tool-workflow` gives the model the `workflow` tool: call it with a JavaScript orchestration script, an identity block, and optional arguments, and it runs the script over `ctx.workflowEngine`, fanning work out across subagents until the script's final value returns. The tool owns the model-facing schema, the usage guidance in the system prompt, and the result envelope; script parsing, execution, caps, and cancellation live behind the engine. Execution is foreground: the parent turn blocks until the whole workflow settles, and a non-clean finish is an error, never partial output. Choose it when the user explicitly asks for workflow-style or large multi-agent orchestration; prefer plain subagent calls for one or two delegations.
 
-Three parameters: `meta` (required identity data: `name`, `description`, and optional progress annotations), `script` (required plain JavaScript body — no `export const meta` statement; the tool description carries the complete authoring contract), and `args` (optional JSON object exposed to the script as the `args` global; wrap a bare list in a field so the wire schema stays honest). The plugin also contributes a `tool:<toolName>` system-prompt section carrying the usage policy — use the tool only on an explicit user ask for a workflow / large orchestration; prefer plain subagent calls for one or two delegations — per the convention that tool guidance ships with the tool plugin, never in the deployment persona.
+## Table of Contents
 
-## Lifecycle
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-Collection is synchronous (like [`dsh-tool-subagent`](../../subagent/tool-subagent/README.md)): `execute` starts a run and awaits `run.result` inside a `try/finally` that always disposes the run, so the script and its children reach quiescence on every path. `exec.signal` is bridged to `run.cancel()` (including the already-aborted-before-start case). A non-`completed` stop reason maps to an `isError` result reporting the reason—never partial output as success; a parse/meta failure thrown synchronously by `start()` becomes an `isError` the model can correct from. Completion returns canonical `{ runId, agentsStarted, result }`; the Native renderer preserves the meta name, agent count, and JSON value, truncating only that projection at `maxResultChars`.
+-----
 
-For a root transport execution (`exec.parent` absent), the tool also projects the run into the calling Agent's Session: run-start after `start()` returns, matching member starts and endings filtered by `run.id`, then run-end only after `run.result` is available and `dispose()` has reached quiescence. Nested transport calls execute normally but write no workflow record. The first failed Session append disables later recording for that run, emits one warning, and leaves either no record or a legal continuous prefix without changing the tool result or cleanup.
+<a id="use-this-package"></a>
+## Use this package
 
-The browser-safe `@deepseek-ai/dsh-tool-workflow/types` subpath owns these four log-only event payloads and their `SessionEventMap` declaration. The package invariant rejects duplicate starts, unpaired members, terminal events with open members, and updates after run-end on both cold load and live append while accepting missing terminal suffixes.
+The `workflow` tool runs a model-authored orchestration script that fans work out across many subagents and returns the script's final JSON value. Use it only when the user explicitly asks for a workflow or for large multi-agent orchestration — an audit over many files, a migration, multi-angle research; for one or two delegations, prefer plain subagent calls.
 
-## Render intent
+### Calling the tool
 
-Decided up front (per the [render-intent Agent Note](../../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.md)): a `generic` card titled `workflow: <meta.name>`, read directly from `args.meta.name` (presentation is a pure function of args and does not ask the engine to parse); the script text rides as `rawInput`. The result keeps the generic card.
+The model submits three parameters: `meta` (required identity data: `name`, `description`, and optional `whenToUse` and `phases`), `script` (required plain JavaScript body — no `export const meta` statement; the tool description carries the complete authoring contract), and `args` (optional JSON object exposed to the script as the `args` global; wrap a bare list in a field so the wire schema stays honest).
 
-## Config
+Success returns the canonical envelope `{ runId, agentsStarted, result }`, rendered to the model as `workflow "<name>" completed (<count> agent<optional-s>).` followed by `Return value:` and the pretty-printed JSON. A workflow that cannot start — a script parse or meta validation failure — returns an error the model can correct from. Cancellation and execution failures return `Error: workflow run was cancelled` or `Error: workflow run failed: <error>`; partial output is never reported as success.
 
-| Key | Default | Meaning |
+### What to expect during a run
+
+While the script runs, the parent turn waits: the tool starts the run, awaits its result, and always disposes it, so the script and its children reach quiescence on every path — including cancellation, which is bridged from the parent step's abort signal. The model sees one final outcome, never intermediate child messages; the children's own work stays out of the parent conversation.
+
+### Config
+
+| Field | Default | Meaning |
 |---|---|---|
 | `toolName` | `workflow` | The model-facing tool name to register. |
 | `maxResultChars` | `50000` | Rendered-result ceiling; longer JSON is truncated with a notice. |
 
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-workflow) is the exhaustive source for every accepted field.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the consumer is split from the engine and how the run lifecycle and records work; observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The consumer owns the model-facing schema, the `tool:<toolName>` system-prompt guidance, and the result envelope; script parsing, execution, caps, and cancellation live behind `ctx.workflowEngine`, so a hardened engine swaps in without changing what the model sees. Usage guidance ships with the tool plugin as a prompt section, never in the deployment persona.
+
+### Run lifecycle
+
+`execute` starts the run and awaits `run.result` inside a `try/finally` that always disposes the run. `exec.signal` is bridged to `run.cancel()`, including the already-aborted-before-start case. A non-`completed` stop reason maps to an `isError` result reporting the reason; completion renders `{ runId, agentsStarted, result }`, with the Native renderer truncating only that projection at `maxResultChars`.
+
+### Durable session records
+
+For a root transport execution (`exec.parent` absent), the tool projects the run into the calling Agent's Session with four log-only events: run-start after `start()` returns, member starts and endings filtered by `run.id`, then run-end only after the result is available and disposal reaches quiescence. Nested transport calls execute normally but write no record. The first failed Session append disables later recording for that run with one warning, leaving either no record or a legal continuous prefix without changing the tool result or cleanup. The package invariant rejects duplicate starts, unpaired members, terminal events with open members, and updates after run-end on both cold load and live append, while accepting missing terminal suffixes.
+
+### Render intent
+
+Decided up front per the [render-intent Agent Note](../../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.md): a `generic` card titled `workflow: <meta.name>`, read directly from `args.meta.name` — presentation is a pure function of args — with the script text carried as `rawInput`. The result keeps the generic card.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: tool registration, run lifecycle, recorder wiring |
+| [`src/types.ts`](src/types.ts) | The four log-only record event payloads and their `SessionEventMap` declaration |
+| [`src/invariant.ts`](src/invariant.ts) | Invariant companion: durable workflow-record protocol validation |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the tool-level contract is not enough. They move from the shared workflow model to the engine and the comparable delegation tool.
+
+- [Workflow subsystem](../../../docs/subsystems/workflow.md) — the seam contract, start request, and event payloads.
+- [Workflow seam](../workflow/README.md) — the run and result vocabulary behind the tool.
+- [Worker-thread engine](../workflow-worker-thread/README.md) — the engine that executes the scripts.
+- [subagent tool](../../subagent/tool-subagent/README.md) — the plain-delegation alternative for one or two children.
+- [Group map](../README.md) — the workflow capability family and its packages.
+- [Dynamic workflows Agent Note](../../../.agents/notes/implemented/feature/2026-07-05-dynamic-workflows.md) — the seam design and its decisions.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### System prompt
@@ -79,7 +151,24 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define what the tool does not yet support. They are current constraints, not a task backlog.
+
 - **The parent turn blocks until the whole workflow settles** — there is no background start/poll API, and cancellation discards partial output as an error.
-- **`args` must be an object and Native result text is bounded** — callers wrap top-level arrays/scalars in a field; the canonical workflow result remains complete, while JSON beyond `maxResultChars` is truncated in the model-facing projection rather than stored behind a retrieval handle.
+- **`args` must be an object and Native result text is bounded** — callers wrap top-level arrays and scalars in a field; the canonical workflow result stays complete, while JSON beyond `maxResultChars` is truncated in the model-facing projection rather than stored behind a retrieval handle.
 - **Workflow policy is fixed per tool registration** — provider selection, caps, and tool name are deployment config, not model-call arguments.
-- **Durable records are top-level and observational** — nested Code Mode dispatches are not recorded, and a recording failure intentionally degrades to an incomplete prefix rather than changing execution.
+- **Durable records are top-level and observational** — nested PTC mode dispatches are not recorded, and a recording failure intentionally degrades to an incomplete prefix rather than changing execution.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers: open directions that are not decided. It is explicitly non-authoritative — shipped behavior, limits, and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+Open directions: a background start/poll route so the parent turn does not block; storing truncated JSON behind a retrieval handle instead of clipping the projection; recording nested dispatches beyond the top level.
+
+</details>

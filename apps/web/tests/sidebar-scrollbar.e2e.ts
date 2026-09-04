@@ -1,67 +1,8 @@
-// Web e2e scenario: the sidebar session list's scrollbar as the browser
-// actually lays it out — the observable half of the themed scrollbars
-// (packages/client/ui-theme/src/styles/scrollbar.css plus the
-// `scrollbar-gutter: stable` reservation on WorkspaceBrowser's `.list`). The
-// ui-theme/ui-workspace unit specs read the CSS text; only a real engine
-// reports the reserved gutter width and the substituted `scrollbar-color`, so
-// those two facts live here.
-//
-// Zero model calls: the list only has to overflow, so the scenario seeds many
-// cold sessions from another spec's committed fixture (seeded-history's
-// seed.jsonl, reused read-only — this spec needs row count, not new recorded
-// content) and never launches a replay row. A stray stream would fail loud
-// with NO_ADAPTER.
-//
-// Headless-chromium caveats, load-bearing for what is asserted below.
-//
-// Headless chromium defaults to an OVERLAY scrollbar: one drawn on top of the
-// content, consuming no layout width unless something reserves space. That is
-// the mode in which the reported symptom exists at all, so this environment
-// reproduces it rather than merely approximating it — without either
-// declaration the list's band is 0 and the bar covers 7px of the relative
-// time. (Under a classic space-consuming bar, `clientWidth` already excludes
-// the bar and nothing can be covered; a headed run under xvfb behaves that way
-// and cannot show the symptom.)
-//
-// The consequence for assertions: comparing the time element's right edge
-// against the list's CLIENT-area right edge holds in both states and proves
-// nothing, because with an overlay bar the client edge is the border edge. The
-// two signals that do separate the states are the reserved band width and
-// `timeCoveredBy`, which measures the overlap against the bar's own width.
-//
-// Both the `scrollbar-gutter: stable` reservation and the sheet's
-// `::-webkit-scrollbar` width are needed for that band, and neither suffices:
-// measured on the running app, deleting either one takes the band from 8 to 0
-// while the other stays in force. The gutter states that space be reserved; the
-// pseudo-element width is what makes chromium treat the bar as occupying layout
-// space in the first place.
-//
-// That conjunction is why `band` and `timeCoveredBy` are both asserted and
-// neither replaces the other. Removing only the gutter leaves `timeCoveredBy` at
-// 0, because the bar is then 8px wide and the row's right padding is also 8px,
-// so it abuts the timestamp without covering it; `band` catches that case.
-// Removing both is what produces the reported overlap, and `timeCoveredBy`
-// measures it at 7.
-//
-// The thumb is a pointer affordance (ui-sidebar rebinds the indirection pair
-// to `transparent` while the pointer is outside the column), so every
-// measurement below states which pointer position it was taken at: the
-// scenario parks the pointer over the sidebar before asserting a colour, and
-// the quiet state and its linger get their own test.
-//
-// Chromium also takes the `::-webkit-scrollbar*` path, not the standard
-// properties: scrollbar.css gates `scrollbar-width`/`scrollbar-color` behind
-// `@supports not selector(::-webkit-scrollbar)`, which is false here. The
-// resolved standard properties therefore read `auto`, and that reading is
-// asserted — a concrete value would mean the gate leaked and silenced the
-// pseudo-element rules. What the theme test measures instead is the pair the
-// pseudo-element rules read: the indirection variables as they resolve ON the
-// list, plus the `::-webkit-scrollbar-thumb:hover` declaration as it stands in
-// the cascade. The hover thumb colour is not observable any other way —
-// chromium folds the `:hover` rule into `getComputedStyle(el,
-// '::-webkit-scrollbar-thumb')`, so that query reports the hover colour at
-// rest and cannot pin either state (measured by deleting the hover rule live:
-// the same query flipped from the hover colour to the resting one).
+// Browser geometry for the sidebar scrollbar reservation and theme. Headless
+// Chromium uses overlay scrollbars, so the reserved band and `timeCoveredBy`
+// together distinguish reserved space from a bar painted over content. Its
+// computed pseudo-element style also folds in `:hover`, so the test reads that
+// declaration from the cascade.
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -74,16 +15,9 @@ import {
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/sidebar-scrollbar', import.meta.url))
-/**
- * Committed golden of the resolved scrollbar style and geometry, in both
- * palettes. The aria goldens the other scenarios commit cannot carry this
- * change: it alters no DOM and no accessible name, so their normalized trees are
- * byte-identical with and without it. This one records the values instead, which
- * makes an unintended shift in thumb colour, band width, or rendering path a
- * reviewable diff rather than an assertion someone has to think about.
- */
+const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.jsonl', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/sidebar-scrollbar', import.meta.url))
+/** Geometry and resolved style are absent from ARIA snapshots, so this scenario records them directly. */
 const GEOMETRY_EXPECTED = join(SNAPSHOT_DIR, 'geometry.expected.md')
 const MODE = webSnapshotMode()
 /** Enough rows that the list overflows the 800px-tall viewport's sidebar; the scenario asserts the overflow rather than trusting it. */
@@ -91,42 +25,24 @@ const SEED_COUNT = 24
 
 /** Geometry and resolved scrollbar style of one scroll container, measured in the page. */
 interface ListMetrics {
-  /** Resolved `scrollbar-gutter`. */
   gutter: string
-  /** Resolved `::-webkit-scrollbar` width: the pseudo-element path's own sizing. */
   width: string
-  /** Resolved `::-webkit-scrollbar-track` background. */
   track: string
-  /** Resolved `scrollbar-width`, expected `auto` because the gate excludes chromium. */
   standardWidth: string
-  /** Resolved `scrollbar-color`, expected `auto` for the same reason. */
   standardColor: string
-  /** `::-webkit-scrollbar-thumb:hover` background declarations found in the cascade, in sheet order. */
   hoverRules: string[]
-  /** `--dsh-scrollbar-thumb` resolved on the list, serialized as a colour. */
   token: string
-  /** `--dsh-scrollbar-thumb-hover` resolved on the list, serialized the same way. */
   hoverToken: string
-  /** True when the list actually scrolls. */
   overflows: boolean
-  /** Border-box width minus client width: the space the scrollbar takes out of the content area. */
   band: number
-  /** Distance from the scrollbar's right edge to the sidebar edge. */
   scrollbarEdgeOffset: number
-  /** Distance from the first row background's right edge to the sidebar edge. */
   rowEdgeInset: number
-  /** Client-area right edge in viewport coordinates (`clientWidth` excludes the scrollbar band). */
   clientRight: number
-  /** Border-box right edge in viewport coordinates. */
   borderRight: number
-  /** Right edge of the first row's relative-time element, the content the unreserved bar covered. */
   timeRight: number
   /**
-   * Pixels of the relative time the scrollbar paints over: how far its right
-   * edge reaches into the band the bar occupies, `[borderRight - barWidth,
-   * borderRight]`. This is the reported symptom as a number, and it is the one
-   * geometric signal that separates the two states in this environment — see
-   * the file header on why `clientWidth` comparisons cannot.
+   * Pixels of relative time under the scrollbar, measured against the bar's
+   * width because an overlay scrollbar does not move the client edge.
    */
   timeCoveredBy: number
 }
@@ -145,13 +61,8 @@ function measureList(page: Page): Promise<ListMetrics> {
     if (time === null) throw new Error('no row relative-time element in the sidebar list')
     const row = list.querySelector<HTMLElement>('[role="treeitem"]')
     if (row === null) throw new Error('no row in the sidebar list')
-    // Each indirection variable is resolved through its own throwaway probe
-    // appended to the list: `var()` substitution then happens where the list
-    // sits in the cascade, which is the claim, and `color` normalizes whatever
-    // notation the palette sheet chose into one comparable serialization. A
-    // REUSED probe would report only the last value read — `getComputedStyle`
-    // returns a live declaration, so reassigning `style.color` retroactively
-    // changes every earlier read.
+    // Use one probe per variable because computed style declarations are live;
+    // the color property also normalizes palette syntax.
     const resolve = (name: string): string => {
       const probe = document.createElement('span')
       probe.style.color = `var(${name})`
@@ -160,11 +71,8 @@ function measureList(page: Page): Promise<ListMetrics> {
       probe.remove()
       return value
     }
-    // The hover colour is read out of the cascade rather than computed:
-    // chromium reports the `:hover` background for the resting pseudo-element
-    // too (see the file header), so no computed query separates the states.
-    // Cross-origin sheets throw on `cssRules`; none is expected, and skipping
-    // them cannot mask the rule under test, which ships in the app's own CSS.
+    // Computed pseudo style folds in hover even at rest, so inspect the cascade.
+    // Cross-origin sheets may throw and cannot contain the app-owned rule.
     const hoverRules = [...document.styleSheets]
       .flatMap((sheet) => {
         try {
@@ -233,9 +141,7 @@ function measureRowInset(page: Page): Promise<Pick<ListMetrics, 'overflows' | 'r
 
 /** One palette's readings, taken at both pointer positions. */
 interface PaletteMetrics {
-  /** Everything measured with the pointer over the list, which is when a thumb exists. */
   hovered: ListMetrics
-  /** `--dsh-scrollbar-thumb` with the pointer parked outside the column. */
   quietThumb: string
 }
 
@@ -260,17 +166,8 @@ async function measurePalette(page: Page): Promise<PaletteMetrics> {
 }
 
 /**
- * Render the golden body: the resolved scrollbar style of the list in each
- * palette, plus the geometric relations the scrollbar-gutter/thin-scrollbar
- * declarations establish.
- *
- * Absolute coordinates are deliberately absent. `timeRight`, `clientRight`, and
- * `borderRight` depend on the sidebar's laid-out width and on font metrics, so
- * committing them would make the golden fail on a machine whose fonts measure
- * differently — a fixture that has to be re-recorded per platform documents the
- * platform, not the behavior. What is recorded instead is the band, the overlap,
- * and the two orderings, each of which is a difference or a comparison and so
- * survives any layout that keeps the reservation.
+ * Render platform-neutral differences and comparisons instead of absolute
+ * coordinates that depend on sidebar width and font metrics.
  * @param light - metrics measured under the light palette.
  * @param dark - metrics measured under the dark palette.
  * @returns the golden body, without a trailing newline.
@@ -395,7 +292,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     // the list with room to spare.
     page = await newEnglishPage(browser, 800)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await expandSeededSessions(page)
     // Every assertion about a thumb colour needs a drawn thumb, and the column
@@ -416,27 +313,12 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     await expect.poll(async () => (await measureList(page)).overflows, { timeout: 10_000 }).toBe(true)
     const metrics = await measureList(page)
     expect(metrics.gutter).toBe('stable')
-    // The control. `band > 0` is the whole observable effect of the
-    // reservation: the scrollbar is taken out of the content area instead of
-    // drawn over it. Removing the declaration makes it exactly 0. The value
-    // itself is not pinned — it tracks `scrollbar-width` and the platform.
+    // Pin presence, not width, because the width is platform-dependent.
     expect(metrics.band).toBeGreaterThan(0)
     expect(metrics.scrollbarEdgeOffset).toBe(2)
     expect(metrics.rowEdgeInset).toBe(12)
-    // The reported symptom, stated directly: no part of the row's relative time
-    // lies under the bar. Without either declaration it measures 7 — the `h`
-    // of `1h` is the covered part. Unlike the client-edge comparison below it
-    // does not go vacuous under an overlay scrollbar, because it measures
-    // against the bar's own width rather than against a content edge the
-    // overlay bar does not move. It is not a replacement for the band
-    // assertion above; see the file header for which regression each one
-    // catches.
+    // Measure against the bar because overlay scrollbars do not move the client edge.
     expect(metrics.timeCoveredBy).toBe(0)
-    // Corollaries of the reservation, kept because they pin where the band sits
-    // rather than only that it exists: the time ends inside the content area,
-    // and the content area ends before the border box. Each holds in both
-    // states on its own (see the file header) and is meaningful only alongside
-    // the two assertions above.
     expect(metrics.timeRight).toBeLessThanOrEqual(metrics.clientRight)
     expect(metrics.clientRight).toBeLessThan(metrics.borderRight)
     expect(tripwire.pageErrors).toEqual([])
@@ -530,7 +412,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
   }, 60_000)
 
   it('commits exactly the fixtures it reads', async () => {
-    // The scenario borrows seeded-history's seed.jsonl rather than committing a
+    // The scenario borrows seeded-history's session.jsonl rather than committing a
     // second copy, so this directory holds the golden alone.
     await assertFixtureInventory(SNAPSHOT_DIR, ['geometry.expected.md'])
   })

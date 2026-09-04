@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -26,6 +27,8 @@ import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent
 async function harness(adapter: MockAdapter, sessionRoot?: string, dshHome?: string) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  // AgentLoop declares the registry as a required injection.
+  await ctx.plugin(SessionProjectionRegistry)
   if (sessionRoot !== undefined) {
     await ctx.plugin(JsonlSessionPersistence, { root: sessionRoot, compression: 'none' })
   }
@@ -57,13 +60,13 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
   })
 }
 
-function events(agent: Agent): SessionEvent[] {
-  return [...agent.session.events]
+function events(agent: Agent): readonly SessionEvent[] {
+  return agent.session.snapshotEvents()
 }
 
 /** Find a session event by type, narrowed; throws when absent. */
 function findEvent<T extends SessionEvent['type']>(
-  log: SessionEvent[],
+  log: readonly SessionEvent[],
   type: T,
   position: 'first' | 'last' = 'first',
 ): Extract<SessionEvent, { type: T }> {

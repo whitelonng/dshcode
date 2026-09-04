@@ -68,7 +68,7 @@ Elapsed since the preceding step context: <duration-or-unavailable>.
 
 ## 后果
 
-- 浏览器时区含义归属于请求并可持久重建，无需更改会话、fork、JSONL 或 SQLite schema。
+- 浏览器时区含义归属于请求并可持久重建，无需更改会话、fork 或 JSONL schema。
 - 模型在每个 Schedule Web 请求步骤中都会收到所请求的浏览器本地假设；来源信息混杂或缺失时会询问，而不是猜测。
 - 工具仍保持显式边界：上下文帮助模型选择字段，但不会成为包 seam 上隐藏的默认值。
 - 时间上下文仅追加并保留到压缩为止；正数间隔会减少历史增长，但也可能使后续请求缺少新的浏览器时区指导。

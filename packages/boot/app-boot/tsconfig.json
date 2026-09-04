@@ -24,10 +24,10 @@
       "path": "../../../vendor/hmr"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../core/system-prompt"
     },
     {
-      "path": "../../core/system-prompt"
+      "path": "../../util/atomic-write"
     },
     {
       "path": "../../util/launch-environment"

@@ -22,9 +22,9 @@ Status: implemented
 
 **消息。** `Session.deriveMessages()` 带缓存：每个 surface 条目在首次出现时通过公开的逐事件函数 `deriveEventMessage(event)` 精确投影一次；surface 重写（压缩的 `replace`，即 `SurfaceManager.replaceGeneration`）触发重建。调用方每次获得一个新数组，底层是共享的深度冻结消息：通过投影变异已记录的历史是不可表达的（会抛异常），取代了旧的逐次调用克隆隔离。外部重建器对日志前缀折叠同一个公开函数，因此不可能有两条路径产生分歧。
 
-`EpochHeader` 记录请求的非历史状态：调用配置、渲染后的系统提示词和工具 schema，空值规范化为缺失。`request/header` 始终写入完整快照：首个循环实例使用 reason `initial`，后续实例使用 `resume`，实例内变更使用 `change`。`foldRequestHeader` 选择最新快照。旧的 `request/header-delta` 事件和已移除的 `fallback` reason 在追加或加载时都会被拒绝。
+`EpochHeader` 记录请求的非历史状态：调用配置、渲染后的系统提示词和工具 schema，空值规范化为缺失。适配器提供的推理强度与 token 默认值会保留其 `adapterDefaults` 来源信息；Web 从日志恢复模型选择时会省略适配器持有的推理强度，因此下一次解析不会把相同的有效配置重新归类为显式选择并产生虚假变更。`request/header` 始终写入完整快照：首个循环实例使用 reason `initial`，后续实例使用 `resume`，实例内变更使用 `change`，内容未变的封装显式开启消息序列或跟随表层替换时使用 `series`。如果发生变化的请求同时开启序列，`change` 快照会携带 `startsSeries: true`，无需重复 header 即可保留这两个独立事实。普通的仅追加后续 Turn、同一序列内后续的 Step 与重试沿用最新快照。`foldRequestHeader` 选择最新快照。旧的 `request/header-delta` 事件和已移除的 `fallback` reason 在追加或加载时都会被拒绝。
 
-每个拟议步骤先领取其 inbox 批次，再运行 `agent/pre-step`。reject 不打开步骤；enter 打开 `step/start`，并把最终消息批次记录为 `user/message` 事件。随后步骤组装系统提示词与工具，`agent/request` 只能替换冻结的调用配置种子。循环记录所需的完整 header 快照，从派生消息与该 header 构建 `GenerateOptions`，对其深度冻结但保持 `AbortSignal` 活跃。首次调用配置从显式的 `AgentOptions` 出发，保留 fork 覆盖和恢复重配置；后续调用从折叠后的 header 出发。
+每个拟议步骤先领取其 inbox 批次，再运行 `agent/pre-step`。reject 不打开步骤；enter 打开 `step/start`，把最终消息批次记录为 `user/message` 事件，并可使用 `startsRequestSeries: true` 声明独立序列。随后步骤组装系统提示词与工具，`agent/request` 只能替换冻结的调用配置种子。循环记录所需的 initial、resume、change 或 series 完整快照，从派生消息与该 header 构建 `GenerateOptions`，对其深度冻结但保持 `AbortSignal` 活跃。首次调用配置从显式的 `AgentOptions` 出发，保留 fork 覆盖和恢复重配置；后续调用从折叠后的 header 出发。
 
 **已打开步骤是重建边界。** 进入步骤的 `user/message` 批次与任何新写入的 `request/header` 都位于请求分派之前。原子领取后发生的注入加入后续请求；必须影响本次请求的监听器则通过 `agent/pre-step` 返回消息。header 重建选择该步骤的 `request/header`，或在无新 header 写入时沿用前一个快照。
 
@@ -42,6 +42,7 @@ Status: implemented
 - **检测并报告**（比较连续请求，发散时告警）：事后捕获违规；违规请求仍可构造并发出。因违规必须在接口层面不可表达而否决。
 - **事件驱动组装**（仅在变更信号时重新渲染）：存在漏信号的 bug 类别——会话中途注册的工具发出 `tools/change` 而非 `system-prompt/change`，第三方提供方可能什么都不发。逐步骤渲染加值比较在零信号纪律下即可稳健工作。
 - **自定义 header-delta 编解码器**（系统行编辑、按名称键控的工具编辑、完整配置/前缀替换）：减少了重复字节，却复制了表示及其 diff/apply/fallback 机制。完整快照只保留一种回放表示。
+- **引用前一个 header 的轻量 series 标记**：减少重复的提示词与工具字节，但从该标记开始的窗口若不再读取前序，就无法渲染或重建请求。自包含的完整快照让持久化、局部历史和快照固定共用一种表示。
 - **Header 快照上的叙事性变更字段列表**：可以通过比较连续快照推导。`reason` 仍保留，因为实例边界无法从快照值推导。
 
 ## 后果
@@ -52,5 +53,5 @@ Status: implemented
 - `agent/pre-step` 是当前请求的消息通道；直接修改 inbox 则是最终进入后续请求的通道。
 - 工具结果裁剪无需新机制：一个已记录的单条目 surface replace（`start === end`），携带同一 `callId` 下裁剪后的 `tool/result`——属压缩家族，回放正确，缓存失效由相同的压力逻辑批量处理。
 - 无法读取的被引用附件对象仍会让模型请求失败；[附件自动隔离](../../proposed/bug-fix/2026-08-20-attachment-read-quarantine.zh.md)记录了不削弱字节精确重建的拟议恢复方案。
-- 会话日志每个循环实例增长一个 `request/header` 快照，并在真正变更时增加快照。它比 delta 编解码器更大，但相对分片密集型日志仍然很小，并只保留一种回放表示。`SESSION_FORMAT_VERSION` 保持 `0`；旧的 delta 事件被拒绝而非迁移。
-- 快照预期输出变更一次（每个 transcript（文本记录）增加其 header 事件）；写入文件系统的 fixture（测试前置数据）以规范化的撰写形式存储，工具参数使用 cwd 相对路径，因为回放只对 cwd 无关的参数路径做往返。
+- 会话日志会为每个循环实例、真实变更和后续模型消息序列增加一个 `request/header` 快照。重复完整系统提示词与工具目录比 delta 编解码器更大，但相对分片密集型日志仍然很小，并保留一种自包含的回放表示。`SESSION_FORMAT_VERSION` 保持 `0`；旧的 delta 事件被拒绝而非迁移。
+- 快照 fixture 包含每个重复的 series header。无密钥 refresh 负责这些确定性日志变化；快照 harness 只为 initial 与真实 change 修订固定提示词和工具 sidecar，并让 `series` 快照复用当前修订。写入文件系统的 fixture 继续以规范化的撰写形式存储，工具参数使用 cwd 相对路径，因为回放只对 cwd 无关的参数路径做往返。

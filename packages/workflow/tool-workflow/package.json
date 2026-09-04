@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-workflow",
   "description": "Model-facing workflow tool: run a JavaScript orchestration script over ctx.workflowEngine",
-  "version": "1.0.5",
+  "version": "0.1.2-alpha.4",
   "publishConfig": {
     "access": "public"
   },
@@ -59,6 +59,7 @@
     "@deepseek-ai/dsh-tools": "workspace:^",
     "@deepseek-ai/dsh-workflow": "workspace:^",
     "@deepseek-ai/dsh-workflow-worker-thread": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-session-projection": "workspace:^"
   }
 }

@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-26-web-syntax-highlighting-shiki.md) | 中文
 
-> 范围：web client 唯一的一套语法高亮体系——依赖裁决、单例形态、token 表约定与各消费表面。本篇是 Code Mode UI 堆叠 PR（Pull Request）链的第五个 PR；[chat 子调用行 Agent Note](../feature/2026-07-26-code-mode-chat-subcall-rows.zh.md)交付了 `run_code` 程序正文，而本体系存在的意义正是让它可读。样式的基本规则由 [Web 样式体系裁决](2026-07-19-web-styling-system.zh.md)规定。
+> 范围：web client 唯一的一套语法高亮体系——依赖裁决、单例形态、token 表约定与各消费表面。本篇是 PTC mode UI 堆叠 PR（Pull Request）链的第五个 PR；[chat 子调用行 Agent Note](../feature/2026-07-26-ptc-chat-subcall-rows.zh.md)交付了 `run_code` 程序正文，而本体系存在的意义正是让它可读。样式的基本规则由 [Web 样式体系裁决](2026-07-19-web-styling-system.zh.md)规定。
 
 ## 问题
 

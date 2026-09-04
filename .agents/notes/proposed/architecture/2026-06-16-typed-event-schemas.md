@@ -10,7 +10,7 @@ The harness models its core vocabulary — content blocks, message sources, fini
 
 The pattern is **compile-time only**. The types vanish at runtime: there is no schema object to validate an incoming value against, parse untrusted input with, or enumerate at runtime. The [session-persistence contract](../../implemented/architecture/2026-06-14-session-persistence.md) exposes two consequences:
 
-1. **Persistence treats `event.data` as opaque JSON.** The JSONL/SQLite backends `JSON.stringify`/`JSON.parse` each event verbatim; the only runtime guard is `isJsonValue` (round-trip serializability — rejects BigInt, functions, cycles, non-finite numbers, …), NOT structural validation. A corrupted-but-still-JSON event datum (wrong field types, missing fields) round-trips silently and is only caught later, if at all, by a consumer's `switch`.
+1. **Persistence treats `event.data` as opaque JSON.** The JSONL provider `JSON.stringify`s and `JSON.parse`s each event verbatim; the only runtime guard is `isJsonValue` (round-trip serializability — rejects BigInt, functions, cycles, non-finite numbers, …), not structural validation. A corrupted-but-still-JSON event datum (wrong field types, missing fields) round-trips silently and is only caught later, if at all, by a consumer's `switch`.
 2. **No runtime contract for plugin-added variants.** A plugin that declaration-merges a new `SessionEventMap` key gets compile-time typing for its own code, but nothing validates that the values it produces match the shape it declared — at the producer, at the persistence boundary, or on reload.
 
 This raises whether the event vocabulary should move to **Zod** or another runtime-schema library so durable and plugin boundaries have runtime schemas rather than erased types.

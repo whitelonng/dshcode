@@ -10,7 +10,7 @@ The shipped graphical surface required a user to install Node.js, launch `dsh we
 
 A desktop owner must also control the Web service it starts. A fixed port can collide with another DSHCode or development process, a wildcard bind exposes the control surface to the LAN, and exiting Electron without disposing the Harness tree can leave sockets or subprocesses alive. Packaging adds a separate failure mode: pnpm workspace packages use required peers as shared Service Definitions, so a deployment can build successfully yet fail only when the Loader imports a peer omitted from the installed tree.
 
-The [GUI layering decision](2026-07-19-gui-layering-and-rpc-protocol.md) leaves both same-origin Web carriage and a future Electron IPC carrier available. The existing Web profile already owns static assets, HTTP API routes, the [WebSocket downlink](2026-08-04-websocket-downlink-carrier.md), directory picking, and the complete browser plugin roster. Replacing that carrier would enlarge this first desktop change without changing the requested interface.
+The [GUI layering decision](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md) leaves both same-origin Web carriage and a future Electron IPC carrier available. The existing Web profile already owns static assets, HTTP API routes, the [WebSocket downlink](../../archived/architecture/2026-08-04-websocket-downlink-carrier.md), directory picking, and the complete browser plugin roster. Replacing that carrier would enlarge this first desktop change without changing the requested interface.
 
 ## Decision
 

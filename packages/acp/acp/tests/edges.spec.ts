@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
-import { createUserMessage, CallId, type StreamChunk  } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId, type StreamChunk  } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import { makeBridgeHarness, textResponse, type BridgeHarness } from './harness.ts'
 
 function toolCallResponse(): StreamChunk[] {
   return [
-    { type: 'block-start', index: 0, blockType: 'tool-call' },
-    { type: 'tool-call-delta', index: 0, id: CallId('call-1'), name: 'echo', argumentsDelta: '{}' },
-    { type: 'block-end', index: 0, block: { type: 'tool-call', id: CallId('call-1'), name: 'echo', arguments: '{}' } },
+    { type: 'block-start', index: 0, blockType: 'reasoning' },
+    { type: 'reasoning-delta', index: 0, text: 'inspect first' },
+    { type: 'block-end', index: 0, block: { type: 'reasoning', text: 'inspect first' } },
+    { type: 'block-start', index: 1, blockType: 'tool-call' },
+    { type: 'tool-call-delta', index: 1, id: ToolCallId('call-1'), name: 'echo', argumentsDelta: '{}' },
+    { type: 'block-end', index: 1, block: { type: 'tool-call', id: ToolCallId('call-1'), name: 'echo', arguments: '{}' } },
+    { type: 'usage', usage: { inputTokens: 8, outputTokens: 2, reasoningTokens: 1 } },
     { type: 'finish', reason: { kind: 'tool-calls' } },
   ]
 }
@@ -22,7 +26,7 @@ describe('ACP automation output boundary', () => {
     harness = undefined
   })
 
-  it('does not emit tool, terminal, plan, title, or reasoning presentation updates', async () => {
+  it('emits committed reasoning, generic tool lifecycle, usage, and final text in order', async () => {
     harness = await makeBridgeHarness({ script: [toolCallResponse(), textResponse('done')] })
     harness.ctx.tools.register(defineContentToolFixture({
       name: 'echo',
@@ -34,11 +38,45 @@ describe('ACP automation output boundary', () => {
     const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
     await harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'go' }] })
 
-    await vi.waitFor(() => { expect(harness!.updates).toHaveLength(1) })
-    expect(harness.updates).toEqual([{
+    await vi.waitFor(() => { expect(harness!.updates.at(-1)?.sessionUpdate).toBe('usage_update') })
+    expect(harness.updates.map(update => update.sessionUpdate)).toEqual([
+      'agent_thought_chunk',
+      'usage_update',
+      'tool_call',
+      'tool_call_update',
+      'agent_message_chunk',
+      'usage_update',
+    ])
+    expect(harness.updates[0]).toMatchObject({
+      sessionUpdate: 'agent_thought_chunk',
+      content: { type: 'text', text: 'inspect first' },
+    })
+    expect('messageId' in harness.updates[0]!).toBe(true)
+    expect(harness.updates[2]).toMatchObject({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'call-1',
+      title: 'echo',
+      kind: 'other',
+      status: 'in_progress',
+      rawInput: {},
+    })
+    expect(harness.updates[3]).toMatchObject({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'call-1',
+      status: 'completed',
+      content: [{ type: 'content', content: { type: 'text', text: 'tool result' } }],
+    })
+    expect(harness.updates[4]).toMatchObject({
       sessionUpdate: 'agent_message_chunk',
       content: { type: 'text', text: 'done' },
-    }])
+    })
+    expect('messageId' in harness.updates[4]!).toBe(true)
+    expect(harness.updates[5]).toMatchObject({
+      sessionUpdate: 'usage_update',
+      size: 1_024,
+    })
+    if (harness.updates[5]?.sessionUpdate !== 'usage_update') throw new Error('expected usage update')
+    expect(typeof harness.updates[5].used).toBe('number')
   })
 
   it('ignores events from agents the bridge does not own', async () => {
@@ -62,11 +100,13 @@ describe('ACP automation output boundary', () => {
 
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'plugin', plugin: 'test' } }))
     await agent.whenIdle()
+    await vi.waitFor(() => { expect(harness!.updates.at(-1)?.sessionUpdate).toBe('usage_update') })
 
-    expect(harness.updates).toEqual([{
+    expect(harness.updates[0]).toMatchObject({
       sessionUpdate: 'agent_message_chunk',
       content: { type: 'text', text: 'external' },
-    }])
+    })
+    expect('messageId' in harness.updates[0]!).toBe(true)
   })
 
   it('contains output conversion failure outside an ACP prompt', async () => {

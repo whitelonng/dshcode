@@ -7,7 +7,7 @@
   align-items: flex-start;
   gap: 8px;
   padding: 16px 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 .rowText {
@@ -95,6 +95,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
+  corner-shape: round;
   background: var(--dsw-alias-bg-layer-1);
   transition: transform 0.15s ease;
 }

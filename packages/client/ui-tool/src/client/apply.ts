@@ -1,7 +1,11 @@
 /** Register the Tool call tree, details renderer, and built-in atomic views. */
-import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
+import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import { ToolCallTree } from './tool/ToolCallTree.tsx'
 import { ToolDetails } from './tool/ToolDetails.tsx'
 import { CONVERSATION_NS as NS } from './locale.ts'
@@ -13,16 +17,19 @@ import { searchToolview } from './tool/toolviews/search-row.tsx'
 import { todoToolview } from './tool/toolviews/todo-row.tsx'
 import { webToolview } from './tool/toolviews/web-row.tsx'
 
-/** Required services: the slot registry and the Host description used for POSIX `~`. */
-export const inject = ['slots', 'connection']
+/** Required services: the slot registry and the Remote face carrying the Host home used for POSIX `~`. */
+export const inject = ['slots', 'remote']
 
 /**
  * Mount the whole-Tool renderers and built-in atomic Tool registrations.
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const connection = ctx.get('connection') as ConnectionHandle
-  const toolInject = () => ({ hooks: { hostDescription: connection.hostDescription } })
+  const hostInfo: HostObservable<RemoteHostFacts> = {
+    getSnapshot: () => ctx.remote.$host,
+    subscribe: listener => ctx.on('connection/reset', listener),
+  }
+  const toolInject = () => ({ hooks: { hostInfo } })
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'tool-call',

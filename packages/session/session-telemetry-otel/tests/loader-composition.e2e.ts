@@ -14,11 +14,11 @@ import { describe, expect, it } from 'vitest'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 
 const driver = fileURLToPath(new URL(
-  '../../../../examples/headless-agent/tests/fixtures/session-telemetry-otel-driver.ts',
+  './fixtures/driver.ts',
   import.meta.url,
 ))
 const configPath = fileURLToPath(new URL(
-  '../../../../examples/headless-agent/tests/fixtures/session-telemetry-otel.cordis.yml',
+  './fixtures/telemetry.patch.yml',
   import.meta.url,
 ))
 const repoTsconfig = fileURLToPath(new URL('../../../../tsconfig.json', import.meta.url))
@@ -75,7 +75,7 @@ function eventTypes(captures: OtlpCapture[]): string[] {
         : []) ?? [])
 }
 
-describe('session-telemetry-otel through a real headless cordis.yml', () => {
+describe('session-telemetry-otel through the production headless profile', () => {
   it('exports redacted ledger records to the collector while the canonical log keeps the secret', async () => {
     let output!: FixtureOutput
     const { stderr } = await runLoaderSmoke({

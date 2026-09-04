@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IDisposable, IPty } from 'node-pty'
 import { LocalTerminalHandle } from '@deepseek-ai/dsh-subprocess-local/src/terminal.ts'
+import { createProcessInspector } from '@deepseek-ai/dsh-subprocess-local/src/process-inspector.ts'
 import type {
   ProcessIdentity,
   ProcessInspector,
+  ProcessInspectorInternals,
+  ProcessSnapshot,
 } from '@deepseek-ai/dsh-subprocess-local/src/process-inspector.ts'
 import type { SubprocessTerminalSignal } from '@deepseek-ai/dsh-subprocess'
 
@@ -59,22 +62,41 @@ class FakeInspector implements ProcessInspector {
   readonly alive = new Set<number>()
   readonly groups: Array<[number, SubprocessTerminalSignal]> = []
   readonly processes: Array<[number, 'SIGTERM' | 'SIGKILL']> = []
+  readonly stdinChecks: Array<[number, number]> = []
   throwGroup = false
   throwProcess = false
   removeOnSignal = true
 
   foregroundPgid() { return this.pgid }
-  isStdinWaiting() { return this.waiting }
-  processTree() { return this.root === undefined ? this.members : [this.root, ...this.members] }
-  processSession() { return this.sessionMembers }
-  isAlive(identity: ProcessIdentity) { return this.alive.has(identity.pid) }
+  isStdinWaiting(pgid: number, shellPid: number) {
+    this.stdinChecks.push([pgid, shellPid])
+    return this.waiting
+  }
+  /** Per-question table reads; tests replace one to stage a scan without rebuilding the fake. */
+  readTree: () => ProcessIdentity[] = () => this.root === undefined ? this.members : [this.root, ...this.members]
+  readSession: () => ProcessIdentity[] = () => this.sessionMembers
+  readAlive: (identity: ProcessIdentity) => boolean = identity => this.alive.has(identity.pid)
+  /** Liveness as of right now; tests diverge it from readAlive to stage an exit between scan and signal. */
+  readCurrentAlive: (identity: ProcessIdentity) => boolean = identity => this.readAlive(identity)
+  /** Counts process-table captures so read-amplification cases can pin them. */
+  captures = 0
+
+  snapshot(): ProcessSnapshot {
+    this.captures += 1
+    return {
+      tree: () => this.readTree(),
+      session: () => this.readSession(),
+      alive: identity => this.readAlive(identity),
+    }
+  }
+
+  isAlive(identity: ProcessIdentity) { return this.readCurrentAlive(identity) }
   signalGroup(pgid: number, signal: SubprocessTerminalSignal) {
     if (this.throwGroup) throw new Error('group failed')
     this.groups.push([pgid, signal])
   }
   signalProcess(identity: ProcessIdentity, signal: 'SIGTERM' | 'SIGKILL') {
     // Mirrors the real inspectors' alive-gated signalling.
-    if (!this.alive.has(identity.pid)) return
     if (this.throwProcess) throw new Error('process raced')
     if (!this.isAlive(identity)) return
     this.processes.push([identity.pid, signal])
@@ -131,7 +153,7 @@ describe('LocalTerminalHandle', () => {
     inspector.alive.add(captured.pid)
     const handle = new LocalTerminalHandle(pty.asPty(), inspector, 10)
     await handle.inspectForeground()
-    inspector.processTree = () => { throw new Error('process table unavailable') }
+    inspector.readTree = () => { throw new Error('process table unavailable') }
     inspector.throwProcess = true
 
     expect(() => { handle.terminateForHostExit() }).not.toThrow()
@@ -162,7 +184,7 @@ describe('LocalTerminalHandle', () => {
     inspector.alive.add(pty.pid)
     const handle = new LocalTerminalHandle(pty.asPty(), inspector, 10)
     inspector.root = { pid: pty.pid, started: 'recycled' }
-    inspector.isAlive = identity => identity.started === 'recycled'
+    inspector.readAlive = identity => identity.started === 'recycled'
 
     handle.terminateForHostExit()
 
@@ -182,6 +204,7 @@ describe('LocalTerminalHandle', () => {
     await handle.write('input\r')
     expect(pty.writes).toEqual(['input\r'])
     expect(await handle.inspectForeground()).toEqual({ processGroupId: 456, inputWaiting: true })
+    expect(inspector.stdinChecks).toEqual([[456, 123]])
     expect(await handle.signalForeground('SIGINT')).toBe(456)
     expect(inspector.groups).toEqual([[456, 'SIGINT']])
 
@@ -253,7 +276,7 @@ describe('LocalTerminalHandle', () => {
     const pty = new FakePty()
     const inspector = new FakeInspector()
     const disowned = { pid: 124, started: 'disowned' }
-    inspector.processSession = () => inspector.alive.has(disowned.pid) ? [disowned] : []
+    inspector.readSession = () => inspector.alive.has(disowned.pid) ? [disowned] : []
     inspector.alive.add(124)
     const handle = makeHandle(pty, inspector, 20)
 
@@ -313,7 +336,7 @@ describe('LocalTerminalHandle', () => {
     const inspector = new FakeInspector()
     const root = { pid: 123, started: 'shell' }
     let reads = 0
-    inspector.processTree = () => {
+    inspector.readTree = () => {
       reads += 1
       if (reads === 1) return [root]
       if (reads === 2) {
@@ -380,7 +403,7 @@ describe('LocalTerminalHandle', () => {
     const root = { pid: 123, started: 'shell' }
     let reads = 0
     inspector.alive.add(captured.pid)
-    inspector.processTree = () => { reads += 1; return reads === 1 ? [root] : reads === 2 ? [root, captured] : [] }
+    inspector.readTree = () => { reads += 1; return reads === 1 ? [root] : reads === 2 ? [root, captured] : [] }
     inspector.signalProcess = (identity, signal) => {
       inspector.processes.push([identity.pid, signal])
       if (signal === 'SIGKILL') inspector.alive.delete(identity.pid)
@@ -507,5 +530,89 @@ describe('LocalTerminalHandle on Windows', () => {
     await handle.terminate()
     expect(pty.kills).toHaveLength(1)
     expect(inspector.processes).toEqual([])
+  })
+})
+
+describe('signalling freshness and containment', () => {
+  it('keeps synchronous host exit going when the process table cannot be captured', () => {
+    const pty = new FakePty()
+    const inspector = new FakeInspector()
+    inspector.alive.add(pty.pid)
+    const handle = new LocalTerminalHandle(pty.asPty(), inspector, 10)
+    inspector.snapshot = () => { throw new Error('process table unavailable') }
+
+    expect(() => { handle.terminateForHostExit() }).not.toThrow()
+
+    // forceStopShell still runs: a failed scan must not cost the PTY root.
+    expect(inspector.processes).toEqual([[pty.pid, 'SIGKILL']])
+  })
+
+  it('captures no process table for a signalling round with no members', () => {
+    const pty = new FakePty()
+    const inspector = new FakeInspector()
+    inspector.alive.add(pty.pid)
+    const handle = new LocalTerminalHandle(pty.asPty(), inspector, 10)
+    // Only the shell exists, so every descendant scan yields an empty round.
+    inspector.readTree = () => [{ pid: pty.pid, started: 'shell' }]
+    inspector.captures = 0
+
+    handle.terminateForHostExit()
+
+    // Two descendant scans and nothing else: no capture for either empty
+    // signalling round, and none for the identity-fenced shell kill.
+    expect(inspector.captures).toBe(2)
+  })
+})
+
+describe('process-table read amplification', () => {
+  // The macOS inspector answers every question by forking `/bin/ps`, so a
+  // readiness poll that asks per descendant scales its blocking cost with the
+  // command's process tree. These pin the read count, not the wall time.
+  function darwinInternals(table: string): { internals: ProcessInspectorInternals; tableReads: string[] } {
+    const tableReads: string[] = []
+    const unreachable = (): never => { throw new Error('darwin inspection uses exec and kill only') }
+    return {
+      tableReads,
+      internals: {
+        readFile: unreachable,
+        readDir: unreachable,
+        readLink: unreachable,
+        stat: unreachable,
+        open: unreachable,
+        read: unreachable,
+        close: unreachable,
+        exec(_file, args) {
+          if (args.includes('tpgid=')) return '456\n'
+          tableReads.push(args.join(' '))
+          return table
+        },
+        kill() {},
+      },
+    }
+  }
+
+  /** A shell at pid 123 with `count` descendants chained beneath it. */
+  function shellTable(count: number): string {
+    const rows = [' 123 1 Mon Jul 21 10:00:00 2026']
+    for (let index = 0; index < count; index += 1) {
+      rows.push(` ${String(124 + index)} ${String(123 + index)} Mon Jul 21 10:00:${String(index + 1).padStart(2, '0')} 2026`)
+    }
+    return `${rows.join('\n')}\n`
+  }
+
+  async function tableReadsForOnePoll(descendants: number): Promise<number> {
+    const { internals, tableReads } = darwinInternals(shellTable(descendants))
+    const inspector = createProcessInspector('darwin', 'arm64', internals)
+    const handle = new LocalTerminalHandle(new FakePty().asPty(), inspector, 10, 'darwin')
+    tableReads.length = 0
+    const foreground = await handle.inspectForeground()
+    expect(foreground).toEqual({ processGroupId: 456, inputWaiting: false })
+    return tableReads.length
+  }
+
+  it('reads the macOS process table once per foreground inspection regardless of descendant count', async () => {
+    expect(await tableReadsForOnePoll(0)).toBe(1)
+    expect(await tableReadsForOnePoll(2)).toBe(1)
+    expect(await tableReadsForOnePoll(10)).toBe(1)
   })
 })

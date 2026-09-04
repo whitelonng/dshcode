@@ -39,7 +39,7 @@ const PNG = Uint8Array.from(Buffer.from(
   'base64',
 ))
 
-const POLICY: NormalizationPolicy = { maxDimension: 2048, maxBytes: 1024 * 1024 }
+const POLICY: NormalizationPolicy = { maxPixels: 2048 * 2048, maxDimension: 8192, maxBytes: 1024 * 1024 }
 
 const LIMITS: ImageAttachmentLimits = {
   maxImageBytes: 1024,
@@ -132,10 +132,21 @@ describe('local attachment store', () => {
     expect(second.attachmentId).toBe(first.attachmentId)
     expect(new Uint8Array(await readFile(object))).toEqual(PNG)
     if (process.platform !== 'win32') {
-      expect((await stat(object)).mode & 0o777).toBe(0o600)
+      expect((await stat(object)).mode & 0o777).toBe(0o400)
       expect((await stat(join(storageRoot, 'objects', sha256.slice(0, 2)))).mode & 0o777).toBe(0o700)
     }
+    await chmod(object, 0o600)
+    await saveImageFile(storageRoot, { data: PNG, mediaType: 'image/png' }, LIMITS, POLICY)
+    if (process.platform !== 'win32') expect((await stat(object)).mode & 0o777).toBe(0o400)
     await expect(readImageFile(storageRoot, first)).resolves.toEqual({ ref: first, data: PNG })
+  })
+
+  it.skipIf(process.platform !== 'win32')('publishes a new object on Windows', async () => {
+    const storageRoot = await root()
+
+    const ref = await saveImageFile(storageRoot, { data: PNG, mediaType: 'image/png' }, LIMITS, POLICY)
+
+    await expect(readImageFile(storageRoot, ref)).resolves.toEqual({ ref, data: PNG })
   })
 
   it('stores the normalized image of an oversized source and reads it back verified', async () => {
@@ -146,10 +157,10 @@ describe('local attachment store', () => {
 
     const saved = await saveImageFile(storageRoot, {
       data: oversized, mediaType: 'image/png', name: 'big.png',
-    }, { ...LIMITS, maxImagePixels: 64 }, { maxDimension: 2, maxBytes: 1024 * 1024 })
+    }, { ...LIMITS, maxImagePixels: 64 }, { maxPixels: POLICY.maxPixels, maxDimension: 2, maxBytes: 1024 * 1024 })
 
     expect(saved).toMatchObject({
-      mediaType: 'image/png',
+      mediaType: 'image/jpeg',
       width: 2,
       height: 2,
       name: 'big.png',

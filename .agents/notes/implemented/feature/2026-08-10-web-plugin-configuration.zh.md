@@ -49,4 +49,4 @@ Status: implemented
 
 bash 与 pwsh 执行器现在把 `config` 暴露为 source thunk 之上的 getter，而不再是 readonly 字段。所有读取点本就是按次读取，因此别无变化；但若某个子类在构造期捕获 `this.config`，就会悄然把组装条目钉死。
 
-`verify-cordis-config` 新增一项检查，代价由本分支付过：合并 master 对客户端清单字段的重命名（`dshClient` → `dsh.client`）后，本包仍声明旧名，于是整个分区从浏览器上消失，且任何地方都不报错——行照常组装、空的 node 半侧照常激活，只是浏览器 roster 扫描永远匹配不到它。这一点无从被既有门禁发现，因为组装文件区分不了 surface 插件与 Host 插件：差别在清单里。现在门禁要求 `packages/client` 包的 `./client` 导出与 `dsh.client` 声明双向一致。之所以只限这一组：Host 包的 `./client` 导出是给浏览器消费方 import 的类型化 wire face，不是 roster 要服务的插件。
+`verify-cordis-config` 要求每个 `packages/client` 包的 `./client` 导出与 `dsh.client` 声明双向一致。缺少这项检查时，陈旧的清单字段可能让组合行与空的 node 半侧保持激活，而浏览器 roster 会悄然漏掉该包。检查只限这一组，因为 Host 包的 `./client` 导出是供浏览器消费方 import 的类型化 wire face，不是 roster 要服务的插件。

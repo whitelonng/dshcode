@@ -1,20 +1,17 @@
 // @vitest-environment jsdom
 /**
- * The three conversation-adjacent surfaces: the General-settings row naming the
- * default for later sessions, the new-session chip naming the next one's, and
- * the session header's read-only label. The split is the host's rule — a
- * session's history is produced under its preset's tools, so the choice is
- * only ever offered before one starts.
+ * The two conversation-adjacent surfaces: the new-session chip naming the
+ * next session's preset, and the session header's read-only label. The split
+ * is the host's rule — a session's history is produced under its preset's
+ * tools, so the choice is only ever offered before one starts.
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { AgentPresetLabel } from '../src/client/AgentPresetLabel.tsx'
 import type { AgentPresetLabelProps } from '../src/client/AgentPresetLabel.tsx'
-import { AgentPresetRow } from '../src/client/AgentPresetRow.tsx'
-import type { AgentPresetRowProps } from '../src/client/AgentPresetRow.tsx'
 import { AgentPresetSeat } from '../src/client/AgentPresetSeat.tsx'
 import type { AgentPresetSeatProps } from '../src/client/AgentPresetSeat.tsx'
 import type { AgentPresetSettingsState } from '../src/client/settings-store.ts'
@@ -23,13 +20,9 @@ import { en } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
-const ROW_READY: AgentPresetSettingsState = {
+const ROSTER_READY: AgentPresetSettingsState = {
   status: 'ready',
   error: null,
-  writable: true,
-  currentValue: 'standard',
-  // `mine` deliberately names itself nothing: the row must fall back to the
-  // id for a preset whose author wrote no metadata.
   options: [{ id: 'standard', trust: 'system', name: '标准模式' }, { id: 'mine', trust: 'user' }],
 }
 
@@ -44,39 +37,35 @@ const SEAT_READY: AgentPresetSeatState = {
   introduce: false,
 }
 
-function renderRow(state: Partial<AgentPresetSettingsState> = {}) {
-  const store = createSnapshotStore<AgentPresetSettingsState>({ ...ROW_READY, ...state })
-  const actions = { load: vi.fn(() => Promise.resolve()), select: vi.fn(() => Promise.resolve()) }
-  render(<AgentPresetRow {...({
-    ...actions,
-    useAgentPreset: bindSnapshotSelector(store),
-    t: (key: keyof typeof en) => en[key],
-  } as unknown as AgentPresetRowProps)} />)
-  return actions
+/** The runtime's own `{name}` substitution, so a test reads the shown text. */
+function translate(key: keyof typeof en, params?: Record<string, unknown>): string {
+  const template = en[key]
+  return params === undefined
+    ? template
+    : template.replace(/\{(\w+)\}/g, (match, name: string) => name in params ? String(params[name]) : match)
 }
 
-function renderSeat(state: Partial<AgentPresetSeatState> = {}) {
+function renderSeat(
+  state: Partial<AgentPresetSeatState> = {},
+  select: () => Promise<string | undefined> = () => Promise.resolve(undefined),
+) {
   const store = createSnapshotStore<AgentPresetSeatState>({ ...SEAT_READY, ...state })
-  const actions = {
-    load: vi.fn(() => Promise.resolve()),
-    select: vi.fn(() => Promise.resolve()),
-    introduced: vi.fn(),
-  }
+  const actions = { load: vi.fn(() => Promise.resolve()), select: vi.fn(select), introduced: vi.fn() }
   render(<AgentPresetSeat {...({
     ...actions,
     useAgentPresetSeat: bindSnapshotSelector(store),
-    t: (key: keyof typeof en) => en[key],
+    t: translate,
   } as unknown as AgentPresetSeatProps)} />)
   return actions
 }
 
 function renderLabel(
-  summary: { blank: boolean; agentPreset?: string } | undefined,
+  summary: { blank: boolean; projectionValues?: { agentPreset?: string | null } } | undefined,
   roster: Partial<AgentPresetSettingsState> = {},
 ) {
   // The chip and the label read the same roster, metadata included.
   const store = createSnapshotStore<AgentPresetSettingsState>({
-    ...ROW_READY, options: SEAT_READY.options, ...roster,
+    ...ROSTER_READY, options: SEAT_READY.options, ...roster,
   })
   const sessions = createSnapshotStore({ byId: summary === undefined ? {} : { s1: summary } })
   const load = vi.fn(() => Promise.resolve())
@@ -89,116 +78,6 @@ function renderLabel(
   } as unknown as AgentPresetLabelProps)} />)
   return { load, view }
 }
-
-describe('the General-settings row', () => {
-  it('reads the roster once and shows the current default', async () => {
-    const actions = renderRow()
-
-    await waitFor(() => { expect(actions.load).toHaveBeenCalledTimes(1) })
-    expect(screen.getByRole('button').textContent).toContain(en.presetStandardName)
-  })
-
-  it('marks a locally authored option as local', () => {
-    renderRow()
-
-    fireEvent.click(screen.getByRole('button'))
-
-    // A local preset is exactly as privileged as the plugins it names, so the
-    // list says which rows are local rather than presenting all as vetted.
-    expect(screen.getByText(`mine · ${en.userTrust}`)).toBeTruthy()
-    // The shipped one carries no marker; only local rows are called out.
-    expect(screen.getAllByText(en.presetStandardName)).toHaveLength(2)
-  })
-
-  it('falls back to the id for a preset that published no name', () => {
-    renderRow({
-      currentValue: 'mine',
-      options: [
-        { id: 'standard', trust: 'system', name: '标准模式' },
-        { id: 'bare', trust: 'system' },
-        { id: 'mine', trust: 'user' },
-        { id: 'ours', trust: 'user', name: '团队模式' },
-      ],
-    })
-
-    // The trigger names the preset; with no metadata the id is all there is.
-    expect(screen.getByRole('button').textContent).toContain('mine')
-
-    fireEvent.click(screen.getByRole('button'))
-
-    // A locally authored preset is marked whether or not it named itself.
-    expect(screen.getByText(`团队模式 · ${en.userTrust}`)).toBeTruthy()
-    expect(screen.getByText(`mine · ${en.userTrust}`)).toBeTruthy()
-    // A shipped preset with no metadata is listed by id and carries no mark.
-    expect(screen.getByText('bare')).toBeTruthy()
-  })
-
-  it('shows the selected id until a stale roster contains it', () => {
-    renderRow({ currentValue: 'arriving', options: [] })
-
-    expect(screen.getByRole('button').textContent).toContain('arriving')
-  })
-
-  it('writes the picked preset and closes the menu', () => {
-    const actions = renderRow()
-    fireEvent.click(screen.getByRole('button'))
-
-    fireEvent.click(screen.getByText(`mine · ${en.userTrust}`))
-
-    expect(actions.select).toHaveBeenCalledWith('mine')
-    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
-  })
-
-  it('closes on an outside dismissal', () => {
-    renderRow()
-    fireEvent.click(screen.getByRole('button'))
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-
-    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
-  })
-
-  it('says it is loading before the roster answers', () => {
-    renderRow({ status: 'loading', currentValue: '' })
-
-    expect(screen.getByRole('button').textContent).toContain(en.loading)
-    expect(screen.getByRole('button')).toHaveProperty('disabled', true)
-  })
-
-  it('shows a failure in place of the description', () => {
-    renderRow({ error: 'roster unavailable' })
-
-    expect(screen.getByRole('alert').textContent).toBe('roster unavailable')
-  })
-
-  it('renders nothing when the deployment composes no presets', () => {
-    const { container } = render(<AgentPresetRow {...({
-      load: vi.fn(() => Promise.resolve()),
-      select: vi.fn(() => Promise.resolve()),
-      useAgentPreset: bindSnapshotSelector(
-        createSnapshotStore<AgentPresetSettingsState>({ ...ROW_READY, status: 'unavailable', options: [] })),
-      t: (key: keyof typeof en) => en[key],
-    } as unknown as AgentPresetRowProps)} />)
-
-    expect(container.firstChild).toBeNull()
-  })
-
-  it('closes and locks the menu when the settings turn read-only', () => {
-    const store = createSnapshotStore<AgentPresetSettingsState>(ROW_READY)
-    render(<AgentPresetRow {...({
-      load: vi.fn(() => Promise.resolve()),
-      select: vi.fn(() => Promise.resolve()),
-      useAgentPreset: bindSnapshotSelector(store),
-      t: (key: keyof typeof en) => en[key],
-    } as unknown as AgentPresetRowProps)} />)
-    fireEvent.click(screen.getByRole('button'))
-
-    act(() => { store.set({ ...ROW_READY, writable: false }) })
-
-    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
-    expect(screen.getByRole('button')).toHaveProperty('disabled', true)
-  })
-})
 
 describe('the new-session chip', () => {
   it('reads the roster once and shows the staged preset by name', async () => {
@@ -274,6 +153,45 @@ describe('the new-session chip', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+  })
+})
+
+describe('a refused switch', () => {
+  it('announces the reason instead of letting the label snap back in silence', async () => {
+    // The banner's own timer has to be a fake one from the start, or the
+    // lifetime assertion below would wait out its real nine seconds.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const reason = 'failed to import loader entry live-on-mac (@deepseek-ai/dsh-also-gone)'
+      renderSeat({}, () => Promise.resolve(reason))
+
+      fireEvent.click(screen.getByRole('button'))
+      fireEvent.click(screen.getByRole('menuitem', { name: /mine/ }))
+
+      // The host refuses a mount discovery reported healthy, so this banner is
+      // the only place the cause appears — the chip has already reverted and
+      // the settings row shows the preset as fine.
+      const banner = await screen.findByRole('alert')
+      expect(banner.textContent).toContain(reason)
+      expect(banner.textContent).toContain('mine')
+
+      // Transient by design: it holds long enough to read a cause that names
+      // packages, then leaves rather than sitting over the screen.
+      act(() => { vi.advanceTimersByTime(9001) })
+      expect(screen.queryByRole('alert')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('says nothing when the switch lands', async () => {
+    const actions = renderSeat()
+
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByRole('menuitem', { name: /mine/ }))
+
+    await waitFor(() => { expect(actions.select).toHaveBeenCalledWith('mine') })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 
@@ -367,7 +285,10 @@ describe('the chip introduce cue', () => {
 
 describe('the session-header label', () => {
   it('names the preset the session runs, and never offers a switch', async () => {
-    const { load } = renderLabel({ blank: false, agentPreset: 'standard' })
+    const { load } = renderLabel({
+      blank: false,
+      projectionValues: { agentPreset: 'standard' },
+    })
 
     await waitFor(() => { expect(load).toHaveBeenCalledTimes(1) })
     // A control here would promise a switch the host refuses outright.
@@ -376,13 +297,16 @@ describe('the session-header label', () => {
   })
 
   it('falls back to the id, and to the generic hint, when metadata is absent', () => {
-    renderLabel({ blank: true, agentPreset: 'mine' })
+    renderLabel({ blank: true, projectionValues: { agentPreset: 'mine' } })
 
     expect(screen.getByTitle(en.headerHint).textContent).toBe('mine')
   })
 
   it('shows the id until the roster resolves it', () => {
-    renderLabel({ blank: false, agentPreset: 'standard' }, { options: [] })
+    renderLabel({
+      blank: false,
+      projectionValues: { agentPreset: 'standard' },
+    }, { options: [] })
 
     // The session's own summary is the authority on which preset it runs; the
     // roster only supplies the display name, and its arrival is a later frame.

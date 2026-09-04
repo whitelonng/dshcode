@@ -14,7 +14,7 @@ Status: implemented
 
 彻底删除 `@deepseek-ai/dsh-cli-demo`：包括它的包、bin、解析器、应用插件、输出格式、测试、workspace 引用、生成目录条目和现行文档。不保留别名或兼容包。源码用户通过 `pnpm dsh --profile headless` 调用产品命令；stdout 上的最终文本、stderr 上的失败诊断、持久化、退出状态和关闭行为均由该命令负责。
 
-`examples/headless-agent` 成为显式测试组装。其 Loader 配置把 `@deepseek-ai/dsh-agent-spine-demo`、一个根 agent（智能体）、JSONL 持久化和检查点策略挂载为独立配置行，不再将其隐藏在应用组合包之后。支持层的 `@deepseek-ai/dsh-loader-smoke` 包负责共享的直接 agent 轮次 helper；未导出的示例本地 driver 选择各自的 Loader 配置，并将规范事件渲染为 JSONL。这些 driver 只由测试启动，不提供 bin，也不定义受支持的产品输出格式。
+`apps/cli/tests/profiles/headless` 加载已交付的 `base` 与 `headless` 组合包层，然后只对回放或模拟提供方、隔离持久化及被测行为应用窄 overlay。支持层的 `@deepseek-ai/dsh-loader-smoke` 包负责交付 profile 组装 helper、共享的直接 agent 轮次 helper 与仅限测试的 driver；该 driver 将规范事件渲染为 JSONL，但不定义受支持的产品输出格式。
 
 ## 考虑过的替代方案
 

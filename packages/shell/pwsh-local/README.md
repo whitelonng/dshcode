@@ -1,41 +1,130 @@
+---
+description: "The local PowerShell executor for deployments and maintainers choosing, configuring, or debugging unconfined PowerShell command execution over the shell seam."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-pwsh-local
 
 English | [中文](README.zh.md)
 
-Local PowerShell Service Provider for the `@deepseek-ai/dsh-shell` executor seam over the [`@deepseek-ai/dsh-subprocess`](../../subprocess/subprocess/README.md) service: `PwshLocalExecutor` spawns `pwsh -NoLogo -NoProfile -NonInteractive -Command <command>` per call as a managed process through `ctx.subprocess`, and owns everything PowerShell-shaped — executable resolution, command defaulting and caps, timeout/cancel classification, the model-friendly terminal environment, and the model-facing stdout/stderr merge for background reads. Group mechanics (bounded spill-backed output, credential scrub, kill escalation, disposal) are the subprocess service's.
+## Summary
 
-The command string rides as ONE argv element to `-Command`: PowerShell itself parses the text, and no intermediate shell exists, so there is no shell-quoting layer to escape (the `bash -c` string domain has no equivalent here). Native Win32 paths (`C:\...`) pass through unchanged.
+`dsh-pwsh-local` is the PowerShell executor: every command runs as a fresh, non-interactive `pwsh -Command` process with no profile files, so no shell state survives between calls. It mirrors `dsh-bash-local`'s semantics call-for-call and adds PowerShell-shaped concerns: executable resolution, UTF-8 output pinning, and the model-friendly terminal environment. Commands run with the harness process's own authority — this executor confines nothing; compose `dsh-pwsh-sandbox` when commands need the sandbox capability. The model-facing `pwsh` tool talks to it once it is mounted.
 
-The package root exports the default and named `PwshLocalExecutor` plugin, its `Config`, the pure `resolvePwshPath`/`candidatePwshPaths` helpers, and the `ENV_OVERRIDES`/`ENCODING_PREAMBLE` constants the executor injects into every spawn.
+## Table of Contents
 
-## Config
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Mount this executor when a composition needs PowerShell command execution — typically on Windows — without confinement. It registers as `ctx.shell`, and the model-facing `pwsh` tool works over it immediately: an agent calls the tool, and the command runs as a fresh `pwsh -Command` process with the budgets below.
+
+### When to choose it
+
+It is the Windows counterpart of `dsh-bash-local`: choose it where `pwsh` is the platform shell, so a composition can swap the POSIX rows for the pwsh rows and keep the same semantics. The executor resolves the `pwsh` executable from an explicit `pwshPath`, well-known Windows install locations, PATH entries, or Windows PowerShell 5.1 as a last resort. For unconfined execution it is the default; compose `dsh-pwsh-sandbox` when commands need the sandbox capability.
+
+### Minimal configuration
+
+Load the executor with the budgets you want; every field has a default, so the smallest composition is the plugin entry alone. The settings provider (when composed) layers a user section over this entry, so budgets can change at runtime without a reload (see [Adjusting budgets at runtime](#adjusting-budgets-at-runtime)).
 
 ```yaml
 - id: bash
   name: '@deepseek-ai/dsh-pwsh-local'
   config:
-    cwd: C:\path\to\workspace   # default: process.cwd()
-    timeoutMs: 120000           # default foreground timeout
-    maxTimeoutMs: 600000        # cap for per-call overrides
-    maxOutputBytes: 64000       # per-stream in-memory cap; overflow spills to disk
-    maxSpillBytes: 67108864     # per-stream full-output spill cap
-    graceMs: 3000               # kill escalation and post-exit pipe-drain grace
-    pwshPath: C:\Program Files\PowerShell\7\pwsh.exe  # explicit executable; else well-known locations, then PATH
+    cwd: C:\path\to\workspace
+    timeoutMs: 120000
 ```
 
-## Behavior
+| Field | Default | Meaning |
+|---|---|---|
+| `cwd` | `process.cwd()` | Default working directory for commands |
+| `timeoutMs` | `120,000` | Default foreground timeout, in milliseconds |
+| `maxTimeoutMs` | `600,000` | Cap for per-call timeout overrides |
+| `maxOutputBytes` | `64,000` | Per-stream in-memory output cap; overflow spills to a temp file |
+| `maxSpillBytes` | `67,108,864` | Per-stream full-output spill cap |
+| `graceMs` | `3,000` | Grace period for kill escalation and post-exit pipe draining |
+| `pwshPath` | resolved | Explicit pwsh executable; else well-known locations, then PATH |
 
-The Windows counterpart of `dsh-bash-local`, deliberately mirroring its semantics call-for-call:
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-pwsh-local) is the exhaustive source for every accepted field and its JSDoc.
 
-- **Spawn per call, no shell state** — every call is a fresh non-interactive `pwsh -Command` (deterministic; no profile files). The `-NoLogo -NoProfile -NonInteractive` flags disable startup banners, profile loading, and prompts that would garble tool output.
-- **The composition entry is a layer, not the last word** — when a settings provider is composed, this executor registers the capability's [`bash` namespace](../shell/README.md) with the entry above as its base, so a user section in `settings.yaml` layers over it and the next command runs with the new budgets. The namespace is shared with the POSIX family because a host composes exactly one provider of `ctx.shell`; a document written on either platform keeps resolving on the other. Values the schema cannot judge (positive and finite, the `graceMs` timer bound) are refused at the write, leaving the running executor on its last good section.
-- **UTF-8 output pinned** — every command runs with `[Console]::OutputEncoding` and `$OutputEncoding` set to UTF-8 first, so the Windows PowerShell 5.1 fallback (or any host whose console code page is not UTF-8) cannot garble non-ASCII output: the subprocess collector decodes bytes as UTF-8. Input encoding is left at the host default; pwsh 7 defaults to UTF-8 and is unaffected.
-- **Executable resolution** — `resolvePwshPath` prefers an explicit `pwshPath`, then on Windows probes PowerShell 7's install location, every PATH entry (Microsoft Store installs; surrounding quotes stripped), and Windows PowerShell 5.1 as a legacy last resort, checking each candidate with an lstat probe that accepts a real file or a link-shaped reparse point (a Store app execution alias stat-fails against its target's ACL, but lstat sees the alias itself); elsewhere it falls back to a bare `pwsh` resolved through PATH. Resolution is a pure function of `(configured, env, platform)`; it runs at construction and again only when a stored `pwshPath` differs from the one the current executable was resolved from, so an unrelated settings change never re-probes the filesystem.
-- **Configured budgets over managed groups** — `resolve()` fills `workdir`/`timeoutMs`/`stdoutMaxBytes` from config, and every spawn hands the service explicit byte caps, spill cap, and `graceMs`. The grace must be positive, finite, and no greater than [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.md), so Node can represent it with one timer. Tree termination (taskkill on Windows, process-group signals on POSIX), the post-exit pipe-drain grace, tail-keep truncation, and bounded spill files are [`dsh-subprocess-local`](../../subprocess/subprocess-local/README.md) mechanics. A foreground `ShellExecRequest.stdoutMaxBytes` can raise stdout's capture budget for one trusted caller; stderr and background runs still use `maxOutputBytes`.
-- **Timeout and cancel classification** — `run()` fuses its config-clamped timeout with the caller's signal through one deadline; only the executor's own timeout reports `timedOut`, an upstream cancel reports `aborted`, and a self-terminated command reports neither ([timeout-library Agent Note](../../../.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.md)). Windows reports forced termination as exit 1 without a signal, so signal-stamped facts (`signal`, `killed` status) are POSIX-only there; the timeout/abort classification is platform-independent.
-- **Model-friendly terminal env** — `NO_COLOR=1 PAGER=cat GIT_PAGER=cat` (no `TERM=dumb`: that is a POSIX concept; `NO_COLOR` is honored by modern PowerShell renderers) merged as ordinary env under the service's credential scrub and `DSH_*` channel rules; an explicit caller entry still wins.
-- **Background processes** — `start()` returns a live `ShellProcess` handle immediately, no timeout applies, and the handle's `readOutput()` merges the service's offset-based stdout/stderr reads into one marked-section delta with a consuming cursor. A still-running process belongs to the subprocess service, so it survives executor reloads and dies (killed and joined) with the service's disposal. Everything task-shaped (ids, ownership, polling, notices) lives in the generic [`ctx.jobs` runtime](../../jobs/jobs/README.md), which the tool layer registers the handle with — this executor never sees a session or a registry.
+### Running commands
 
+Run a command with `run` and read its output from the result; a nonzero exit, a timeout, or a cancellation resolves descriptively, and only infrastructure failures reject. The command string rides as one argument to `-Command`: PowerShell parses the text itself and no intermediate shell exists, so there is no shell-quoting layer to escape and native Win32 paths pass through unchanged. Every command pins UTF-8 output first, so non-ASCII output is not garbled even on the Windows PowerShell 5.1 fallback. The environment is model-friendly: `NO_COLOR=1 PAGER=cat GIT_PAGER=cat` (no `TERM=dumb` — a POSIX concept), with explicit caller-provided entries still winning.
+
+```text
+const result = await ctx.shell.run(ctx.shell.resolve({ command: 'Get-ChildItem' }))
+if (result.timedOut) console.log('timed out after', result.timeoutMs)
+```
+
+### Background processes
+
+Call `start` to run a command in the background; it returns a handle immediately and no timeout applies. `readOutput()` merges the stream deltas into one consuming read, marking stderr under a `[stderr]` section; `kill()` stops the process tree; `done` settles when the process closes and never rejects. Job ids, ownership, polling, and notices belong to the generic `ctx.jobs` runtime, which the tool layer registers the handle with.
+
+<a id="adjusting-budgets-at-runtime"></a>
+### Adjusting budgets at runtime
+
+When a settings provider is composed, this executor registers the capability's shared `shell` settings namespace — the same one the POSIX family uses, because a host composes exactly one provider of `ctx.shell` — so a user section in `settings.yaml` layers over the composition entry and the next command runs with the new budgets. Values the schema cannot judge — positive and finite numbers, and the `graceMs` timer bound — are refused at the write, leaving the running executor on its last good section.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design of the executor and points at the code that realizes it; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The executor is the PowerShell Service Provider for the `ctx.shell` seam built on the subprocess capability: it owns everything pwsh-shaped — executable resolution, command defaulting and caps, deadline fusion and cause classification, UTF-8 output pinning, the model-friendly terminal environment, and the background read merge — while process-tree mechanics (bounded spill-backed output, credential scrub, kill escalation, disposal) belong to the subprocess service. Every call spawns a fresh non-interactive `pwsh -Command` with `-NoLogo -NoProfile -NonInteractive`, so commands are deterministic and profile state never leaks between calls.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: `PwshLocalExecutor`, `Config`, settings wiring, argv seam |
+| [`src/resolve.ts`](src/resolve.ts) | Pure `resolvePwshPath`/`candidatePwshPaths` executable resolution |
+| — | No runtime invariant companion is published; this package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam. |
+| `tests/` | Exercised behavior: budgets, classification, resolution, background handles |
+
+### Main flow
+
+A call runs through three steps: `resolve()` fills `workdir`/`timeoutMs`/`stdoutMaxBytes` from config (capping the per-call `timeoutMs` override); the executor builds the pwsh argv — `pwsh -NoLogo -NoProfile -NonInteractive -Command <encoding preamble + command>` — fuses the config-clamped timeout with the caller's abort signal into one deadline, and spawns through `ctx.subprocess` with explicit byte caps and the `graceMs`; the settled outcome is classified and projected into a `ShellRunResult`. Windows reports forced termination as exit 1 without a signal, so signal-stamped facts are POSIX-only there; the timeout/abort classification is platform-independent.
+
+### Invariants and ownership
+
+- The `graceMs` budget must be positive, finite, and no greater than `MAX_TIMER_DELAY_MS` so Node can represent it with one timer; invalid values are refused where they are written.
+- Environment layering is fixed: terminal overrides first, then the caller's `env`, then the trusted `dshEnv` snapshot last; the subprocess service scrubs ambient credentials and inherited `DSH_*` names independently.
+- Executable resolution is a pure function of `(configured, env, platform)` and re-probes the filesystem only when the stored `pwshPath` differs from the one the current executable was resolved from.
+- A background process belongs to the subprocess service: it survives an executor-only reload and is killed and joined when the service disposes.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the executor contract is not enough. They move from the seam to the confining sibling and the PowerShell tool.
+
+- [shell seam](../shell/README.md) — the executor contract this provider implements, including the request/spec split.
+- [bash-local](../bash-local/README.md) — the POSIX counterpart this executor mirrors call-for-call.
+- [pwsh-sandbox](../pwsh-sandbox/README.md) — the confining executor to compose instead when commands need the sandbox capability.
+- [tool-pwsh](../tool-pwsh/README.md) — the model-facing `pwsh` tool over this executor.
+- [Bash executor subsystem](../../../docs/subsystems/shell.md) — request/spec vocabulary, results, and the service contract in full.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 Indirectly, through `dsh-tool-pwsh`, which renders this executor's bounded stdout/stderr tails, background-process deltas (through the generic job runtime), spill-file paths, and infrastructure failures.
@@ -46,12 +135,25 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **Unconfined by itself** — this executor always runs commands with the harness process's authority; deployments needing confinement compose a sandboxing bash executor or policy instead.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when this executor is a poor fit. They are current package constraints, not a roadmap.
+
+- **Unconfined by itself** — commands run with the harness process's authority; deployments needing confinement compose a sandboxing executor or policy instead.
 - **No persistent shell or PTY** — every call starts a fresh `pwsh -Command`.
 - **The command string is PowerShell text** — the `-Command` domain has no shell-quoting layer, but a model-facing command is parsed by PowerShell itself, so PowerShell syntax errors are command failures, not launch failures.
 - **A background spawn-failure note is single-delivery** — the subprocess service buffers no output for a process that never ran, so the executor injects `spawn failed: …` into exactly one `readOutput()` delta; a reader that discards that delta cannot recover it.
-- **Windows termination reports no signal** — a force-killed process settles as exit 1 with `signal: null`, so signal-based status classification (POSIX `killed`) does not apply on Windows; `kill()`-initiated stops still stamp `killed` directly.
-- **The encoding preamble precedes the command** — PowerShell requires `param(...)`, `#requires`, and `using namespace`/`using assembly` statements at the very top of a script, so a command whose first statement is one of those cannot run under the UTF-8 output preamble. Wrap a `param(...)` script in `& { … }` (a param block legally heads a script block); `using` statements and `#requires` have no in-command workaround (`#requires` is inert inside `-Command` regardless of position) — run such scripts from a file instead.
-- **Non-ASCII stdin under Windows PowerShell 5.1 may be mis-decoded** — the preamble pins output encoding only; `[Console]::InputEncoding` stays at the host default because setting it under redirected stdin throws. pwsh 7 defaults to UTF-8 and is unaffected.
+- **Windows termination reports no signal** — a force-killed process settles as exit 1 with `signal: null`, so signal-based status classification does not apply on Windows; `kill()`-initiated stops still stamp `killed` directly.
+- **The encoding preamble precedes the command** — PowerShell requires `param(...)`, `#requires`, and `using` statements at the very top of a script, so a command whose first statement is one of those cannot run under the UTF-8 output preamble; wrap a `param(...)` script in `& { … }`, and run `using`/`#requires` scripts from a file instead.
+- **Non-ASCII stdin under Windows PowerShell 5.1 may be mis-decoded** — the preamble pins output encoding only; `[Console]::InputEncoding` stays at the host default because setting it under redirected stdin throws; pwsh 7 defaults to UTF-8 and is unaffected.
 
-Scrub-heuristic and spill-retention caveats live with [`dsh-subprocess-local`](../../subprocess/subprocess-local/README.md), which owns those mechanics.
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

@@ -19,7 +19,7 @@ Status: implemented
 - **在 `AppCLIEntry` 里做启动胶水判定**（随附两行并带静态 `disabled`，由 `--directory-picker=auto|native|browse` 标志修补 `disabled`）。可行——`PatchOptions` 能修补元数据，模块扫描也会跳过禁用行——但把决策留成应用私有，此后每个组合都要重新实现；选择器插件让任何 `cordis.yml` 都获得同样的一行自适应。只有当某个部署需要不改自己的 yml 就*强制*指定后端时，才重新引入该标志。
 - **合并成一个按调用分支的插件**（client 先试 `pick`，收到 `directory-picker-unavailable` 再回退到浏览对话框）。否决：client 得把两套流程装进同一个 bundle——bundle 纯净门禁禁止跨插件的值导入，jscpd 禁止复制对话框——而且按调用探测让 browse 宿主每次打开都付出一次注定失败的 RPC。
 - **复活 wire 广播**，让两套 client 流程都挂载并按宿主的 kind 分支。否决：推翻 seam Agent Note 的那次删除，却服务不了任何选择器尚未服务的消费方，还与 `single` 目录流洞相冲突。
-- **按连接自适应**（同一台服务器，回环浏览器用 native、远程浏览器用 browse）。延期：需要按客户端的能力对象、上述广播，以及同时挂载两套流程；今天没有部署同时服务两种操作者形态。
+- **按连接自适应**（同一台服务器，回环浏览器用 native、远程浏览器用 browse）。延期：需要按客户端的能力对象、上述广播，以及同时挂载两套流程；没有已交付部署同时服务两种操作者形态。
 
 ## 后果
 

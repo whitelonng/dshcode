@@ -1,70 +1,154 @@
-# dsh-timeout
+---
+description: "Shared timeout arithmetic, deadline fusion, and timeout-versus-cancel classification for capabilities that clamp a caller's hint, arm a deadline, and must tell the two apart later."
+kind: "package-library"
+---
+
+# @deepseek-ai/dsh-timeout
 
 English | [中文](README.zh.md)
 
-The **timing-and-classification** half of a timeout — a zero-dependency library of pure functions (no runtime harness deps) shared by every capability that clamps a caller's timeout hint, arms a deadline, and later has to tell "timed out" apart from "cancelled".
+## Summary
 
-It owns **no termination**. The signal it hands out only *notifies*; actually stopping the work stays in each capability, because that mechanism differs — bash SIGKILLs an OS process group, web tears down a `fetch` socket — and no shared layer can own all of them. This is the boundary the [Agent Note](../../../.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.md) draws: share the timing/classification, keep the hard kill local.
+`dsh-timeout` lets a capability run one unit of work under a caller-visible timeout and later tell a timeout apart from a cancellation. A caller's optional hint is clamped against a backend default and cap, and upstream cancellation fuses with the deadline into one `AbortSignal`. The deadline signal only notifies — each capability owns the mechanism that stops its work, so no shared layer needs to know how to stop anything. For streamed transports an idle watchdog arms a timeout only while a provider read is outstanding, so consumer think time never counts as idle. A `timeoutMs` of zero is the internal no-timeout sentinel for backend-owned background work, never a public disable switch; the zero-dependency library is shared by the bash, web, subprocess, and tool-timeout-policy consumers.
 
-It is a **library, not a service or plugin**: no `ctx`, registers nothing, holds no state, emits no events. A "timeout service" would have to understand how to stop every capability's work — exactly the knowledge a microkernel keeps out of shared layers.
+## Table of Contents
 
-## API
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Use `deadline` when a capability runs one unit of work under a caller-visible timeout, and `idleWatchdog` when it reads a streamed transport. Validate caller hints with `clampTimeout` first so the `timeoutMs` that reaches `deadline` is always positive and finite.
+
+### Clamping a timeout hint
 
 ```ts
-import { clampTimeout, deadline, idleWatchdog, MAX_TIMER_DELAY_MS, timeoutOf, TimeoutReason } from '@deepseek-ai/dsh-timeout'
+import { clampTimeout } from '@deepseek-ai/dsh-timeout'
+
+declare const requested: number | undefined
+declare const DEFAULT_TIMEOUT_MS: number
+declare const MAX_TIMEOUT_MS: number
+
+const timeoutMs = clampTimeout(requested, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, 'bash-local: request.timeoutMs')
 ```
 
-| Export | Role |
-|---|---|
-| `clampTimeout(requested, def, max, name?)` | Validate the caller's optional positive-finite hint, fill from `def`, cap at `max`. Throws (with `name`) on a non-positive/non-finite hint. |
-| `deadline(upstream, timeoutMs, code)` | Fuse `upstream` cancellation with a timeout into one `AbortSignal` (`AbortSignal.any`); the timeout carries a `TimeoutReason`. `[Symbol.dispose]` clears the timer. |
-| `idleWatchdog(upstream, timeoutMs, code)` | Keep one stable fused signal and arm only while its guarded async-iterator `next()` is outstanding. Resolution disarms; later demand or `pulse()` activity rearms; disposal clears; concurrent demand rejects. |
-| `MAX_TIMER_DELAY_MS` | Largest delay Node schedules without clamping it to one millisecond (`2_147_483_647`). Timer-owning config must not exceed it. |
-| `timeoutOf(signal \| { reason }, code?)` | Recover the `TimeoutReason` from an aborted signal/error, else `undefined` — the timeout-vs-cancel classifier. Pass `code` to match only THIS deadline's timer (see nesting below). |
-| `TimeoutReason` | The internal reason (`code` + `timeoutMs`) stamped on a timeout abort. Not a public error — providers translate it into their own error/field. |
+`clampTimeout` fills the backend default when the hint is absent, caps the result at the backend maximum, and rejects a non-positive or non-finite hint with the caller-provided name. Zero is never accepted here: it is not a public disable-timeout value.
 
-## The `timeoutMs <= 0` sentinel
+### Running work under a deadline
 
-`0` is the **internal** "no timeout" value for backend-owned background work (bash `start()`): `deadline()` arms no timer and forwards only `upstream`; with no upstream either, it returns a never-aborting signal plus a no-op disposer, so every caller keeps one call shape. External request hints validate as **positive finite** via `clampTimeout` before they reach `deadline`, so `0` is never a model-/plugin-facing "disable timeout" value.
-
-## Usage shape
-
-```ts
+```text
 import { deadline, timeoutOf } from '@deepseek-ai/dsh-timeout'
 
-declare function runWork(options: { signal: AbortSignal }): Promise<unknown>
-
-// Scope-lifetime consumer (foreground bash, one fetch): `using` disposes the timer.
-export async function runWithDeadline(upstream: AbortSignal | undefined, timeoutMs: number): Promise<unknown> {
-  using d = deadline(upstream, timeoutMs, 'BASH_TIMEOUT')
-  const outcome = await runWork({ signal: d.signal })               // work listens on d.signal and terminates itself
-  const timedOut = timeoutOf(d.signal, 'BASH_TIMEOUT') !== undefined // classify the first abort, scoped to OUR code
-  const aborted = d.signal.aborted && !timedOut                     // mutually exclusive: timeout won, or cancel did
-  return { outcome, timedOut, aborted }
-}
+using d = deadline(upstream, timeoutMs, 'BASH_TIMEOUT')
+const outcome = await runWork({ signal: d.signal })   // work listens on d.signal and terminates itself
+const timedOut = timeoutOf(d.signal, 'BASH_TIMEOUT') !== undefined
+const aborted = d.signal.aborted && !timedOut
 ```
 
-The signal only *notifies* — the caller MUST attach its own termination (`d.signal.addEventListener('abort', kill)`, or hand `d.signal` to `fetch`). Racing a promise against a timer would resolve the tool-call while the child process or socket leaks on; handing out a signal forces a real termination path to exist.
+The signal only notifies: the caller must attach its own termination — hand `d.signal` to `fetch`, or listen for `abort` and kill the child. Racing a promise against a timer would resolve the tool call while the child process or socket leaks on.
 
-Pass your own `code` to `timeoutOf` so classification composes under nesting. When `upstream` is itself a deadline signal, `AbortSignal.any` preserves its `TimeoutReason` if that timer fires first. Scoping to your code makes a foreign timeout read as an ordinary upstream cancel instead of claiming that the local timer expired.
+### Classifying the outcome
 
-For a streamed transport, create one `idleWatchdog`, pass its stable `signal` into the transport, and call `watchdog.next(iterator)` for each provider read. Call `watchdog.pulse()` when transport activity does not yield an iterator value. The interval must be positive, finite, and no greater than `MAX_TIMER_DELAY_MS`; Node otherwise clamps it to one millisecond. It measures only outstanding demand, so no timer runs while downstream code renders or otherwise waits before asking for the next chunk. The primitive still only notifies, so the transport must observe the stable signal; the DeepSeek and pi-ai adapters prove that timeout closes their real response body or SDK request.
+`timeoutOf(signal, code)` recovers the timeout reason only when this deadline's timer fired first. Pass your own `code` so classification composes under nesting: when `upstream` is itself a deadline signal, a foreign timeout reads as an ordinary upstream cancellation instead of claiming that the local timer expired.
 
-## What does NOT get a timeout
+### Streaming with an idle watchdog
 
-Local file `read`/`write`/`edit` take no `timeoutMs`: file IO runs untimed because a deadline would kill work the OS will still finish. See [the filesystem subsystem page](../../../docs/subsystems/filesystem.md).
+```ts
+import { idleWatchdog } from '@deepseek-ai/dsh-timeout'
 
+declare const upstream: AbortSignal | undefined
+declare const idleMs: number
+declare const providerIterator: AsyncIterator<unknown>
+
+using watchdog = idleWatchdog(upstream, idleMs, 'LLM_STREAM_IDLE_TIMEOUT')
+const next = await watchdog.next(providerIterator)    // timer runs only while this read is outstanding
+```
+
+The timer is armed only while an iterator `next()` is outstanding and rearms on `pulse()` for transport activity that yields no value, so consumer think time between reads never counts as idle. The interval must be positive, finite, and no greater than `MAX_TIMER_DELAY_MS`.
+
+### What does not get a timeout
+
+Local file `read`/`write`/`edit` take no `timeoutMs`: file IO runs untimed because a deadline would kill work the OS will still finish.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+The library is built on one boundary: share the timing and classification, keep the hard kill local.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | `clampTimeout`, `deadline`, `idleWatchdog`, `timeoutOf`, `TimeoutReason`, `MAX_TIMER_DELAY_MS` |
+| — | No runtime invariant companion is published; this pure utility owns no event stream or mutable runtime data; its value algebra is enforced by unit tests. |
+
+### How a deadline fuses sources
+
+`deadline` arms one timer and fuses its abort with the upstream signal via `AbortSignal.any`, which adopts the reason of whichever source aborts first — so a race resolves to a single cause. The `TimeoutReason` carries the capability-owned `code` and the elapsed `timeoutMs`; `timeoutOf` reads it only when the timeout won, and upstream-wins leaves an ordinary abort reason. `[Symbol.dispose]` clears the timer.
+
+### The no-timeout sentinel
+
+`timeoutMs <= 0` arms no timer and forwards only the upstream signal — or a never-aborting signal when there is none — so every caller keeps one call shape. The sentinel exists for backend-owned background work; external request hints are validated positive and finite before they reach `deadline`.
+
+### Why an idle watchdog rearms
+
+`idleWatchdog` keeps one stable fused signal and arms the timer only while `next()` is outstanding; resolution disarms, later demand or `pulse()` rearms, disposal clears, and concurrent demand rejects. Only the transport observes the signal, so the provider's real read must listen to it — the DeepSeek and pi-ai adapters close their response body or SDK request on abort.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when you need the consumers or the boundary decision behind the library.
+
+- [Timeout-deadline library Agent Note](../../../.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.md) — the shared-timing, local-kill boundary.
+- [Tool-call timeout policy](../../guard/timeout-policy/README.md) — the consumer that enforces declared tool timeouts.
+- [Bash provider](../../shell/bash-local/README.md) — a foreground deadline consumer that kills a process group.
+- [Filesystem subsystem](../../../docs/subsystems/filesystem.md) — why local file IO runs untimed.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-Indirectly, through consumers such as `dsh-tool-call-timeout-policy`, which may replace a provider result with a retained timeout error or suppress a late result.
+Indirectly, through the timeout consumers that render timeout outcomes.
 
 #### KV Cache effect
 
-No direct invalidation; the named consumer owns any request-prefix changes.
+No direct invalidation; the timeout consumers own any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **Notification only** — a deadline cannot stop work that ignores its signal; every capability still needs its own socket/process/task termination path.
-- **`timeoutMs <= 0` is internal vocabulary** — it disables the local timer only after an owning backend has resolved policy, never as a public model/plugin knob.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define what the library deliberately does not do. They are current package constraints, not a task backlog.
+
+- **Notification only** — a deadline cannot stop work that ignores its signal; every capability still needs its own socket, process, or task termination path.
+- **`timeoutMs <= 0` is internal vocabulary** — it disables the local timer only after an owning backend has resolved policy, never as a public model- or plugin-facing knob.
 - **The first abort reason wins classification** — when an upstream cancellation beats the local timer, this layer cannot later report that its own timeout would also have elapsed.
 - **An idle watchdog is not a total deadline** — it rearms per outstanding iterator demand and deliberately excludes consumer think time.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

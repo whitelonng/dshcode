@@ -2,9 +2,9 @@
 # entries, all on one version. The vendored framework and the native packages are
 # separate sequences with their own workflows and version lines.
 #
-# Pack runs without credentials on every pull request and master push, so a
-# pull request proves the whole publish set still packs. Publication is a manual
-# workflow_dispatch of release-publish.yml from a dsh-v* tag.
+# Pack and dependency-layout verification run without credentials on every pull
+# request and master push. Publication is a manual workflow_dispatch of
+# release-publish.yml from a dsh-v* tag.
 name: Release (dsh)
 
 on:
@@ -26,6 +26,46 @@ env:
   DSH_TELEMETRY_DISABLED: '1'
 
 jobs:
+  dependencies:
+    name: Dependency layout
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Configure pnpm store path
+        id: pnpm-store
+        run: |
+          store_root="$HOME/.local/share/pnpm/store"
+          echo "PNPM_CONFIG_STORE_DIR=$store_root" >> "$GITHUB_ENV"
+          store_path=$(PNPM_CONFIG_STORE_DIR="$store_root" pnpm store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-pnpm-
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify dependency policy
+        run: pnpm run verify-package-dependencies
+
+      - name: Verify npm install layout
+        run: pnpm run verify-npm-install-layout
+
   pack:
     if: github.repository_owner == 'deepseek-ai'
     name: Pack npm tarballs
@@ -69,8 +109,10 @@ jobs:
       - name: Build
         run: pnpm run build:official
 
+      # Concurrency here is rehearsal-only: the credentialed publish workflows
+      # invoke release:pack without the flag and keep the strictly serial path.
       - name: Pack release tarballs
-        run: pnpm run release:pack --family dsh --out dist/npm
+        run: pnpm run release:pack --family dsh --out dist/npm --concurrency 8
 
       # The harness packages declare the vendored framework as a peer, and this
       # verification must not depend on the registry already carrying matching
@@ -78,7 +120,7 @@ jobs:
       # publishes — so it installs that family's pack output too. Only dist/npm
       # is published.
       - name: Pack the vendored framework for verification
-        run: pnpm run release:pack --family vendor --out dist/npm-vendor
+        run: pnpm run release:pack --family vendor --out dist/npm-vendor --concurrency 8
 
       # dsh-sandbox-local declares the Landlock entry as a runtime dependency, so
       # the verification needs its tarball. Its platform packages stay out: they

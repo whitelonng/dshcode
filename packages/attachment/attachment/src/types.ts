@@ -52,6 +52,26 @@ export interface EncodedImageAttachment {
   name?: string
 }
 
+/**
+ * Browser-submitted prompt content accepted by Host prompt endpoints; the
+ * accepting Host promotes image parts to durable references through
+ * `admitPromptContent` before any message is created, so a wire caller can
+ * never cite an attachment it did not upload.
+ */
+export type PromptContentPart =
+  | { readonly type: 'text'; readonly text: string }
+  | {
+    readonly type: 'image'
+    readonly mediaType: ImageMediaType
+    readonly data: string
+    readonly name?: string
+  }
+
+/** Host-admitted prompt content with each uploaded image replaced by its durable reference. */
+export type AdmittedPromptContentPart =
+  | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'image'; readonly attachment: ImageAttachmentRef }
+
 /** Request to validate and durably commit one image. */
 export interface SaveImageAttachment {
   data: Uint8Array
@@ -71,7 +91,7 @@ export interface StoredImageAttachment {
 export interface ImageRequestPolicy {
   /** Maximum width multiplied by height after aspect-preserving projection. */
   maxPixels: number
-  /** Encoded-byte cap before base64 expansion or Files API upload. */
+  /** Encoded-byte target before base64 expansion or Files API upload; the smallest quality-ladder output is kept when no quality fits. */
   maxBytes: number
 }
 

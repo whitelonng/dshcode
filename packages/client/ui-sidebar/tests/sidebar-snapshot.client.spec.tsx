@@ -12,13 +12,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, waitFor } from '@testing-library/react'
 import { SlotTestRuntime, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
+import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 
 // The service reads its initial locale from the browser; these specs assert
 // the shipped Chinese copy, so they state the browser they assume.
 usePinnedBrowserLanguages('zh-CN')
 
-beforeEach(() => { vi.stubEnv('DSH_CLIENT_COMMIT_HASH', 'abc1234') })
+beforeEach(() => {
+  vi.stubEnv('DSH_CLIENT_COMMIT_HASH', 'abc1234')
+  vi.stubEnv('DSH_CLIENT_GIT_DIRTY', 'true')
+  vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3-rc.4')
+})
 
 afterEach(() => {
   cleanup()
@@ -33,10 +39,12 @@ afterEach(() => {
  */
 async function bench(options: { locale?: 'en' } = {}) {
   const runtime = await SlotTestRuntime.create()
-  runtime.provide('layout', { toggleSidebar: vi.fn() })
+  runtime.ctx.provide('layout', { toggleSidebar: vi.fn() })
+  runtime.ctx.provide('uiWorkspace', { startSession: vi.fn() } as never)
   const locale = new LocaleRuntime(runtime.ctx)
+  locale.register('common', { zh: commonZh, en: commonEn })
   if (options.locale === 'en') locale.setLocale('en')
-  runtime.provide('locale', locale)
+  runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
   await runtime.declare({ 'sidebar': { kind: 'single', scope: 'root' } })
   await runtime.mount({ inject: [...inject], apply })

@@ -46,7 +46,7 @@ list 读取被推迟到首次 hover 或 focus，而不是在 mount 时触发，�
 
 Web GUI 可以记录逐条消息的评价与备注。#1326 中用户可见的那一半现在存在了；该 Issue 之所以被重开，是因为后端合并在没有任何入口存在的情况下关闭了它。
 
-`AssistantMessageNode.messageId` 是可选的，因此所有既有读取方无需改动即可编译，但任何将来的消费方都必须处理缺失，而不能假定消息已完成。两个并行的物化点仍是重复隐患：第三个构造该节点的视图必须记得复制该 id，而没有任何机制强制这一点。今天只有 chat 视图渲染控件，尽管 trajectory 与 waterfall 节点现在携带同一个 id。
+`AssistantMessageNode.messageId` 是可选的，因此所有既有读取方无需改动即可编译，但任何将来的消费方都必须处理缺失，而不能假定消息已完成。两个并行的物化点仍是重复隐患：第三个构造该节点的视图必须记得复制该 id，而没有任何机制强制这一点。只有 chat 视图渲染控件，尽管 trajectory 与 waterfall 节点现在携带同一个 id。
 
 反馈对模型保持不可见——该 sidecar 既不进入 Session 日志、也不进入模型上下文与 telemetry——因此该包的 Model Experience 是一条经审计的 `none` 条目，而不是结构化区块。
 

@@ -9,8 +9,8 @@
  * Input side owns the span/bare-token CAS guard) and focuses the composer;
  * the controller never touches the input machine.
  */
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { TokenSpan } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { SelectOption } from './contract.ts'
 

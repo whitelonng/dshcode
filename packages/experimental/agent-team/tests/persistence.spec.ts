@@ -9,30 +9,35 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SqliteSessionPersistence from '@deepseek-ai/dsh-session-persistence-sqlite'
 import SubagentService, { seedDescriptorTurn, snapshotSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import * as SubagentSpawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
-import TeamService, { foldTeam, TeamId, TeamMessageId } from '../src/index.ts'
+import TeamService, { TeamId, TeamMessageId } from '../src/index.ts'
+import { teamProjectionDefinition } from '../src/projection.ts'
 import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/index.ts'
+import { TestSessionQuery } from './test-session-query.ts'
 
 const SIGNAL = new AbortController().signal
 const PERSISTENCE_TEST_TIMEOUT_MS = 15_000
 const roots: string[] = []
 const contexts = new Set<Context>()
 
-/** Detached durable Team read: the service exposes views, so assertions fold the Lead log. */
+/** Detached durable Team read through the same projection definition as the service. */
 function durable(agent: Agent): {
   members: TeamMemberSnapshot[]
   tasks: TeamTaskSnapshot[]
   pendingMessages: TeamMessageSnapshot[]
 } {
-  const state = foldTeam(agent.id, agent.session.events)
+  let projected = teamProjectionDefinition.init(agent.session.header)
+  for (const event of agent.session.snapshotEvents()) projected = teamProjectionDefinition.apply(projected, event)
+  if (projected.failure !== undefined) throw new Error(projected.failure)
+  const state = projected
   return {
-    members: [...state.members.values()],
-    tasks: [...state.tasks.values()],
-    pendingMessages: [...state.messages.values()].filter(message => !state.delivered.has(message.id)),
+    members: state.members,
+    tasks: state.tasks,
+    pendingMessages: state.messages.filter(message => !state.delivered.includes(message.id)),
   }
 }
 
@@ -76,13 +81,6 @@ const backends: PersistenceMount[] = [
       compression: 'none',
     }),
   },
-  {
-    name: 'SQLite',
-    mount: async (ctx, root) => await ctx.plugin(SqliteSessionPersistence, {
-      path: join(root, 'sessions.sqlite'),
-      journalMode: 'delete',
-    }),
-  },
 ]
 
 async function stack(
@@ -93,7 +91,9 @@ async function stack(
   const ctx = new Context()
   contexts.add(ctx)
   await mountAgentLoopTestDependencies(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   await backend.mount(ctx, root)
+  await ctx.plugin(TestSessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentService)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
@@ -133,7 +133,7 @@ function persistedChild(
   }))
   const child = ctx.sessions.create(childId, {
     seed,
-    meta: { parentSession: rootId, seedLength: 0, origin: 'subagent' },
+    meta: { parentSession: rootId, origin: 'subagent' },
   })
   child.append('agent/inbox/spliced', {
     target: 'next-turn',

@@ -37,7 +37,7 @@ export interface Config {
    * regain the foreground before `inferred_idle` settles; at least one `pollIntervalMs`.
    */
   handoffGraceMs?: number
-  /** Absolute send wait bound. */
+  /** Absolute bound for one send and the complete pwsh startup sequence. */
   timeoutMs?: number
   /** Grace before teardown escalates to `SIGKILL`. */
   disposeGraceMs?: number

@@ -1,6 +1,6 @@
 /**
- * ACL failure-path tests with stub binding tables (the failure-paths.spec.ts
- * pattern): every checked Win32 call in the lock, read-merge-write, and
+ * ACL failure-path tests with minimal stub binding tables: every checked
+ * Win32 call in the lock, read-merge-write, and
  * grant-skip sequence has a failing counterpart, and each failure closes the
  * handles it created before throwing. The exact-ACE skip and the DACL-walk
  * defenses are driven through crafted in-memory ACL/SID buffers. Pure
@@ -9,13 +9,13 @@
  */
 
 import { tmpdir } from 'node:os'
+import { Win32Error } from '@deepseek-ai/dsh-win32-process'
 import { describe, expect, it, vi } from 'vitest'
 import koffi from 'koffi'
 
 import { grantWrite, revokeWrite, withPathLock } from '../src/acl.ts'
 import { allocBytes, ptrAddress } from '../src/ffi.ts'
 import type { NativePtr, Win32Bindings } from '../src/ffi.ts'
-import { Win32Error } from '../src/errors.ts'
 import * as abi from '../src/win32-abi.ts'
 
 const PVOID = koffi.pointer('void')

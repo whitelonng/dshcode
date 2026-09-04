@@ -26,7 +26,7 @@ node-compat CI 矩阵（Node 22.19 与 26）新增 `dsh-source-launch-smoke`（`
 
 **把源码图改成 erasable-only 以适配 Node 26 strip 模式。** 拒绝：参数属性与值 namespace 遍布 vendor 的 Cordis/cosmokit/loader/schemastery；改写是无界 churn，且每次 vendor sync 都要重做。
 
-**仓库自有的同线程 loader（`module.registerHooks()` + esbuild 或 `@swc/core` 转换）。** 暂拒：原型实测约 0.45s（esbuild 路径未端到端验证；SWC 在 `vendor/hmr` 的装饰器 + namespace 合并上两种装饰器模式都会崩），但这意味着要自行负责转换正确性，以及实现 tsx 已经提供的解析钩子。仅当约 0.3s 的差距成为真实成本时再重新考虑；性能分析证据在 PR 讨论中。
+**仓库自有的同线程 loader（`module.registerHooks()` 加 esbuild 或 `@swc/core` 转换）。**不予采纳：原型实测约 0.45s，而 esbuild 路径缺少端到端验证，SWC 在两种装饰器模式下都会因 `vendor/hmr` 的装饰器与 namespace 合并失败。该方案还会让仓库负责转换正确性和 tsx 已经提供的解析钩子。仅当实测约 0.3s 的差距成为实质成本时再重新考虑。
 
 **Node 26 运行构建产物 `lib/`，24 保留原生。** 拒绝：在最新 Node 版本线上失去零构建开发循环，且混淆源码面与产物面。
 

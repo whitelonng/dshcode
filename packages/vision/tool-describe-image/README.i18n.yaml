@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/vision/tool-describe-image/README.md
-README.md: fbe3f2e98bc908f7c654786719ed17cc04cac67c
-README.zh.md: 9941bcef4dc15cfe965f3b00e44b8d3ff8432d57
+README.md: ae3488e7ba814e1271b66b02dadefea51a2d1cf0
+README.zh.md: 69307982091359c8b08dcfaa6b0a86321af9a385

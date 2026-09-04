@@ -15,13 +15,28 @@
       "path": "../locale"
     },
     {
+      "path": "../store"
+    },
+    {
       "path": "../ui-conversation"
     },
     {
-      "path": "../runtime"
+      "path": "../ui-renderer"
+    },
+    {
+      "path": "../ui-session"
+    },
+    {
+      "path": "../ui-slots"
+    },
+    {
+      "path": "../../api/session-controller/tsconfig.client.json"
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/session"
     },
     {
       "path": "../../core/tools"
@@ -30,7 +45,10 @@
       "path": "../../compaction/compaction"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../attachment/attachment"
     }
   ]
 }

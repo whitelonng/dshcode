@@ -8,7 +8,7 @@
 
 ```
 vendor/<dir>/
-  package.json     # from upstream; set "private": true, rescope the name, keep exports/type
+  package.json     # from upstream; rescope the name, keep exports/type (publishable release member, no private flag)
   tsconfig.json    # extends ../../tsconfig.base.json (see configuration below)
   src/             # the upstream src/ verbatim
   README.md LICENSE # if upstream ships them
@@ -29,7 +29,7 @@ vendor/<dir>/
 }
 ```
 
-`package.json` 的不变式：`"private": true`（vendored 包永不发布）；改写 `name` 的 scope（[映射](../rescope.zh.md)），保留上游的 `version`/`exports`/`type`；声明元数据指向 `lib/types`；发布 `.d.ts` 与 `.d.ts.map` 声明输出；在 `peerDependencies` 中列出其 Cordis 依赖（与上游 manifest（元数据清单）一致）。传递性上游依赖本身也必须被 vendor 或已存在于仓库中——vendor 一个包往往意味着 vendor 其整条依赖树（如 `@cordisjs/plugin-http` 会拉入 `@cordisjs/fetch-file`）。
+`package.json` 的不变式：改写 `name` 的 scope（[映射](../rescope.zh.md)），保留上游的 `exports`/`type`；声明元数据指向 `lib/types`；发布 `.d.ts` 与 `.d.ts.map` 声明输出；在 `peerDependencies` 中列出其 Cordis 依赖（与上游 manifest（元数据清单）一致）。vendored 包是可发布的 release member，因此不得设置 `private: true`，且必须设置 `publishConfig.access: public`；`version` 字段跟随 harness 发布序列（见 [vendor/README.md](../../vendor/README.md)）。传递性上游依赖本身也必须被 vendor 或已存在于仓库中——vendor 一个包往往意味着 vendor 其整条依赖树（如 `@cordisjs/plugin-http` 会拉入 `@cordisjs/fetch-file`）。
 
 vendored TypeScript 源码中的本地相对导入/导出在复制后使用显式 `.ts` 后缀。这是仓库本地构建与上游的差异：`rewriteRelativeImportExtensions` 输出 `.js` 运行时导入，而声明文件保留显式 `.ts` 后缀，使 NodeNext/Node16 的 TypeScript 消费方能够解析。
 

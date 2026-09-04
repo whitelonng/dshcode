@@ -42,7 +42,7 @@ Wire mapping (`attributionHeaders`; header names lowercase in code - HTTP field 
 |---|---|
 | All HTTP-based adapters | `User-Agent: {product}/{version} (+{url})` - the parenthesized `+url` comment stays within RFC 9110's conservative product/comment syntax. |
 | Direct DeepSeek endpoint | `User-Agent` for app attribution; `x-deepseek-harness-user-id` and conditional `x-deepseek-harness-session-id` are separate request identity under the DeepSeek-specific decision. Do not send OpenRouter-only headers unless DeepSeek documents an equivalent contract. |
-| OpenRouter endpoints | `User-Agent` only for now. Do not send `HTTP-Referer`, `X-OpenRouter-Title`, `X-Title`, or `X-OpenRouter-Categories` under this decision. |
+| OpenRouter endpoints | `User-Agent` only. This decision excludes `HTTP-Referer`, `X-OpenRouter-Title`, `X-Title`, and `X-OpenRouter-Categories`. |
 | Future providers | `User-Agent` only unless a later provider-specific Agent Note accepts additional headers. Do not reuse `HTTP-Referer` by analogy. |
 
 Endpoint detection is not part of this Agent Note because no endpoint-specific mapping is accepted here. If OpenRouter support lands later, detection must be explicit: either a dedicated OpenRouter provider package or an explicit `provider: 'openrouter'` / `attributionTarget: 'openrouter'` config, not arbitrary path fragments or model names.

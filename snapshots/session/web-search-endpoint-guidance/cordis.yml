@@ -1,0 +1,11 @@
+# Live-recording patch for a deterministic failed DeepSeek search request.
+- insert:
+    - id: web-search-error-fixture
+      name: './web-search-error-fixture.mjs'
+
+- id: web-search-deepseek
+  name: '@deepseek-ai/dsh-web-search-deepseek'
+  config:
+    apiKey: snapshot-key
+    # The fixture maps this recorded authority to its OS-assigned listener.
+    baseURL: http://127.0.0.1:43118/anthropic/v1

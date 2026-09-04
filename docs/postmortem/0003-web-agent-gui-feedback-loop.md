@@ -39,8 +39,8 @@ Background process semantics were also bypassed with shell `&`, so job identity,
 
 ## Guardrails added
 
-- The Web launcher publishes the canonical loopback URL and actual production/development mode in the logged `app:web-surface` prompt section and managed `$DSH_WEB_URL`/`$DSH_WEB_MODE` environment.
-- Production guidance requires rebuilding artifacts and verifying the existing URL after refresh. Development guidance explains that `dsh web --dev` mounts only the HMR receiver; `pnpm run dev:web` in the same checkout must also rebuild client-plugin bundles, while shell and plain-package changes still require refresh.
+- The Web launcher publishes the canonical loopback URL in the logged `app:web-surface` prompt section and the managed `$DSH_WEB_URL` environment.
+- Production guidance requires rebuilding artifacts and verifying the existing URL after refresh. Development guidance explains that the HMR receiver is always on; `pnpm run dev:web` in the same checkout rebuilds client-plugin bundles for refresh-free reload, while shell and plain-package changes still require refresh.
 - `apps/web` standalone Vite serve mode rejects during configuration. Its subprocess test proves natural exit and instruments `Server.listen()` so a transient bind cannot pass unnoticed.
 - Layered real-path tests cover the CLI request, exact production/development prompts, shell runtime facts, same-port static replacement, source watcher rebuild, host stat polling, and browser HMR under an unchanged page identity.
 - PR evidence preserves screenshots from the original 3081 session and a real-model before/after GUI run; external browser, HTTP, process, and session-log observations carry acceptance.

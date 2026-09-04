@@ -1,16 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, render, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { SessionLiveEventEntry } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
-  ChatConversationViewNode, ChatSnapshot, ConversationEventInput,
   ConversationNodeDefinition, ConversationViewDefinition,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { ConversationNodeAssembler } from '@deepseek-ai/dsh-client-runtime/client'
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { ConversationNodeAssembler } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {
+  ChatConversationViewNode, ChatSnapshot,
+} from '@deepseek-ai/dsh-client-ui-chat/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { commandDefinition } from '@deepseek-ai/dsh-client-ui-conversation/src/client/conversation-nodes/command.ts'
-import { chatViewDefinition } from '@deepseek-ai/dsh-client-ui-conversation/src/client/conversation-nodes/chat-snapshot-builder.ts'
+import { commandDefinition } from '@deepseek-ai/dsh-client-ui-chat/src/client/conversation-nodes/command.ts'
+import { chatViewDefinition } from '@deepseek-ai/dsh-client-ui-chat/src/client/conversation-nodes/chat-snapshot-builder.ts'
 import { GoalCommandInputView } from '../src/client/GoalCommandInputView.tsx'
 import {
   goalCommandInputDefinition, goalCommandText,
@@ -35,17 +38,17 @@ class TestViewDefinitions {
   }
 }
 
-function entry(seq: number, type: string, data: unknown): ConversationEventInput {
+function entry(seq: number, type: string, data: unknown): SessionLiveEventEntry {
   return {
-    event: { seq, time: 1_700_000_000_000 + seq, type, data } as ConversationEventInput['event'],
-    view: undefined,
+    type: 'event',
+    event: { seq, time: 1_700_000_000_000 + seq, type, data } as SessionEvent,
   }
 }
 
-function snapshot(entries: readonly ConversationEventInput[], hasMore = false): ChatSnapshot {
+function snapshot(entries: readonly SessionLiveEventEntry[], hasMore = false): ChatSnapshot {
   const assembler = new ConversationNodeAssembler(new TestEventDefinitions(), new TestViewDefinitions())
   assembler.replaceWindow(entries, hasMore)
-  assembler.flush()
+  assembler.activateTarget('chat')
   const value = assembler.snapshot('chat') as ChatSnapshot | undefined
   if (value === undefined) throw new Error('chat view was not registered')
   return value
@@ -126,7 +129,7 @@ describe('goal command input projection', () => {
       t,
     } as unknown as Parameters<typeof GoalCommandInputView>[0]
     const view = render(<GoalCommandInputView {...props} />)
-    const bubble = view.getByRole('group', { name: '命令输入' })
+    const bubble = view.getByRole('group', { name: '指令输入' })
 
     expect(bubble.textContent).toBe('/goal ship it')
     expect(within(bubble).queryByRole('button')).toBeNull()

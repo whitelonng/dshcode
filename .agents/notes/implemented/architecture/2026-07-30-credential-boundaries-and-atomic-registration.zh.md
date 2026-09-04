@@ -18,7 +18,7 @@ Status: implemented
 
 ## 决策
 
-**凭据文档只归凭据提供方所有。**没有任何一个面会把它加载进 `process.env`。当时该文档是 `$DSH_HOME/.env`；[凭据文档拆分](2026-08-04-credentials-yaml-and-user-environment-layer.zh.md)后来把它移到 `$DSH_HOME/.credentials.yaml`，因此如今被加载的正是那条旧路径——作为用户的普通环境层，其中不含任何提供方管理的密钥。真正的启动环境，以及调用目录中由 bin 加载的 `.env`，仍然是那一层只读的环境来源，因此不挂载该提供方的组合，解析密钥的方式与从前完全一致，而存下的密钥跨重启仍然来源于文件、仍然可写——这一点由 loader 组合中的一次真实重启来证明，而不是靠对 `describe()` 的单元断言。
+**凭据文档只归凭据提供方所有。**没有任何一个面会把它加载进 `process.env`。当时该文档是 `$DSH_HOME/.env`；[凭据文档拆分](2026-08-04-credentials-yaml-and-user-environment-layer.zh.md)后来把它移到 `$DSH_HOME/.credentials.yaml`，因此 `$DSH_HOME/.env` 是用户的普通环境层，其中不含任何提供方管理的密钥。真正的启动环境，以及调用目录中由 bin 加载的 `.env`，仍然是那一层只读的环境来源，因此不挂载该提供方的组合，解析密钥的方式与从前完全一致，而存下的密钥跨重启仍然来源于文件、仍然可写——这一点由 loader 组合中的一次真实重启来证明，而不是靠对 `describe()` 的单元断言。
 
 **存下的凭据对模型没有边界，而 README 就是这么写的。**`0700` 目录下的 `0600` 挡得住其他 OS 用户；模型的 bash 与文件系统工具正是以同一用户身份运行，而已交付的默认配置不提供任何约束。harness 真正守住的边界更窄，文档也严格按这一范围表述：没有任何一个面会把该文档提升进 `process.env`，模型也从不会拿到它的解析后路径，因此要拿到这个值，需要刻意去读一条并未交给它的路径。OS 钥匙串（keychain）提供方——一个模型的进程根本读不到的存储——被记录为真正的答案，而不是靠一个残缺的方案去暗示它。
 
@@ -26,7 +26,7 @@ Status: implemented
 
 **路由替换是注册表的操作，不是调用方的一串步骤。**`registerAdapter` 返回一个携带 `replace(providers)` 的句柄：候选集合先被完整校验（冲突、名称、提供方元数据），再在一个同步区段内完成替换。被拒绝的替换会让先前的路由保持注册并继续服务，而调用方的事实缓存只有在注册表确实持有新集合之后才会推进，因此改回可用配置时会重新生效。pi-ai 的注册事实按提供方排序，因此仅仅调换键顺序的设置文档不再算作路由变更。
 
-**已提交的凭据写入采用收容式发布。**`CredentialProvider.notifyUpdated` 逐个监听器扇出 `credentials/reference-updated`；同步抛错与异步 rejection 都只记日志，不改变已提交操作的结果，而带 `INVARIANT` 代码的失败会在每个监听器都运行完之后重抛——与 settings seam 处理 `settings/updated` 的形状相同。`installSettingsSection` 的清理现在会区分它的两个触发来源：提供方脱离时仍回退到组合的 entry 配置并重新推导，而消费方自身卸载时立即返回，不再在拆卸过程中重新注册路由。
+**已提交的凭据写入采用收容式发布。**`CredentialProvider.notifyUpdated` 逐个监听器扇出 `credentials/reference-updated`；同步抛错与异步 rejection 都只记日志，不改变已提交操作的结果，而带 `INVARIANT` 代码的失败会在每个监听器都运行完之后重抛——与 settings seam 处理 `settings/updated` 的形状相同。`SettingsProvider.installSection()` 的清理会区分它的两个触发来源：提供方脱离时仍回退到组合的 entry 配置并重新推导，而消费方自身卸载时立即返回，不在拆卸过程中重新注册路由。
 
 ## 曾考虑的替代方案
 

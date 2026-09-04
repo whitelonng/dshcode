@@ -1,34 +1,45 @@
-/**
- * Question-composer slot contract: the registrant-side props composition for
- * the conversation-owned `conversation.composer` slot, plus the question
- * domain face over the runtime's carrier object. The carrier (PendingWait)
- * owns envelope transport only; the question protocol — answer value shape,
- * cancelled error encoding, receipt checks — lives HERE, with the package
- * that consumes it.
- */
-import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-// Also pulls ui-conversation's SlotMap merge (the 'conversation.composer'
-// entry) into every program that sees this contract, so PropsRuntime resolves.
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { PendingWait } from '@deepseek-ai/dsh-client-runtime/client'
-import type { QuestionResponsePayload } from '@deepseek-ai/dsh-api-remotes/client'
+/** Question composer props and one pending Remote waterfall response. */
+import type { PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+// The client module declares the conversation.composer SlotMap entry required by PropsRuntime.
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type {
+  AskUserQuestionAnswer, AskUserQuestionItem,
+} from '@deepseek-ai/dsh-user-questions'
+import type { createQuestionDraftStore } from '../draft-store.ts'
 
-/** The pending question carrier the owner dispatches into the composer slot. */
-export type QuestionWait = PendingWait<'question'>
+declare module '@deepseek-ai/dsh-client-ui-session/client' {
+  interface SessionPendingInteractionMap {
+    /** Pending question or plan-review request. */
+    question: PendingQuestion
+  }
+}
 
 /** One structured answer batch covering every question of the request. */
-export type QuestionAnswer = QuestionResponsePayload['answer']
+export type QuestionAnswer = AskUserQuestionAnswer
 
-/** One question of the request, as the carrier payload carries it. */
-type QuestionItem = QuestionWait['payload']['questions'][number]
+/** One question of the request. */
+type QuestionItem = AskUserQuestionItem
 
 /** One option the asker offered on a question. */
 type QuestionOption = NonNullable<QuestionItem['options']>[number]
 
+/* jscpd:ignore-start -- Question and Approval intentionally own independent pending-settlement lifecycles. */
+function settlePendingComposer(settle: () => void, failureMessage: string): Promise<void> {
+  try {
+    settle()
+    return Promise.resolve()
+  } catch (error) {
+    return Promise.reject(error instanceof Error
+      ? error
+      : new Error(failureMessage, { cause: error }))
+  }
+}
+/* jscpd:ignore-end */
+
 /**
  * A request narrowed to the `plan-review` presentation intent: everything the
  * decision card renders and answers with, so the panel never re-reads the
- * request shape. `approve` and `decline` are the asker's own options — an
+ * request fields. `approve` and `decline` are the asker's own options — an
  * answer must carry one of those labels verbatim — and `plan` is the markdown
  * body under review.
  */
@@ -84,53 +95,120 @@ export function planReviewOf(questions: readonly QuestionItem[]): PlanReview | u
   }
 }
 
-/**
- * Question domain face over the carrier: render identity and questions
- * transparently forwarded; answer/cancel own the wire encoding (the success
- * fields and the cancelled error) and turn a rejected carrier receipt into a
- * thrown error. Components mint one per carrier via useMemo (never inside a
- * select — a per-dispatch mint would churn identity and break memoization).
- */
+let nextQuestionKey = 0
+
+/** Create a wire-preserved user-question rejection. */
+function questionError(message: string, code: 'ASK_ABORTED' | 'ASK_CANCELLED'): Error {
+  const error = new Error(message) as Error & { code: string }
+  error.name = 'UserQuestionError'
+  error.code = code
+  return error
+}
+
+/** One answerable Client presentation of a pending Host waterfall. */
 export class PendingQuestion {
+  /** Presentation discriminator used by Session pending-interaction consumers. */
+  readonly kind: 'question' | 'plan-review'
+  /** Opaque render identity and request key for the Session-scoped draft store. */
+  readonly key: string
+  /** The request's question list. */
+  readonly questions: readonly AskUserQuestionItem[]
+  /** Result returned by the Remote Event listener to the Host waterfall. */
+  readonly result: Promise<QuestionAnswer>
+
+  readonly #resolve: (answer: QuestionAnswer) => void
+  readonly #reject: (reason: unknown) => void
+  readonly #signal: AbortSignal | undefined
+  readonly #onAbort: (() => void) | undefined
+  readonly #delegated = Symbol('pending question delegated')
+  #settled = false
+
   /**
-   * @param wait - the runtime carrier for one pending question request.
+   * @param sessionId - Agent/Session identity owning the scoped request.
+   * @param questions - complete question batch.
+   * @param signal - Host request and delivery lifetime.
    */
-  constructor(private readonly wait: QuestionWait) {}
-
-  /** Opaque render identity (React key / draft remount axis), forwarded from the carrier. */
-  get key(): string {
-    return this.wait.key
-  }
-
-  /** The request's question list, forwarded from the carrier payload. */
-  get questions(): QuestionWait['payload']['questions'] {
-    return this.wait.payload.questions
+  constructor(
+    readonly sessionId: SessionId,
+    questions: readonly AskUserQuestionItem[],
+    signal?: AbortSignal,
+  ) {
+    nextQuestionKey += 1
+    this.key = `question:${String(nextQuestionKey)}`
+    this.questions = questions
+    this.kind = planReviewOf(questions) === undefined ? 'question' : 'plan-review'
+    const completion = Promise.withResolvers<QuestionAnswer>()
+    this.result = completion.promise
+    this.#resolve = completion.resolve
+    this.#reject = completion.reject
+    this.#signal = signal
+    if (signal === undefined) {
+      this.#onAbort = undefined
+      return
+    }
+    const onAbort = (): void => {
+      this.abort(questionError('ask_user_question was aborted before the user answered', 'ASK_ABORTED'))
+    }
+    this.#onAbort = onAbort
+    signal.addEventListener('abort', onAbort, { once: true })
+    if (signal.aborted) onAbort()
   }
 
   /**
-   * Deliver the whole answer batch; a rejected carrier receipt throws.
+   * Resolve the Host waterfall with the whole answer batch.
    * @param answer - complete structured answer batch.
    */
-  async answer(answer: QuestionAnswer): Promise<void> {
-    const receipt = await this.wait.respond({
-      ok: true, value: { sessionId: this.wait.sessionId, answer },
-    })
-    if (!receipt.accepted) {
-      throw new Error(`question response rejected: ${receipt.reason}`)
-    }
+  answer(answer: QuestionAnswer): Promise<void> {
+    return settlePendingComposer(() => {
+      this.finish(() => { this.#resolve(answer) })
+    }, 'pending question settlement failed')
   }
 
-  /** Reject the whole wait (the host resolves the tool call as cancelled); a rejected receipt throws. */
-  async cancel(): Promise<void> {
-    const receipt = await this.wait.respond({
-      ok: false,
-      error: { code: 'cancelled', message: 'the user closed this question request', details: {} },
-    })
-    if (!receipt.accepted) {
-      throw new Error(`question cancellation rejected: ${receipt.reason}`)
+  /** Delegate an unanswered request to the next waterfall listener. */
+  delegate(): void {
+    if (this.#settled) return
+    this.finish(() => { this.#reject(this.#delegated) })
+  }
+
+  /**
+   * Test whether a rejection requests waterfall delegation.
+   * @param reason - rejection received from {@link PendingQuestion.result}.
+   * @returns whether {@link PendingQuestion.delegate} produced it.
+   */
+  isDelegation(reason: unknown): boolean {
+    return reason === this.#delegated
+  }
+
+  /** Reject the Host waterfall because the user closed the question. */
+  cancel(): Promise<void> {
+    return settlePendingComposer(() => {
+      this.finish(() => {
+        this.#reject(questionError('the user cancelled ask_user_question', 'ASK_CANCELLED'))
+      })
+    }, 'pending question cancellation failed')
+  }
+
+  /**
+   * End an unanswered presentation when its transport, scope, or plugin lifetime ends.
+   * @param reason - rejection exposed to the waiting Remote Event listener.
+   */
+  abort(reason: unknown): void {
+    if (this.#settled) return
+    this.finish(() => { this.#reject(reason) })
+  }
+
+  private finish(settle: () => void): void {
+    if (this.#settled) throw new Error(`pending question ${this.key} is already settled`)
+    this.#settled = true
+    if (this.#signal !== undefined && this.#onAbort !== undefined) {
+      this.#signal.removeEventListener('abort', this.#onAbort)
     }
+    settle()
   }
 }
+
+/** Pending value returned by the composer-chain selector. */
+export type QuestionWait = PendingQuestion
 
 /**
  * Full component props: the framework runtime share (chain currency +
@@ -140,4 +218,7 @@ export class PendingQuestion {
  * whole behavior surface.
  */
 export type QuestionComposerProps =
-  PropsRuntime<'conversation.composer'> & { matched: QuestionWait } & PropsLocale<'question'>
+  PropsRuntime<'conversation.composer'>
+  & PropsStore<ReturnType<typeof createQuestionDraftStore>>
+  & { matched: QuestionWait }
+  & PropsLocale<'question'>

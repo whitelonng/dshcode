@@ -1,0 +1,11 @@
+version: 1
+scenario: subagent-acp-diagnostic
+profile: headless
+composition: subagent-acp-diagnostic
+recording: authored
+header:
+  class: subagent-acp-diagnostic
+  pin: true
+  systemPromptSource: product-subagent-codex
+replay:
+  override: true

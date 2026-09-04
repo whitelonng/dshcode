@@ -1,23 +1,118 @@
+---
+description: "Human slash-command registry for interactive UIs: plugin-owned commands that run directly against an agent without creating a model message, for users and maintainers composing or extending command surfaces."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-commands
 
 English | [中文](README.zh.md)
 
-Plugin-owned human-command registry consumed by interactive UI adapters. The [plugin command registration Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-plugin-command-registration.md) owns the boundary and dispatch contract.
+## Summary
 
-## Service contract
+`dsh-commands` lets a user type `/command [input]` in an interactive Harness UI and run it directly against the receiving agent without creating a model message. Plugins register commands with a name, description, optional input hint and image-acceptance flag, and an abortable handler; interactive adapters discover and dispatch them per agent. A command-producing plugin mounted under an agent's context can register an exact agent-scoped command that shadows the global one of the same name. Each command run is recorded in the session log, and its result is rendered by the adapter, never entering model history. Slash commands ship with the `dsh` CLI and the Web client.
 
-`ctx.commands.register(definition)` registers one lowercase command name, description, optional unstructured-input descriptor (`hint` plus an `images` flag declaring whether composer image attachments may accompany an invocation), optional `recordInput` policy, and abortable handler. `recordInput` defaults to true; a command whose authoritative domain event owns the payload sets it to false so `command/run` omits `args` instead of duplicating the input. A registered command is available to every composed command adapter; a plugin that is incompatible with a deployment does not register there. A plain-context registration is global. A command-producing plugin mounted beneath `agent.ctx` declares its own `commands` injection and creates an exact agent-scoped definition; it shadows a global definition with the same name. This child-injection shape preserves the agent scope without making the core agent loop depend on a UI service. Duplicate names within one layer fail during registration. Every disposer is the exact Cordis effect disposer, and registration or removal notifies every `commands/change` observer so live adapters can refresh discovery; observer failures are logged and cannot veto the registry mutation or starve later observers.
+## Table of Contents
 
-`list(agent)` returns immutable, name-sorted descriptors after scoped shadowing (the descriptor carries `input.images` so composers can refuse image submissions to non-declaring commands before dispatch). `find(agent, name)` returns the corresponding definition. `execute(agent, line, images, signal)` uses `parseCommand()` and runs only a known command, returning the settled `CommandExecution` (the normalized result plus the lifecycle pairing `commandId`) or `undefined` for invalid syntax or unknown names. `images` carries the submission's base64-encoded composer images (`EncodedImageAttachment` from `@deepseek-ai/dsh-attachment/types`); the executor enforces the declaration — images sent to a non-declaring command, an absent `attachments` store, or an exceeded batch limit each settle as an error result before the handler runs, and a rejected batch publishes no durable object. An admitted batch is committed through `admitEncodedImages` and handed to the handler as frozen ordered `ImageBlock`s on `invocation.attachments`; the handler owns their model-visible use and returns an error when its grammar cannot use them, so the dispatching composer keeps the originals. A resolved command's lifecycle is logged on the receiving agent's session as the log-only pair `command/run` (before the handler, with a minted `commandId`, the parser's structured name, the issuing `CommandSource`, and `args` unless `recordInput` is false) and `command/done` (at settlement, with the outcome kind and verbatim text; a successful result may also name an earlier non-command authoritative domain event through `sourceEventSeq`; a thrown or aborted handler settles as `kind: 'error'`). Admission misses log nothing. Both are direct standalone appends on the receiving agent's session: no turn wraps them, and persistence drains them through ordinary checkpoints and teardown.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-`parseCommand()` recognizes a slash at byte zero, a lowercase name containing letters, digits, `_`, or `-`, and either end-of-input or whitespace. It returns every byte after the name as `rawInput`, including separator whitespace; consumers own their command-specific grammar and may normalize only what that grammar permits.
+-----
 
-Handlers return `success` or `error` plus optional UI text. A successful handler may also return `sourceEventSeq` when an earlier domain event owns a richer presentation; the lifecycle invariant requires that reference to be a prior non-command event in the same session. Results are rendered directly by the adapter and never enter model history. The registry never submits `rawInput` to the agent implicitly; a command producer may explicitly schedule model-visible work through the receiving `Agent`, in which case that producer owns the resulting message contract. The registry races handler completion against the supplied abort signal, but an uncooperative handler may continue its own external side effects after the caller stops awaiting it.
+<a id="use-this-package"></a>
+## Use this package
 
-## Composition
+Compose this service when an interactive UI should let users drive agent-side behavior with slash commands instead of model prompts. UI-less demo spines and ACP automation provide no command adapter and do not need it.
 
-The shipped `dsh` base mounts this service and the Web client dispatches through it. UI-less demo spines and ACP automation do not provide a command adapter. Custom interactive compositions and command producers mount `@deepseek-ai/dsh-commands` explicitly.
+### Registering a command
 
+A plugin registers a command with `ctx.commands.register()`: a lowercase name, a description shown in discovery, an optional `input` hint, and a handler that runs against the receiving agent.
+
+```text
+ctx.commands.register({
+  name: 'plan',
+  description: 'Enter plan mode',
+  input: { hint: '<message>' },
+  handler: ({ agent, rawInput }) => {
+    // Runs directly against the agent; no model message is created.
+    return { kind: 'success', text: 'plan mode selected' }
+  },
+})
+```
+
+The handler returns `success` or `error` plus optional UI text that the adapter renders. `recordInput` defaults to true; a command whose own authoritative domain event already carries the payload sets it to false so the session log does not duplicate the input. Registering the same name twice in one scope throws.
+
+### Command syntax
+
+A command line starts with a slash at byte zero, a lowercase name containing letters, digits, `_` or `-`, and then either end-of-input or whitespace. Everything after the name — including separator whitespace — is the command's `rawInput`, and the command owns its own grammar for it. Lines that are not syntactically a command, or that name an unknown command, are rejected by the adapter instead of becoming a model prompt.
+
+### Agent-scoped commands
+
+A plain registration is global. A command-producing plugin mounted beneath an agent's own context declares its `commands` injection and registers an exact agent-scoped command, which shadows the global definition of the same name for that agent only.
+
+### Image attachments
+
+A command may declare `input.images` to accept composer image attachments. The executor enforces the declaration: images sent to a non-declaring command, an absent attachment store, or an over-limit batch each settle as an error before the handler runs. Admitted images reach the handler as frozen ordered `ImageBlock`s on `invocation.attachments`, and the handler owns their model-visible use — the registry never schedules them itself.
+
+### Dispatching from an adapter
+
+An interactive adapter calls `execute(agent, line, images, signal)` with the exact receiving agent, the full command line, and the submission's images. It returns the settled `CommandExecution` — the normalized result plus its lifecycle `commandId` — or `undefined` for invalid syntax or an unknown name. `list(agent)` and `find(agent, name)` serve discovery after agent-scoped shadowing.
+
+### Cancellation
+
+The caller's abort signal stops the registry from awaiting a handler; a handler that ignores the signal may continue its own external side effects after the caller stops waiting. A cancelled or thrown handler settles as a `command/done` error in the log.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+The observable behavior is covered in [Use this package](#use-this-package); this section explains how the registry is built and where its contracts live.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | `CommandRuntime` service: registration, scoping, dispatch, lifecycle events |
+| [`src/types.ts`](src/types.ts) | Command definition, descriptor, execution, and result types |
+| [`src/brand.ts`](src/brand.ts) | `CommandId` brand for lifecycle pairing ids |
+| [`src/invariant.ts`](src/invariant.ts) | Invariant companion pairing `command/run` with `command/done` per session log |
+
+### Lifecycle events
+
+`execute()` mints a `commandId`, appends `command/run` before the handler runs, and appends `command/done` at settlement with the outcome kind and verbatim text; the exact payload fields live in [`src/index.ts`](src/index.ts). A successful result may name an earlier non-command authoritative domain event through `sourceEventSeq`; a thrown or aborted handler settles as `kind: 'error'`. Both events are direct standalone log-only appends: no turn wraps them, and persistence drains them at ordinary checkpoints and teardown. Admission misses (invalid syntax or unknown name) log nothing.
+
+### Scoping
+
+Registrations live in global and agent-scoped layers merged per agent via `ScopedLayers`. The child-injection shape — a command-producing plugin mounted beneath `agent.ctx` declares its own `commands` injection — preserves agent scope without making the core agent loop depend on a UI service. Duplicate names within one layer fail during registration, and registration or removal notifies every `commands/change` observer so live adapters can refresh discovery; observer failures are logged and cannot veto the mutation or starve later observers.
+
+### Image admission
+
+Image enforcement happens in the executor, not the composer: an admitted batch is committed through `admitEncodedImages` against the `attachments` store, a rejected batch publishes no durable object, and cancellation is honored before the handler runs so a retrying caller never duplicates state. Handlers that cannot use the images return an error, so the dispatching composer keeps the originals.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the shared command vocabulary to the design evidence and adjacent surfaces.
+
+- [Commands subsystem reference](../../../docs/subsystems/commands.md) — registry semantics, input metadata, and the `ctx.commands` cordis surface.
+- [Command registration Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-plugin-command-registration.md) — the boundary and dispatch contract behind this service.
+- [Interaction group map](../README.md) — adjacent approval, permission, and question packages.
+- [Plan mode package](../../plan/plan-mode/README.md) — a shipped command producer that drives model-visible work.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Direct human commands
@@ -36,5 +131,20 @@ Registry metadata, command input, and direct output never enter a model request 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define what the registry does not offer. They are current package constraints, not a UI backlog.
+
 - **Only unstructured text input** — forms, completion schemas, and typed arguments remain command-owned parsing concerns.
 - **Cooperative side-effect cancellation** — dispatch stops awaiting on abort; handlers must honor the signal to stop work that has already escaped into external systems.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

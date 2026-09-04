@@ -3,8 +3,7 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEventMap, SessionId } from '@deepseek-ai/dsh-session'
-import { foldTeam } from './fold.ts'
-import type { TeamEventType, TeamFoldState } from './fold.ts'
+import type { TeamEventType, TeamState } from './projection.ts'
 
 type AppendTeamEvent = <T extends TeamEventType>(type: T, data: SessionEventMap[T]) => void
 type MutableTeamEventType = 'team/member' | 'team/task' | 'team/message/queued' | 'team/message/delivered'
@@ -23,12 +22,15 @@ export class TeamJournal {
   ) {}
 
   /**
-   * Fold authoritative Team state for one exact live Lead.
+   * Read authoritative Team state for one exact live Lead.
    * @param root - exact live Team Lead.
-   * @returns current replay state selected by the Lead Team id.
+   * @returns current projected state selected by the Lead Team id.
    */
-  state(root: Agent): TeamFoldState {
-    return foldTeam(root.id, root.session.events)
+  state(root: Agent): TeamState {
+    const projection = this.ctx.sessionProjections.stateOf(root.session, 'agentTeam')
+    if (projection === undefined) throw new Error('Agent Teams projection is not registered')
+    if (projection.failure !== undefined) throw new Error(projection.failure)
+    return projection
   }
 
   /**

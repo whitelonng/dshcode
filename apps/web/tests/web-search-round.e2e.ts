@@ -16,11 +16,11 @@ import {
   assertFixtureInventory, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, expandOwningTurnProcess, newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/web-search-round', import.meta.url))
-const FIXTURE = fileURLToPath(new URL('./snapshots/web-search-round/session.jsonl', import.meta.url))
-const UI_EXPECTED = fileURLToPath(new URL('./snapshots/web-search-round/ui.expected.md', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/web-search-round', import.meta.url))
+const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/web-search-round/session.jsonl', import.meta.url))
+const UI_EXPECTED = fileURLToPath(new URL('../../../snapshots/web/web-search-round/ui.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
 const QUERIES = ['DeepSeek Harness snapshot search', 'DeepSeek Harness multi-query search'] as const
 const PROMPT = `Use web_search once with queries ${JSON.stringify(QUERIES)}. Then reply exactly SEARCH_DONE and stop.`
@@ -148,6 +148,7 @@ describe('web e2e: shipped default web search', () => {
     searchServer = search.server
     searchBaseURL = search.baseURL
     scaffold = await launchWebScaffold({
+      compareReplaySession: true,
       deepSeekSearch: {
         baseURL: search.baseURL,
         apiKeyEnv: SEARCH_CREDENTIAL_REF,
@@ -159,7 +160,7 @@ describe('web e2e: shipped default web search', () => {
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, 120_000)
@@ -184,7 +185,7 @@ describe('web e2e: shipped default web search', () => {
     if (MODE !== 'record') {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT])
     }
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     await input.waitFor({ timeout: 10_000 })
     const settled = scaffold.whenTurnSettled()
     await input.fill(PROMPT)
@@ -262,7 +263,9 @@ describe('web e2e: shipped default web search', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-search-aria'))
     await expect.poll(() => page.getByText('SEARCH_DONE', { exact: true }).count(), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(1)
-    await page.locator('[data-tool="web_search"]').waitFor({ timeout: 10_000 })
+    const searchTool = page.locator('[data-tool="web_search"]')
+    await expandOwningTurnProcess(page, searchTool)
+    await searchTool.waitFor({ timeout: 10_000 })
     const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
   })
@@ -270,6 +273,7 @@ describe('web e2e: shipped default web search', () => {
   it.skipIf(MODE === 'record')('scrolls the capped source list inside the fixed-height container', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-search-sources-scroll'))
     const row = page.locator('[data-tool="web_search"] [data-expandable]').first()
+    await expandOwningTurnProcess(page, row)
     await row.click()
     await expect.poll(() => row.getAttribute('aria-expanded'), { timeout: 5_000 }).toBe('true')
 
@@ -280,7 +284,7 @@ describe('web e2e: shipped default web search', () => {
     expect(await sources.locator('li').count()).toBe(WEB_SEARCH_MAX_RESULTS)
     // The list is complete in the DOM, so the card carries no expand control.
     expect(await card.locator('button').count()).toBe(0)
-    expect(await card.getByText('来源列表已截断').isVisible()).toBe(true)
+    expect(await card.getByText('Source list truncated').isVisible()).toBe(true)
 
     const geometry = await sources.evaluate((element) => {
       const computed = getComputedStyle(element)
@@ -298,6 +302,7 @@ describe('web e2e: shipped default web search', () => {
 
   it.skipIf(MODE === 'record')('reserves marker room a scroll container cannot clip back', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-search-marker-room'))
+    await expandOwningTurnProcess(page, page.locator('[data-tool="web_search"]'))
     // `overflow-y: auto` clips inline-start overflow with no way to scroll it
     // back, and markers are right-aligned to the content edge, so a marker wider
     // than `padding-left` silently loses its leading digits. `searchMaxResults`

@@ -34,6 +34,16 @@ const COLLAPSE_SETTLE_MS = 150
  */
 const SCROLLBAR_LINGER_MS = 2000
 
+/** Format complete-build metadata for the local brand badge. */
+function localBuildVersion(): string | undefined {
+  const version = process.env.DSH_CLIENT_VERSION
+  if (version === undefined) return undefined
+  const commit = process.env.DSH_CLIENT_COMMIT_HASH
+  return version
+    + (commit === undefined ? '' : `-${commit}`)
+    + (process.env.DSH_CLIENT_GIT_DIRTY === 'true' ? '-dirty' : '')
+}
+
 /**
  * Render the sidebar column shell.
  * @param props - composed slot props (runtime share + injected callbacks, contract/slots.ts).
@@ -111,6 +121,8 @@ export function SidebarRoot({
     }
   }, [pointerInside])
 
+  const buildVersion = localBuildVersion()
+
   return (
     <div
       ref={column}
@@ -141,14 +153,14 @@ export function SidebarRoot({
               </span>
               <span className={css.brandName}>
                 {renderSlot('sidebar.brand.name', {}, {
-                  fallback: (
-                    <>
-                      <span className={css.fallbackBrandName}>DSH Local Build</span>
-                      {process.env.DSH_CLIENT_COMMIT_HASH
-                        ? <span className={css.buildRevision}>{process.env.DSH_CLIENT_COMMIT_HASH}</span>
-                        : null}
-                    </>
-                  ),
+                  fallback: buildVersion === undefined
+                    ? <span className={css.fallbackBrandName}>{t('brand.localBuild')}</span>
+                    : (
+                      <span className={css.localBuildBrand}>
+                        <span className={css.localBuildTitle}>{t('brand.localBuild')}</span>
+                        <span className={css.buildVersion}>{buildVersion}</span>
+                      </span>
+                    ),
                 })}
               </span>
             </span>

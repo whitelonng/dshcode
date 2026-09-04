@@ -16,7 +16,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { getOrCreateAnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { recordFeedback } from '@deepseek-ai/dsh-command-feedback'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import OpenTelemetrySessionBackend, { Config, DEFAULT_TELEMETRY_MODE, SessionTelemetryMode } from '../src/index.ts'
 
 interface Capture {
@@ -150,7 +150,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
     const start = ledger.find(r => r.record.attributes?.some(a => a.key === 'event.type' && a.value.stringValue === 'turn/start'))
     expect(start).toBeDefined()
     expect(start?.record.severityNumber).toBe(9)
-    expect(BigInt(start!.record.timeUnixNano)).toBe(BigInt(session.events[0]!.time) * 1_000_000n)
+    expect(BigInt(start!.record.timeUnixNano)).toBe(BigInt(session.snapshotEvents()[0]!.time) * 1_000_000n)
     expect(start?.record.attributes).toContainEqual({ key: 'session.cwd', value: { stringValue: '/tmp/w' } })
 
     const end = ledger.find(r => r.record.attributes?.some(a => a.key === 'event.type' && a.value.stringValue === 'turn/end'))
@@ -325,7 +325,7 @@ describe('OpenTelemetrySessionBackend wire', () => {
     })
     ctx.emit('session/event', session, {
       type: 'feedback/record',
-      seq: session.events.length,
+      seq: SessionSeq(session.seq),
       time: Date.now(),
       data: { text: 'not committed' },
     })

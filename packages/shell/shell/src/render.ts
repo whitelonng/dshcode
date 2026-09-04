@@ -1,7 +1,8 @@
 /**
  * Shared rendering helpers for the shell tools (`dsh-tool-bash`,
- * `dsh-tool-pwsh`): the exit-status marker contract the tools' renderers
- * emit and the presentation layer parses back.
+ * `dsh-tool-pwsh`): the exit-status marker contract the tools' renderers emit,
+ * Host `presentResult` implementations parse here, and the Web terminal card
+ * model mirrors without importing Host code.
  * @module @deepseek-ai/dsh-shell/render
  */
 

@@ -1,7 +1,9 @@
 /** Tool UI slot declarations and their composed component props. */
-import type { HostDescriptionSource } from '@deepseek-ai/dsh-client-connection/client'
-import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
+import type {
+  HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime,
+} from '@deepseek-ai/dsh-client-ui-slots'
+import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 
@@ -47,10 +49,15 @@ export interface ToolCallOwnerProps {
 export type ToolCallViewProps = PropsRuntime<'tool.call.toolview'>
 
 /** Injected Host description for POSIX home-path display. */
-export type ToolHostDescriptionInjected = {
+export type ToolHostInfoInjected = {
   hooks: {
-    /** Current generation's Host description, bound by the slot renderer. */
-    hostDescription: HostDescriptionSource
+    /**
+     * Fixed Host facts, reached through a hook rather than injected as values:
+     * the renderer memoizes an entry's inject result for the registration's
+     * lifetime, so facts read there would freeze at whatever the first render
+     * saw. Select the field the view needs (`info => info.home`).
+     */
+    hostInfo: HostObservable<RemoteHostFacts>
   }
 }
 
@@ -58,9 +65,9 @@ export type ToolHostDescriptionInjected = {
 export type ToolTreeProps = PropsRuntime<'conversation.chat.node', 'tool-call'>
   & PropsRenderSlots<'tool.call.toolview'>
   & PropsLocale<'conversation'>
-  & InjectFace<ToolHostDescriptionInjected>
+  & InjectFace<ToolHostInfoInjected>
 
 /** Full props of the selected Tool output renderer in the details panel. */
 export type ToolDetailsProps = PropsRuntime<'conversation.details.tool'>
   & PropsLocale<'conversation'>
-  & InjectFace<ToolHostDescriptionInjected>
+  & InjectFace<ToolHostInfoInjected>

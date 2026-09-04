@@ -8,7 +8,14 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { Context, Service, type Fiber } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
+import { SessionSeq } from '@deepseek-ai/dsh-session'
+import type {
+  Session,
+  SessionEvent,
+  SessionHeader,
+  SessionId,
+  SessionLogOffset,
+} from '@deepseek-ai/dsh-session'
 import type SessionPersistence from '@deepseek-ai/dsh-session-persistence'
 import type {
   SessionPersistenceRevision,
@@ -126,6 +133,7 @@ interface ResolvedConfig {
 
 interface ObservedSession {
   header: SessionHeader
+  inheritedEventCount: SessionLogOffset
   documents: SessionEventSearchDocument[]
   fingerprint: string
 }
@@ -508,7 +516,11 @@ export class SqliteSessionQueryEngine extends SessionQueryEngine {
             const loaded = await persistence.inspect(entry.header.id, signal)
             assertNotAborted(signal)
             assertSessionHeadersCompatible(entry.header, loaded.meta)
-            entry.loaded = observeSession(loaded.meta, loaded.events)
+            entry.loaded = observeSession(
+              loaded.meta,
+              loaded.inheritedEventCount,
+              loaded.events,
+            )
           }
           assertNotAborted(signal)
           const afterSnapshots = await persistence.listSnapshots(signal)
@@ -577,7 +589,7 @@ export class SqliteSessionQueryEngine extends SessionQueryEngine {
         (id, version, created_at, cwd, parent_session, seed_length, delegation_depth, agent_preset, revision, generation)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      ...headerBindings(entry.header),
+      ...headerBindings(entry.header, entry.inheritedEventCount),
       revision,
       generation,
     )
@@ -607,7 +619,7 @@ export class SqliteSessionQueryEngine extends SessionQueryEngine {
         (id, version, created_at, cwd, parent_session, seed_length, delegation_depth, agent_preset, fingerprint, persisted, generation)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      ...headerBindings(entry.header),
+      ...headerBindings(entry.header, entry.inheritedEventCount),
       entry.fingerprint,
       persisted ? 1 : 0,
       generation,
@@ -741,7 +753,7 @@ export class SqliteSessionQueryEngine extends SessionQueryEngine {
   private _eventHit(row: SearchRow): SessionEventSearchHit {
     return {
       sessionId: row.session_id as SessionId,
-      seq: row.seq,
+      seq: SessionSeq(row.seq),
       type: row.type as SessionEventSearchHit['type'],
       time: row.time,
       surface: row.surface as SessionEventSearchHit['surface'],
@@ -766,14 +778,17 @@ export class SqliteSessionQueryEngine extends SessionQueryEngine {
  * @param header - the session header being written.
  * @returns one bound value per header column.
  */
-function headerBindings(header: SessionHeader): (string | number | null)[] {
+function headerBindings(
+  header: SessionHeader,
+  inheritedEventCount: SessionLogOffset,
+): (string | number | null)[] {
   return [
     header.id,
     header.version,
     header.createdAt,
     header.cwd ?? null,
     header.parentSession ?? null,
-    header.seedLength ?? null,
+    header.isSeeded ? inheritedEventCount : null,
     header.delegationDepth ?? null,
     header.agentPreset ?? null,
   ]
@@ -854,17 +869,22 @@ function selectedDocumentsParams(query: string, persistenceVisible: boolean): Ar
 }
 
 function observeLive(session: Session): ObservedSession {
-  return observeSession(session.header, session.events)
+  return observeSession(session.header, session.inheritedEventCount, session.snapshotEvents())
 }
 
-function observeSession(header: SessionHeader, events: readonly SessionEvent[]): ObservedSession {
+function observeSession(
+  header: SessionHeader,
+  inheritedEventCount: SessionLogOffset,
+  events: readonly SessionEvent[],
+): ObservedSession {
   const detachedHeader = structuredClone(header)
   const detachedEvents = events.map(event => structuredClone(event))
   return {
     header: detachedHeader,
+    inheritedEventCount,
     documents: buildSessionEventSearchDocuments(detachedHeader.id, detachedEvents),
     fingerprint: createHash('sha256')
-      .update(JSON.stringify({ header: detachedHeader, events: detachedEvents }))
+      .update(JSON.stringify({ header: detachedHeader, inheritedEventCount, events: detachedEvents }))
       .digest('base64url'),
   }
 }
@@ -920,7 +940,7 @@ function sameHeader(a: SessionHeader, b: SessionHeader): boolean {
     && a.createdAt === b.createdAt
     && a.cwd === b.cwd
     && a.parentSession === b.parentSession
-    && a.seedLength === b.seedLength
+    && a.isSeeded === b.isSeeded
     && (a.delegationDepth ?? 0) === (b.delegationDepth ?? 0)
     && a.agentPreset === b.agentPreset
 }
@@ -932,7 +952,7 @@ function rowHeader(row: SessionHeaderRow): SessionHeader {
     createdAt: row.created_at,
     ...row.cwd === null ? {} : { cwd: row.cwd },
     ...row.parent_session === null ? {} : { parentSession: row.parent_session as SessionId },
-    ...row.seed_length === null ? {} : { seedLength: row.seed_length },
+    isSeeded: row.seed_length !== null,
     ...row.delegation_depth === null ? {} : { delegationDepth: row.delegation_depth },
     ...row.agent_preset === null ? {} : { agentPreset: row.agent_preset },
   }

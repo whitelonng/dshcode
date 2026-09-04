@@ -65,6 +65,8 @@ export interface ExampleLaunchOptions {
   readonly mode?: ExampleMode
   /** Absolute repo tsconfig whose `paths` map resolves unbuilt workspace imports. Required in `src` mode, ignored in `lib`. */
   readonly tsconfigPath?: string
+  /** Select the ESM-only tsx hook instead of the generic loader. */
+  readonly sourceImport?: 'tsx/esm'
   /** Extra environment entries the mode-specific ones layer over; the caller then merges the result over `process.env`. */
   readonly env?: NodeJS.ProcessEnv
 }
@@ -113,7 +115,9 @@ export function resolveExampleLaunch(options: ExampleLaunchOptions): ExampleLaun
     if (options.tsconfigPath === undefined) {
       throw new Error("resolveExampleLaunch: 'src' mode needs tsconfigPath for the workspace paths map.")
     }
-    const tsxLoader = import.meta.resolve('tsx')
+    const tsxLoader = options.sourceImport === 'tsx/esm'
+      ? import.meta.resolve('tsx/esm')
+      : import.meta.resolve('tsx')
     env.TSX_TSCONFIG_PATH = options.tsconfigPath
     return { command: process.execPath, args: ['--import', tsxLoader, options.srcBin, ...configArgs], env }
   }
@@ -127,6 +131,8 @@ export interface LoaderSmokeOptions {
   readonly label: string
   /** Prefix for the isolated temporary process cwd. */
   readonly tempDirPrefix: string
+  /** Existing parent for the generated cwd; defaults to the platform temporary directory. */
+  readonly tempDirParent?: string
   /** Absolute app-bin source path (`<pkg>/src/bin.ts`); the `lib` bin is derived from it. */
   readonly binScript: string
   /** Explicit plain-Node entry for `lib` mode; intended for test fixtures outside a package `src/` tree. */
@@ -172,7 +178,7 @@ export interface LoaderSmokeResult {
  * @returns captured stdout and stderr after a zero exit.
  */
 export async function runLoaderSmoke(options: LoaderSmokeOptions): Promise<LoaderSmokeResult> {
-  const cwd = await mkdtemp(join(tmpdir(), options.tempDirPrefix))
+  const cwd = await mkdtemp(join(options.tempDirParent ?? tmpdir(), options.tempDirPrefix))
   const processTimeoutMs = options.processTimeoutMs ?? DEFAULT_PROCESS_TIMEOUT_MS
   try {
     await options.prepare?.(cwd)
@@ -182,7 +188,11 @@ export async function runLoaderSmoke(options: LoaderSmokeOptions): Promise<Loade
       configArgs: options.binArgs ?? [options.configPath],
       ...options.mode !== undefined ? { mode: options.mode } : {},
       tsconfigPath: options.tsconfigPath,
-      env: { DSH_HOME: join(cwd, '.dsh'), DSH_AGENTS_HOME: join(cwd, '.agents'), ...options.env },
+      env: {
+        DSH_HOME: join(cwd, '.dsh'),
+        DSH_AGENTS_HOME: join(cwd, '.agents'),
+        ...options.env,
+      },
     })
     // `input: ''` writes nothing and closes stdin — the fixture-visible
     // stdin-close contract. `reject: false` folds spawn errors, the SIGKILL

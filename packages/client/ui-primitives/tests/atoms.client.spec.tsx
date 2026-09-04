@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Button, ConnectionBanner, Input, Menu, Modal, Pill } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, ConnectionIndicator, Input, Menu, Modal, Pill } from '@deepseek-ai/dsh-client-ui-primitives'
 import { POINTER_GRACE_MS } from '../src/pointer-grace.ts'
 
 afterEach(cleanup)
@@ -383,7 +383,7 @@ describe('Modal', () => {
   it('is absent while closed; Escape and mask click call onClose', () => {
     const onClose = vi.fn()
     const { rerender } = render(
-      <Modal open={false} onClose={onClose} title="Create new workspace">body</Modal>)
+      <Modal open={false} onClose={onClose} title="Create new workspace" closeLabel="Close">body</Modal>)
     expect(screen.queryByRole('dialog')).toBeNull()
     rerender(
       <Modal open onClose={onClose} title="Create new workspace" closeLabel="Configure later" description="Name it." contentClassName="scrolling-content" footer={<button type="button">Create</button>}>
@@ -406,13 +406,50 @@ describe('Modal', () => {
     fireEvent.click(mask)
     expect(onClose).toHaveBeenCalledTimes(2)
   })
+
+  it('renders headless content without the default close chrome', () => {
+    render(
+      <Modal open onClose={() => {}} title="Custom surface" headless>
+        <span>Custom body</span>
+      </Modal>,
+    )
+    expect(screen.getByRole('dialog', { name: 'Custom surface' })).toBeDefined()
+    expect(screen.getByText('Custom body')).toBeDefined()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
 })
 
-describe('ConnectionBanner', () => {
-  it('renders only while reconnecting', () => {
-    const { container, rerender } = render(<ConnectionBanner reconnecting={false} />)
+describe('ConnectionIndicator', () => {
+  it('renders outage, attempt progress, and recovered states without a native tooltip', () => {
+    const reconnect = vi.fn()
+    const labels = {
+      disconnectedLabel: 'Disconnected',
+      reconnectLabel: 'Reconnect',
+      connectingLabel: 'Connecting',
+      recoveredLabel: 'Connected',
+      reconnectActionLabel: 'Disconnected, reconnect now',
+      restartActionLabel: 'Connecting, restart now',
+      onReconnect: reconnect,
+    }
+    const { container, rerender } = render(
+      <ConnectionIndicator state={undefined} {...labels} />,
+    )
     expect(container.firstChild).toBeNull()
-    rerender(<ConnectionBanner reconnecting />)
-    expect(container.textContent).toContain('重连')
+    rerender(<ConnectionIndicator state="disconnected" {...labels} />)
+    const indicator = screen.getByRole('button', { name: 'Disconnected, reconnect now' })
+    expect(indicator.textContent).toContain('Disconnected')
+    expect(indicator.textContent).toContain('Reconnect')
+    expect(indicator.hasAttribute('title')).toBe(false)
+    expect(indicator.querySelector('svg')).toBeTruthy()
+    fireEvent.click(indicator)
+    expect(reconnect).toHaveBeenCalledOnce()
+
+    rerender(<ConnectionIndicator state="connecting" {...labels} />)
+    expect(screen.getByRole('button', { name: 'Connecting, restart now' }).textContent)
+      .toContain('Connecting...')
+
+    rerender(<ConnectionIndicator state="recovered" {...labels} />)
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByRole('status', { name: 'Connected' })).toBeTruthy()
   })
 })

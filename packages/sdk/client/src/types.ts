@@ -5,7 +5,8 @@
  * @module @deepseek-ai/dsh-sdk-client/types
  */
 
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type { SdkPromptContentBlock } from '@deepseek-ai/dsh-sdk-protocol'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 /** One server-to-client notification as received off the wire. */
@@ -21,19 +22,26 @@ export type NotificationFilter = (notification: HarnessNotification) => boolean
 
 /** Launch and timeout options for {@link HarnessClient}. */
 export interface HarnessClientOptions {
-  /** The runtime executable (the `dsh-jsonrpc-agent` bin, a packaged exe, or `node`). */
-  command: string
-  /** Arguments passed to {@link command}. */
-  args?: string[]
-  /** Working directory for the runtime process itself. */
-  cwd?: string
+  /** Absolute or caller-relative dsh CLI module; omitted resolves this package's same-version dependency. */
+  dshBin?: string
+  /** Named profile serving the SDK protocol (default `sdk`). */
+  profile?: string
+  /** Ordered per-launch profile patches; relative paths resolve before spawn. */
+  patches?: string[]
+  /** Explicit Harness home for this child; relative paths resolve before spawn. */
+  dshHome?: string
+  /** Working directory for the dsh process itself. */
+  processCwd?: string
   /**
-   * The complete child environment. `undefined` inherits the parent env
-   * verbatim; passing an object replaces it entirely, so callers own
+   * The complete child environment, read when {@link HarnessClient.start}
+   * spawns. `undefined` reads the parent env at that time; passing an object
+   * reads that object at spawn and replaces the parent environment entirely, so callers own
    * credential policy (see `scrubbedParentEnv` in `@deepseek-ai/dsh-subprocess`
    * for the shared scrub-then-merge base).
    */
   env?: NodeJS.ProcessEnv
+  /** Bound (ms) on the initial profile handshake (default 10000). */
+  initializeTimeoutMs?: number
   /** Per-request timeout (ms); `undefined` waits indefinitely (a turn can legitimately run long). */
   requestTimeoutMs?: number
   /** Bound (ms) on the protocol `shutdown` exchange inside `close()` (default 1000). */
@@ -45,15 +53,15 @@ export interface HarnessClientOptions {
 }
 
 /** Options for the high-level {@link DeepSeekHarness} wrapper. */
-export interface DeepSeekHarnessOptions {
-  /** Launch spec for the runtime subprocess (command, args, cwd, env, timeouts). */
-  launch: HarnessClientOptions
-  /** Workspace cwd recorded on every SDK-created session (default: the launch cwd, else `process.cwd()`). */
+export interface DeepSeekHarnessOptions extends HarnessClientOptions {
+  /** Workspace cwd recorded on every SDK-created session (default: the process cwd, else `process.cwd()`). */
   cwd?: string
   /** Provider route for SDK-created agents (default `deepseek-official`). */
   provider?: string
   /** Model for SDK-created agents (default `deepseek-v4-flash`). */
   model?: string
+  /** Adapter-owned reasoning effort for the selected provider/model route. */
+  reasoningEffort?: ReasoningEffortId
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
 }
@@ -72,3 +80,4 @@ export interface RunResult {
 
 /** Re-exported content-block alias so SDK callers need no extra import. */
 export type { ContentBlock }
+export type { SdkPromptContentBlock }

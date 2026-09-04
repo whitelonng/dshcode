@@ -2,7 +2,7 @@
 
 [English](schedule.md) | 中文
 
-Schedule 拥有持久提醒；这些提醒会作为普通的后续对话轮次返回原 live Session。[持久 Schedule Agent Note](../../.agents/notes/implemented/feature/2026-08-05-durable-web-schedule.zh.md) 负责持久化与生命周期决策，[对话式交付](../../.agents/notes/implemented/simplification/2026-08-09-conversational-schedule-delivery.zh.md) 负责无回执边界，[显式时区边界](../../.agents/notes/implemented/simplification/2026-08-09-explicit-schedule-time-zone.zh.md) 负责浏览器本地解释，[有界固定速率 Schedule](../../.agents/notes/implemented/simplification/2026-08-09-bounded-fixed-rate-schedule.zh.md) 负责重复调度。本页记录 [`packages/schedule/schedule/src/types.ts`](../../packages/schedule/schedule/src/types.ts) 中的持久数据形状和面向模型的数据形状；[包 README](../../packages/schedule/schedule/README.zh.md) 负责组合、工具行为与确切的提醒 framing。
+Schedule 拥有持久提醒；这些提醒会作为普通的后续对话轮次返回原 live Session。[持久 Schedule Agent Note](../../.agents/notes/implemented/feature/2026-08-05-durable-web-schedule.zh.md) 负责持久化、生命周期与活动状态呈现，[对话式交付](../../.agents/notes/implemented/simplification/2026-08-09-conversational-schedule-delivery.zh.md) 负责无回执边界，[显式时区边界](../../.agents/notes/implemented/simplification/2026-08-09-explicit-schedule-time-zone.zh.md) 负责浏览器本地解释，[有界固定速率 Schedule](../../.agents/notes/implemented/simplification/2026-08-09-bounded-fixed-rate-schedule.zh.md) 负责重复调度。本页记录 [`packages/schedule/schedule/src/types.ts`](../../packages/schedule/schedule/src/types.ts) 中的持久数据形状和面向模型的数据形状；[包 README](../../packages/schedule/schedule/README.zh.md) 负责组合、工具行为与确切的提醒 framing。
 
 ## 持久记录
 
@@ -149,7 +149,7 @@ type ScheduleDispatchChange = OneShotScheduleDispatchChange | EveryScheduleDispa
 type ScheduleChange = ScheduleCreateChange | ScheduleDeleteChange | ScheduleDispatchChange
 ```
 
-严格 decoder 与 fold 会拒绝未知版本、额外字段、复用 id、不匹配的一次性提醒或 Every dispatch 形状，以及针对非活动记录的 delete 或 dispatch 转换。普通 Session 折叠完整事件流。fork 只折叠 `SessionHeader.seedLength` 位置及其后的事件，因此保留历史，但不会接管父 Session 的活动提醒。`schedule/change` 声明和源码位置也编入[持久化目录](../persistence-catalog.zh.md#schedulechange--log-only)。
+严格 decoder 与 fold 会拒绝未知版本、额外字段、复用 id、不匹配的一次性提醒或 Every dispatch 形状，以及针对非活动记录的 delete 或 dispatch 转换。普通 Session 折叠完整事件流。fork 只折叠精确 `inheritedEventCount` 位置及其后的事件，因此保留历史，但不会接管父 Session 的活动提醒。Projection 初始化会在不可变 header 旁接收该 cut，复用共享 transition，并持久化 cut、活动记录与已使用 id 历史，使缓存恢复继续保持严格回放。`schedule/change` 声明和源码位置也编入[持久化目录](../persistence-catalog.zh.md#schedulechange--log-only)。
 
 ## 活动视图与管理
 
@@ -177,10 +177,16 @@ type ScheduleView = ScheduleRecord & {
 
 生成的[工具目录](../tool-catalog.zh.md#deepseek-aidsh-schedule)负责 `schedule_create`、`schedule_list` 和 `schedule_delete` 的参数与结果 schema。一条 Agent-scoped 队列将管理调用与到期工作串行化。每次读取或判断都会先等待共享的 Session 持久化 barrier；create 与实际执行的 delete 在追加后还会再次等待。barrier 失败会报告 `persistence_uncertain`，而不是猜测 eager write 是否已提交。其他稳定错误代码是 `invalid_prompt`、`invalid_selector`、`invalid_rule`、`invalid_time_zone`、`not_future`、`time_out_of_range`、`frequency_too_high`、`corrupt_schedule_log` 和 `internal_error`。
 
+## 只读 Web 目录
+
+可选 Session projection 注册表存在时，Schedule 会注册客户端可见的 `schedule` key，其值是完整的活动 `ScheduleRecord[]`。live、cache、history 与 detached 读取共用同一套 header-aware 严格 fold；畸形权威输入会使既有读取路径失败，而不会发布部分值。
+
+shipped Web bundle 默认禁用 `ui-schedule`，显式 Schedule overlay 则把它与 Host 能力一同启用。[`dsh-client-ui-schedule`](../../packages/client/ui-schedule/README.zh.md)拥有 header 交互，[`dsh-client-ui-workspace`](../../packages/client/ui-workspace/README.zh.md)拥有列表行呈现，持久 Schedule Agent Note 拥有二者共享的活动状态边界。共享值只表示当前活动状态，绝不表示交付历史或回执；到期提醒仍通过下文所述的普通 Assistant 输出出现。
+
 ## Live 交付
 
 进程内 owner 根据持久 fold 派生最早的 timer，并在每次有界等待后重新读取墙钟。cold Session 不执行任何工作；重新打开后会重建 timer，并使已经过去的目标进入 overdue 状态。到期的一次性提醒享有优先级，每次只进入一个后续轮次。当没有一次性提醒到期时，所有 overdue 的 Every 记录会组成上述单个批次。
 
 到期工作会先等待 Agent 完全 idle 并认领 maintenance phase，再重新折叠状态、采样本次判断、将一个 `followup()` 排入队列，并追加对应的 dispatch 变更。它绝不会调用 `steer()`，也绝不会中断当前轮次。
 
-获得准入的一次性提醒或固定速率批次会启动一个普通的后续轮次，且只通过普通对话 transcript（文本记录）出现；Schedule 不提供独立的持久 Web 回执或浏览器渲染器。如果 framing 构造或同步队列准入失败，则不会记录 dispatch，提醒仍保持活动。队列准入后、持久 dispatch 前的狭窄崩溃窗口可能使提醒内容在恢复后重复，因此该边界提供的是尽力而为的至少一次交付，而非恰好一次交付。
+获得准入的一次性提醒或固定速率批次会启动一个普通的后续轮次，且只通过普通对话 transcript（文本记录）出现；Schedule 不提供独立的持久 Web 回执。上面的只读活动目录绝不表示交付成功。如果 framing 构造或同步队列准入失败，则不会记录 dispatch，提醒仍保持活动。队列准入后、持久 dispatch 前的狭窄崩溃窗口可能使提醒内容在恢复后重复，因此该边界提供的是尽力而为的至少一次交付，而非恰好一次交付。

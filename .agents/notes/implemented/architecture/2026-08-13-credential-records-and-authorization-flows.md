@@ -53,7 +53,7 @@ Withdrawal settles an attempt whether or not its flow reacts to the signal. A fl
 
 `.credentials.yaml` gains a version and two sections. A boot upgrades the recognized pre-release flat layout in place — an all-string flat mapping nests verbatim under `refs:` under the writer lock — because a key stored through the Models page by an earlier internal build must survive the layout change without a hand edit and without its model requests failing. Any flat shape the recognizer cannot prove it understands keeps the by-name refusal with the hand migration stated in the message; the parser itself still reads exactly one layout, and the migration step retires with the pre-release stance at the first tagged release. Every fixture in the repo that wrote the flat document was rewritten; the llm suites' fixtures were missed by the record change itself and fixed here.
 
-`openai-codex` returns to the provider picker and to the Models page directory. Signing in is offered for every installed provider that ships a login, which today is all 38 — 31 collect a key through pi-ai's own prompt, six offer that beside a subscription login, and Codex offers only the subscription login.
+`openai-codex` returns to the provider picker and to the Models page directory. All 38 installed providers offer sign-in: 31 collect a key through pi-ai's own prompt, six offer that beside a subscription login, and Codex offers only the subscription login.
 
 What this does not yet include is the surface: the wire contract that carries notices and prompts to the browser, and the Models-page control that starts a login. Until that lands, the flows are reachable only in-process, and a deployment still configures a key by typing it into the settings form.
 
@@ -65,4 +65,4 @@ The seam's suite pins the lifecycle it owns: single-flight refusal and release, 
 
 `llm-pi-ai` covers the three translations against a real `$DSH_HOME` document — an api-key credential field by field, an OAuth credential verbatim including its refresh half, a foreign plugin's record skipped by scope, and the write refusal without a credentials service — plus every `AuthEvent` and `AuthPrompt` member restated, with `Models.login()` mocked at the collection boundary since a real one opens a browser. Two real-composition tests boot the plugin with and without the authorization seam.
 
-The `models-settings` and `onboarding-usable-provider` web e2e goldens regain exactly the `openai-codex` option line they lost when it was withheld — the whole assembled-application difference this change makes today, because the Models page has no login control yet to record.
+The `models-settings` and `onboarding-usable-provider` web e2e goldens regain exactly the `openai-codex` option line they lost when it was withheld — the only assembled-application difference this decision records, because the Models page has no login control yet to record.

@@ -62,7 +62,7 @@ DeepSeek 原生 `web_search` 探测已注册但会跳过。线上 Anthropic 兼�
 
 仓库的首个 CI secret 需要一份记录在案的威胁模型，因为同仓库 PR、fork PR 和 Dependabot PR 的访问权限各不相同，且仓库公开后会发生变化。
 
-### 当前谁能触及 secret（私有仓库）
+### 私有仓库中谁能触及 secret
 
 - **无写权限（fork PR）：不能。** 两个独立事实阻止了它。第一，工作流使用 `pull_request` 而**非** `pull_request_target`——GitHub 不会将 repo secret 传递给 fork PR 的 `pull_request` 运行，因此 `secrets.DEEPSEEK_API_KEY_EXTERNAL` 在 fork runner 上解析为空。第二，`if:` 门禁完全跳过 fork PR。secret 扣留是真正的边界；门禁是纵深防御和用户体验。
 - **有写（push）权限：能。** 同仓库分支 PR 会收到 secret，因此有写权限的作者可以修改测试代码（或安装生命周期脚本，或其分支上的工作流 YAML）来窃取密钥。这**是 GitHub Actions 的固有特性，并非本文引入的**：任何对任何仓库有 push 权限的人都可以通过编写工作流来窃取该仓库的任何 Actions secret。写权限⇒secret 访问权，始终如此。缓解措施在于谁被授予写权限以及分支保护，而非本文件。
@@ -79,7 +79,7 @@ DeepSeek 原生 `web_search` 探测已注册但会跳过。线上 Anthropic 兼�
 
 变差的是*周边*模型，以下是翻转可见性之前需要处理的事项：
 
-- **日志变为全球可读。** 今天泄露给组织成员的粗心 secret 回显，公开后会泄露给整个互联网并在数分钟内被爬取。secret 处理纪律（不回显值/长度——已做到）的重要性大幅提升。
+- **日志变为全球可读。** 泄露给组织成员的粗心 secret 回显，公开后会泄露给整个互联网并在数分钟内被爬取。secret 处理纪律（不回显值/长度——已做到）的重要性大幅提升。
 - **`pull_request_target` 陷阱变为灾难性的。** 如果有人为了「修复」PR 运行而将触发器切换为 `pull_request_target`，工作流将在 base-repo 上下文中运行不可信的 fork 代码并**携带** secret——完整的密钥泄露向量。在私有仓库中这勉强无害，在公开仓库中则是灾难。e2e.yml 中触发器上的 `SECURITY —` 注释禁止此更改并指向本文。
 - **翻转时轮换密钥。** 密钥曾存在于私有仓库的 CI 中；将公开视为「假定已暴露」，在那一刻轮换 `DEEPSEEK_API_KEY_EXTERNAL`。
 - **将 secret 置于控制之下。** 确认 Settings → Actions → *"Send secrets to workflows from fork pull requests"* 保持**关闭**（这是唯一真正会打破 fork 边界的设置），并考虑将密钥移入带有 required reviewers 的 GitHub **Environment**，使即使已合并的代码也只在受控条件下使用它，且轮换有单一归属。

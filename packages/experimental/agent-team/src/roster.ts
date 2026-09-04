@@ -2,15 +2,16 @@
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { MessageId } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import type { ContinuableStart } from '@deepseek-ai/dsh-subagent'
 import { errorMessage, TeamError } from './error.ts'
-import type { TeamFoldState } from './fold.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamRuntimeLifecycle } from './lifecycle.ts'
+import type { TeamState } from './projection.ts'
 import { messageAccepted } from './session-message.ts'
 import { TeamId } from './types.ts'
 import type {
@@ -34,19 +35,18 @@ export interface TeamMembership {
 /**
  * Resolve one active Team member by model-facing name, including the Lead pseudo-row.
  * @param root - exact live Team Lead.
- * @param state - current Team fold.
+ * @param state - current Team state.
  * @param rawName - candidate member name.
  * @returns resolved durable id and normalized name.
  */
 export function resolveActiveMember(
   root: Agent,
-  state: TeamFoldState,
+  state: TeamState,
   rawName: string,
 ): { id: SessionId; name: string } {
   const name = rawName.trim()
   if (name === 'lead') return { id: root.id, name }
-  const id = state.memberIdsByName.get(name)
-  const member = id === undefined ? undefined : state.members.get(id)
+  const member = state.members.find(candidate => candidate.name === name)
   if (member === undefined || member.phase !== 'active') {
     throw new TeamError(`active teammate "${name}" not found`, 'TEAM_MEMBER_NOT_FOUND')
   }
@@ -95,7 +95,7 @@ export class TeamRoster {
       if (parentId !== undefined) {
         const root = this.ctx.agents.get(parentId)
         if (root !== undefined) {
-          const member = this.journal.state(root).members.get(agent.id)
+          const member = this.journal.state(root).members.find(candidate => candidate.id === agent.id)
           if (member?.phase === 'active' || member?.phase === 'provisioning') {
             return { root, id: TeamId(root.id), role: 'teammate', name: member.name }
           }
@@ -109,7 +109,7 @@ export class TeamRoster {
       // A continuation can briefly outlive its parent during child-first teardown.
       // Do not reinterpret that durable child as a new implicit root Team. A host-
       // resumed ordinary fork has no descriptor in its own suffix and remains a
-      // valid new root whose inherited Team records fold out by TeamId.
+      // valid new root whose inherited Team records stay outside its projected Team state.
       if (this.subagentDescriptor(agent)) return undefined
       return { root: agent, id: TeamId(agent.id), role: 'lead', name: 'lead' }
     } catch {
@@ -136,7 +136,7 @@ export class TeamRoster {
       ...root.options.model === undefined ? {} : { model: root.options.model },
       diagnostics: [],
     }]
-    for (const member of state.members.values()) {
+    for (const member of state.members) {
       const live = this.ctx.agents.get(member.id)
       const model = live?.options.model ?? root.options.model
       result.push({
@@ -223,7 +223,8 @@ export class TeamRoster {
       const rootId = agent.session.header.parentSession
       if (rootId === undefined) continue
       const root = this.ctx.agents.get(rootId)
-      if (root === undefined || !this.journal.state(root).members.has(agent.id)) continue
+      if (root === undefined
+        || !this.journal.state(root).members.some(member => member.id === agent.id)) continue
       const children = teams.get(root) ?? []
       children.push(agent.id)
       teams.set(root, children)
@@ -254,7 +255,7 @@ export class TeamRoster {
     const root = membership.root
     const name = this.memberName(request.name)
     const description = requiredText(request.description, 'description', 200)
-    const childId = SessionId(randomUUID())
+    const childId = brandString<SessionId>(randomUUID())
     const member: TeamMemberSnapshot = {
       id: childId,
       name,
@@ -266,10 +267,10 @@ export class TeamRoster {
 
     await this.journal.transact(root.id, async () => {
       const state = this.journal.state(root)
-      if (state.memberIdsByName.has(name)) {
+      if (state.members.some(member => member.name === name)) {
         throw new TeamError(`teammate name "${name}" was already used in this Team`, 'TEAM_MEMBER_NAME_TAKEN')
       }
-      if (state.members.size >= this.maxMembers) {
+      if (state.members.length >= this.maxMembers) {
         throw new TeamError(`Team member limit ${this.maxMembers} reached`, 'TEAM_MEMBER_LIMIT')
       }
       await this.journal.appendAndFlush(root, 'team/member', { version: 1, teamId: TeamId(root.id), member })
@@ -345,7 +346,7 @@ export class TeamRoster {
       const session = this.ctx.sessions.get(childId)
       if (session === undefined) {
         const stored = await this.ctx.sessionPersistence.inspect(childId, signal)
-        const suffix = stored.events.slice(stored.meta.seedLength ?? 0)
+        const suffix = stored.events.slice(stored.inheritedEventCount)
         if (messageAccepted(suffix, message => message.id === messageId)) return
         throw new TeamError(
           `teammate "${childId}" initial prompt was not durably accepted`,
@@ -373,7 +374,7 @@ export class TeamRoster {
       try {
         signal.throwIfAborted()
         await this.ctx.sessions.flush(session)
-        const suffix = session.events.slice(session.header.seedLength ?? 0)
+        const suffix = session.ownEvents()
         if (messageAccepted(suffix, message => message.id === messageId)) return
         if (this.ctx.sessions.get(childId) !== session) continue
         await progress.promise
@@ -387,7 +388,7 @@ export class TeamRoster {
 
   /** Settle provisioning-only members from their independently durable child Sessions. */
   private async reconcileProvisioning(root: Agent, signal: AbortSignal): Promise<void> {
-    const provisioning = [...this.journal.state(root).members.values()].filter(member => member.phase === 'provisioning')
+    const provisioning = this.journal.state(root).members.filter(member => member.phase === 'provisioning')
     for (const member of provisioning) {
       signal.throwIfAborted()
       // A live child means creation is still completing in this process. Its
@@ -397,7 +398,7 @@ export class TeamRoster {
       let failure = 'provisioning did not leave a resumable child Session'
       try {
         const loaded = await this.ctx.sessionPersistence.inspect(member.id, signal)
-        const suffix = loaded.events.slice(loaded.meta.seedLength ?? 0)
+        const suffix = loaded.events.slice(loaded.inheritedEventCount)
         const descriptor = foldSubagentDescriptor(suffix)
         const acceptedInitialPrompt = messageAccepted(suffix, message => message.source.kind === 'user')
         if (loaded.meta.parentSession === root.id
@@ -414,7 +415,7 @@ export class TeamRoster {
       signal.throwIfAborted()
       await this.journal.transact(root.id, async () => {
         signal.throwIfAborted()
-        const current = this.journal.state(root).members.get(member.id)
+        const current = this.journal.state(root).members.find(candidate => candidate.id === member.id)
         if (current?.phase !== 'provisioning') return
         const settled: TeamMemberSnapshot = {
           ...current,
@@ -463,7 +464,7 @@ export class TeamRoster {
     terminal: TeamMemberSnapshot,
   ): Promise<'active' | 'failed'> {
     return this.journal.transact(root.id, async () => {
-      const current = this.journal.state(root).members.get(terminal.id)
+      const current = this.journal.state(root).members.find(member => member.id === terminal.id)
       /* v8 ignore next 3 -- the append-only provisioning event is committed by this operation before settlement. */
       if (current === undefined) {
         throw new TeamError(`provisioned teammate "${terminal.id}" disappeared`, 'TEAM_PROVISIONING_CONFLICT')
@@ -480,6 +481,6 @@ export class TeamRoster {
 
   /** Whether a Session's own suffix identifies a provider-owned subagent child. */
   private subagentDescriptor(agent: Agent): boolean {
-    return foldSubagentDescriptor(agent.session.events.slice(agent.session.header.seedLength ?? 0)) !== undefined
+    return foldSubagentDescriptor(agent.session.ownEvents()) !== undefined
   }
 }

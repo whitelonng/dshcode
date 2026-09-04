@@ -21,6 +21,8 @@ Linux coverage CI and native Windows CI use [in-job partitioned coverage](2026-0
 
 `scripts/coverage-exempt.ts` is the single roster point, holding the membership contract and the filter/exclude pairs so the two sides cannot drift.
 
+The roster also contains the packed-image loadability suite. That suite reads built workspace artifacts while the packer and Web Worker runtime sources it imports are threshold-excluded. Native Windows makes the uninstrumented gate wait for `build`, so the suite cannot observe a partially emitted dependency closure.
+
 ### The roster, reconciled entry by entry
 
 A suite contributes to coverage exactly when it executes measured files in-process (`coverage.include` spans the package src trees). The current roster, audited:
@@ -30,6 +32,8 @@ A suite contributes to coverage exactly when it executes measured files in-proce
 | All 6 typert generator specs | The generator's own src | Generator src is threshold-excluded as a package (`vitest.config.ts`) — outside the threshold scope to begin with |
 | tools-catalog.spec additionally imports | `typert-registry` and `tool-cordis` src | Each package's own tests cover them fully (verified with focused coverage runs, zero threshold errors) |
 | `scripts/install-lefthook.spec.ts`, `scripts/oxlint-contract.spec.ts`, `scripts/change-scope.spec.ts`, `scripts/translation-pairing-merge.spec.ts` | None — they test `scripts/` sources (never in `coverage.include`) and work by spawning child processes | Nothing to carry |
+| `packages/experimental/webworker-runtime/tests/compile/transform-corpus.spec.ts` | None — it spawns a child process that transforms and imports every built bundle (Node's ESM loader is the oracle) | webworker-runtime src is threshold-excluded as a package (`vitest.config.ts`) — outside the threshold scope to begin with |
+| `packages/experimental/webworker-packer/tests/image-loadable.spec.ts` | Packer and Web Worker runtime src, both threshold-excluded in `vitest.config.ts` | The suite is correctness evidence over built artifacts; native Windows runs it after build in the uninstrumented gate |
 
 ### Membership contract
 
@@ -58,6 +62,7 @@ Measured on CI (16-core runner): the gate segment went from 424 seconds to the t
 ## Consequences
 
 - The exempt suites execute without adding instrumentation cost to the thresholded gate; partitioned wall-clock measurements belong to the [in-job partitioning decision](2026-08-18-in-job-partitioned-coverage.md).
+- Native Windows makes the exempt gate wait for build, so the packed-image suite reads a complete workspace artifact tree.
 - `DSH_GATE_CONCURRENCY` has two schedulable gates in this lane again, so the aggregate scheduler is no longer a pass-through.
 - Adding a heavy suite to the roster requires the membership audit above; a wrong entry fails the instrumented gate loudly rather than eroding coverage silently.
 - The exempt suites no longer appear in the coverage report's file list of contributors; their correctness signal lives solely in the uninstrumented gate's pass/fail.

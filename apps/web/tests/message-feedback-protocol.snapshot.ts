@@ -5,16 +5,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   assertFixtureInventory,
   compareOrRefreshGolden,
+  fixtureIdentity,
   launchWebScaffold,
   seedSession,
   type WebScaffold,
 } from './scaffold.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/message-feedback-protocol', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/message-feedback-protocol', import.meta.url))
 const SESSION_FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
 const PROTOCOL_EXPECTED = join(SNAPSHOT_DIR, 'protocol.expected.json')
 const SESSION_ID = 'message-feedback-protocol'
-const MESSAGE_ID = '11111111-1111-4111-8111-111111111111'
+const MESSAGE_ID = fixtureIdentity('message', 2)
 
 interface ProtocolExchange {
   readonly endpoint: string
@@ -41,6 +42,7 @@ function createdVersion(response: unknown): string {
 /** Replace only run-owned UUID/time values; all protocol names and business fields stay exact. */
 function normalizeProtocol(exchanges: readonly ProtocolExchange[], version: string): string {
   return JSON.stringify(exchanges, (key, value: unknown) => {
+    if (key === 'messageId' && value === MESSAGE_ID) return '{{message:2}}'
     if ((key === 'version' || key === 'ifVersion') && value === version) return '{{version}}'
     if ((key === 'createdAt' || key === 'updatedAt') && typeof value === 'number') return '{{timestamp}}'
     return value
@@ -63,7 +65,7 @@ describe('message feedback Host Remote protocol', () => {
     const exchanges: ProtocolExchange[] = []
     const invoke = async (rpcId: string, endpoint: string, request: unknown): Promise<unknown> => {
       const payload = { args: { request } }
-      const response = await fetch(`${scaffold.baseUrl}/api/${endpoint}`, {
+      const response = await scaffold.hostFetch(`/api/${endpoint}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

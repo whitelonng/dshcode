@@ -76,7 +76,7 @@ Receiver 是一个小型载体而非领域对象的透明代理。需要 agent �
 
 作用域感知的注册表使用 `ScopedLayers`，拥有一个即时创建的全局 aggregate 和按标识键惰性创建的 aggregate。读取解析全局 layer 和至多一个精确局部 layer；它不创建状态，也从不遍历父级链。注册可见性与 Cordis effect 所有权都从同一个上下文派生，而回收会等待具体 layer 的完整 aggregate 变空（见[决策](2026-07-12-scoped-layers-store.zh.md)）。
 
-每个服务保留其领域规则。命名 command 和提示词视图使用共享的、保持插入顺序的 shadow 合并；工具保留更丰富的 resolver，因为限制会在加入局部工具前过滤全局工具，保留的 Code Mode transport 则单独插入。提示词变量和工具 guard 保持实时迭代，而工具提供方成员关系按每次 assembly 物化。Scope 提供存储生命周期和命名遮蔽，而非通用的注册表视图。
+每个服务保留其领域规则。命名 command 和提示词视图使用共享的、保持插入顺序的 shadow 合并；工具保留更丰富的 resolver，因为限制会在加入局部工具前过滤全局工具，保留的 PTC mode transport 则单独插入。提示词变量和工具 guard 保持实时迭代，而工具提供方成员关系按每次 assembly 物化。Scope 提供存储生命周期和命名遮蔽，而非通用的注册表视图。
 
 ### 融合 dispatch 辅助函数防止主体漂移
 
@@ -210,7 +210,7 @@ Session 头部、种子和追加的事件是无损 JSON 数据。Session 构造�
 
 ### 一个解析器定义工具视图
 
-私有解析器应用当前展示模式、活跃的全局限制、精确的局部叠加和局部遮蔽。Schema、查找、执行、Code Mode SDK 生成和限制验证都使用该解析器或其限制前的全局名称视图。
+私有解析器应用当前展示模式、活跃的全局限制、精确的局部叠加和局部遮蔽。Schema、查找、执行、PTC mode SDK 生成和限制验证都使用该解析器或其限制前的全局名称视图。
 
 [subagent 组合控制 Agent Note](../feature/2026-07-12-subagent-persona-tool-filter-and-depth.zh.md#tool-filtering-is-one-live-global-view-rule) 拥有用户可见的 allow/deny 语义。实现要求是一致性：被过滤掉的全局工具不能通过另一条查找路径仍可执行，局部遮蔽的定义就是被展示和执行的同一个定义。
 
@@ -218,11 +218,11 @@ Session 头部、种子和追加的事件是无损 JSON 数据。Session 构造�
 
 ### 工具执行拥有标识和边界物化
 
-注册表为每次执行分配一个新的带品牌的 `Symbol` token。嵌套的 Code Mode 调用将外层 token 作为 `parent` 携带，因此结构化输出可以通过标识将内层捕获与其外层 `run_code` 结果关联。
+注册表为每次执行分配一个新的带品牌的 `Symbol` token。嵌套的 PTC mode 调用将外层 token 作为 `parent` 携带，因此结构化输出可以通过标识将内层捕获与其外层 `run_code` 结果关联。
 
 注册表分配的新 Symbol 提供无碰撞的执行标识，无需 WeakSet 成员注册表。调用方无法通过 `ToolExecutionInput` 提供执行自身的 token；它们仅在注册表创建后接收流水线拥有的 `ToolExecution`。这是一个可信的类型化约定，而非针对任意强制转换或 JavaScript 调用方的运行时防御。
 
-参数在模型/工具 JSON 进入流水线时一次性物化。Pre-、around- 和 post-execute 监听器操作类型化的 execution 和决策。Call ID 关联、审批、单调守卫和 Code Mode 嵌套仍然是显式的关系检查。
+参数在模型/工具 JSON 进入流水线时一次性物化。Pre-、around- 和 post-execute 监听器操作类型化的 execution 和决策。Call ID 关联、审批、单调守卫和 PTC mode 嵌套仍然是显式的关系检查。
 
 在 post-execute 或外层流水线完成规范化后，注册表先为候选结果创建无损快照，并将快照失败转为普通错误；随后调用在本次调用创建时已快照的可选 `ToolDefinition.finalizeContent` 回调，最后一次性物化并冻结被接受的最终结果。该回调只能替换内容，因此即使工具强制最后一道结果上限，结构化错误标识、上下文与元数据仍由注册表拥有。每个同步的 `tools/result` 观察者接收该确切的已提交对象，观察者失败被逐个隔离。外层流水线失败或候选快照失败会在最终内容处理之前被规范化，因此观察者可以丢弃针对同一权威边界的暂存工作。
 
@@ -230,9 +230,9 @@ Session 头部、种子和追加的事件是无损 JSON 数据。Session 构造�
 
 SystemPrompt 首先将全局加 agent 的段、变量和工具提供方解析为确定性的注册表贡献。作用域过滤的 `system-prompt/assemble` waterfall 随后可以重排、替换、添加或移除任何段、变量或 schema。其返回的组装结果即为权威；没有后续的恢复步骤，普通提示词段、工具定义或提供方结果上也没有终态元数据。
 
-这是一个可信的同进程扩展点，而非权限边界。修改 Code Mode 的 `run_code` schema 或 `tools:sdk` 指令，或结构化子级的捕获 schema 或指令的监听器，有责任在其返回的组装中保持协议的一致性。ToolRuntime 仍然保留 `run_code` 不受普通工具注册和限制影响，因为那些是注册表不变式，但 assembly 中间件仍然可以自由变换最终的模型可见表面。
+这是一个可信的同进程扩展点，而非权限边界。修改 PTC mode 的 `run_code` schema 或 `tools:sdk` 指令，或结构化子级的捕获 schema 或指令的监听器，有责任在其返回的组装中保持协议的一致性。ToolRuntime 仍然保留 `run_code` 不受普通工具注册和限制影响，因为那些是注册表不变式，但 assembly 中间件仍然可以自由变换最终的模型可见表面。
 
-Scope 直接解决了真正的隔离问题。结构化输出贡献注册在子级的精确作用域中，而 Code Mode 从同一个已解析的工具视图派生其传输和 SDK。第二套命名保护系统需要另一套所有权和碰撞规则来覆盖任意 schema 提供方（包括有意贡献重复名称的提供方），却不创建新的信任边界。
+Scope 直接解决了真正的隔离问题。结构化输出贡献注册在子级的精确作用域中，而 PTC mode 从同一个已解析的工具视图派生其传输和 SDK。第二套命名保护系统需要另一套所有权和碰撞规则来覆盖任意 schema 提供方（包括有意贡献重复名称的提供方），却不创建新的信任边界。
 
 <a id="structured-output-commits-only-authoritative-outcomes"></a>
 
@@ -242,11 +242,11 @@ Scope 直接解决了真正的隔离问题。结构化输出贡献注册在子�
 
 对于原生调用，观察者仅在该确切执行的最终结果成功时才删除暂存并提交其值。因此 post-execute 阻止或外层流水线失败不会留下已捕获的值。
 
-对于 Code Mode SDK 调用，内层成功结果记录 `{ parentToken, value }` 而非提交。观察者等待 token 匹配 `parentToken` 的 `run_code` 执行，仅在该外层最终结果也成功时才提交。程序失败、运行时中止或外层 post-policy 拒绝会丢弃待定值。
+对于 PTC mode SDK 调用，内层成功结果记录 `{ parentToken, value }` 而非提交。观察者等待 token 匹配 `parentToken` 的 `run_code` 执行，仅在该外层最终结果也成功时才提交。程序失败、运行时中止或外层 post-policy 拒绝会丢弃待定值。
 
 一旦值处于待定或已提交状态，作用域单调守卫拒绝后续工具调用。成功的结构化输出执行会调用 `exec.concludeTurn()`，因此其自身不可变结果携带 `concludesTurn: true`，循环在该步骤结束工具循环。Schema 验证失败仍然是普通的 `INVALID_ARGS` 工具错误，子级可以在同一轮次内重试。
 
-纯 Code Mode 的注册表贡献从原生 wire schema 中省略 `structured_output`，并通过生成的 SDK 暴露它。Assembly waterfall 可以有意改变该展示；执行仍然针对子作用域定义进行验证，监听器拥有其创建的任何替代模型可见路由的一致性。
+纯 PTC mode 的注册表贡献从原生 wire schema 中省略 `structured_output`，并通过生成的 SDK 暴露它。Assembly waterfall 可以有意改变该展示；执行仍然针对子作用域定义进行验证，监听器拥有其创建的任何替代模型可见路由的一致性。
 
 <a id="three-execution-boundaries-are-deliberately-one-way"></a>
 
@@ -342,7 +342,7 @@ TypeScript 无法管控 JavaScript 强制转换、直接 Cordis dispatch、进�
 
 事件目录、服务目录、生产者/消费方矩阵、配置目录、模块图、工具目录、type-equiv 块和作用域事件解析器映射都是从源码生成或受新鲜度门禁约束的。[TypeScript 语义门禁 Agent Note](../process/2026-07-14-typescript-program-backed-semantic-gates.zh.md) 拥有 Program 构造、语义事件发现和解析器生成规则。
 
-行为测试固定了作用域路由和 dispose、最终写入注册表时的碰撞清理、发布回滚、有序完全停稳、持久化前/后提交行为、跨展示和执行的活跃工具过滤、协作式提示词组装、原生和 Code Mode 中的结构化输出提交、异步 subagent 启动和信号取消、worker 终端仲裁、ACP 结算和进程拆除。
+行为测试固定了作用域路由和 dispose、最终写入注册表时的碰撞清理、发布回滚、有序完全停稳、持久化前/后提交行为、跨展示和执行的活跃工具过滤、协作式提示词组装、原生和 PTC mode 中的结构化输出提交、异步 subagent 启动和信号取消、worker 终端仲裁、ACP 结算和进程拆除。
 
 ## 曾考虑的替代方案
 
@@ -395,7 +395,7 @@ Worker 消息、进程死亡和持久化输入确实跨越所有权和序列化�
 
 作用域感知服务仍然维护全局和按标识键索引的映射，操作必须显式携带其真实 agent。异步创建/恢复和 subagent start 要求调用方等待所有权转移并 dispose 返回的句柄。
 
-可信的 `system-prompt/assemble` 监听器可以移除或替换 Code Mode 和结构化输出协议片段。这是有意为之：监听器拥有最终组合，必须保持部署期望仍可用的任何协议。
+可信的 `system-prompt/assemble` 监听器可以移除或替换 PTC mode 和结构化输出协议片段。这是有意为之：监听器拥有最终组合，必须保持部署期望仍可用的任何协议。
 
 该设计信任同进程中的类型化插件。它不防御任意强制转换、有状态 getter、违反 readonly 约定的修改，或插件有意在支持的组合 API 之外使用环境服务访问。
 

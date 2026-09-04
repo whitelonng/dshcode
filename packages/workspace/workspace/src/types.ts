@@ -6,13 +6,21 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type {} from '@deepseek-ai/dsh-typert-protocol'
 
 /**
  * Identifies one workspace record. A generated uuid, never the path: path
  * normalization rewrites paths, and a reference anchor must stay stable.
  */
 export type WorkspaceId = Branded<'WorkspaceId'>
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    /** No registration carries that Workspace identity. */
+    'workspace/not-found': { readonly workspaceId: WorkspaceId }
+  }
+}
 
 /**
  * One workspace: a stable id over an existing directory, a display title, and

@@ -98,4 +98,4 @@ Status: implemented
 
 `packages/client/ui-settings-models/tests/` 以同一张表加上形状用例钉住 `apiKeyFailure`，并驱动两张卡片：留空的输入框可提交且不写入凭据、只含空白的输入框在字段上失败、非法或被包裹的 Key 同时拦截提交与探测、带首尾空白的 Key 在 `credentials.set` 与探测之前被 trim，以及手工声明的路由可以完全不带 Key 创建。
 
-用户可见的终态则钉在它真正被组装的位置：`examples/headless-agent/tests/headless.snapshot.ts` 让 one-shot 应用在一个 HTTP 标头无法承载的已存密钥下运行，复用其 missing-credential 兄弟场景的同一套无密钥 composition，并记录该轮次以 `INVALID_CREDENTIAL` 结束、消息可操作且既不含密钥也不含 `ByteString` 字样。包级测试无法证明这一点，而 web e2e 只覆盖了浏览器那一半。
+用户可见的终态则钉在它真正被组装的位置：`apps/cli/tests/profiles/headless/tests/headless.expected.e2e.ts` 让 one-shot 应用在一个 HTTP 标头无法承载的已存密钥下运行，复用其 missing-credential 兄弟场景的同一套无密钥 composition，并记录该轮次以 `INVALID_CREDENTIAL` 结束、消息可操作且既不含密钥也不含 `ByteString` 字样。包级测试无法证明这一点，而 web e2e 只覆盖了浏览器那一半。

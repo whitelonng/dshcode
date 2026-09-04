@@ -1,15 +1,54 @@
-# sandbox/ — process-sandbox capability family
+---
+description: "The process-sandbox package group: the confinement seam, per-platform backends, the shared policy resolver, and the Windows write-restriction rung."
+kind: "package-group"
+---
+
+# packages/sandbox
 
 English | [中文](README.zh.md)
 
-This family applies per-session confinement policy to process execution. It covers same-world subprocesses; isolated environments replace complete capability implementations instead of registering here.
+## Summary
+
+The `sandbox/` group confines subprocess execution to a file-effect policy: commands run `read-only`, write only under the session workspace (`workspace-write`), or run unrestricted (`danger-full-access`). Four packages deliver it: the confinement service (`sandbox/`), the per-platform backends for Linux, macOS, and Windows (`sandbox-local/`), the shared policy resolver (`sandbox-policy/`), and the Windows write-restriction backend (`sandbox-windows-acl/`). A confined call that a policy denies can retry through a user-approved one-time escalation. Confinement is same-world only: it shares the host kernel and filesystem, while containers, microVMs, and remote executors replace whole capabilities instead of registering here.
+
+## Table of Contents
+
+- [Packages](#packages)
+- [Related documentation](#related-documentation)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="packages"></a>
+## Packages
+
+Four packages play the confinement roles; the subsystem reference owns the exhaustive contracts and the per-call policy semantics.
 
 | Package | Role | ctx key |
 |---|---|---|
-| [`sandbox/`](sandbox/README.md) | Defines the process-sandbox service and shared escalation vocabulary | `ctx.sandbox` |
-| [`sandbox-local/`](sandbox-local/README.md) | Provides local platform confinement backends | registers on `ctx.sandbox` |
-| [`sandbox-policy/`](sandbox-policy/README.md) | Resolves durable per-session sandbox policy | `ctx.sandboxPolicy` |
+| [`sandbox/`](sandbox/README.md) | Confinement service contract: modes, enforcement, per-call policy, and the escalation vocabulary | `ctx.sandbox` |
+| [`sandbox-local/`](sandbox-local/README.md) | Per-platform confinement backends: Linux bwrap then Landlock, macOS Seatbelt, Windows restricted token | registers on `ctx.sandbox` |
+| [`sandbox-policy/`](sandbox-policy/README.md) | Shared policy home: deployment defaults and per-session mode overrides for every enforcing family | `ctx.sandboxPolicy` |
+| [`sandbox-windows-acl/`](sandbox-windows-acl/README.md) | Windows write restriction: confined children may write only in the workspace and a private temp directory | — (mounted by `sandbox-local` as the win32 backend) |
 
-See the [sandbox decision](../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) for the capability boundary and the [filesystem integration decision](../../.agents/notes/implemented/feature/2026-07-14-cross-family-fs-sandbox.md) for cross-family policy use.
+-----
 
-The subsystem reference — modes and enforcement, per-call policy, wrapped-argv dialects, fail-closed errors — is [docs/subsystems/sandbox.md](../../docs/subsystems/sandbox.md); the boundary and the cross-family phase live in the [sandbox](../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) and [cross-family fs sandbox](../../.agents/notes/implemented/feature/2026-07-14-cross-family-fs-sandbox.md) Agent Notes.
+<a id="related-documentation"></a>
+## Related documentation
+
+Start with the subsystem reference for the shared vocabulary, then the confinement decision and its cross-family extension.
+
+- [Process sandbox subsystem](../../docs/subsystems/sandbox.md) — modes, per-call policy, wrapped-argv dialects, and fail-closed errors.
+- [The subprocess sandbox decision](../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) — the capability boundary, escalation choreography, and deferred phases.
+- [Cross-family file sandbox decision](../../.agents/notes/implemented/feature/2026-07-14-cross-family-fs-sandbox.md) — the shared policy home and the sandboxed filesystem provider.
+- [Windows ACL restricted-token sandbox decision](../../.agents/notes/implemented/feature/2026-08-08-windows-acl-restricted-token-sandbox.md) — why raw ACL restricted tokens over mxc and AppContainer.
+
+<a id="dev-note"></a>
+## Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

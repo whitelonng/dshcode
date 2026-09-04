@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
@@ -82,7 +82,7 @@ async function tempPng(): Promise<string> {
 function callDescribe(ctx: Context, image: string) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId('loader-vision-call'),
+    callId: ToolCallId('loader-vision-call'),
     name: 'describe_image',
     arguments: { image },
   })

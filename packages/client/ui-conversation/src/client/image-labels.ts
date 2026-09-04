@@ -15,8 +15,9 @@ export function imageSizeText(bytes: number): string {
 }
 
 /**
- * Product copy for a host attachment rejection (the `attachment-error`
- * `details.reason`). User-solvable reasons name the limit and the way out;
+ * Product copy for a host attachment rejection (the `details.reason` of
+ * `session/attachment-invalid` or `subagent/attachment-invalid`).
+ * User-solvable reasons name the limit and the way out;
  * reasons the user cannot act on fold into one send-failed line carrying the
  * reason code for a bug report.
  * @param t - the conversation-namespace translate.
@@ -31,7 +32,6 @@ export function attachmentErrorText(
 ): string {
   switch (reason) {
     case 'MODEL_DOES_NOT_SUPPORT_IMAGES': return t('image.modelUnsupported')
-    case 'SUBAGENT_IMAGE_UNSUPPORTED': return t('image.subagentUnsupported')
     case 'IMAGE_TOO_MANY_PIXELS': return t('image.tooManyPixels')
     case 'IMAGE_DIMENSION_TOO_LARGE':
       if (limits !== undefined) return t('image.dimensionTooLarge', { size: limits.maxImageDimension })

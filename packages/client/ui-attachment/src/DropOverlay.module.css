@@ -1,7 +1,5 @@
-/* Full-viewport drop invitation (DeepSeek Chat DragMask). pointer-events:
-   none — the layer is decoration; drag events must keep hitting the page so
-   the owner's enter/leave count stays balanced. The frosted sheet color is
-   the theme's drop-mask alias (dark override lives with the theme owner). */
+/* Drag events must keep reaching the page so the owner's enter/leave count
+   stays balanced. */
 .mask {
   position: fixed;
   inset: 0;

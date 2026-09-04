@@ -9,7 +9,7 @@ Cordis is the vendored plugin framework underneath DeepSeek Harness. This primer
 - **A plugin is a object that implements Service.** It can be a function with optional `inject` and `apply(ctx)` fields, or a `Service` subclass whose lifecycle Cordis mounts into the current context.
 - **A context is a repository of services.** A service claims a stable `ctx.<key>` such as `ctx.tools`, `ctx.llm`, or `ctx.sessions` from a context; other plugins find services via key instead of importing a concrete implementation.
 - **Declare service dependency via `inject`.** A plugin that names required services waits until those services exist, so load order is expressed through service requirements rather than manual boot sequencing.
-- **Typed Events for communication.** Services declare event names through TypeScript declaration merging, then dispatch them as `emit`, `waterfall`, `parallel`, or `serial` depending on whether listeners observe, wrap, fan out, or run in order.
+- **Typed Events for communication.** Services declare event names through TypeScript declaration merging, then dispatch them as `emit`, `waterfall`, `parallel`, `serial`, or `bail` depending on whether listeners observe, wrap, fan out, run in order, or stop at the first bail value.
 - **Registrations are reversible effects.** Prompt sections, tool schemas, adapters, providers, and listeners are installed through `ctx.effect()` or `ctx.on()` so reload and teardown unwind them predictably.
 
 ## Dispatch Modes
@@ -22,6 +22,7 @@ Every event can have one of the following dispatch mode and can only be dispatch
 | `waterfall` | No | listeners observe in registration order | Yes |
 | `parallel` | Yes | all listeners observe the event in parallel | No |
 | `serial` | Yes | listeners observe in registration order | Yes |
+| `bail` | No | listeners observe in registration order until one bails | Yes |
 
 The dispatch mode is part of the event's public contract. New harness events document it with an `@mode` tag so the generated catalog can check declarations against dispatch sites.
 

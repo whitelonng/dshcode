@@ -1,18 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { AttachmentId } from '@deepseek-ai/dsh-attachment'
+import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentStore, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import {
-  CallId,
+  ToolCallId,
   createUserMessage,
-  OFFLOADED_IMAGE_TEXT,
-  offloadRequestImages,
+  offloadedImageText,
+  offloadedImagePrefixCount,
   offloadRequestImagesWithPolicy,
   projectImagesForTextModel,
+  resolveImageAttachmentAccess,
+  requestImageHandleText,
 } from '../src/index.ts'
-import type { ContentBlock } from '../src/index.ts'
+import type { ContentBlock, Message } from '../src/index.ts'
 
 const source = { kind: 'plugin' as const, plugin: 'test' }
 
-function image(bytes: number): ContentBlock {
+const OMITTED = '[omitted]'
+
+function offloadBase64(messages: readonly Message[], maxBytes: number | undefined): readonly Message[] {
+  return offloadRequestImagesWithPolicy(messages, {
+    representation: 'base64',
+    ...maxBytes === undefined ? {} : { maxBytes },
+    byteQuantum: 1,
+    placeholder: () => OMITTED,
+  })
+}
+
+function image(bytes: number): Extract<ContentBlock, { type: 'image' }> {
   return {
     type: 'image',
     attachment: {
@@ -25,15 +39,15 @@ function image(bytes: number): ContentBlock {
   }
 }
 
-describe('offloadRequestImages', () => {
+describe('base64 request-image offload', () => {
   it('preserves every image when no payload bound is configured', () => {
     const messages = [createUserMessage({ content: [image(300)], source })]
-    expect(offloadRequestImages(messages, undefined)).toBe(messages)
+    expect(offloadBase64(messages, undefined)).toBe(messages)
   })
 
   it('preserves the original request when its base64 payload fits exactly', () => {
     const messages = [createUserMessage({ content: [image(3), image(3)], source })]
-    expect(offloadRequestImages(messages, 8)).toBe(messages)
+    expect(offloadBase64(messages, 8)).toBe(messages)
   })
 
   it('keeps five 3 MiB images at 20 MiB and offloads the oldest after one more raw byte', () => {
@@ -43,14 +57,14 @@ describe('offloadRequestImages', () => {
       content: Array.from({ length: 5 }, () => image(rawImageBytes)),
       source,
     })]
-    expect(offloadRequestImages(exact, maxRequestImageBytes)).toBe(exact)
+    expect(offloadBase64(exact, maxRequestImageBytes)).toBe(exact)
 
     const over = [createUserMessage({
       content: [image(rawImageBytes + 1), ...Array.from({ length: 4 }, () => image(rawImageBytes))],
       source,
     })]
-    expect(offloadRequestImages(over, maxRequestImageBytes)[0]?.content).toEqual([
-      { type: 'text', text: OFFLOADED_IMAGE_TEXT },
+    expect(offloadBase64(over, maxRequestImageBytes)[0]?.content).toEqual([
+      { type: 'text', text: OMITTED },
       ...Array.from({ length: 4 }, () => image(rawImageBytes)),
     ])
   })
@@ -61,7 +75,7 @@ describe('offloadRequestImages', () => {
       createUserMessage({
         content: [{
           type: 'tool-result',
-          toolCallId: CallId('shot'),
+          toolCallId: ToolCallId('shot'),
           content: [shared],
         }],
         source,
@@ -69,12 +83,12 @@ describe('offloadRequestImages', () => {
       createUserMessage({ content: [shared, image(3)], source }),
     ]
 
-    const fitted = offloadRequestImages(messages, 8)
+    const fitted = offloadBase64(messages, 8)
     expect(fitted).not.toBe(messages)
     expect(fitted[0]?.content).toEqual([{
       type: 'tool-result',
-      toolCallId: CallId('shot'),
-      content: [{ type: 'text', text: OFFLOADED_IMAGE_TEXT }],
+      toolCallId: ToolCallId('shot'),
+      content: [{ type: 'text', text: OMITTED }],
     }])
     expect(fitted[1]?.content).toEqual([shared, image(3)])
     expect(messages[0]?.content[0]).toMatchObject({ type: 'tool-result', content: [shared] })
@@ -82,21 +96,34 @@ describe('offloadRequestImages', () => {
 
   it('replaces a single image that cannot fit', () => {
     const messages = [createUserMessage({ content: [image(300)], source })]
-    expect(offloadRequestImages(messages, 8)[0]?.content)
-      .toEqual([{ type: 'text', text: OFFLOADED_IMAGE_TEXT }])
+    expect(offloadBase64(messages, 8)[0]?.content)
+      .toEqual([{ type: 'text', text: OMITTED }])
   })
 
   it('keeps unchanged nested content while replacing a later image', () => {
     const nested = {
       type: 'tool-result' as const,
-      toolCallId: CallId('text-only'),
+      toolCallId: ToolCallId('text-only'),
       content: [{ type: 'text' as const, text: 'kept' }],
     }
     const messages = [createUserMessage({ content: [nested, image(3)], source })]
-    expect(offloadRequestImages(messages, 1)[0]?.content).toEqual([
+    expect(offloadBase64(messages, 1)[0]?.content).toEqual([
       nested,
-      { type: 'text', text: OFFLOADED_IMAGE_TEXT },
+      { type: 'text', text: OMITTED },
     ])
+  })
+})
+
+describe('offloadedImagePrefixCount', () => {
+  it('removes nothing under unbounded budgets and whole quanta past them', () => {
+    const lengths = [4, 4, 4, 4]
+    expect(offloadedImagePrefixCount(lengths, {})).toBe(0)
+    expect(offloadedImagePrefixCount(lengths, { maxBytes: 16 })).toBe(0)
+    expect(offloadedImagePrefixCount(lengths, { maxImages: 4 })).toBe(0)
+    // One excess image rounds up to the whole count quantum.
+    expect(offloadedImagePrefixCount([...lengths, 4], { maxImages: 4, countQuantum: 2 })).toBe(2)
+    // One excess byte removes a whole byte quantum, crossing the second image.
+    expect(offloadedImagePrefixCount([...lengths, 1], { maxBytes: 16, byteQuantum: 5 })).toBe(2)
   })
 })
 
@@ -109,6 +136,7 @@ describe('offloadRequestImagesWithPolicy', () => {
       representation: 'raw',
       maxBytes: 128 * mib,
       byteQuantum: 64 * mib,
+      placeholder: () => OMITTED,
     })[0]?.content
 
     expect(project(128)?.filter(block => block.type === 'image')).toHaveLength(128)
@@ -124,6 +152,7 @@ describe('offloadRequestImagesWithPolicy', () => {
       representation: 'raw',
       maxImages: 600,
       countQuantum: 20,
+      placeholder: () => OMITTED,
     })
     expect(projected[0]?.content.filter(block => block.type === 'text')).toHaveLength(20)
     expect(projected[0]?.content.filter(block => block.type === 'image')).toHaveLength(581)
@@ -135,11 +164,159 @@ describe('offloadRequestImagesWithPolicy', () => {
       representation: 'raw',
       maxBytes: 3,
       byteLength: () => 2,
+      placeholder: () => OMITTED,
     })
     expect(projected[0]?.content).toEqual([
-      { type: 'text', text: OFFLOADED_IMAGE_TEXT },
+      { type: 'text', text: OMITTED },
       image(100),
     ])
+  })
+
+  it('builds a distinct placeholder from each omitted attachment', () => {
+    const first = image(3)
+    const second = image(3)
+    first.attachment = { ...first.attachment, name: 'first.png' }
+    second.attachment = { ...second.attachment, name: 'second.png' }
+    const projected = offloadRequestImagesWithPolicy([
+      createUserMessage({ content: [first, second], source }),
+    ], {
+      representation: 'raw',
+      maxBytes: 3,
+      placeholder: ref => `omitted:${ref.name}`,
+    })
+    expect(projected[0]?.content).toEqual([
+      { type: 'text', text: 'omitted:first.png' },
+      second,
+    ])
+  })
+})
+
+describe('model-facing image access', () => {
+  it('describes the request preview, immutable normalized path, and source uncertainty', () => {
+    const attachment = {
+      attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+      mediaType: 'image/png' as const,
+      bytes: 4_000,
+      width: 2048,
+      height: 1536,
+      name: 'source "map".png',
+    }
+    const access = { readonlyPath: '/tmp/.dsh/attachments/v1/objects/bb/object' }
+    const version = {
+      variantId: ImageVariantId(`sha256:${'c'.repeat(64)}`),
+      attachment,
+      data: Uint8Array.of(1),
+      mediaType: 'image/png' as const,
+      bytes: 1,
+      width: 923,
+      height: 692,
+      depth: 'uchar' as const,
+      space: 'srgb' as const,
+      hasAlpha: true,
+    }
+    expect(requestImageHandleText(attachment, version, access)).toBe(
+      `Image "source \\"map\\".png" (${attachment.attachmentId}); request preview 923x692px.`
+      + ' Normalized copy (read-only; may be resized or re-encoded): "/tmp/.dsh/attachments/v1/objects/bb/object" (2048x1536px, image/png).'
+      + ' Source dimensions, format, and byte size may differ.'
+      + ' Copy to a writable path ending in .png before editing.',
+    )
+  })
+
+  it('bridges a provider host object only through the mounted filesystem mapping', () => {
+    const attachment = image(1).attachment
+    const attachments = {
+      imageHostPath: () => '/host/.dsh/attachments/object',
+    } as unknown as AttachmentStore
+    const mapped = (hostPath: string): string | undefined => hostPath === '/host/.dsh/attachments/object'
+      ? '/workspace/.attachments/object'
+      : undefined
+    expect(resolveImageAttachmentAccess(
+      attachments,
+      mapped,
+      attachment,
+    )).toEqual({ readonlyPath: '/workspace/.attachments/object' })
+    expect(resolveImageAttachmentAccess(
+      attachments,
+      () => undefined,
+      attachment,
+    )).toBeUndefined()
+    expect(resolveImageAttachmentAccess(
+      { imageHostPath: () => undefined } as unknown as AttachmentStore,
+      mapped,
+      attachment,
+    )).toBeUndefined()
+  })
+
+  it('names each occurrence from its own reference when one prepared version is shared', () => {
+    const attachment = {
+      attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
+      mediaType: 'image/png' as const,
+      bytes: 4_000,
+      width: 8,
+      height: 8,
+      name: 'second.png',
+    }
+    const version = {
+      variantId: ImageVariantId(`sha256:${'c'.repeat(64)}`),
+      attachment,
+      data: Uint8Array.of(1),
+      mediaType: 'image/png' as const,
+      bytes: 1,
+      width: 8,
+      height: 8,
+      depth: 'uchar' as const,
+      space: 'srgb' as const,
+      hasAlpha: false,
+    }
+    expect(requestImageHandleText({ ...attachment, name: 'first.png' }, version))
+      .toContain('"first.png"')
+  })
+
+  it('keeps a useful omission identity with and without a local path', () => {
+    const ref = {
+      attachmentId: AttachmentId(`sha256:${'d'.repeat(64)}`),
+      mediaType: 'image/jpeg' as const,
+      bytes: 10,
+      width: 10,
+      height: 5,
+      name: 'photo.jpg',
+    }
+    expect(offloadedImageText(ref)).toContain('No local normalized image path is available')
+    expect(offloadedImageText(ref, { readonlyPath: '/tmp/object' })).toBe(
+      `[image omitted to fit request image limits; "photo.jpg" (${ref.attachmentId}).`
+      + ' Normalized copy (read-only; may be resized or re-encoded): "/tmp/object" (10x5px, image/jpeg).'
+      + ' Source dimensions, format, and byte size may differ.'
+      + ' Copy to a writable path ending in .jpg before editing.]',
+    )
+  })
+
+  it.each([
+    ['image/png', '.png'],
+    ['image/jpeg', '.jpg'],
+    ['image/webp', '.webp'],
+    ['image/gif', '.gif'],
+  ] as const)('names the writable extension for %s', (mediaType, suffix) => {
+    const ref = {
+      attachmentId: AttachmentId(`sha256:${'e'.repeat(64)}`),
+      mediaType,
+      bytes: 1,
+      width: 1,
+      height: 1,
+    }
+    expect(offloadedImageText(ref, { readonlyPath: '/tmp/object' }))
+      .toContain(`writable path ending in ${suffix}`)
+  })
+
+  it('rejects a media type that escaped the closed union at runtime', () => {
+    const ref = {
+      attachmentId: AttachmentId(`sha256:${'e'.repeat(64)}`),
+      mediaType: 'image/tiff' as unknown as ImageMediaType,
+      bytes: 1,
+      width: 1,
+      height: 1,
+    }
+    expect(() => offloadedImageText(ref, { readonlyPath: '/tmp/object' }))
+      .toThrow('unreachable variant in image extension: "image/tiff"')
   })
 })
 
@@ -153,12 +330,12 @@ describe('projectImagesForTextModel', () => {
     const plain = createUserMessage({ content: [{ type: 'text', text: 'plain' }], source })
     const nested = {
       type: 'tool-result' as const,
-      toolCallId: CallId('nested-image'),
+      toolCallId: ToolCallId('nested-image'),
       content: [{ type: 'text' as const, text: 'before' }, image(3), { type: 'text' as const, text: 'after' }],
     }
     const unchangedNested = {
       type: 'tool-result' as const,
-      toolCallId: CallId('text-only'),
+      toolCallId: ToolCallId('text-only'),
       content: [{ type: 'text' as const, text: 'unchanged' }],
     }
     const visual = createUserMessage({

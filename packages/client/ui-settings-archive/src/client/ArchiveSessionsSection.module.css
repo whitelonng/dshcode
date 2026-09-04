@@ -50,7 +50,7 @@
   gap: 6px;
   flex: 1 1 240px;
   padding: 6px 10px;
-  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
   border-radius: 8px;
   color: var(--dsw-alias-label-tertiary, #81858c);
 }
@@ -105,7 +105,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 12px 14px;
-  border: 1px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
+  border: 0.5px solid var(--dsw-alias-border-l2, rgb(0 0 0 / 8%));
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-2, rgb(0 0 0 / 3%));
 }

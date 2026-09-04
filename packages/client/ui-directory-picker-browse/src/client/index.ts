@@ -2,22 +2,25 @@
  * Browser half of the browse directory-picker backend: fills ui-workspace's
  * two directory-flow holes with the in-app Select Workspace Directory dialog
  * (figma `Harness` 813-23126 family), driving the node half's
- * `host.listDirectory`/`host.createDirectory` primitives. Mounting this
- * package therefore composes both sides of the browse interaction with one
- * cordis.yml row; no client code branches on a capability kind. The dialog's
- * copy is locale-registered here — the flow package owns its own strings.
+ * `directoryPicker/list`/`directoryPicker/createDirectory` primitives.
+ * Mounting this package therefore composes both sides of the browse
+ * interaction with one cordis.yml row; no client code branches on a
+ * capability kind. The dialog's copy is locale-registered here — the flow
+ * package owns its own strings.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the SlotMap merge declaring the directory-flow holes.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
+// Type-only: pulls the SlotRegistry service merge (ctx.slots).
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { BrowseFlowInjected } from './flow.ts'
 import { BrowseDirectoryFlow } from './flow.ts'
 
 /** Locale namespace owning the browser dialog's copy. */
 const LOCALE_NS = 'directory-browser'
 
-/** Required services (cordis fiber inject): the slot registry, the wire-facing workspace service, and locale. */
-export const inject = ['slots', 'workspaces', 'locale']
+/** Required services (cordis fiber inject): the slot registry, workspace UI service, and locale. */
+export const inject = ['slots', 'uiWorkspace', 'locale']
 
 /**
  * Client plugin body: register the dialog's dictionaries and the browse flow
@@ -73,8 +76,8 @@ export function apply(ctx: ClientContext): void {
   }, 'directory-picker-browse: dialog dictionaries')
 
   const injected = (): BrowseFlowInjected => ({
-    listDirectory: (path, signal) => ctx.workspaces.listDirectory(path, signal),
-    createDirectory: (path, name) => ctx.workspaces.createDirectory(path, name),
+    listDirectory: (path, signal) => ctx.uiWorkspace.listDirectory(path, signal),
+    createDirectory: (path, name) => ctx.uiWorkspace.createDirectory(path, name),
     t: ctx.locale.bind(LOCALE_NS),
   })
   // Both declaration lifetimes must be live before the pair installs; the

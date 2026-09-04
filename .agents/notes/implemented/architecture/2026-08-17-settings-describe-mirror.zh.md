@@ -30,5 +30,5 @@ Status: implemented
 - 启动期 `settings.describe` 从 15 次降到 2 次，新增持有偏好设置的插件带来零次新增读取。
 - 任一时刻每个派生面看到的都是同一份文档 revision；各读取方的防护（`refreshWelcomeIfLoaded`、`refreshPermissionIfLoaded`、`refreshDocumentIfLoaded`）及其订阅随之消失。
 - 镜像对任何命名空间的文档提交都会刷新，因此在没有任何设置表面打开时，一次外部设置编辑现在也花费一次后台读取——这是「表面打开即新鲜」的代价。随着各 scope 订阅的删除，按命名空间的 `ns !== spec.namespace` 过滤一并消失。
-- `credentials.describe`（启动 3 次）、`agentPreset.list`（2 次）与 `llm.providers` 是另外的数据源，保持直连；若将来需要，同一镜像模式对它们同样适用。
+- `credentials/describe`（启动 3 次）、`agentPresets/list`（2 次）、`llm/listProviders` 与 `llm/listConfigurableProviders` 是另外的数据源，保持直连；若将来需要，同一镜像模式对它们同样适用。
 - 客户端代码中新增直连 `settings.describe` 调用即是预算回归；e2e 的失败信息会提示在 `ui-settings` 之外 grep 调用方。

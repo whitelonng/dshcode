@@ -16,7 +16,7 @@ The shared abstraction the tools need is **retention**, not generic collection. 
 
 The library has two independent retainers:
 
-- `ItemRetainer<T>` handles ordered logical units such as paths, grep matches, or search sources. It supports `head` retention only in v1, while keeping the retainer shape open to additional retention strategies later.
+- `ItemRetainer<T>` handles ordered logical units such as paths, grep matches, or search sources. It supports only `head` retention, while keeping the retainer shape open to additional strategies.
 - `TextRetainer` handles byte-oriented text streams such as bash stdout/stderr or web response bodies. It supports `head`, `tail`, and `headTail` retention while preserving UTF-8 boundaries at `finish()`.
 
 Both retainers return a small `PushDecision` after each `push()` so callers can tell whether that unit/chunk was fully retained and whether the accumulated result is now truncated. Omission counts are exact because callers keep feeding every observed item/chunk.
@@ -95,7 +95,7 @@ type TextRetentionStrategy =
 
 ### Tool mapping
 
-`read` is intentionally outside the v1 retention library. Its `read-render` helper owns a file-specific pagination contract: `offset` / `limit`, line numbers, `totalLines`, offset-out-of-range errors, per-line preview truncation, and a selected-output byte cap that can stop scanning mid-window. That is a line-window renderer, not a generic retention primitive. It may share future neutral notice helpers, but it should not pass its already-selected window through `ItemRetainer`.
+`read` is intentionally outside the retention library. Its `read-render` helper owns a file-specific pagination contract: `offset` / `limit`, line numbers, `totalLines`, offset-out-of-range errors, per-line preview truncation, and a selected-output byte cap that can stop scanning mid-window. That is a line-window renderer, not a generic retention primitive. It may share future neutral notice helpers, but it should not pass its already-selected window through `ItemRetainer`.
 
 `FsGlobEntry` and `FlatGrepMatch` below are the intended discovery-tool item shapes, not existing retention-library exports. `FsGlobEntry` is one backend-derived path, and `FlatGrepMatch` is one ungrouped grep match before the backend groups retained matches by file.
 
@@ -142,15 +142,15 @@ The formatter hook is deliberately small: a tool turns a `RetentionNotice` into 
 
 **Boundaries the library holds.** `truncated` means the retainer omitted otherwise-available content because of a budget; it never means the upstream was incomplete. Tool-specific states — `incomplete`, permission failures, provider partial failures, binary skips, bash spill-path recovery, invalid UTF-8 — stay in tool-domain fields, outside the retainer. When a future change migrates a tool, that package's README and tests must prove the model-facing result text is unchanged except for deliberate notice wording.
 
-**Tradeoffs accepted.** The v1 API deliberately supports only item `head` retention and text `head` / `tail` / `headTail`; windows, grouped budgets, sort-aware caps, and upstream-stop control wait until a second consumer proves the need. Text retention counts bytes for process/body safety, leaving character- and line-level preview budgets as separate tool-owned concerns.
+**Tradeoffs accepted.** The API deliberately supports only item `head` retention and text `head` / `tail` / `headTail`; windows, grouped budgets, sort-aware caps, and upstream-stop control wait until a second consumer proves the need. Text retention counts bytes for process/body safety, leaving character- and line-level preview budgets as separate tool-owned concerns.
 
 ## Alternatives considered
 
 **Post-hoc `truncate(text)` only.** Rejected: it matches Codex's history/tool-output truncation use case but loses item counts, grouping boundaries, UTF-8-safe byte windows, and exact omission metadata.
 
-**One generic `Collector<T>` with pluggable callbacks.** Rejected for v1: it hides the two important resource modes. Logical item retention counts items; text retention counts bytes and preserves UTF-8 boundaries. Separate `ItemRetainer` and `TextRetainer` names make that difference explicit while keeping the API small.
+**One generic `Collector<T>` with pluggable callbacks.** Rejected: it hides the two important resource modes. Logical item retention counts items; text retention counts bytes and preserves UTF-8 boundaries. Separate `ItemRetainer` and `TextRetainer` names make that difference explicit while keeping the API small.
 
-**Put `read` windowing behind `ItemRetainer`.** Rejected for v1: `read` is the only current window consumer, and its semantics are file pagination rather than generic retention. A single `Omitted` count cannot represent both sides of a line window, and `read` also carries `totalLines`, offset-range errors, per-line preview truncation, and a byte cap over selected output. Keeping `read-render` tool-owned avoids growing the shared library around one special case.
+**Put `read` windowing behind `ItemRetainer`.** Rejected: `read` is the only shipped window consumer, and its semantics are file pagination rather than generic retention. A single `Omitted` count cannot represent both sides of a line window, and `read` also carries `totalLines`, offset-range errors, per-line preview truncation, and a byte cap over selected output. Keeping `read-render` tool-owned avoids growing the shared library around one special case.
 
 **Make truncation part of `ToolExecutionResult`.** Rejected: the tool registry would have to understand tool-specific recovery guidance, grouping, line numbering, exit status, and provider semantics. Retention is a library used by a tool's Native renderer; the model-facing projection remains tool-owned while the [canonical value](2026-07-20-canonical-tool-output-contract.md) may retain the complete acquired result.
 

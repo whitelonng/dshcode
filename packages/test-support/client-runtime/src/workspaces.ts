@@ -1,10 +1,56 @@
 /** Test-owned workspaces face: the renderer standard-kit observable plus recorded actions. */
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
-  DirectoryListing, IWorkspaces, SessionId, SnapshotStore, WorkspaceId, WorkspaceListState, WorkspaceView,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { workspaceListState } from './fixtures.ts'
-import type { Stabilizer } from './fixtures.ts'
+  ArchivedSessionItem, IWorkspaces, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
+} from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { DirectoryListing } from '@deepseek-ai/dsh-host-directory-picker/types'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { workspaceSnapshot } from './fixtures.ts'
+import type { FixtureSnapshot, Stabilizer } from './fixtures.ts'
+
+/** Writable test representation of the immutable Workspace Controller snapshot. */
+type WorkspaceFixtureSnapshot = FixtureSnapshot<WorkspaceSnapshot>
+
+/** Callable command names on the production Workspace Controller face. */
+type WorkspaceAction = {
+  [Key in keyof IWorkspaces]: IWorkspaces[Key] extends (...args: never[]) => unknown ? Key : never
+}[keyof IWorkspaces]
+
+/**
+ * Product desktop extensions beyond the upstream Controller face. The upstream
+ * moved these verbs to the host directory-picking seam, but the test double
+ * retains them as extra stubbable methods so feature suites keep driving the
+ * recorded desktop flows without depending on that seam's Host backend.
+ */
+type ProductWorkspaceAction =
+  | 'openPath'
+  | 'pickDirectory'
+  | 'pickFiles'
+  | 'locateFiles'
+  | 'listDirectory'
+  | 'createDirectory'
+
+/** Everything the double records and can stub. */
+type AnyWorkspaceAction = WorkspaceAction | ProductWorkspaceAction
+
+/** Product-extension signatures, used by {@link WorkspaceStub} for the keys outside {@link IWorkspaces}. */
+interface ProductWorkspaceStub {
+  openPath: (path: string) => Promise<void>
+  pickDirectory: () => Promise<string | null>
+  pickFiles: () => Promise<{ cancelled: boolean; paths: string[] }>
+  locateFiles: (sessionId: SessionId, names: string[]) => Promise<Array<{ name: string; paths: string[] }>>
+  listDirectory: (path: string | undefined, signal: AbortSignal | undefined) => Promise<DirectoryListing>
+  createDirectory: (path: string, name: string) => Promise<string>
+}
+
+/** Test replacement retaining one command's parameters and result. */
+type WorkspaceStub<Key extends AnyWorkspaceAction> =
+  Key extends keyof IWorkspaces
+    ? (...args: Parameters<IWorkspaces[Key]>) => ReturnType<IWorkspaces[Key]>
+    : Key extends ProductWorkspaceAction
+      ? ProductWorkspaceStub[Key]
+      : never
 
 /**
  * Workspaces test double. Implements the same IWorkspaces face features
@@ -15,59 +61,36 @@ import type { Stabilizer } from './fixtures.ts'
  */
 export class TestWorkspaces implements IWorkspaces {
   /** The useWorkspaces standard feed. */
-  readonly list: SnapshotStore<WorkspaceListState>
+  readonly list: SnapshotStore<WorkspaceFixtureSnapshot>
 
   /** Calls observed on the action face, newest last. */
   readonly calls: { method: string; args: unknown[] }[] = []
 
   /** Replaceable action seat: feature tests may stub richer behavior. */
-  private readonly stubs = new Map<string, (...args: unknown[]) => unknown>()
+  private readonly stubs = new Map<AnyWorkspaceAction, (...args: unknown[]) => unknown>()
 
   /**
    * @param stabilize - the owning runtime's act wrapper.
    */
   constructor(private readonly stabilize: Stabilizer) {
-    this.list = createSnapshotStore<WorkspaceListState>(workspaceListState())
+    this.list = createSnapshotStore<WorkspaceFixtureSnapshot>({ ...workspaceSnapshot() })
   }
 
   /**
    * Update the workspace list state through an immer draft.
    * @param mutate - draft mutator.
    */
-  async update(mutate: (draft: WorkspaceListState) => void): Promise<void> {
+  async update(mutate: (draft: WorkspaceFixtureSnapshot) => void): Promise<void> {
     await this.stabilize(() => { this.list.update(mutate) })
   }
 
   /**
    * Replace an action's behavior (the recorded call is still appended first).
-   * @param method - action name (e.g. 'connectWorkspace').
+   * @param method - Controller action name (e.g. 'create').
    * @param impl - replacement behavior.
    */
-  stub(method: string, impl: (...args: unknown[]) => unknown): void {
-    this.stubs.set(method, impl)
-  }
-
-  /**
-   * Connect a workspace to its reusable/new blank session (recorded). The
-   * default resolves the workspace id back as the session id; stub for
-   * cross-session flows.
-   * @param workspaceId - target workspace.
-   * @returns the connected session id.
-   */
-  async connectWorkspace(workspaceId: WorkspaceId): Promise<SessionId> {
-    this.calls.push({ method: 'connectWorkspace', args: [workspaceId] })
-    const stub = this.stubs.get('connectWorkspace')
-    if (stub !== undefined) return await (stub(workspaceId) as Promise<SessionId>)
-    return `session-of-${workspaceId}` as SessionId
-  }
-
-  /**
-   * New-session flow (recorded; stubbed behavior runs when installed).
-   * @param workspaceId - optional explicit workspace target.
-   */
-  startSession(workspaceId?: WorkspaceId): void {
-    this.calls.push({ method: 'startSession', args: [workspaceId] })
-    this.stubs.get('startSession')?.(workspaceId)
+  stub<Key extends AnyWorkspaceAction>(method: Key, impl: WorkspaceStub<Key>): void {
+    this.stubs.set(method, impl as (...args: unknown[]) => unknown)
   }
 
   /**
@@ -136,6 +159,7 @@ export class TestWorkspaces implements IWorkspaces {
    * Browse listing (recorded). The default serves an empty home level; stub
    * to shape a tree.
    * @param path - absolute directory to list; absent lists the home level.
+   * @param signal - aborts an in-flight listing; forwarded to the wire like production.
    * @returns the level's listing.
    */
   async listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
@@ -235,6 +259,18 @@ export class TestWorkspaces implements IWorkspaces {
     await this.update((draft) => {
       draft.archivedSessionIds = [...draft.archivedSessionIds, sessionId]
     })
+  }
+
+  /**
+   * List the Host's archived sessions (recorded). The default projects the
+   * list state's archive set as identity-only rows.
+   * @returns one row per archived session, in archive-set order.
+   */
+  async listArchived(): Promise<ArchivedSessionItem[]> {
+    this.calls.push({ method: 'listArchived', args: [] })
+    const stub = this.stubs.get('listArchived')
+    if (stub !== undefined) return await (stub() as Promise<ArchivedSessionItem[]>)
+    return this.list.getSnapshot().archivedSessionIds.map(sessionId => ({ sessionId }))
   }
 
   /**

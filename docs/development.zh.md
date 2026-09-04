@@ -47,11 +47,11 @@ pnpm run typecheck
 
 ### TypeScript 项目布局
 
-仓库使用相互隔离的 Host 与 Client aggregate。普通包只登记进其中一个 aggregate；Host 包进入 `tsconfig.host.json`，Client 包进入 `tsconfig.client.json`。
+仓库使用相互隔离的 Host 与 Client aggregate。普通包只登记进其中一个 aggregate；Host 包进入 `tsconfig.host.json`，Client 包进入 `tsconfig.client.json`；`host/webserver`、`compaction/compaction` 与 `typert/registry` 三个包被两个 aggregate 同时引用，作为共享 leaf，让两侧对同一份源码做类型检查。
 
 | 文件 | 角色 | 是否构成 program？ |
 |---|---|---|
-| `tsconfig.json` | solution 根：`extends` base、`files: []`、引用两个 aggregate。它是 tsserver 发现入口，也是显式执行整张 Project Reference 图时的入口；经继承的 `paths` 充当 tsx 运行 `examples/` 与 `scripts/` 时的解析配置。 | 否 |
+| `tsconfig.json` | solution 根：`extends` base、`files: []`、引用两个 aggregate。它是 tsserver 发现入口，也是显式执行整张 Project Reference 图时的入口；经继承的 `paths` 充当 tsx 运行 `scripts/` 时的解析配置。 | 否 |
 | `tsconfig.host.json` | Host aggregate：Host 包、示例、测试、脚本和 website，以及 `api/remotes` 的 Host 特例 project。 | 是 |
 | `tsconfig.client.json` | Client aggregate：`packages/client/*` 包及其测试、`apps/web`，以及 `api/remotes` 的 Client 特例 project。 | 是 |
 | `tsconfig.base.json` | 共享 compilerOptions 与源码 `paths` 映射。同时是各 vitest 配置让 vite-tsconfig-paths 指向的解析门面：它没有 `include`，因此其 `paths` 适用于任何 importer。 | 否 |
@@ -61,9 +61,9 @@ Host 与 Client 保持两个 aggregate program，是因为两侧在相同键下�
 
 - `tsconfig.base.json` 永不添加 `include` 或 `files`：它们会泄漏进每个 extends 它的包项目，并收窄门面的全匹配范围。
 - 构造全仓 `ts.Program` 的脚本显式以 `tsconfig.host.json` 或 `tsconfig.client.json` 为种子——根 solution 永不作为种子，因为把两个 aggregate 展平进一个 program 会撞上 `Context` 合并冲突。
-- 新包只登记进一个 aggregate。包同时具有 Node loader 入口和 browser 入口并不构成拆分理由；普通 Client 插件的两份运行时产物都在 Client 构建阶段生成。
+- 新包只登记进一个 aggregate；只有上述拆分包同时携带两个 leaf 配置，共享 leaf 因两侧需要对同一份源码做类型检查而登记进两个 aggregate。包同时具有 Node loader 入口和 browser 入口并不构成拆分理由；普通 Client 插件的两份运行时产物都在 Client 构建阶段生成。
 
-`api/remotes` 是唯一拆分 Host/Client tsconfig 的仓库特例。它的 Host 入口必须进入 Host Typert 图，而 Client 入口导入 Host tsdown 才会生成的 `/remote` 声明，因此本包根 `tsconfig.json` 只作为 solution，两个 aggregate 和直接消费方分别引用 `tsconfig.host.json` 或 `tsconfig.client.json`。workspace `constraints` 门禁遍历可达的 Project Reference 图，并按各引用 project 自身的 compiler face 检查：只有单一配置的目标可由任一 face 引用，拆分配置的目标则必须引用匹配的 leaf，不得引用 solution 根或另一侧 leaf；该门禁按「两个 leaf 配置同时存在」自动发现拆分包，所以新拆分的包会自动纳入管辖。不要把该结构推广到其他包；[`api-remotes` README](../packages/api/remotes/README.zh.md) 说明 Host/Client 拆分与构建顺序。
+拆分 Host/Client tsconfig 的包有六个：`api/remotes`、`api/gateway`、`api/session-controller`、`api/workspace-controller`、`client/connection` 与 `session-query/session-log-export`。`api/remotes` 的 Host 入口进入 Host Typert 图，而 Client 入口导入生成的 `/remote` 声明；`session-log-export` 则让 Node archive 生产代码不进入浏览器 controller。每个拆分包根 `tsconfig.json` 因此只作为 solution，两个 aggregate 和直接消费方分别引用 `tsconfig.host.json` 或 `tsconfig.client.json`。workspace `constraints` 门禁遍历可达的 Project Reference 图，并按各引用 project 自身的 compiler face 检查：只有单一配置的目标可由任一 face 引用，拆分配置的目标则必须引用匹配的 leaf，不得引用 solution 根或另一侧 leaf；该门禁按「两个 leaf 配置同时存在」自动发现拆分包，所以新拆分的包会自动纳入管辖。[`api-remotes` README](../packages/api/remotes/README.zh.md) 与 [`session-log-export` README](../packages/session-query/session-log-export/README.zh.md)分别说明其拆分。
 
 根构建按生成依赖排序：
 
@@ -79,7 +79,7 @@ pnpm run build:web
 
 Typert 只在 Host tsdown 中以 `tsconfig.host.json` 为种子运行。它分析 Host 类型并生成 Host 反射产物及 Host-for-Client Remote 投影；Client tsdown 不启动 Typert。`pnpm run typecheck` 因此先执行完整 Host lib 阶段，再运行 Client tsc；`pnpm run build` 继续执行 Client tsdown 和 Web 构建。该顺序的决策记录见 [API Remotes 生成约定构建 Note](../.agents/notes/implemented/process/2026-08-08-api-remotes-generated-contract-build.zh.md)。
 
-`pnpm run build` 会内联调用方精确的 `DSH_CLIENT_*` 环境；未设置时不使用任何公开 client 值。`pnpm run build:official` 是与 CI 和 release 产物构建等价的跨平台本地命令。每次完整构建成功后都会写入一份被 gitignore 的记录，把这些值与 Vite 输出及动态 client bundle 绑定；release 打包和 built Web 测试会拒绝缺少记录或被后续局部构建改动的产物。
+`pnpm run build` 会内联根包版本、七位源码 commit，并在 Git 报告本地变化时内联 dirty 标记；调用方提供的其他 `DSH_CLIENT_*` 值也会被继承。`pnpm run build:official` 是与 CI 和 release 产物构建等价的跨平台本地命令，并省略本地 dirty 标记。每次完整构建成功后都会写入一份被 gitignore 的记录，把精确公开值与 Vite 输出及动态 client bundle 绑定；release 打包和 built Web 测试会拒绝缺少记录或被后续局部构建改动的产物。`pnpm run dev:web` 仍需要先执行完整构建来准备产物树，但会在启动时读取一次当前版本和 Git 状态，并在本次会话的所有 watcher stage 之间共享该环境；它不会校验完整构建记录，因为 watcher stage 会重写记录覆盖的产物。
 
 静态分析和测试通过 base 的 `paths` 映射把工作区 import 解析到 `src`，且必须在干净树上通过；消费构建产物 `lib/` 的门禁显式声明该依赖。生成的 Host-for-Client Remote 声明是有意设置的例外：公共 `typecheck`、`lint` 和 `doc-typecheck` 命令会先生成这些声明，而内部 `*:contracts-ready` 脚本假定调用它的公共命令或调度器门禁已经依赖 Typert 约定生成阶段或完整构建。两个 aggregate 的设置见 [solution-root Note](../.agents/notes/implemented/process/2026-07-22-tsconfig-solution-root-two-aggregates.zh.md)，tsc-first 发射职责见 [ts-build-config Note](../.agents/notes/implemented/process/2026-06-17-ts-build-config.zh.md)，门禁准备约定见 [Typert Remote Agent Note](../.agents/notes/implemented/architecture/2026-08-02-typert-remote-method-calls.zh.md)。
 
@@ -130,7 +130,7 @@ keyless [CI 工作流](../.github/workflows/ci.yml) 将独立门禁分组到若�
 
 根目录的[贡献者说明](../AGENTS.md#commands)概述常用命令，[`package.json`](../package.json) 与 [scripts/run-gates.ts](../scripts/run-gates.ts) 则负责当前脚本和门禁清单。请选择覆盖变更表面的最小检查集。文档变更使用 `pnpm run doc-sync`；包公开行为变更还需更新所属 README 或 JSDoc，而基于构建产物的检查需要先运行 `pnpm run build`。
 
-### 演示
+### Profile 运行
 
 从源码 checkout 运行这些演示前，请单独执行仓库构建：
 
@@ -144,16 +144,10 @@ pnpm run build
 pnpm dsh --profile headless "summarize this workspace"
 ```
 
-自指的 cordis 演示可以检查并修改其实时插件运行时，并需要相同的凭证（默认 `web`，也可用 `acp`）：
+PTC mode 演示启用代码式工具展示，并运行同一个 headless profile：
 
 ```sh
-pnpm run demo:cordis
-```
-
-ACP 自动化服务器通过 JSON-RPC stdio 提供全新 agent 会话，同样需要 `DEEPSEEK_API_KEY`：
-
-```sh
-pnpm run demo:acp
+pnpm run demo:ptc -- "summarize this workspace"
 ```
 
 ### TODO 标记

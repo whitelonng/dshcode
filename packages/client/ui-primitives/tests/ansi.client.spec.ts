@@ -1,9 +1,3 @@
-// parseAnsiLines, the ANSI model behind TerminalBlock: anser's SGR runs
-// resolved into inline styles and folded into per-line span arrays, with every
-// escape and control character that carries no color removed first. The DOM
-// side of the same model (which runs get a span wrapper) is in
-// terminal-block.spec.tsx.
-
 import { describe, expect, it } from 'vitest'
 import { parseAnsiLines } from '../src/ansi.ts'
 
@@ -12,12 +6,10 @@ const BS = '\u0008'
 /** A combining acute accent: zero-width, so it takes no terminal column. */
 const ACCENT = '\u0301'
 
-/** Paint `text` with the SGR `codes`, then reset. */
 function sgr(codes: string, text: string): string {
   return `${ESC}[${codes}m${text}${ESC}[0m`
 }
 
-/** The single span of a single-line, single-run parse. */
 function onlySpan(text: string) {
   const lines = parseAnsiLines(text)
   expect(lines).toHaveLength(1)

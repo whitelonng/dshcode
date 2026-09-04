@@ -5,7 +5,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import { deepEqualJson } from './index.ts'
+import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-settings'
 

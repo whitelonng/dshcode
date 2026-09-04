@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-07-25-web-command-surfaces-and-assembly.md
-2026-07-25-web-command-surfaces-and-assembly.md: a3628a7d99a6ab33652c67f6188933dea213194b
-2026-07-25-web-command-surfaces-and-assembly.zh.md: eef93d750c502f5c034b6604774de31d75d6d342
+2026-07-25-web-command-surfaces-and-assembly.md: 943b68416d896c674783156b05997840c6df3255
+2026-07-25-web-command-surfaces-and-assembly.zh.md: c35d47202894af99377932df57e5de118186c1ce

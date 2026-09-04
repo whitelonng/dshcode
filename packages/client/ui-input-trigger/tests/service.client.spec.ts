@@ -9,8 +9,8 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { createScope, scopeOf } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import { createScope, scopeOf } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { InputTriggerController, InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {
   BeginCommandRequest, ClientSessionContext, CommandClaim, InsertReferenceRequest, PickOutcome,
@@ -293,6 +293,25 @@ describe('track', () => {
     expect(controller.menu.getSnapshot().groups[0]!.items).toEqual([{ name: 'goal' }])
   })
 
+  it('refinement keeps the settled items on screen until the new fetch lands', async () => {
+    const cmd = deferredSource('/', 'command')
+    const { controller } = controllerBench([cmd.source])
+    controller.track('/g', 2, { tier: 'plain' }, 1)
+    cmd.pending[0]!.resolve([{ name: 'goal' }])
+    await tick()
+
+    // Stale-while-revalidate: the pending group still carries the items.
+    controller.track('/go', 3, { tier: 'plain' }, 1)
+    expect(controller.menu.getSnapshot().groups[0]).toEqual(
+      { source: 'command', status: 'pending', items: [{ name: 'goal' }] },
+    )
+    cmd.pending[1]!.resolve([{ name: 'goat' }])
+    await tick()
+    expect(controller.menu.getSnapshot().groups[0]).toEqual(
+      { source: 'command', status: 'ready', items: [{ name: 'goat' }] },
+    )
+  })
+
   it('same hit re-track refreshes the span stamp without refetching', () => {
     const cmd = deferredSource('/', 'command')
     const { controller } = controllerBench([cmd.source])
@@ -572,6 +591,151 @@ describe('pick / scoped input events', () => {
   })
 })
 
+describe('header / drilled descent', () => {
+  /** A source that publishes one crumb per path segment of a drilled query. */
+  function crumbSource() {
+    const requests: Array<{ query: string; quoted?: boolean; drilled: boolean }> = []
+    const fetches: boolean[] = []
+    const picks: InputTriggerPick[] = []
+    const source: InputTriggerSource = {
+      trigger: '@',
+      name: 'reference',
+      candidates: (_session, req) => {
+        fetches.push(req.drilled)
+        return Promise.resolve([{ name: 'src', drill: true, value: 'src' }])
+      },
+      header: (_session, req) => {
+        requests.push({ ...req })
+        if (!req.drilled || !req.query.includes('/')) return undefined
+        return req.query.split('/').filter(Boolean).map(label => ({ label, value: label }))
+      },
+      onPick: (pick) => {
+        picks.push(pick)
+        return pick.action === 'drill' ? { text: `@${String(pick.candidate.value)}/`, continue: true } : undefined
+      },
+    }
+    return { source, requests, fetches, picks }
+  }
+
+  it('publishes no crumbs for a typed path and asks every source how the menu was reached', async () => {
+    const { source, requests } = crumbSource()
+    const { controller } = controllerBench([source])
+    controller.track('@src/', 5, { tier: 'plain' }, 1)
+    await tick()
+    expect(requests).toEqual([{ query: 'src/', drilled: false, quoted: false }])
+    expect(controller.headers.getSnapshot().size).toBe(0)
+  })
+
+  it('publishes crumbs once a drill produced the query, and drops them when the menu closes', async () => {
+    const { source, picks } = crumbSource()
+    const { controller, actx } = controllerBench([source])
+    const texts: string[] = []
+    actx.on('slash/input-insert-text', (req) => {
+      texts.push(req.text)
+      return true
+    })
+    controller.track('@sr', 3, { tier: 'plain' }, 1)
+    await tick()
+    controller.pick('reference', 0, 'drill')
+    expect(texts).toEqual(['@src/'])
+    expect(picks[0]?.action).toBe('drill')
+    // The drilled text lands as the next tracked draft.
+    controller.track('@src/', 5, { tier: 'plain' }, 2)
+    await tick()
+    expect(controller.headers.getSnapshot().get('reference')).toEqual([{ label: 'src', value: 'src' }])
+    controller.dismiss()
+    expect(controller.headers.getSnapshot().size).toBe(0)
+  })
+
+  it('routes a crumb through the source drill path and refuses the current step', async () => {
+    const { source, picks } = crumbSource()
+    const { controller, actx } = controllerBench([source])
+    actx.on('slash/input-insert-text', () => true)
+    controller.track('@sr', 3, { tier: 'plain' }, 1)
+    await tick()
+    controller.pick('reference', 0, 'drill')
+    controller.track('@src/lib/', 9, { tier: 'plain' }, 2)
+    await tick()
+    const trail = controller.headers.getSnapshot().get('reference')
+    expect(trail?.map(crumb => crumb.label)).toEqual(['src', 'lib'])
+    picks.length = 0
+    controller.pickCrumb('reference', 0)
+    expect(picks).toHaveLength(1)
+    expect(picks[0]).toMatchObject({ candidate: { name: 'src', value: 'src' }, action: 'drill', via: 'menu' })
+  })
+
+  it('publishes crumbs when the input re-tracks inside the drill edit', async () => {
+    const { source, fetches } = crumbSource()
+    const { controller, actx } = controllerBench([source])
+    // A pointer drill reaches the input outside any editor update, so the
+    // descent commits synchronously and re-tracks before the pick that asked
+    // for it has returned — the keyboard drill, dispatched inside an update,
+    // re-tracks only once that update commits. Both orders must reach the
+    // header and candidate requests as a drill.
+    actx.on('slash/input-insert-text', (req) => {
+      controller.track(req.text, req.text.length, { tier: 'plain' }, 2)
+      return true
+    })
+    controller.track('@sr', 3, { tier: 'plain' }, 1)
+    await tick()
+    controller.pick('reference', 0, 'drill')
+    await tick()
+    expect(controller.headers.getSnapshot().get('reference')).toEqual([{ label: 'src', value: 'src' }])
+    expect(fetches).toEqual([false, true])
+  })
+
+  it('publishes no crumbs when the input refused the drill edit', async () => {
+    const { source } = crumbSource()
+    const { controller } = controllerBench([source])
+    // No listener accepts the insert, so the descent text never landed.
+    controller.track('@sr', 3, { tier: 'plain' }, 1)
+    await tick()
+    controller.pick('reference', 0, 'drill')
+    controller.track('@src/', 5, { tier: 'plain' }, 2)
+    await tick()
+    expect(controller.headers.getSnapshot().size).toBe(0)
+  })
+
+  it('drops a source whose header throws and keeps the rest of the menu', async () => {
+    const failing: InputTriggerSource = {
+      trigger: '@',
+      name: 'broken',
+      candidates: () => Promise.resolve([{ name: 'x' }]),
+      header: () => { throw new Error('header boom') },
+      onPick: () => undefined,
+    }
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { controller } = controllerBench([failing])
+    controller.track('@x', 2, { tier: 'plain' }, 1)
+    await tick()
+    expect(controller.headers.getSnapshot().size).toBe(0)
+    expect(controller.menu.getSnapshot().open).toBe(true)
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  it('tells candidate fetches how the menu was reached', async () => {
+    const seen: boolean[] = []
+    const source: InputTriggerSource = {
+      trigger: '@',
+      name: 'reference',
+      candidates: (_session, req) => {
+        seen.push(req.drilled)
+        return Promise.resolve([{ name: 'src', drill: true, value: 'src' }])
+      },
+      onPick: pick => (pick.action === 'drill' ? { text: '@src/', continue: true } : undefined),
+    }
+    const { controller, actx } = controllerBench([source])
+    actx.on('slash/input-insert-text', () => true)
+    controller.track('@sr', 3, { tier: 'plain' }, 1)
+    await tick()
+    controller.pick('reference', 0, 'drill')
+    controller.track('@src/', 5, { tier: 'plain' }, 2)
+    await tick()
+    expect(seen).toEqual([false, true])
+  })
+})
+
 describe('lexicon', () => {
   function lexSource(trigger: TriggerChar, name: string, roll?: readonly string[]  , hasHook = true): InputTriggerSource {
     return {
@@ -623,13 +787,13 @@ describe('lexicon', () => {
     expect(rolls.has('@')).toBe(false)
   })
 
-  it('a source lexicon notification republishes the aggregated store', () => {
-    let roll: readonly string[] | undefined = undefined
+  it('a source lexicon notification republishes the roll and refreshes an open menu', async () => {
+    let roll: readonly string[] | undefined = ['old']
     let notify: (() => void) | undefined
     const source: InputTriggerSource = {
       trigger: '/',
       name: 'skill',
-      candidates: () => Promise.resolve([]),
+      candidates: () => Promise.resolve((roll ?? []).map(name => ({ name }))),
       onPick: () => undefined,
       lexicon: () => roll,
       subscribeLexicon: (_session, listener) => {
@@ -638,12 +802,18 @@ describe('lexicon', () => {
       },
     }
     const { controller } = controllerBench([source])
-    expect(controller.lexicon.getSnapshot().size).toBe(0)
+    expect(controller.lexicon.getSnapshot().get('/')).toEqual(['old'])
+    controller.track('/', 1, { tier: 'plain' }, 1)
+    await tick()
+    expect(controller.menu.getSnapshot().groups[0]?.items).toEqual([{ name: 'old' }])
     const seen: number[] = []
     controller.lexicon.subscribe(() => { seen.push(controller.lexicon.getSnapshot().size) })
     roll = ['commit-helper']
     notify?.()
+    await tick()
+    await tick()
     expect(controller.lexicon.getSnapshot().get('/')).toEqual(['commit-helper'])
+    expect(controller.menu.getSnapshot().groups[0]?.items).toEqual([{ name: 'commit-helper' }])
     expect(seen).toEqual([1])
     controller.dispose()
     expect(notify).toBeUndefined()
@@ -694,10 +864,28 @@ describe('arbitrate', () => {
     expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 0 })
   })
 
+  it('hover parks the shared highlight; disposed controllers ignore it', async () => {
+    const { controller } = await menuBench()
+    controller.hover('command', 1)
+    expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 1 })
+    // Keyboard keeps moving from the parked spot: last input wins.
+    expect(controller.arbitrate('up', false)).toBe('consumed')
+    expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 0 })
+    controller.dispose()
+    controller.hover('command', 1)
+    expect(controller.menu.getSnapshot().highlight).toBeNull()
+  })
+
   it('enter picks the highlight through the pipeline', async () => {
     const { controller, cmd } = await menuBench()
     expect(controller.arbitrate('enter', false)).toBe('pick-highlighted')
     expect(cmd.picks[0]!.candidate.name).toBe('goal')
+    expect(controller.menu.getSnapshot().open).toBe(false)
+  })
+
+  it('escape closes and consumes', async () => {
+    const { controller } = await menuBench()
+    expect(controller.arbitrate('escape', false)).toBe('consumed')
     expect(controller.menu.getSnapshot().open).toBe(false)
   })
 
@@ -718,53 +906,93 @@ describe('arbitrate', () => {
     expect(controller.menu.getSnapshot().open).toBe(false)
   })
 
-  it('tab consumes without acting on a non-leading token or another trigger', async () => {
-    const inline = readySource('/', 'command', [{ name: 'goal' }], () => undefined)
-    const at = readySource('@', 'reference', [{ name: 'session' }], () => undefined)
-    const { controller, actx } = controllerBench([inline.source, at.source])
-    const texts: unknown[] = []
-    actx.on('slash/input-insert-text', (req) => {
-      texts.push(req)
-      return true
-    })
-    controller.track('prefix /g', 9, { tier: 'plain' }, 1)
+  it('tab drills into a drillable highlight and picks a plain completion', async () => {
+    const drillable = readySource('/', 'command', [{ name: 'src', drill: true }, { name: 'plan' }], () => undefined)
+    const { controller } = controllerBench([drillable.source])
+    controller.track('prefix /s', 9, { tier: 'plain' }, 1)
     await tick()
     expect(controller.arbitrate('tab', false)).toBe('consumed')
-    expect(inline.picks).toEqual([])
-    expect(controller.menu.getSnapshot().open).toBe(true)
-    controller.track('@s', 2, { tier: 'plain' }, 1)
+    expect(drillable.picks[0]!.action).toBe('drill')
+    expect(drillable.picks[0]!.candidate.name).toBe('src')
+    // Plain row (no drill flag): Tab settles the highlighted completion.
+    controller.track('prefix /s', 9, { tier: 'plain' }, 2)
     await tick()
-    expect(controller.arbitrate('tab', false)).toBe('consumed')
-    expect(at.picks).toEqual([])
-    expect(texts).toEqual([])
-    expect(controller.menu.getSnapshot().open).toBe(true)
+    controller.arbitrate('down', false)
+    expect(controller.arbitrate('tab', false)).toBe('pick-highlighted')
+    expect(drillable.picks[1]!.action).toBe('pick')
+    expect(drillable.picks[1]!.candidate.name).toBe('plan')
+    expect(controller.menu.getSnapshot().open).toBe(false)
   })
 
-  it('escape closes and consumes', async () => {
-    const { controller } = await menuBench()
-    expect(controller.arbitrate('escape', false)).toBe('consumed')
-    expect(controller.menu.getSnapshot().open).toBe(false)
+  it('tab during a pending refinement is consumed: no pick, no focus traversal', async () => {
+    const picks: string[] = []
+    const cmd = deferredSource('/', 'command', {
+      onPick: (pick) => { picks.push(pick.candidate.name); return undefined },
+    })
+    const { controller } = controllerBench([cmd.source])
+    controller.track('prefix /g', 9, { tier: 'plain' }, 1)
+    cmd.pending[0]!.resolve([{ name: 'goal' }, { name: 'plan' }])
+    await tick()
+    expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 0 })
+    // Refinement: previous rows and highlight stay visible while the fetch pends.
+    controller.track('prefix /go', 10, { tier: 'plain' }, 2)
+    expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 0 })
+    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(picks).toHaveLength(0)
+    expect(controller.menu.getSnapshot().open).toBe(true)
+    // Settled: the same gesture settles the highlighted completion.
+    cmd.pending[1]!.resolve([{ name: 'goal' }])
+    await tick()
+    expect(controller.arbitrate('tab', false)).toBe('pick-highlighted')
+    expect(picks).toEqual(['goal'])
+  })
+
+  it('a settling pick reports the pick action', async () => {
+    const { controller, cmd } = await menuBench()
+    controller.arbitrate('enter', false)
+    expect(cmd.picks[0]!.action).toBe('pick')
   })
 
   it('IME composition passes every key untouched', async () => {
     const { controller } = await menuBench()
-    for (const key of ['up', 'down', 'enter', 'tab', 'escape'] as const) {
+    for (const key of ['up', 'down', 'enter', 'escape', 'tab'] as const) {
       expect(controller.arbitrate(key, true)).toBe('pass')
     }
     expect(controller.menu.getSnapshot().open).toBe(true)
   })
 
-  it('closed menu passes; an open menu without a highlight consumes tab and passes enter', () => {
+  it('closed menu passes; an open menu without a highlight passes picking keys', () => {
     const cmd = deferredSource('/', 'command')
     const { controller } = controllerBench([cmd.source])
     expect(controller.arbitrate('enter', false)).toBe('pass')
     expect(controller.arbitrate('tab', false)).toBe('pass')
-    // Open with the only group still pending: nothing to pick or complete yet
-    // — tab is consumed so the focus walk cannot escape the composer.
+    // Open with the only group still pending: nothing to pick yet.
     controller.track('/g', 2, { tier: 'plain' }, 1)
     expect(controller.arbitrate('enter', false)).toBe('pass')
-    expect(controller.arbitrate('tab', false)).toBe('consumed')
+    expect(controller.arbitrate('tab', false)).toBe('pass')
+  })
+
+  it('enter during a pending refinement is consumed: no pick, no submit fallthrough', async () => {
+    const picks: string[] = []
+    const cmd = deferredSource('/', 'command', {
+      onPick: (pick) => { picks.push(pick.candidate.name); return undefined },
+    })
+    const { controller } = controllerBench([cmd.source])
+    controller.track('/g', 2, { tier: 'plain' }, 1)
+    cmd.pending[0]!.resolve([{ name: 'goal' }, { name: 'plan' }])
+    await tick()
+    expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 0 })
+    // Refinement: previous rows and highlight stay visible while the fetch pends.
+    controller.track('/go', 3, { tier: 'plain' }, 2)
+    expect(controller.menu.getSnapshot().highlight).toEqual({ source: 'command', index: 0 })
+    expect(controller.arbitrate('enter', false)).toBe('consumed')
+    expect(picks).toHaveLength(0)
     expect(controller.menu.getSnapshot().open).toBe(true)
+    // Settled: the same gesture picks again.
+    cmd.pending[1]!.resolve([{ name: 'goal' }])
+    await tick()
+    expect(controller.arbitrate('enter', false)).toBe('pick-highlighted')
+    expect(picks).toEqual(['goal'])
   })
 })
 

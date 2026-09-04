@@ -34,7 +34,7 @@ This uses the normal system-prompt registration mechanism rather than a second p
 
 ### Tool filtering is one live global-view rule
 
-The tool filter controls capability visibility and executable lookup together. An in-process provider installs `ToolRuntime.restrict()` in the child's scope before publication, and the registry's single resolver applies the same result to wire tool schemas, lookup, execution, and Code Mode SDK generation. Independently registered system-prompt sections are outside `ToolRuntime`, so filtering a tool does not remove that plugin's standalone guidance.
+The tool filter controls capability visibility and executable lookup together. An in-process provider installs `ToolRuntime.restrict()` in the child's scope before publication, and the registry's single resolver applies the same result to wire tool schemas, lookup, execution, and PTC mode SDK generation. Independently registered system-prompt sections are outside `ToolRuntime`, so filtering a tool does not remove that plugin's standalone guidance.
 
 Resolution follows these rules:
 
@@ -53,7 +53,7 @@ The depth limit bounds recursive delegation independently of tool visibility. A 
 
 The effective parent depth is the greater of durable `SessionHeader.delegationDepth` and runtime `AgentOptions.subagentDepth`. An in-process child records its derived depth in the session header, and resume restores that header, so a restart cannot lower the recursion count.
 
-Every public entry validates the domain rather than relying on one model-facing configuration path. Negative values, fractions, negative zero, non-finite values, unsafe integers, malformed stored parent depth, and derived overflow all reject. A direct `SubagentStartRequest` may omit the cap to leave depth unbounded; loader-resolved `dsh-tool-subagent` configuration instead defaults to `3`, accepts a numeric override, and uses explicit `'provider-managed'` to omit the cap for an out-of-process provider whose deployment owns its recursion budget. Three is a small finite default that still permits a root plus three descendant generations: the [JSON-RPC example](../../../../examples/jsonrpc-agent/cordis.yml) uses that general policy, while the ACP and headless examples pin one. A numeric tool cap fails at provider mount when the provider lacks `depthLimit`.
+Every public entry validates the domain rather than relying on one model-facing configuration path. Negative values, fractions, negative zero, non-finite values, unsafe integers, malformed stored parent depth, and derived overflow all reject. A direct `SubagentStartRequest` may omit the cap to leave depth unbounded; loader-resolved `dsh-tool-subagent` configuration instead defaults to `3`, accepts a numeric override, and uses explicit `'provider-managed'` to omit the cap for an out-of-process provider whose deployment owns its recursion budget. Three is a small finite default that still permits a root plus three descendant generations, and the [base profile](../../../../packages/bundle/base/cordis.patch.yml) uses that general policy. A numeric tool cap fails at provider mount when the provider lacks `depthLimit`.
 
 A deployment can combine depth and filtering, but the numeric cap does not synthesize a filter. The delegation tool stays visible at the cap because authorization may depend on runtime state; every attempted start checks the calling agent's current durable and runtime depth, and a rejected start returns an errored tool result without publishing a child. A deployment may separately deny delegation tools in children when its visibility policy is static. Neither choice changes the provider's conversation-history behavior.
 
@@ -85,7 +85,7 @@ A security design would need a separate authority representation, propagation ru
 
 **Snapshot allowed global tools at child creation.** A frozen allow-set makes future registration uniformly unavailable, but it changes hot-registration semantics and starts an authorization design. The implemented filter stays a live registry predicate and documents allow-versus-deny behavior directly.
 
-**Hide only tool schemas.** Presentation-only filtering lets the model execute a tool that the prompt says does not exist through Code Mode or a forged call. One resolver governs both presentation and execution instead.
+**Hide only tool schemas.** Presentation-only filtering lets the model execute a tool that the prompt says does not exist through PTC mode or a forged call. One resolver governs both presentation and execution instead.
 
 **Encode the depth cap as an automatic tool filter.** A creation-time filter snapshots a decision that may depend on runtime state, affects only one configured tool name, and does not protect direct service callers or alternate delegation tools. The provider instead enforces the absolute cap at every start.
 

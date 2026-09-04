@@ -1,7 +1,7 @@
-import type { Branded } from '@deepseek-ai/dsh-brand'
+import { brandNumber, brandString, type Branded, type BrandedNumber } from '@deepseek-ai/dsh-brand'
 import type {
   AssistantMessage,
-  CallId,
+  ToolCallId,
   LlmCallConfig,
   LlmCallConfigAdapterDefaults,
   LlmFailure,
@@ -11,12 +11,7 @@ import type {
   ToolSchema,
   UserMessage,
 } from '@deepseek-ai/dsh-llm'
-import type { JsonValue } from './json.ts'
-
-// The lossless-JSON payload type belongs to this client-safe face too: a wire
-// contract carrying JSON data must not import the root entry, which merges
-// `ctx.sessions` (a Host-only SessionStore) into every consumer's program.
-export type { JsonValue } from './json.ts'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 /** Identifies one session in the store (and its persistence artifacts). */
 export type SessionId = Branded<'SessionId'>
@@ -24,11 +19,47 @@ export type SessionId = Branded<'SessionId'>
 /**
  * Brand a string as a {@link SessionId}.
  * @param id - the raw session id string.
- * @returns the same string, branded (a compile-time cast — no runtime cost).
+ * @returns the same string with the session-id brand.
  */
 export function SessionId(id: string): SessionId {
-  return id as SessionId
+  return brandString<SessionId>(id)
 }
+
+/** Sequence number of one existing event in a Session log. */
+export type SessionSeq = BrandedNumber<'SessionSeq'>
+
+/**
+ * Admit a numeric value as an existing Session event position.
+ * @param value - non-negative safe integer admitted by the owning log operation.
+ * @returns the same number with the Session-sequence brand.
+ */
+export function SessionSeq(value: number): SessionSeq {
+  if (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) {
+    throw new TypeError(`SessionSeq must be a non-negative safe integer, got ${String(value)}`)
+  }
+  return brandNumber<SessionSeq>(value)
+}
+
+/** A Session log gap, prefix length, or read offset, which may equal the event count. */
+export type SessionLogOffset = BrandedNumber<'SessionLogOffset'>
+
+/**
+ * Admit a numeric value as a Session log offset.
+ * @param value - non-negative safe integer used as a gap or prefix length.
+ * @returns the same number with the Session-log-offset brand.
+ */
+export function SessionLogOffset(value: number): SessionLogOffset {
+  if (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0)) {
+    throw new TypeError(`SessionLogOffset must be a non-negative safe integer, got ${String(value)}`)
+  }
+  return brandNumber<SessionLogOffset>(value)
+}
+
+/** Inclusive Session event watermark, or `-1` before any event exists. */
+export type SessionSeqCursor = SessionSeq | -1
+
+/** One existing Session event position, or explicit absence. */
+export type OptionalSessionSeq = SessionSeq | null
 
 /**
  * The on-disk session format version, stamped into every newly-written {@link SessionHeader}
@@ -74,10 +105,10 @@ export interface SessionHeader {
   /** The session this one was forked from (seed lineage), if any. */
   readonly parentSession?: SessionId
   /**
-   * How many leading events were inherited through a seed. Persisting this
-   * boundary lets resume and replay distinguish parent history from child work.
+   * Whether this Session contains a fork-inherited event prefix. The exact prefix
+   * length is Session state rather than ordinary header metadata.
    */
-  readonly seedLength?: number
+  readonly isSeeded: boolean
   /**
    * Coarse product classification for a session created as a subagent child.
    * This is presentation metadata, not proof that the child is continuable.
@@ -107,14 +138,19 @@ export interface CreateSessionOptions {
   /** Initial replay or fork history supplied at construction. */
   readonly seed?: readonly SessionEvent[]
   /**
-   * Storage metadata read once before publication. `seedLength` is explicit
-   * because a resumed seed contains the full stored log, not only its inherited prefix.
+   * Exact fork-inherited prefix length when `meta.isSeeded` is true. A
+   * constructor seed may also contain child-owned setup events after this cut.
+   */
+  readonly inheritedEventCount?: SessionLogOffset
+  /**
+   * Storage metadata read once before publication. `isSeeded` marks fork
+   * lineage; supplying replay history alone does not make it inherited.
    */
   readonly meta?: {
     readonly cwd?: string
     readonly parentSession?: SessionId
     readonly createdAt?: number
-    readonly seedLength?: number
+    readonly isSeeded?: boolean
     readonly origin?: 'subagent'
     readonly delegationDepth?: number
     readonly agentPreset?: string
@@ -130,6 +166,8 @@ export interface RestoredSessionOptions {
   readonly seed: SessionEvent[]
   /** Fresh detached storage metadata to validate and freeze in place. */
   readonly meta: SessionHeader
+  /** Exact number of fork-inherited leading events decoded from storage. */
+  readonly inheritedEventCount: SessionLogOffset
   /** Select the persistence ownership-transfer path. */
   readonly seedSource: 'persistence'
 }
@@ -177,23 +215,6 @@ export interface TurnEndReasonMap {
 export type TurnEndReason = TurnEndReasonMap[keyof TurnEndReasonMap]
 
 /**
- * One entry in an agent's todo list — the unit of the `todo/write`
- * {@link SessionEventMap} event's whole-list snapshot.
- *
- * Deliberately minimal: a human-readable `content` line and a three-state
- * `status`. No id, priority, or `activeForm` — the list is replaced wholesale
- * on every write (last-write-wins), so entries need no stable identity. The
- * three statuses describe the complete portable lifecycle needed by model and
- * UI consumers.
- */
-export interface TodoItem {
-  /** What this task is — a short imperative line shown in the UI. */
-  content: string
-  /** Lifecycle state. `in_progress` marks a task being worked now; parallel work may mark several. */
-  status: 'pending' | 'in_progress' | 'completed'
-}
-
-/**
  * Logged request state outside derived history: call config, system prompt, and
  * tools. The latest full `request/header` snapshot reconstructs it; canonical
  * empty optional fields are absent.
@@ -223,9 +244,11 @@ export interface RequestContext {
  * Why a `request/header` snapshot was appended: `'initial'` — the log's first
  * header (a new conversation); `'resume'` — a loop instance's first request
  * over a log that already has header events (process restart, fork seed);
- * `'change'` — a later request used a different header.
+ * `'change'` — a later request used a different header, with `startsSeries`
+ * preserving a coincident series boundary; `'series'` — an unchanged header
+ * began an explicitly distinct message series or followed a surface replacement.
  */
-export type RequestHeaderReason = 'initial' | 'resume' | 'change'
+export type RequestHeaderReason = 'initial' | 'resume' | 'change' | 'series'
 
 /**
  * The merge-extensible, append-only source of truth for an agent interaction.
@@ -280,7 +303,7 @@ export interface SessionEventMap {
    * JSON string exactly as the model produced it (unparsed). `callId` pairs the
    * call with its `tool/result`.
    */
-  'tool/call': { turn: number; step: number; callId: CallId; name: string; arguments: string }
+  'tool/call': { turn: number; step: number; callId: ToolCallId; name: string; arguments: string }
   /**
    * A completed tool call's model-facing result, optional internal failure
    * identity, and optional tool-private `meta` presentation payload. `meta` is
@@ -308,13 +331,16 @@ export interface SessionEventMap {
    * turn, by a human transcript edit (delete message / discard a turn).
    */
   'message/delete': { start: number; end: number }
-  /** Whole-list snapshot; latest write wins on replay. Log-only UI state; never derived history. */
-  'todo/write': { todos: TodoItem[] }
   /**
    * Full header for the next request, appended inside its step before dispatch.
    * It is log-only; the latest snapshot reconstructs the request header.
    */
-  'request/header': { header: EpochHeader; reason: RequestHeaderReason }
+  'request/header': {
+    header: EpochHeader
+    reason: RequestHeaderReason
+    /** A changed header also begins a distinct model-message series. */
+    startsSeries?: true
+  }
   /**
    * Route metadata for the next request, logged only when the route or capacity
    * changes. It does not participate in request reconstruction or header equality.
@@ -390,8 +416,8 @@ export type SurfaceEvent = SessionEvent<SurfaceEventType> & { surfaceOp: Surface
  */
 export type SurfaceOp =
   | 'append'
-  | { op: 'replace'; start: number; end: number }
-  | { op: 'delete'; start: number; end: number }
+  | { op: 'replace'; start: SessionSeq; end: SessionSeq }
+  | { op: 'delete'; start: SessionSeq; end: SessionSeq }
 
 /**
  * Surface placement and cited source-event seqs for {@link Session.append}. Required on
@@ -405,7 +431,7 @@ export interface SurfaceIntent {
    * absent, the event does not record which earlier events produced the message.
    * Other surface events require a non-empty set when this field is present.
    */
-  sourceEventSeqs?: number[]
+  sourceEventSeqs?: SessionSeq[]
 }
 
 /**
@@ -425,7 +451,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
   [K in SessionEventType]: {
     type: K
     /** Monotonic sequence number within the session. */
-    seq: number
+    seq: SessionSeq
     /** Unix epoch milliseconds. */
     time: number
     data: SessionEventMap[K]
@@ -449,8 +475,15 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
      * provider stream; when the field is absent, the event does not record which
      * earlier events produced the message.
      */
-    sourceEventSeqs?: number[]
+    sourceEventSeqs?: SessionSeq[]
     /** How this event entered the surface; absent for non-surface events. */
     surfaceOp?: SurfaceOp
   } : object)
 }[T]
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    /** The named Session does not exist; produced by every layer that resolves a SessionId. */
+    'session/not-found': { readonly sessionId: SessionId }
+  }
+}

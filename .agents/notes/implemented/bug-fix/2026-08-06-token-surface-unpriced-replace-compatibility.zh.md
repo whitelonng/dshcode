@@ -26,7 +26,7 @@ Status: implemented
 
 ## 影响
 
-未计价的替换让总量保持不动而不是缩小，因此被压缩（compaction）掉的区段仍被计入：`contextBreakdown.messageTokens` 保留这部分多计的量；`contextPressure.projectedTokens` 会高估占用率，但只持续到下一个用量样本重新锚定为止，因为该数字追踪的是自样本以来的增减，而非绝对水平。误差方向是安全的：高估占用率最坏不过是招致一次更早的压缩。
+未计价的替换让总量保持不动而不是缩小，因此被压缩（compaction）掉的区段仍被计入：`contextBreakdown.messageTokens` 保留这部分多计的量；`contextPressure.projectedTokens` 会高估占用率，但只持续到下一个用量样本重新锚定为止，因为该数字追踪的是自样本以来的增减，而非绝对水平。高估占用率只可能触发更早的压缩。
 
 响亮失败保留在它仍有意义的地方：区间不匹配的相邻声明是现行生产方的缺陷，仍会抛出异常。
 

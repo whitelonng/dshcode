@@ -849,5 +849,5 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
   }
-  ctx.connection.rpc.handle(CHANNEL, handle, { authority: 'loopback' })
+  ctx.connection.rpc.handle(CHANNEL, handle)
 }

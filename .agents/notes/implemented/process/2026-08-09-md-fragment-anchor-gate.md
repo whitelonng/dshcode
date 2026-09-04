@@ -14,7 +14,7 @@ English | [中文](2026-08-09-md-fragment-anchor-gate.zh.md)
 
 The slug function differs from `gen-cordis-catalog`'s region-anchor slugger (which drops underscores): the generator's headings are always reachable through its explicit `<a id>` anchors, so the two need not share one rule. Chinese pair sides follow the existing repository convention (`docs/glossary.zh.md`, `docs/cordis-primer.zh.md`): keep the English fragment in the link and place an explicit `<a id>` before the Chinese heading, so both language sides expose identical anchors.
 
-The 15 broken fragments are fixed in the same change: stale slugs retargeted to the current headings, the relocated no-timeout contract now linked at its owning group README, and four zh documents given explicit anchors. `docs/AGENTS.md` and the `dsh-doc-standards` skill no longer prescribe the manual anchor grep for Markdown links; it survives only for anchors cited from TypeScript strings whose output never reaches gate-scanned Markdown (today's three all render into scanned pages, so the gate covers them through the committed output).
+The 15 broken fragments are fixed in the same change: stale slugs retargeted to the current headings, the relocated no-timeout contract now linked at its owning group README, and four zh documents given explicit anchors. `docs/AGENTS.md` and the `dsh-doc` skill no longer prescribe the manual anchor grep for Markdown links; it survives only for anchors cited from TypeScript strings whose output never reaches gate-scanned Markdown (the three scanned references all render into scanned pages, so the gate covers them through the committed output).
 
 ## Verification
 

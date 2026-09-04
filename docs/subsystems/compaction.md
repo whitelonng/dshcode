@@ -34,11 +34,11 @@ interface CompactionResult {
   /** Human command that initiated this compaction, when it was manual. */
   sourceCommandId?: CommandId
   /** The seq of the appended `compaction/start` event. */
-  startSeq: number
+  startSeq: SessionSeq
   /** The seq of the appended `compaction/summary` event. */
-  summarySeq: number
+  summarySeq: SessionSeq
   /** The seq of the appended `compaction/end` event. */
-  endSeq: number
+  endSeq: SessionSeq
   /** The summary content blocks produced by the backend. */
   summary: ContentBlock[]
   /**
@@ -49,9 +49,9 @@ interface CompactionResult {
    * can be GREATER than `end`. {@link CompactionResult.shadowedSeqs} is the
    * authoritative set of shadowed nodes, in surface order.
    */
-  shadowedRange: { start: number; end: number }
+  shadowedRange: { start: SessionSeq; end: SessionSeq }
   /** The seqs of all shadowed surface nodes, in surface order. */
-  shadowedSeqs: number[]
+  shadowedSeqs: SessionSeq[]
   /** Estimated token count of the shadowed content. */
   shadowedTokenCount: number
 }
@@ -83,7 +83,7 @@ type ManualCompactionErrorCode =
 
 `changed` and `summary` leave the conversation surface unchanged but still close and persist the failed attempt in the log. `commit` may follow partial mutation; `persistence` means the in-memory bracket closed but its flush failed. Cancellation remains separate and throws the exact abort reason after required cleanup.
 
-Pressure compaction runs at serial `agent/pre-step` before request derivation. Once pressure or canonical overflow qualifies, compaction-basic invokes optional [`ctx.toolResultPruner`](../../packages/compaction/compaction-tool-result-pruner/README.md) before range selection, remeasures through `ctx.tokenMeter`, and can advance the surface without a summary. Failed-request recovery runs through `agent/request-error` after the failed step closes and returns a retry action only when the surface replacement generation advances, even if later summary work throws after pruning; cancellation still wins. Region boundaries preserve tool-call/result pairing but not whole turns, allowing early closed steps of one oversized turn to compact. `dsh-compaction-basic` owns thresholds, retained-tail policy, overflow caps, and failure handling.
+Pressure compaction runs at the `agent/pre-step` waterfall before request derivation. Once pressure or canonical overflow qualifies, compaction-basic invokes optional [`ctx.toolResultPruner`](../../packages/compaction/compaction-tool-result-pruner/README.md) before range selection, remeasures through `ctx.tokenMeter`, and can advance the surface without a summary. Failed-request recovery runs through `agent/request-error` after the failed step closes and returns a retry action only when the surface replacement generation advances, even if later summary work throws after pruning; cancellation still wins. Region boundaries preserve tool-call/result pairing but not whole turns, allowing early closed steps of one oversized turn to compact. `dsh-compaction-basic` owns thresholds, retained-tail policy, overflow caps, and failure handling.
 
 The Service Definition exports `toolPairingBalancedBefore(session, seq)` and `toolPairingBalancedAfter(session, seq)` for the tool-call/result pairing checks before and after a seq. Both validate current surface membership and reject missing seqs and orphan results; the [package contract](../../packages/compaction/compaction/README.md#tool-pairing-boundaries) defines their cache behavior.
 
@@ -95,11 +95,11 @@ The optional tool-result pruning service reports each durable content replacemen
 /** Cited source event and size accounting for one landed surface replacement. */
 interface PrunedEntry {
   /** Full-fidelity tool-result event shadowed by the replacement. */
-  readonly originalSeq: number
+  readonly originalSeq: SessionSeq
   /** Newly appended pruned tool-result event. */
-  readonly replacementSeq: number
+  readonly replacementSeq: SessionSeq
   /** Tool call shared by the original and replacement. */
-  readonly callId: CallId
+  readonly callId: ToolCallId
   /** Original text size in Unicode code points. */
   readonly charsBefore: number
   /** Replacement text size in Unicode code points. */
@@ -187,10 +187,10 @@ abstract compactNow( agent: ManualCompactAgentContext, signal: AbortSignal, sour
  * @throws when compaction is active or the range is missing, reversed, or unbalanced.
  * @returns the appended event seqs, summary, replaced range, and token accounting.
  */
-abstract compactRegion( start: number, end: number, agent: CompactionAgentContext, signal?: AbortSignal, ): Promise<CompactionResult>
+abstract compactRegion( start: SessionSeq, end: SessionSeq, agent: CompactionAgentContext, signal?: AbortSignal, ): Promise<CompactionResult>
 ```
 
-Types: [CommandId](commands.md)
+Types: [CommandId](commands.md) · [SessionSeq](session.md)
 
 Source: [`packages/compaction/compaction/src/index.ts`](../../packages/compaction/compaction/src/index.ts)
 

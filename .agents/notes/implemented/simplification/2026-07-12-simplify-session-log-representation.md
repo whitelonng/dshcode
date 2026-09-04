@@ -18,9 +18,9 @@ The implementation retains append and replacement `sourceEventSeqs`, the `tool/c
 
 `SurfaceManager.nodes` is a `readonly number[]` of event sequences; the public `SurfaceNode` shape, node links, and seq-to-node map are removed. The internal replace-generation signal remains. The complete `foldSurface()` read used by session-query returns the same number-array representation plus replacement metadata without making the incremental manager retain history. Tool-pairing balance and compaction use event sequences and surface positions; the compact-owned per-cut balance cache does not depend on node links.
 
-Request headers use canonical full snapshots only. Initial and resume anchors remain full snapshots even when unchanged; an in-instance change appends another full `request/header` with reason `change`. The delta event, codec types, diff/apply helpers, and codec-only `fallback` reason are removed. Request reconstruction selects the latest snapshot.
+Request headers use canonical full snapshots only. Initial and resume anchors remain full snapshots even when unchanged; an in-instance change appends another full `request/header` with reason `change`; and an unchanged envelope beginning an explicitly declared message series or following a surface replacement appends a full snapshot with reason `series`. Ordinary append-only later Turns, further Steps, and retries in that model-message series inherit the latest snapshot. The delta event, codec types, diff/apply helpers, and codec-only `fallback` reason are removed. Request reconstruction selects the latest snapshot.
 
-`SESSION_FORMAT_VERSION` remains pinned at `0`, so seed, append, and persistence-load validation explicitly reject old v0 `request/header-delta` events and full snapshots carrying the removed `fallback` reason. There is no compatibility fold or migration. JSONL and SQLite tests pin this fail-loud boundary, and the ACP snapshot harness represents legitimate mid-session changes as full pinned headers and full readable prompts.
+`SESSION_FORMAT_VERSION` remains pinned at `0`, so seed, append, and persistence-load validation explicitly reject old v0 `request/header-delta` events and full snapshots carrying the removed `fallback` reason. There is no compatibility fold or migration. JSONL tests pin this fail-loud boundary, and the ACP snapshot harness represents legitimate mid-session changes as full pinned headers and full readable prompts.
 
 ## Alternatives considered
 
@@ -28,7 +28,7 @@ Request headers use canonical full snapshots only. Initial and resume anchors re
 
 ## Verification
 
-Unit coverage pins ordered-surface append/replace behavior, tool pairing, compaction, full-header folding/logging, request reconstruction, and dev invariants. Seed validation plus JSONL and SQLite load tests reject the legacy event before replay. The keyless ACP suite exercises record, refresh, replay, changed-header pinning, and the sandbox mode-switch fixture in the new shape.
+Unit coverage pins ordered-surface append/replace behavior, tool pairing, compaction, full-header folding/logging, request reconstruction, and dev invariants. Seed validation plus JSONL load tests reject the legacy event before replay. The keyless ACP suite exercises record, refresh, replay, changed-header pinning, and the sandbox mode-switch fixture in the new shape.
 
 ## Consequences
 

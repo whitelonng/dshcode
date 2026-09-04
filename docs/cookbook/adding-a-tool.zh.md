@@ -50,7 +50,7 @@ export function apply(ctx: Context) {
 
 ## 长时间运行的工作
 
-通过 producer 配置控制 `run_in_background`，然后使用 `ctx.jobs.start({ kind, label, owner: exec.agent, run })` 注册任务。注册表会在进入 producer 主体前将已预先中止的调用判为失败；运行时会在 `run()` 启动工作前校验 owner 和任务控制器是否可用，随后提供 id、会话围栏、通用控制工具、通知和 owner cleanup。成功的后台分支会返回类型化的规范句柄，如 `{ kind: 'background', jobId }`；其 Native 渲染器可以保留 `started background job bash-1` 这类供人阅读的自然语言，但 Code Mode 绝不能通过解析该文本取得 id。
+通过 producer 配置控制 `run_in_background`，然后使用 `ctx.jobs.start({ kind, label, owner: exec.agent, run })` 注册任务。注册表会在进入 producer 主体前将已预先中止的调用判为失败；运行时会在 `run()` 启动工作前校验 owner 和任务控制器是否可用，随后提供 id、会话围栏、通用控制工具、通知和 owner cleanup。成功的后台分支会返回类型化的规范句柄，如 `{ kind: 'background', jobId }`；其 Native 渲染器可以保留 `started background job bash-1` 这类供人阅读的自然语言，但 PTC mode 绝不能通过解析该文本取得 id。
 
 producer 提供同步的 `cancel`、在资源清理后 settle 且不 reject 的 `done`，以及可选的消费式 `readOutput`（负责有界输出的格式化）。预先中止的调用属于失败，因为此时没有任务，其 id 无法满足成功输出 schema。`ctx.jobs.start()` 发布 id 后，应使用任务自有的取消信号，而不是 `exec.signal`：之后取消外层调用只会停止等待本次调用，不会终止已经发布的工作；该生命周期归 `job_kill`、owner dispose 和服务 teardown 所有。前台工作仍与 `exec.signal` 耦合。流式 producer 的示例和完整约定见[后台任务运行时 Agent Note](../../.agents/notes/implemented/architecture/2026-06-20-generic-long-running-tool-runtime.zh.md)与 `dsh-tool-bash`。
 
@@ -60,9 +60,9 @@ producer 提供同步的 `cancel`、在资源清理后 settle 且不 reject 的 
 
 尽量不要把部署策略内建到工具中。使用 `tools/pre-execute` 实现可扩展的允许／拒绝／询问策略（见[权限门禁示例](extension-cookbook.zh.md#a-hook-plugin-permission-gate-example)）；使用 `ctx.tools.guard()` 设置最终的单调拒绝，后续监听器无法撤销；使用 `tools/execute` 为分发添加截止时间、重试或指标收集；使用 `tools/post-execute` 替换展示内容或返回值、阻止结果，或附加模型可见上下文；使用 `tools/result` 观测不可变的归一化结果而不改变它。替换内容不会阻止程序化访问 `value`；保密策略会屏蔽或替换该值。沙箱实现也可以在工具的执行器实现中运行；[`dsh-tools` README](../../packages/core/tools/README.zh.md#extension-points) 定义每个扩展点的输入、顺序、返回值和失败行为。
 
-## Code Mode 自动触达你的工具
+## PTC mode 自动触达你的工具
 
-在 [Code Mode](../../packages/core/tools/README.zh.md) 中，每个可见的已注册工具都可通过 `await tools.<name>(args)` 调用，无需额外集成。生成的 `ToolArgsMap` 和 `ToolOutputMap` 会根据同一组 schema 分别派生精确的参数类型与规范返回类型，调用则重新进入正常的执行流水线。成功调用会解析为策略处理后的最终规范 JSON 值，而不是渲染后的 Native 内容。失败调用会以真正的 `ToolCallError` reject；程序只能检查其 `name`、`toolName` 和可供人阅读的 `message`，无法取得内部错误代码或失败联合。
+在 [PTC mode](../../packages/core/tools/README.zh.md) 中，每个可见的已注册工具都可通过 `await tools.<name>(args)` 调用，无需额外集成。生成的 `ToolArgsMap` 和 `ToolOutputMap` 会根据同一组 schema 分别派生精确的参数类型与规范返回类型，调用则重新进入正常的执行流水线。成功调用会解析为策略处理后的最终规范 JSON 值，而不是渲染后的 Native 内容。失败调用会以真正的 `ToolCallError` reject；程序只能检查其 `name`、`toolName` 和可供人阅读的 `message`，无法取得内部错误代码或失败联合。
 
 请把 `output.schema` 设计为实用的程序化 API：直接返回句柄与字段；当标量、数组或 null 确实就是结果时，允许采用相应的根类型；将面向人类的解释放入 `output.render`。中间值只存在于执行期间，不会被持久化或按提示词上限截断，也不设字节上限，因此生产方如实声明的采集边界和进程内存仍然重要。只有外层 `run_code` 日志／结果会受到可配置输出上限和面向模型的 spill 流水线约束。
 
@@ -80,6 +80,7 @@ producer 提供同步的 `cancel`、在资源清理后 settle 且不 reject 的 
   - `generic` 提供可选的标题和内容。
   - `terminal` 提供原始输出和可选的退出元数据；各 UI 根据自身能力渲染对应视图或回退视图。
   - `diff` 提供已应用的 hunk，通常由 `output.presentationMeta` 派生并通过持久化的 `result.meta` 携带，使回放能重现它们。变更类工具保留 diff 结果，因为完成后的视图会替换 pending 卡片。
+  - `read` 提供从持久化 `result.meta` 重建的已完成文件窗口：文件 `path`、从 1 开始的 `offset`、返回的 `lines`（每行保留其文件行号）、`totalLines`，以及可选的 `lang` 高亮提示；不具备 `read` 能力的 UI 回退到原始结果内容。没有 `read` 调用视图——读取调用的 pending 状态保持为 generic 卡片，因为内容只在 `execute` 之后才存在。（tool-fs `read`。）
   - `search` 提供从持久化 `result.meta` 重建的发现型结果：按文件分组的匹配（`shape: 'matches'`，grep）或扁平路径列表（`shape: 'paths'`，glob），外加 `truncated`／`total` 使 UI 永不把被截断的结果当作完整结果呈现。该视图不携带结果文本（无 search 卡片的 UI 回退到原始结果内容），也没有 `search` 调用视图——发现型调用的 pending 状态保持为 generic 卡片，因为匹配只在 `execute` 之后才存在。（tool-fs-search 的 `grep`／`glob`。）
   - `web` 提供已完成的 web 检索，以 `kind: 'search' | 'fetch'` 区分（结构化的搜索来源或抓取摘要），由 `result.meta` 派生；它不携带正文副本，因此不具备 `web` 能力的 UI 回退到原始结果内容。（tool-web `web_search`／`web_fetch`。）
 
@@ -89,7 +90,13 @@ producer 提供同步的 `cancel`、在资源清理后 settle 且不 reject 的 
 - **UI 格式不进入模型结果。** 围栏 ` ```console ` 块、diff、相对化路径均不应仅为服务 UI 而进入规范值或 Native 内容。`output.render` 负责模型可见的自然语言；`presentationMeta` 和卡片展示器负责可回放的 UI 状态。`terminal` 结果视图携带原始输出，由适配器按需添加回退格式。
 - **`defineTool` 对展示路径做软校验。** 格式错误或旧版日志中的参数会使包装器返回 `undefined`（通用回退）而非抛异常——展示绝不能导致回放崩溃。
 
-中性词汇定义在 `dsh-tools` 中；工具绝不导入 UI 或传输类型。host/client 运行时将每个 `card` 映射到各自的视图。设计与原因见[渲染意图联合体 Agent Note](../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.zh.md)；`dsh-tool-fs`（generic/diff）和 `dsh-tool-bash`（terminal）是参考实现。
+中性词汇定义在 `dsh-tools` 中；工具绝不导入 UI 或传输类型。使用该 API 的消费方把每个 `card` 映射到自己的视图。设计与原因见[渲染意图联合体 Agent Note](../../.agents/notes/implemented/architecture/2026-07-02-tool-render-intent-union.zh.md)；`dsh-tool-fs`（generic/diff）和 `dsh-tool-bash`（terminal）是参考实现。
+
+## Web Client 展示
+
+内置 Web Client 不消费 `presentCall` 或 `presentResult`。Session `page` 与 `follow` 运输原始 `tool/call` 和 `tool/result` 事件，包括持久化的 `result.meta`。Client 插件在 keyed slot `tool.call.toolview` 中注册自己的 wire 工具名称，并从 `ToolCallBlock` 的参数、内容、错误、metadata、现有 Code Dispatch `parentCallId` 与 Session 路径事实派生组件 props。插件在本地校验这些 wire 值，并让格式错误或不受支持的输入回退到 generic 行。
+
+现有 Web 卡片需要模型可见内容无法无损保存的有界结构化结果事实时，使用 `output.presentationMeta(args, value)`。不要在 metadata 中保存 React props 或预选卡片，不要把 Host 工具实现导入浏览器 bundle，也不要建立另一套 Client presenter registry。只定义 Host 展示方法不会增加专用 Web 卡片。[Client 派生展示 Agent Note](../../.agents/notes/implemented/architecture/2026-08-23-client-derived-tool-presentation.zh.md)规定 owner、fallback 与对等要求。
 
 ## 验证
 

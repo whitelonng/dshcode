@@ -6,7 +6,7 @@ Cordis 框架及其基础库以源码形式 vendored 在 [`vendor/`](../vendor/R
 
 ## 名字映射
 
-| 目录 | 上游名 | 发布名 | 版本 | 角色 |
+| 目录 | 上游名 | 发布名 | 上游版本 | 角色 |
 |---|---|---|---|---|
 | `vendor/cordis/` | `cordis` | `@deepseek-ai/cordis` | 4.0.0-rc.7 | 框架核心：`Context`、`Service`、`Fiber`、事件 |
 | `vendor/cosmokit/` | `cosmokit` | `@deepseek-ai/cosmokit` | 1.8.1 | 框架与 Schemastery 共用的基础工具 |
@@ -22,7 +22,7 @@ Cordis 框架及其基础库以源码形式 vendored 在 [`vendor/`](../vendor/R
 
 ## 改名不碰什么
 
-- **目录名与版本号。** `vendor/hmr/` 仍是 `vendor/hmr/`，每个包保留清单表那行记录的上游版本，所以 vendored 树依旧读作一份上游快照。
+- **目录名与上游源码版本。** `vendor/hmr/` 仍是 `vendor/hmr/`，清单表记录的是所钉住源码快照的上游版本，因此清单读作一份上游快照；而每个 vendored 包 `package.json` 自身的 `version` 字段是 harness 发布的清单版本，`pnpm run release:vendor` 会提升它，重新 sync 时会恢复成上游版本。
 - **依赖 range。** 依赖条目只换键、不换范围：`"cordis": "^4.0.0-rc.7"` 变成 `"@deepseek-ai/cordis": "^4.0.0-rc.7"`；`linkWorkspacePackages` 靠这些保留下来的范围把它们解析到固定的 workspace。
 - **Loader 的 `cordis:` 内建前缀。** `cordis:include`、`cordis:group` 是协议前缀，不是包名。
 - **`cordis.yml` 配置文件家族**，包括 `*.cordis.yml`、`*.cordis.snapshot.yml`、`cordis.patch.yml`。

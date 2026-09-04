@@ -1,0 +1,7 @@
+version: 1
+scenario: advanced-toolchain
+profile: headless
+composition: advanced
+recording: authored
+header:
+  class: advanced

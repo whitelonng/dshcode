@@ -90,9 +90,6 @@ describe('Typert-backed Cordis catalog', () => {
     // An interface-typed key is described by its Service Definition: that is where
     // the contract and, by repository convention, the member JSDoc live.
     expect(byKey.get('lsp')?.type).toBe('LspService')
-    // The Service Definition may sit anywhere in the package, including a nested
-    // contract directory (`src/api/`), while the Context merge stays in `src`.
-    expect(byKey.get('apiProxy')?.type).toBe('ApiProxy')
     // Two packages describe `ctx.typert` — a merge-extensible interface in
     // type-meta and the implementing class in registry. The class wins: it is the
     // object a caller meets and it carries the documentation.

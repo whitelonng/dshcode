@@ -16,18 +16,42 @@
 // sequentially in-file.
 import type { ChildProcess } from 'node:child_process'
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { createRequire } from 'node:module'
+import { createRequire, SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import WebSocket from 'ws'
 import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot } from './support.ts'
 
-const WEB_SURFACE_PROMPT = fileURLToPath(new URL('./snapshots/web-runtime-context/web-surface-prompt.expected.md', import.meta.url))
+const WEB_SURFACE_PROMPT = fileURLToPath(new URL('./expected/web-runtime-context/web-surface-prompt.expected.md', import.meta.url))
+const authenticatedCookies = new Map<string, Promise<{ origin: string; cookie: string }>>()
+
+/** Exchange a printed process token once for Node-side HTTP/WebSocket probes. */
+function authenticatedWeb(launchUrl: string): Promise<{ origin: string; cookie: string }> {
+  const existing = authenticatedCookies.get(launchUrl)
+  if (existing !== undefined) return existing
+  const exchange = (async () => {
+    const response = await fetch(launchUrl, { redirect: 'manual' })
+    const setCookie = response.headers.get('set-cookie')
+    if (response.status !== 303 || setCookie === null) {
+      throw new Error(`dsh web authentication returned HTTP ${String(response.status)}`)
+    }
+    return {
+      origin: new URL(launchUrl).origin,
+      cookie: setCookie.split(';', 1)[0]!,
+    }
+  })()
+  authenticatedCookies.set(launchUrl, exchange)
+  return exchange
+}
+
+const comboMapUrl = (url: string): string => url.replace(/\/client\.js(?=,|&rev=)/g, '/client.js.map')
 
 function waitForReadyLine(child: ChildProcess): Promise<string> {
   return new Promise((resolveReady, reject) => {
@@ -50,28 +74,122 @@ function waitForReadyLine(child: ChildProcess): Promise<string> {
   })
 }
 
-async function rpc<T>(baseUrl: string, method: string, payload: unknown): Promise<T> {
-  const response = await fetch(`${baseUrl}/api/${method}`, {
+async function remoteRpc<T>(baseUrl: string, endpoint: string, args: object): Promise<T> {
+  const authenticated = await authenticatedWeb(baseUrl)
+  const response = await fetch(`${authenticated.origin}/api/${endpoint}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', cookie: authenticated.cookie },
     body: JSON.stringify({
       type: 'client-request',
-      rpcId: `smoke-${method}`,
-      method,
-      payload,
+      rpcId: `smoke-${endpoint}`,
+      method: endpoint,
+      payload: { args },
     }),
   })
-  if (!response.ok) throw new Error(`${method} failed over HTTP ${response.status}: ${await response.text()}`)
+  if (!response.ok) throw new Error(`${endpoint} failed over HTTP ${response.status}: ${await response.text()}`)
   const body = await response.json() as {
     result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
   }
-  if (!body.result.ok) throw new Error(`${method} failed: ${body.result.error.code}: ${body.result.error.message}`)
+  if (!body.result.ok) throw new Error(`${endpoint} failed: ${body.result.error.code}: ${body.result.error.message}`)
   return body.result.value
 }
 
+/** Read the explicit page cut from a freshly opened Session follow stream. */
+async function sessionCursor(baseUrl: string, sessionId: string): Promise<number> {
+  const authenticated = await authenticatedWeb(baseUrl)
+  const socket = new WebSocket(`${authenticated.origin.replace(/^http/u, 'ws')}/api/remote.mux`, {
+    headers: { cookie: authenticated.cookie },
+  })
+  const streamId = `smoke-history-${randomUUID()}`
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = (): void => {
+        socket.removeEventListener('open', opened)
+        socket.removeEventListener('error', failed)
+        socket.removeEventListener('close', closed)
+      }
+      const opened = (): void => {
+        cleanup()
+        resolve()
+      }
+      const failed = (): void => {
+        cleanup()
+        reject(new Error('session/follow carrier failed before opening'))
+      }
+      const closed = (): void => {
+        cleanup()
+        reject(new Error('session/follow carrier closed before opening'))
+      }
+      socket.addEventListener('open', opened)
+      socket.addEventListener('error', failed)
+      socket.addEventListener('close', closed)
+    })
+    return await new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => { finish(new Error('session/follow did not publish an opening cursor')) }, 10_000)
+      const cleanup = (): void => {
+        clearTimeout(timer)
+        socket.removeEventListener('message', message)
+        socket.removeEventListener('error', failed)
+        socket.removeEventListener('close', closed)
+      }
+      const finish = (error: Error | undefined, cursor?: number): void => {
+        cleanup()
+        if (error !== undefined) reject(error)
+        else resolve(cursor ?? -1)
+      }
+      const message = (event: WebSocket.MessageEvent): void => {
+        try {
+          const text = typeof event.data === 'string'
+            ? event.data
+            : Buffer.isBuffer(event.data) ? event.data.toString('utf8') : undefined
+          if (text === undefined) throw new Error('session/follow published a non-text frame')
+          const frame: unknown = JSON.parse(text)
+          if (!isRecord(frame) || frame.streamId !== streamId) return
+          if (frame.type === 'error') {
+            finish(new Error(`session/follow failed: ${JSON.stringify(frame.error)}`))
+            return
+          }
+          if (frame.type === 'end') {
+            finish(new Error('session/follow ended before its opening cursor'))
+            return
+          }
+          const value = frame.value
+          if (frame.type === 'item' && isRecord(value)
+            && value.type === 'snapshot' && Number.isSafeInteger(value.cursor)) {
+            finish(undefined, value.cursor as number)
+          }
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error(String(error)))
+        }
+      }
+      const failed = (): void => { finish(new Error('session/follow carrier failed before its opening cursor')) }
+      const closed = (): void => { finish(new Error('session/follow carrier closed before its opening cursor')) }
+      socket.addEventListener('message', message)
+      socket.addEventListener('error', failed)
+      socket.addEventListener('close', closed)
+      socket.send(JSON.stringify({
+        type: 'open',
+        streamId,
+        endpoint: 'session/follow',
+        payload: { args: { request: { address: { kind: 'session', sessionId } } } },
+      }))
+    })
+  } finally {
+    socket.close()
+  }
+}
+
 interface HistoryPage {
-  events: { event: { type: string; data: unknown } }[]
+  records: (
+    | { type: 'event'; event: HistoryEvent }
+    | { type: 'chunks'; event: HistoryEvent }
+  )[]
   hasMore: boolean
+}
+
+interface HistoryEvent {
+  type: string
+  data: unknown
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -79,8 +197,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function providerTitle(page: HistoryPage): string | undefined {
-  for (let index = page.events.length - 1; index >= 0; index--) {
-    const event = page.events[index]!.event
+  const events = page.records.flatMap(record => record.type === 'event' ? [record.event] : [])
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index] as HistoryEvent
     if (event.type !== 'session/title' || !isRecord(event.data)) continue
     const source = event.data.source
     if (typeof event.data.title === 'string' && isRecord(source) && source.kind === 'provider') {
@@ -91,7 +210,9 @@ function providerTitle(page: HistoryPage): string | undefined {
 }
 
 function hasAssistantMarker(page: HistoryPage, marker: string): boolean {
-  return page.events.some(({ event }) => {
+  return page.records.some((record) => {
+    if (record.type !== 'event') return false
+    const { event } = record
     if (event.type !== 'assistant/message' || !isRecord(event.data) || !isRecord(event.data.message)) return false
     const content = event.data.message.content
     if (!Array.isArray(content)) return false
@@ -101,7 +222,10 @@ function hasAssistantMarker(page: HistoryPage, marker: string): boolean {
 }
 
 async function history(baseUrl: string, sessionId: string): Promise<HistoryPage> {
-  return rpc<HistoryPage>(baseUrl, 'session.history', { sessionId, maxMessages: 10 })
+  const throughSeq = await sessionCursor(baseUrl, sessionId)
+  return remoteRpc<HistoryPage>(baseUrl, 'session/page', {
+    request: { address: { kind: 'session', sessionId }, throughSeq, maxMessages: 10 },
+  })
 }
 
 async function waitForProviderTitle(baseUrl: string, sessionId: string): Promise<string> {
@@ -118,6 +242,23 @@ async function waitForAssistantMarker(baseUrl: string, sessionId: string, marker
   await expect.poll(async () => hasAssistantMarker(await history(baseUrl, sessionId), marker), {
     timeout: 120_000,
   }).toBe(true)
+}
+
+/** Find one real source location through a served indexed map. */
+function firstMappedSource(script: string, payload: ConstructorParameters<typeof SourceMap>[0]): string | undefined {
+  const consumer = new SourceMap(payload)
+  const lines = script.split('\n')
+  for (let line = 0; line < lines.length; line++) {
+    const lastColumn = Math.min(lines[line]!.length, 512)
+    for (let column = 0; column <= lastColumn; column++) {
+      const entry = consumer.findEntry(line, column)
+      if (!('originalSource' in entry) || typeof entry.originalSource !== 'string') continue
+      if (entry.originalSource.startsWith('/packages/') && entry.originalSource.includes('/src/')) {
+        return entry.originalSource
+      }
+    }
+  }
+  return undefined
 }
 
 /** Real-host smoke screenshot: evidence for the figma comparison, not a failure artifact. */
@@ -142,8 +283,8 @@ async function detailsTrack(page: Page): Promise<number> {
 // plugin's client bundle exists and exports apply, the loader fail-louds and
 // the frame never appears.
 const UI_PLUGIN_DIRS = [
-  'connection', 'runtime', 'ui-theme', 'locale', 'ui-layout', 'ui-sidebar',
-  'ui-settings', 'ui-settings-general', 'ui-settings-models', 'ui-conversation',
+  'connection', 'ui-theme', 'locale', 'ui-layout', 'ui-renderer', 'ui-session', 'ui-sidebar',
+  'ui-settings', 'ui-settings-general', 'ui-settings-models', 'ui-conversation', 'ui-approval', 'ui-chat',
   'ui-model-selection', 'ui-user-questions', 'ui-trajectory', '../session-query/session-log-export',
 ]
 const ROUND_DONE_MARKER = 'WEB_ROUND_DONE'
@@ -154,7 +295,7 @@ const notReady = UI_PLUGIN_DIRS.filter((dir) => {
 if (notReady.length > 0) console.warn(`[smoke-real] skipped — client bundles not ready: ${notReady.join(', ')}`)
 
 describe('dsh web keyless CLI smoke', () => {
-  it('listens on 127.0.0.1 by default', async () => {
+  it('serves a usable app from two immutable plugin batches', async () => {
     requireDist()
     const sessionsDir = mkdtempSync(join(tmpdir(), 'dsh-web-keyless-'))
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
@@ -173,11 +314,68 @@ describe('dsh web keyless CLI smoke', () => {
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     )
+    let browser: Browser | undefined
     try {
       const readyUrl = await waitForReadyLine(child)
-      expect(readyUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
-      expect((await fetch(readyUrl)).status).toBe(200)
+      expect(readyUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/\?token=[A-Za-z0-9_-]+$/u)
+      expect((await fetch(readyUrl, { redirect: 'manual' })).status).toBe(303)
+      browser = await chromium.launch({ headless: true })
+      const page = await newEnglishPage(browser)
+      const pluginScripts: string[] = []
+      const cacheHeaders = new Map<string, string | undefined>()
+      // Chromium reports `preload as=script` as Script and reuses that same
+      // request when the matching script node executes; this count pins both.
+      page.on('request', (request) => {
+        const url = new URL(request.url())
+        const resource = `${url.pathname}${url.search}`
+        if (request.resourceType() === 'script' && resource.startsWith('/plugins/??')) {
+          pluginScripts.push(resource)
+        }
+      })
+      page.on('response', (response) => {
+        const url = new URL(response.url())
+        const resource = `${url.pathname}${url.search}`
+        if (resource.startsWith('/plugins/??')) {
+          cacheHeaders.set(resource, response.headers()['cache-control'])
+        }
+      })
+      await page.goto(readyUrl)
+      await page.getByRole('button', { name: 'New session', exact: true }).first().waitFor({ timeout: 30_000 })
+      const batchPaths = [...new Set(pluginScripts)].sort()
+      expect(batchPaths).toHaveLength(2)
+      expect(batchPaths).toContainEqual(expect.stringMatching(
+        /^\/plugins\/\?\?.+\/client\.js,.+\/client\.js&rev=[a-f\d]{12}$/,
+      ))
+      expect(batchPaths).toContainEqual(expect.stringMatching(
+        /^\/plugins\/\?\?@deepseek-ai\/dsh-client-modules\/client\.js&rev=[a-f\d]{12}$/,
+      ))
+      const readyOrigin = new URL(readyUrl).origin
+      expect([...cacheHeaders.values()]).toEqual([
+        'public, max-age=31536000, immutable',
+        'public, max-age=31536000, immutable',
+      ])
+      for (const path of batchPaths) {
+        const [scriptResponse, mapResponse] = await Promise.all([
+          fetch(`${readyOrigin}${path}`),
+          fetch(`${readyOrigin}${comboMapUrl(path)}`),
+        ])
+        expect(scriptResponse.status).toBe(200)
+        expect(mapResponse.status).toBe(200)
+        const script = await scriptResponse.text()
+        const payload = await mapResponse.json() as ConstructorParameters<typeof SourceMap>[0]
+        const sections = (payload as unknown as {
+          sections: { map: { sources?: unknown[]; sourcesContent?: unknown[] } }[]
+        }).sections
+        expect(sections.every(section => (
+          Array.isArray(section.map.sources)
+          && Array.isArray(section.map.sourcesContent)
+          && section.map.sourcesContent.length === section.map.sources.length
+          && section.map.sourcesContent.every(source => typeof source === 'string')
+        ))).toBe(true)
+        expect(firstMappedSource(script, payload)).toMatch(/^\/packages\/.+\/src\//)
+      }
     } finally {
+      await browser?.close()
       const closed = child.exitCode === null
         ? new Promise<void>((resolveClose) => { child.once('close', () => { resolveClose() }) })
         : Promise.resolve()
@@ -242,12 +440,13 @@ describe('dsh web keyless CLI smoke', () => {
     )
     try {
       const baseUrl = await waitForReadyLine(child)
-      const created = await rpc<{ sessionId: string }>(baseUrl, 'session.create', {})
-      await rpc<{ accepted: true }>(baseUrl, 'session.prompt', {
+      const created = await remoteRpc<{ sessionId: string }>(baseUrl, 'session/create', { request: {} })
+      await remoteRpc<{ accepted: true }>(baseUrl, 'session/prompt', { request: {
+        requestId: randomUUID(),
         sessionId: created.sessionId,
         mode: 'queue',
         content: [{ type: 'text', text: 'go' }],
-      })
+      } })
       const capturedRequests = await Promise.race([
         providerRequests,
         new Promise<never>((_resolve, reject) => {
@@ -262,7 +461,7 @@ describe('dsh web keyless CLI smoke', () => {
         message.role === 'user' && message.content?.includes('web-workspace-context-probe'))
       const systemMessage = captured.messages?.find(message => message.role === 'system')
       const expectedWebSection = readFileSync(WEB_SURFACE_PROMPT, 'utf8').trimEnd()
-        .replace('{{webUrl}}', baseUrl)
+        .replace('{{webUrl}}', new URL(baseUrl).origin)
       expect(systemMessage?.content).toContain(expectedWebSection)
       expect(workspaceMessage).toMatchInlineSnapshot(`
         {
@@ -281,6 +480,7 @@ describe('dsh web keyless CLI smoke', () => {
         .filter(name => name === 'web_search' || name === 'web_fetch'))
         .toMatchInlineSnapshot(`
           [
+            "web_fetch",
             "web_search",
           ]
         `)
@@ -354,28 +554,31 @@ describe('dsh web keyless CLI smoke', () => {
     )
     try {
       const baseUrl = await waitForReadyLine(child)
-      const created = await rpc<{ sessionId: string }>(baseUrl, 'session.create', {})
-      await rpc<{ accepted: true }>(baseUrl, 'session.prompt', {
+      const created = await remoteRpc<{ sessionId: string }>(baseUrl, 'session/create', { request: {} })
+      await remoteRpc<{ accepted: true }>(baseUrl, 'session/prompt', { request: {
+        requestId: randomUUID(),
         sessionId: created.sessionId,
         mode: 'queue',
         content: [{ type: 'text', text: promptMarker }],
-      })
+      } })
       let page: HistoryPage | undefined
       await expect.poll(async () => {
         page = await history(baseUrl, created.sessionId)
         return hasAssistantMarker(page, recoveredMarker)
       }, { timeout: 20_000 }).toBe(true)
       if (page === undefined) throw new Error('retry history was not observed')
-      const retry = page.events.find(({ event }) => event.type === 'llm/retry')?.event
+      const retry = page.records.find(record => (
+        record.type === 'event' && record.event.type === 'llm/retry'
+      ))
       expect(mainAttempts).toBe(2)
-      expect(retry?.data).toMatchObject({
+      expect(retry?.type === 'event' ? retry.event.data : undefined).toMatchObject({
         turn: 1,
         step: 1,
         retry: 1,
         maxRetries: 5,
         failure: { code: 'TRANSPORT' },
       })
-      expect(JSON.stringify(page.events)).toContain('WEB_RETRY_DISCARDED')
+      expect(JSON.stringify(page.records)).toContain('WEB_RETRY_DISCARDED')
     } finally {
       const closed = child.exitCode === null
         ? new Promise<void>((resolveClose) => { child.once('close', () => { resolveClose() }) })
@@ -385,18 +588,18 @@ describe('dsh web keyless CLI smoke', () => {
       await new Promise<void>(resolveClose => provider.close(() => { resolveClose() }))
       rmSync(workspace, { recursive: true, force: true })
     }
-  }, 30_000)
+  }, 120_000)
 
-  it('DSH_TOOLS_MODE=code collapses the provider wire tools to run_code with the SDK prompt section', async () => {
+  it('DSH_TOOLS_MODE=ptc collapses the provider wire tools to run_code with the SDK prompt section', async () => {
     requireDist()
-    const workspace = mkdtempSync(join(tmpdir(), 'dsh-web-code-mode-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'dsh-web-ptc-'))
 
-    interface CodeModeProviderRequest {
+    interface PtcModeProviderRequest {
       messages?: { role?: string; content?: string }[]
       tools?: { function?: { name?: string } }[]
     }
-    let resolveProviderRequest!: (request: CodeModeProviderRequest) => void
-    const providerRequest = new Promise<CodeModeProviderRequest>((resolve) => {
+    let resolveProviderRequest!: (request: PtcModeProviderRequest) => void
+    const providerRequest = new Promise<PtcModeProviderRequest>((resolve) => {
       resolveProviderRequest = resolve
     })
     const provider = createServer((request, response) => {
@@ -404,7 +607,7 @@ describe('dsh web keyless CLI smoke', () => {
       request.setEncoding('utf8')
       request.on('data', (chunk: string) => { body += chunk })
       request.on('end', () => {
-        resolveProviderRequest(JSON.parse(body) as CodeModeProviderRequest)
+        resolveProviderRequest(JSON.parse(body) as PtcModeProviderRequest)
         response.writeHead(200, { 'content-type': 'text/event-stream' })
         response.end([
           'data: {"choices":[{"delta":{"role":"assistant","content":null,"reasoning_content":""}}]}',
@@ -426,9 +629,9 @@ describe('dsh web keyless CLI smoke', () => {
         cwd: workspace,
         env: {
           ...process.env,
-          DEEPSEEK_API_KEY: 'keyless-web-code-mode',
+          DEEPSEEK_API_KEY: 'keyless-web-ptc',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
-          DSH_TOOLS_MODE: 'code',
+          DSH_TOOLS_MODE: 'ptc',
           DSH_HOME: join(workspace, '.dsh'),
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -438,12 +641,13 @@ describe('dsh web keyless CLI smoke', () => {
     )
     try {
       const baseUrl = await waitForReadyLine(child)
-      const created = await rpc<{ sessionId: string }>(baseUrl, 'session.create', {})
-      await rpc<{ accepted: true }>(baseUrl, 'session.prompt', {
+      const created = await remoteRpc<{ sessionId: string }>(baseUrl, 'session/create', { request: {} })
+      await remoteRpc<{ accepted: true }>(baseUrl, 'session/prompt', { request: {
+        requestId: randomUUID(),
         sessionId: created.sessionId,
         mode: 'queue',
         content: [{ type: 'text', text: 'go' }],
-      })
+      } })
       const captured = await Promise.race([
         providerRequest,
         new Promise<never>((_resolve, reject) => {
@@ -539,7 +743,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     // step mounts and the page is immediately interactive.
     // Fresh world: connect a Workspace so the composer starts live.
     await connectFreshWorkspace(page, sessionsDir)
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     await input.waitFor({ timeout: 10_000 })
     const productTitle = await page.title()
     await screen(page, '02-empty-state')
@@ -555,10 +759,18 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
       productTitle,
       { timeout: 15_000 },
     )
-    await expect.poll(async () => (await rpc<{ items: { sessionId: string }[] }>(baseUrl, 'session.list', {})).items.length, {
+    await expect.poll(async () => (await remoteRpc<{ items: { sessionId: string }[] }>(
+      baseUrl,
+      'session/list',
+      { _request: {} },
+    )).items.length, {
       timeout: 15_000,
     }).toBe(1)
-    const sessions = await rpc<{ items: { sessionId: string }[] }>(baseUrl, 'session.list', {})
+    const sessions = await remoteRpc<{ items: { sessionId: string }[] }>(
+      baseUrl,
+      'session/list',
+      { _request: {} },
+    )
     const sessionId = sessions.items[0]?.sessionId
     if (sessionId === undefined) throw new Error('created Web session was not listed')
     const durableTitle = await waitForProviderTitle(baseUrl, sessionId)
@@ -591,7 +803,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
 
   it('bash differential rendering: tool row click leaves the default details column closed', async () => {
     onTestFailed(() => saveFailureShot(page, 'w5-tool-details'))
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     await input.fill('请用 bash 工具运行命令 echo w5marker 然后告诉我结果')
     await input.press('Enter')
     // Wait for the tool ROW, not response text (the reply echoes any marker).

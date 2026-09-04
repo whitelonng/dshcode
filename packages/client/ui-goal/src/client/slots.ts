@@ -7,14 +7,23 @@
  * (callbacks from inject, live state from useProjection).
  */
 
-import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
+
+/**
+ * The one failure the strip reports without a wire call: the session projects
+ * no goal, so no CAS ref exists to address a mutation to.
+ */
+export interface GoalLocalFailure {
+  readonly ok: false
+  readonly error: { readonly code: 'no-current-goal'; readonly message: string }
+}
 
 /**
  * Settled outcome of one goal mutation, rendered inline by the strip. The
  * strip renders the failure only — the mutated goal arrives through the
  * projection — so the success value stays unread here.
  */
-export type GoalActionResult = RemoteResult<unknown>
+export type GoalActionResult = RemoteResult<unknown> | GoalLocalFailure
 
 /** Injected business face of the GoalBar dock entry: the mutation verbs (function properties: the strip destructures them freely). */
 export interface GoalBarActions {

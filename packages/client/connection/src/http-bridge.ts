@@ -23,7 +23,7 @@ export interface FetchHandler {
 
 /**
  * Bridge one node:http request to the fetch-shaped handler (client close
- * aborts; SSE bodies stream out chunk by chunk).
+ * aborts; response bodies stream out chunk by chunk).
  * @param req - incoming node:http request (fully read before dispatch).
  * @param res - node:http response the bridge writes and owns to completion.
  * @param apiHandler - fetch-shaped API carrier the request is dispatched to.
@@ -38,8 +38,8 @@ export async function bridge(
   const abort = new AbortController()
   // Client-disconnect detection MUST hang off the response, not the request:
   // since Node 16, IncomingMessage 'close' fires as soon as the request body is
-  // fully consumed (immediately for a bodyless GET), which would abort every SSE
-  // stream right after open. ServerResponse 'close' fires on connection teardown;
+  // fully consumed (immediately for a bodyless GET), which would abort a
+  // streaming response right after open. ServerResponse 'close' fires on connection teardown;
   // writableEnded distinguishes a normal end() from the client going away.
   res.on('close', () => {
     if (!res.writableEnded) abort.abort()
@@ -80,7 +80,7 @@ export async function bridge(
   }
   for await (const chunk of response.body) {
     // Backpressure: a false return means the socket buffer is full — wait for drain
-    // instead of buffering unboundedly (slow/suspended SSE consumers). 'close' also
+    // instead of buffering unboundedly (slow or suspended consumers). 'close' also
     // resolves so a mid-wait disconnect can't park this loop forever; the close
     // handler above aborts the handler stream, which then ends the iteration.
     if (!res.write(chunk)) {

@@ -87,7 +87,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          dest: ${{ runner.temp }}/setup-pnpm
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/setup-node@v6
         with:
@@ -131,7 +131,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          dest: ${{ runner.temp }}/setup-pnpm
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/setup-node@v6
         with:
@@ -176,7 +176,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          dest: ${{ runner.temp }}/setup-pnpm
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/setup-node@v6
         with:
@@ -184,18 +184,31 @@ jobs:
 
       - name: Configure persistent pnpm store
         shell: pwsh
+        # The store must share the ReFS workspace volume for the clone
+        # import method below; LOCALAPPDATA (C:) would cross volumes and
+        # break block clone. See 2026-08-30-windows-refs-store-block-clone-install.
         run: |
-          $storeRoot = "$env:LOCALAPPDATA\pnpm\store"
+          $storeRoot = "F:\.pnpm-store"
           echo "PNPM_CONFIG_STORE_DIR=$storeRoot" >> $env:GITHUB_ENV
 
       - name: Install (immutable)
         shell: pwsh
-        run: pnpm install --frozen-lockfile
+        # See 2026-08-30-windows-refs-store-block-clone-install for the
+        # ReFS block-clone rationale; use clone only on ReFS.
+        run: >-
+          $drive = (Split-Path -Qualifier $env:GITHUB_WORKSPACE).TrimEnd(':');
+          $fs = (Get-Volume -DriveLetter $drive).FileSystem;
+          if ($fs -eq 'ReFS') {
+            corepack pnpm install --frozen-lockfile --package-import-method=clone
+          } else {
+            pnpm install --frozen-lockfile
+          }
 
       - name: Run complete unsharded Windows gate inventory serially
         shell: pwsh
         env:
           DSH_COVERAGE_MAX_WORKERS: '1'
+          DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'
           DSH_GATE_CONCURRENCY: '1'
           DSH_PUBLINT_CONCURRENCY: '1'
         run: pnpm run check:ci:windows-complete
@@ -264,7 +277,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          dest: ${{ runner.temp }}/setup-pnpm
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The benchmark's Windows lanes deliberately skip the store cache like
       # the independent native Windows job; an empty input disables caching.
@@ -355,7 +368,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          dest: ${{ runner.temp }}/setup-pnpm
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
 
       # Unlike the larger-runner suite, both platforms cache the store here:
       # the consolidated topology measures cache mechanics as workload.

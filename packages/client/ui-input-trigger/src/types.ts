@@ -1,14 +1,15 @@
 /**
- * Frozen cross-package contract for the input trigger pipeline. Types only —
- * no runtime code. Sources (ui-commands / ui-skill / ui-reference) and the
- * conversation input layer import from here; changes require main-thread
- * arbitration.
+ * Input-trigger provider contract. Types only — no runtime code. The
+ * conversation input layer owns and exports the shared machine currency;
+ * this module re-exports it for trigger providers.
  *
  * Providers receive a {@link ClientSessionContext} projection per call —
  * never a Cordis context or the mutable Session. RPC and service access go
  * through the provider plugin's own root context captured at registration.
  */
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+
 
 /**
  * The provider-facing projection of one client session. It carries stable
@@ -29,96 +30,57 @@ export type TriggerPosition = 'leading' | 'inline'
 /** Which of the three pick paths produced a pick. */
 export type PickVia = 'menu' | 'space' | 'enter'
 
+/** What a pick asks for: resolve the candidate, or drill into it in place. */
+export type PickAction = 'pick' | 'drill'
+
+/** Leading glyph token of one menu candidate, mapped to its SVG by the menu view. */
+export type InputTriggerCandidateIcon = 'file' | 'folder' | 'session'
+
 /** One menu candidate. Pure display data — zero behavior declaration. */
 export interface InputTriggerCandidate {
   readonly name: string
   readonly description?: string
-  readonly icon?: string
+  readonly icon?: InputTriggerCandidateIcon
   readonly hint?: string
   /** Optional visual heading shared by adjacent candidates; sectioned groups omit their source-title row. */
   readonly section?: string
   /** Opaque source-owned pick payload. */
   readonly value?: string
-}
-
-/** Pick-moment snapshot of the trigger token span. CAS: stale draftRev ⇒ the whole action no-ops. */
-export interface TokenSpan {
-  readonly start: number
-  readonly end: number
-  readonly draftRev: number
-}
-
-/** Base64-encoded composer image accompanying one claimed submit transaction. */
-export interface SubmitImageAttachment {
-  /** Declared media type; the host verifies it against the decoded bytes. */
-  readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
-  /** Canonical base64 encoding of the image bytes. */
-  readonly data: string
-  /** Optional display name; never interpreted as a path. */
-  readonly name?: string
+  /**
+   * The row offers a drill action beside the settling pick: Tab or the row's
+   * chevron refines the query in place (directory descent) instead of
+   * resolving the candidate.
+   */
+  readonly drill?: boolean
 }
 
 /**
- * Command-mode entry credential. Pure data + a closure method — no class, no
- * cross-package runtime value (client bundle purity).
+ * One crumb of a source's menu header. The pipeline treats `value` as opaque
+ * and hands it straight back on pick, so a source names its own destinations.
  */
-export interface CommandClaim {
-  /** Integrity-watched draft prefix, e.g. `'/goal '` — breaking startsWith releases the claim. */
-  readonly token: string
-  /** Ghost-text hint rendered while the claim's args are blank. */
-  readonly hint?: string
-  /**
-   * Whether composer image attachments may accompany this command's submit.
-   * Absent = the composer refuses to submit while images are attached, keeping
-   * the draft and the images in place behind a visible notice.
-   */
-  readonly images?: boolean
-  /**
-   * Enter transaction, supplied by the source as a closure.
-   * @param images - serialized composer images accompanying the submission;
-   *   the composer passes them only when {@link CommandClaim.images} is true.
-   */
-  submit(args: string, actx: ClientContext, images: readonly SubmitImageAttachment[]): Promise<SubmitOutcome>
-}
-
-/**
- * Inline reference insertion. The draft holds the complete display text while
- * the occurrence retains its range; the owner supplies both user-facing projections at insert time
- * (the model representation is serialized on submit via the source codec).
- */
-export interface ReferenceInsert {
-  readonly source: string
-  readonly ref: string
-  /** Inline display label (fallback-cached on the occurrence). */
+export interface InputTriggerCrumb {
+  /** Rendered text of this step. */
   readonly label: string
-  /** Optional domain glyph shown beside the label. */
-  readonly appearance?: 'session' | 'file' | 'folder'
-  /** Clipboard / persistence projection, e.g. `/name` (never the model form). */
-  readonly clipboardText: string
+  /** Opaque source-owned pick payload, returned through `onPick`. */
+  readonly value: string
+  /** The step the menu is currently showing; rendered as the trailing, unclickable crumb. */
+  readonly current?: boolean
 }
 
-/** Settled result of a command submit transaction. */
-export interface SubmitOutcome {
-  readonly kind: 'success' | 'error'
-  readonly text?: string
+/** What a source needs to decide the header of the open menu. */
+export interface HeaderRequest {
+  /** Text between the trigger char and the caret, live-filtered. */
+  readonly query: string
+  /** Whether the active @file token is an open quoted path. */
+  readonly quoted?: boolean
+  /**
+   * True while this menu was opened or last re-scoped by a drill pick. It
+   * survives further typing and clears when the menu closes, so a query typed
+   * after a drill still reads as drilled. The pipeline owns the fact; what it
+   * means for a header is the source's to decide.
+   */
+  readonly drilled: boolean
 }
-
-/**
- * Unified pick return. `undefined` = miss → default sink; `'handled'` = the
- * source dealt with it internally (e.g. opened its popup shell). The `text`
- * arm is the plain-text reference path (decision recorded in
- * .agents/notes/implemented/architecture/2026-07-25-web-input-machine-and-slash-pipeline.md):
- * the token span is
- * replaced with literal text — no occurrence identity, no placeholder; any
- * chip visual is derived downstream by scanning the draft against the
- * source lexicons.
- */
-export type PickOutcome =
-  | { readonly claim: CommandClaim }
-  | { readonly insert: ReferenceInsert }
-  | { readonly text: string; readonly continue?: boolean }
-  | 'handled'
-  | undefined
 
 /**
  * Non-text composer submission state visible to enter adjudication. The
@@ -136,6 +98,8 @@ export interface CandidateRequest {
   /** Whether the active @file token is an open quoted path. */
   readonly quoted?: boolean
   readonly position: TriggerPosition
+  /** Whether this menu was opened or last re-scoped by a drill pick; see {@link HeaderRequest.drilled}. */
+  readonly drilled: boolean
   readonly signal: AbortSignal
 }
 
@@ -145,6 +109,8 @@ export interface InputTriggerPick {
   readonly session: ClientSessionContext
   readonly position: TriggerPosition
   readonly via: PickVia
+  /** Settling pick, or the candidate's drill action (Tab / row chevron). */
+  readonly action: PickAction
   readonly span: TokenSpan
 }
 
@@ -182,6 +148,18 @@ export interface InputTriggerSource {
   /** Whether the menu renders the source-title row; defaults to true. */
   readonly showGroupTitle?: boolean
   candidates(session: ClientSessionContext, req: CandidateRequest): Promise<readonly InputTriggerCandidate[]>
+  /**
+   * Synchronous breadcrumb rendered above this source's group, re-polled on
+   * every hit. Implementing IS the participation claim; `undefined` means
+   * this request needs no header. A crumb pick routes back through
+   * {@link InputTriggerSource.onPick} with `action: 'drill'` and the crumb's
+   * `value` as the candidate value, so returning to a step and descending
+   * into one are the same outcome.
+   * @param session - stable session projection.
+   * @param req - the live query and how the menu reached it.
+   * @returns the crumbs to render, or undefined for no header.
+   */
+  header?(session: ClientSessionContext, req: HeaderRequest): readonly InputTriggerCrumb[] | undefined
   /** Every pick lands here; claim/insert outcomes are executed by the pipeline via the scoped input events. */
   onPick(pick: InputTriggerPick): PickOutcome
   /** Synchronous space-time adjudication over hot state only. `token` is the just-completed leading token (e.g. '/goal'). */
@@ -305,3 +283,67 @@ declare module '@deepseek-ai/cordis' {
     'slash/input-insert-text'(request: InsertTextRequest): true | undefined
   }
 }
+
+/** Serialized image the composer hands a command source when its claim allows images. */
+export interface SubmitImageAttachment {
+  /** Declared media type; the host verifies it against the decoded bytes. */
+  readonly mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+  /** Canonical base64 encoding of the image bytes. */
+  readonly data: string
+  /** Optional display name; never interpreted as a path. */
+  readonly name?: string
+}
+
+/** Submit result a command claim returns through the scoped input event. */
+export interface SubmitOutcome {
+  readonly kind: 'success' | 'error'
+  readonly text?: string
+}
+
+/** Draft-span CAS material: integrity-watched range plus the draft revision it belongs to. */
+export interface TokenSpan {
+  readonly start: number
+  readonly end: number
+  readonly draftRev: number
+}
+
+/** What a pick resolves into: a claim, a reference insert, inserted text, or explicit handling. */
+export type PickOutcome =
+  | { readonly claim: CommandClaim }
+  | { readonly insert: ReferenceInsert }
+  | { readonly text: string; readonly continue?: boolean }
+  | 'handled'
+  | undefined
+
+/** Claim the composer grants a command source while its leading token remains unbroken. */
+export interface CommandClaim {
+  /** Integrity-watched draft prefix, e.g. `/goal ` — breaking startsWith releases the claim. */
+  readonly token: string
+  /** Ghost-text hint rendered while the claim's args are blank. */
+  readonly hint?: string
+  /**
+   * Whether composer image attachments may accompany this command's submit.
+   * Absent = the composer refuses to submit while images are attached, keeping
+   * the draft and the images in place behind a visible notice.
+   */
+  readonly images?: boolean
+  /**
+   * Enter transaction, supplied by the source as a closure.
+   * @param images - serialized composer images accompanying the submission;
+   *   the composer passes them only when {@link CommandClaim.images} is true.
+   */
+  submit(args: string, actx: ClientContext, images: readonly SubmitImageAttachment[]): Promise<SubmitOutcome>
+}
+
+/** Reference a source inserts into the draft, e.g. `@session` or `/file`. */
+export interface ReferenceInsert {
+  readonly source: string
+  readonly ref: string
+  /** Inline display label (fallback-cached on the occurrence). */
+  readonly label: string
+  /** Optional domain glyph shown beside the label. */
+  readonly appearance?: 'session' | 'file' | 'folder'
+  /** Clipboard / persistence projection, e.g. `/name` (never the model form). */
+  readonly clipboardText: string
+}
+

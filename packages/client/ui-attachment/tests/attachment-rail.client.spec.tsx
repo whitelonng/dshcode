@@ -1,7 +1,4 @@
 // @vitest-environment jsdom
-// AttachmentRail behavior in the jsdom lane: item rendering and callbacks,
-// arrow paging over stubbed scroll geometry (jsdom lays nothing out), the
-// exclusive vertical-wheel pan, and the new-item end reveal.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'

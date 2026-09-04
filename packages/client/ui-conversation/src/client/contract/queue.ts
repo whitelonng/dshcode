@@ -1,13 +1,11 @@
-/** Queue contracts derived from the runtime session face and snapshot. */
-import type {
-  ConversationSnapshot, SessionFace,
-} from '@deepseek-ai/dsh-client-runtime/client'
+/** Queue contracts derived from the Session Controller face. */
+import type { SessionFace, SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 
-/** One address accepted by the runtime session's queue mutation verb. */
+/** One address accepted by the Session Controller's queue mutation verb. */
 export type QueueItemId = Parameters<SessionFace['updateQueue']>[0]
 
-/** One mutation accepted by the runtime session's queue mutation verb. */
+/** One mutation accepted by the Session Controller's queue mutation verb. */
 export type QueueAction = Parameters<SessionFace['updateQueue']>[1]
 
-/** One row projected by the runtime session's authoritative queue snapshot. */
-export type QueueRow = ConversationSnapshot['queue'][number]
+/** One row projected by the authoritative Session queue snapshot. */
+export type QueueRow = SessionSnapshot['queue'][number]

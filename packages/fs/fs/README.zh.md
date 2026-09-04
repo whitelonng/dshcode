@@ -1,55 +1,99 @@
+---
+description: "`ctx.fs` 文件系统服务约定：面向选择或挂载文件系统后端的部署方，以及实现后端的开发者。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-fs
 
 [English](README.md) | 中文
 
-**`FileSystem`**（`ctx.fs`）定义同一个执行世界中的存储原语，包括解析路径、公开规范化进程路径与文件 URI、检查包含关系、完整或流式读取文本、有界读取原始字节、检查／列出元数据、原子写入和应用字面量编辑，但不规定实现方式。两个变更操作都**可选** 接收版本防护，因此 `ctx.fs` 本身就是完整且不受约束的存储 seam。本包还拥有由工具分派、政策插件监听的 `fs/*` 政策事件词汇。
+## 概述
 
-本包拥有四层文件系统栈中的 Service Definition 和提供方约定层；该拆分使每个关注点可以独立演进和替换（见[能力 seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.zh.md)、[文件系统能力 seam Agent Note](../../../.agents/notes/implemented/architecture/2026-06-17-filesystem-capability-seam.zh.md)、[拆分文件系统 seam Agent Note](../../../.agents/notes/implemented/simplification/2026-06-26-fsspec-style-fs-seam.zh.md)和[文件上下文事件门禁 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-26-file-context-as-event-gate.zh.md)）：
+`dsh-fs` 定义 `ctx.fs` 文件系统服务：一个紧凑、与后端无关的约定，面向同一个执行世界，把路径解析为稳定身份、在受支持时映射共享宿主文件、在界内读取文本与原始字节、列出目录，并原子地执行写入与字面量编辑。它有意把存储机制留给实现它的后端——`fs-local` 面向宿主文件系统，`fs-sandbox` 面向策略强制的隔离，`fs-e2b` 面向远程执行世界。两个变更操作都带可选版本防护，因此即使不加载策略插件，挂载的后端依然提供完整、不受约束、原子的文件操作。本包还拥有由工具包分派、策略插件决策的 `fs/*` 策略事件词汇。当你需要可替换的文件系统表面时选择它；面向模型的工具本身位于 `dsh-tool-fs`。
 
-| 层 | 包 | 角色 |
-|---|---|---|
-| 工具/执行器 | `@deepseek-ai/dsh-tool-fs` | 面向模型的 `read`/`write`/`edit` schema、读取窗口和文本渲染；通过 `ctx.fs` 读取/写入/编辑，并分派 `fs/*` 事件 |
-| 政策 | `@deepseek-ai/dsh-fs-observation-policy` | 已观察状态、编辑前读取和版本防护的写入/编辑，通过 `fs/*` 事件门禁贡献（无服务） |
-| 提供方约定 | `@deepseek-ai/dsh-fs`（本包） | `ctx.fs`：执行世界路径、文本 I/O 与原子变更原语（可选版本防护）；拥有 `fs/*` 事件词汇 |
-| 提供方 | `@deepseek-ai/dsh-fs-local` | 宿主文件系统实现 |
+## 目录
 
-`fs-sandbox` 与 `fs-e2b` 实现该接口，无需更改政策层和工具层。
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
 
-## 服务 API（`ctx.fs`）
+-----
 
-后端继承 `FileSystem` 并实现十二个原语。
+<a id="use-this-package"></a>
+## 使用本包
 
-| 成员 | 语义 |
+你很少直接加载 `dsh-fs`：你挂载一个注册为 `ctx.fs` 的后端，然后从自己的插件调用该服务，或让 `dsh-tool-fs` 工具替你调用。本页服务于确实接触它的两类读者——选择后端的部署方，以及实现或消费该约定的开发者。
+
+### 选择并挂载后端
+
+普通宿主文件选择 [`fs-local`](../fs-local/README.zh.md)，会话变更必须限制在工作区与临时根目录内时选择 [`fs-sandbox`](../fs-sandbox/README.zh.md)，文件状态必须位于远程执行世界时选择 [`fs-e2b`](../../e2b/fs-e2b/README.zh.md)。挂载任一后端都会填充 `ctx.fs`；更换后端不会改变策略插件、工具或工具 schema。未挂载任何后端的组合就没有 `ctx.fs`，工具会在注册时失败。
+
+### 服务能做什么
+
+通过 `ctx.fs`，你可以把任意路径解析为稳定的目标身份、完整读取或分片流式读取文本文件、按显式上限读取原始字节、列出一层目录、原子地创建或替换文件，并原子地应用字面量文本编辑。两个变更操作上的版本防护都是可选的：省略它即无条件创建或覆盖，提供它则在文件自上次观察以来发生变化时失败。每个操作要么返回数据，要么抛出携带稳定错误码（如 `FS_NOT_FOUND`、`FS_STALE_VERSION`、`FS_AMBIGUOUS_EDIT`）的类型化 `FsError`，调用方依据错误码分支，绝不解析消息文本。
+
+-----
+
+<a id="understand-the-implementation"></a>
+## 理解实现
+
+<details>
+<summary>实现细节——点击展开</summary>
+
+本节解释约定背后的设计决策，并指出实现它们的代码位置；可观察行为已在[使用本包](#use-this-package)中完整说明。
+
+### 设计理念
+
+该约定建立在一个分离与三项承诺之上：
+
+- **约定高于机制。** 服务只命名存储层能做什么——解析、stat、读取、列出、写入、编辑——绝不规定如何存储字节。后端拥有目标身份、执行世界坐标、解码、二进制拒绝与原子性。
+- **策略不放在基类上。** 已观察状态、编辑前读取与版本防护的变更是插件（`dsh-fs-observation-policy`）的职责，通过提供可选防护来添加——因此沙箱化或远程后端不会继承任何面向模型的观察策略。
+- **`editText` 留在 seam 上。** 版本校验、字面量匹配与原子重写共享同一个临界区，错误归因与一方胜出/一方陈旧的并发语义因此保持正确；远程后端也可以将其实现为原生比较并编辑操作。
+- **界限制在此 seam 上。** `readBytes` 要求 `maxBytes`，并以 `FS_TOO_LARGE` 失败而不是截断，因此任何后端都不会无界缓冲文件。
+
+### 源码地图
+
+| 文件 | 职责 |
 |---|---|
-| `resolve(path, opts?)` | 把路径解析为稳定的 `FsTarget`（不透明 `targetKey`、`displayPath`）。`opts.cwd` 是相对 `path` 解析所依据的基准（调用方提供其会话工作区；绝对路径忽略该值；省略时使用后端默认值），`opts.signal` 则中止后端往返。该方法是异步的，因为远程后端可能需要 I/O。经不同路径到达的同一文件必须产生相同 `targetKey`。 |
-| `processPath(target)` | 返回该提供方执行世界中的子进程可以打开的规范化绝对路径。该路径有意与不透明的 `targetKey` 分离。 |
-| `fileUrl(target)` | 返回采用执行世界平台语法的规范化 `file:` URI。编码由后端而非宿主进程负责。 |
-| `contains(parent, child)` | 在不公开或解析目标 key 的情况下，检查规范化身份相等或后代包含关系。两个目标都来自该提供方。 |
-| `stat(target, signal?)` | 返回 `FsInfo` 元数据（`version`、`type`、可选 `size`）；目标不存在时返回 `undefined`。绝不返回内容。 |
-| `lstat(path, opts?, signal?)` | 当最后一个路径组件是符号链接时，不跟随该组件，返回 `FsPathInfo` 元数据。该方法采用路径形态，使消费方能在 `resolve` 跟随仓库所有的符号链接进入目标前拒绝它。 |
-| `readText(target, signal?)` | 把整个普通文本文件读取为一个解码后的字符串。负责普通文件检查、UTF-8 解码和二进制/NUL 拒绝（`FS_NOT_TEXT`）。 |
-| `streamText(target, signal?)` | 为大文件按解码后的分片流式读取相同文本（跨分片 UTF-8 解码仍由此处负责）；需要字节上限的消费方在消费流时执行该上限。 |
-| `readBytes(target, signal, maxBytes)` | 把完整普通文件按原始字节读出，不做解码或二进制拒绝。`maxBytes` 为必填，在该 seam 上限制完整内容：已知或读取中发现的超限以 `FS_TOO_LARGE` 失败，而不是截断或无界缓冲。 |
-| `listDir(target, signal?)` | 按稳定名称顺序列出直接子项。返回条目名称、条目类型、解析后的子目标和低成本元数据（若可用则包括 `version`/文件 `size`）；绝不读取文件内容。缺失目标抛出 `FS_NOT_FOUND`，非目录抛出 `FS_NOT_DIRECTORY`，权限失败抛出 `FS_PERMISSION_DENIED`，其他后端 I/O 失败抛出 `FS_IO_ERROR`。损坏/消失的子项可以作为无元数据的 `other` 返回；子项权限/I/O 失败会使用相同结构化代码使整个列表失败。 |
-| `writeText(target, content, expected?, signal?)` | 原子创建/替换。`expected` 是可选的：省略 ⇒ 无条件创建或覆盖；提供 `FsWriteIntent`（`createIfAbsent`/`replaceIfVersion`）⇒ 添加防护。`createIfAbsent` 必须以不替换的方式发布，使初始探测后抢先创建的文件得到保留。 |
-| `editText(target, edit, expected?, signal?)` | 字面量编辑。`expected` 是可选的：省略 ⇒ 无条件编辑当前内容；提供 `{ version }` ⇒ 添加防护，并在匹配之前校验。无论哪种情况，目标缺失都报告 `FS_STALE_VERSION`。应用和写入以原子方式完成，使用同一个变更临界区。 |
+| [`src/index.ts`](src/index.ts) | 服务定义：抽象 `FileSystem` 类、`ctx.fs` 声明与 `fs/*` 事件词汇 |
+| [`src/types.ts`](src/types.ts) | 词汇：`FsTarget`/`FsTargetKey`、`FsVersion`、`FsObservation`、`FsWriteIntent`、`FsError` 及其错误码 |
 
-无论是否有版本防护，变更都在后端的每目标锁内运行，因此无条件写入/编辑仍是原子的；「无条件」只移除*版本*前置条件，不移除原子性。
+### 调用流程
 
-## `fs/*` 政策事件
+每个普通操作都以 `resolve(path, { cwd })` 开始，它产生稳定的 `FsTarget`（不透明 `targetKey` 加用于模型/UI 输出的 `displayPath`）；经不同路径到达同一文件会产生相同 key。`processPathFromHostPath(hostPath)` 在后端共享或显式映射宿主文件时，单独把绝对宿主文件映射进此执行世界，否则返回 `undefined`。读取随后执行 `stat` → `readText`/`streamText`/`readBytes`，列出执行 `listDir`，变更则经过每个目标一个临界区：先检查可选防护，应用新内容，再原子发布结果。
 
-本包声明三个事件（见 [filesystem.md](../../../docs/subsystems/filesystem.zh.md#cordis-surface) 的生成区块），使发出方（`@deepseek-ai/dsh-tool-fs`）和政策监听器（`@deepseek-ai/dsh-fs-observation-policy`）共享词汇，而无需让发出方依赖政策插件。`fs/write-intent` 和 `fs/edit-intent` 是单槽决策 waterfall（瀑布式事件）（监听器完整决策，绝不调用 `next()`）；`fs/observed` 是发后即忘的记录事件，携带 `FsObservation` 可辨识联合：存在并带有版本，或确认缺失。它们只携带 `dsh-fs` 词汇和一个不透明 `object` 参与者，不含面向模型的概念或 agent（智能体）/会话所有者结构。
+### `fs/*` 策略事件
 
-## 提供方约定，不是政策层
+本包声明三个事件，使发出方（`dsh-tool-fs`）与策略监听器（`dsh-fs-observation-policy`）共享词汇，而无需让发出方依赖策略插件。`fs/write-intent` 与 `fs/edit-intent` 是单槽决策 waterfall（瀑布式事件）：第一个监听器直接决策，绝不调用 `next()`。`fs/observed` 是发后即忘的记录事件，携带 `FsObservation`——存在并带版本，或确认缺失。事件只携带 `dsh-fs` 词汇和一个不透明 `object` 参与者。
 
-`ctx.fs` 有意接近 fsspec 风格的存储原语，比字节级 `cat`/`open` 高半层，因为它会解码文本并拒绝二进制，使政策层绝不接触原始字节。它负责 UTF-8 解码、二进制拒绝、原子写入和字面量编辑临界区。它**不** 负责行窗口、编号行、渲染 footer 或已观察状态。已观察状态、编辑前读取和版本防护的写入/编辑属于插件（`@deepseek-ai/dsh-fs-observation-policy`）通过提供可选防护而添加的政策，并非提供方行为，因此沙箱化/远程后端不会继承任何面向模型的观察政策。
+### 不变式
 
-`editText` 留在该 seam 上，不由政策层通过读取加写入组合，因为版本防护、字面量匹配和原子重写必须处于同一临界区内，才能正确归因错误并实现一方胜出/一方陈旧的并发；远程后端也可以将其实现为原生比较并编辑操作。
+- `targetKey` 与 `version` 是带品牌的不透明 id：消费方不得解析或解释它们；只有 `displayPath` 用于模型/UI 输出。
+- 失败是携带稳定错误码的类型化 `FsError`，绝不是临时拼写的消息字符串。
+- 该 seam 不设 I/O deadline；取消是每个原语上可选的 `AbortSignal`。
 
-## 词汇
+</details>
 
-`FsTargetKey` / `FsVersion` 是带品牌的不透明 id（见[品牌 id Agent Note](../../../.agents/notes/implemented/architecture/2026-06-20-branded-ids.zh.md)）；消费方不得解析 `targetKey` 或解释 `version`，只有 `displayPath` 用于模型/UI 输出。`FsObservation` 区分 `{ kind: 'present', version }` 与 `{ kind: 'absent' }`，使策略无需执行 I/O 即可分辨未见目标和确认缺失。`FsWriteIntent` 是显式的防护写入意图（`createIfAbsent` 创建缺失目标，并以 `FS_NOT_OBSERVED` 拒绝现有目标；`replaceIfVersion` 只在观察版本上替换，否则为 `FS_STALE_VERSION`）；从 `writeText` 中省略该值就是第三种无条件状态。`FsPathInfo` 是可报告 `symlink` 的不跟随链接元数据形态，区别于目标级 `FsInfo`。失败会抛出 `FsError`（继承 `HarnessError`；见[结构化错误分类 Agent Note](../../../.agents/notes/implemented/architecture/2026-06-11-structured-error-taxonomy.zh.md)），并携带稳定的 `FsErrorCode`（`FS_NOT_FOUND`、`FS_NOT_DIRECTORY`、`FS_NOT_TEXT`、`FS_NOT_REGULAR_FILE`、`FS_TOO_LARGE`、`FS_PERMISSION_DENIED`、`FS_IO_ERROR`、`FS_STALE_VERSION`、`FS_NOT_OBSERVED`、`FS_AMBIGUOUS_EDIT`、`FS_EDIT_NOT_FOUND`、`FS_ABORTED`）；工具注册表公开 `{ name, code }`，并将其附在 `isError` 结果上。完整约定见 `src/types.ts`。
+-----
 
+<a id="further-exploration"></a>
+## 进一步探索
+
+当包级约定不够用时阅读以下页面。它们从穷尽式约定逐步进入构建于其上的后端与消费方。
+
+- [文件系统子系统](../../../docs/subsystems/filesystem.zh.md)——穷尽式提供方约定、策略事件与错误分类体系。
+- [fs-local](../fs-local/README.zh.md)——实现该约定的宿主文件系统后端。
+- [fs-sandbox](../fs-sandbox/README.zh.md)——实现该约定的沙箱强制后端。
+- [tool-fs](../tool-fs/README.zh.md)——消费 `ctx.fs` 的面向模型工具。
+- [fs-observation-policy](../fs-observation-policy/README.zh.md)——通过 `fs/*` 事件防护变更的策略插件。
+- [能力 seam 笔记](../../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.zh.md)——文件系统栈为何拆分为约定、提供方、策略与工具。
+
+-----
+
+<a id="model-experience"></a>
 ## 模型体验
 
 通过 `dsh-tool-fs` 间接产生影响；该消费方把提供方文本和错误渲染为有界且保留的文件系统工具结果。
@@ -60,7 +104,22 @@
 
 ## 已知限制与延期工作
 
-- **变更操作约定只支持文本**：文本读取和两个变更操作都以 `FS_NOT_TEXT` 拒绝二进制/非 UTF-8 内容；`readBytes` 是唯一的原始字节原语，二进制安全的变更操作仍是[工具 schema Agent Note](../../../.agents/notes/implemented/feature/2026-06-17-filesystem-tool-schemas.zh.md)有意延期的工作。
-- **只有十二个原语**：没有删除、重命名/移动、复制或监视；`listDir` 只支持一层，递归、glob、分页和搜索不在范围内，见[目录列出 Agent Note](../../../.agents/notes/archived/architecture/2026-07-03-filesystem-directory-listing-seam.md)。
-- **没有 I/O deadline**：该 seam 不启动超时；取消只是每个原语上尽力而为的可选 `AbortSignal`（见有意采用的 [fs 能力族立场](../README.zh.md)）。
+<a id="known-limitations-and-deferred-work"></a>
+
+
+这些限制说明该约定何时不合适，或何时需要特别的运维注意。它们是当前包约束，不是通用文件系统对比或任务积压。
+
+- **变更操作约定只支持文本**：文本读取和两个变更操作都以 `FS_NOT_TEXT` 拒绝二进制/非 UTF-8 内容；`readBytes` 是唯一的原始字节原语，二进制安全的变更操作仍延期（见[工具 schema Agent Note](../../../.agents/notes/implemented/feature/2026-06-17-filesystem-tool-schemas.zh.md)）。
+- **只有十三个原语**：没有删除、重命名、复制或监视；`listDir` 只列出一层，递归、glob、分页与搜索不在范围内（见[目录列出笔记](../../../.agents/notes/archived/architecture/2026-07-03-filesystem-directory-listing-seam.md)）。
+- **没有 I/O deadline**：该 seam 不启动超时；取消只是每个原语上尽力而为的可选 `AbortSignal`（见[fs 能力族立场](../README.zh.md)）。
 - **先解析后操作使远程后端每次工具调用需要两次往返**：折叠或缓存解析由这种后端自行决定。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+无。
+
+</details>

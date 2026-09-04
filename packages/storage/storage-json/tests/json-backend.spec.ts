@@ -1,13 +1,11 @@
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage, { storageBackendServiceKey } from '@deepseek-ai/dsh-storage'
-import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import { runKvBackendContract } from '../../storage/tests/contract.ts'
 import { Config, JsonStorageBackend, apply } from '../src/index.ts'
-import * as InvariantCompanion from '../src/invariant.ts'
 
 const roots: string[] = []
 
@@ -198,15 +196,6 @@ describe('json backend specifics', () => {
     await expect(unit.putRecord('t', 'x', {})).rejects.toMatchObject({ code: 'closed' })
   })
 
-  it('registers the invariant companion and disposes cleanly', async () => {
-    const ctx = new Context()
-    await ctx.plugin(InvariantRegistry)
-    const fiber = await ctx.plugin(InvariantCompanion)
-    // Disposal releases the reservation: a fresh mount succeeds.
-    await fiber.dispose()
-    await ctx.plugin(InvariantCompanion)
-  })
-
   it('close drains in-flight writes and blocks in-flight opens', async () => {
     const root = await freshRoot()
     const backend = new JsonStorageBackend(root)
@@ -224,5 +213,198 @@ describe('json backend specifics', () => {
     const closing = backend2.close()
     await expect(opening.then(u => u.putRecord('t', 'x', {}))).rejects.toMatchObject({ code: 'closed' })
     await closing
+  })
+})
+
+describe('per-record layout', () => {
+  const descriptor = { name: 'recs', version: 2, layout: 'per-record' as const, tables: ['t'], hasGlobal: true }
+  const recordPath = (root: string, key: string): string => join(root, 'recs', 't', `${key}.json`)
+
+  it('stores one version-stamped document per record and defers materialization', async () => {
+    const root = await freshRoot()
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    // Missing directory = empty unit; nothing materialized on the medium yet.
+    expect(await unit.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await unit.putRecord('t', 'k1', { v: 1 })
+    await unit.putRecord('t', 'k2', { v: 2 })
+    await unit.setGlobal('G')
+    expect(await readFile(recordPath(root, 'k1'), 'utf8'))
+      .toBe(`${JSON.stringify({ version: 2, record: { v: 1 } }, null, 2)}\n`)
+    expect((await readdir(join(root, 'recs', 't'))).sort()).toEqual(['k1.json', 'k2.json'])
+    expect(JSON.parse(await readFile(join(root, 'recs', 'global.json'), 'utf8')))
+      .toEqual({ version: 2, record: 'G' })
+    expect(await unit.loadAll()).toEqual({ tables: { t: { k1: { v: 1 }, k2: { v: 2 } } }, global: 'G' })
+    await backend.close()
+  })
+
+  it('overwrites and deletes one document at a time and persists across reopen', async () => {
+    const root = await freshRoot()
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    await unit.putRecord('t', 'k', { v: 1 })
+    await unit.putRecord('t', 'k', { v: 2 }) // overwrite the same document
+    await unit.deleteRecord('t', 'missing') // idempotent no-op
+    await unit.close()
+    const unit2 = await backend.kv.open(descriptor)
+    expect(await unit2.loadAll()).toEqual({ tables: { t: { k: { v: 2 } } }, global: null })
+    await unit2.deleteRecord('t', 'k')
+    expect(await unit2.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await backend.close()
+  })
+
+  it('rejects unsafe keys and undeclared tables, and enforces the closed guard', async () => {
+    const root = await freshRoot()
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    await expect(unit.putRecord('t', 'a/b', {})).rejects.toThrow(/not path-safe/)
+    await expect(unit.deleteRecord('t', '..')).rejects.toThrow(/not path-safe/)
+    await expect(unit.putRecord('bogus', 'k', {})).rejects.toThrow(/does not declare table/)
+    await unit.close()
+    await expect(unit.putRecord('t', 'k', {})).rejects.toMatchObject({ code: 'closed' })
+    await expect(unit.deleteRecord('t', 'k')).rejects.toMatchObject({ code: 'closed' })
+    await expect(unit.setGlobal('x')).rejects.toMatchObject({ code: 'closed' })
+    await expect(unit.loadAll()).rejects.toMatchObject({ code: 'closed' })
+    await backend.close()
+  })
+
+  it('discards foreign documents (stale version, malformed, non-object, unsafe key) on open', async () => {
+    const root = await freshRoot()
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    await unit.putRecord('t', 'good', { v: 1 })
+    await unit.close()
+    await writeFile(recordPath(root, 'stale'), JSON.stringify({ version: 1, record: { v: 0 } }), 'utf8')
+    await writeFile(recordPath(root, 'broken'), '{oops', 'utf8')
+    await writeFile(recordPath(root, 'scalar'), JSON.stringify(5), 'utf8')
+    await writeFile(recordPath(root, 'unsafe%2Fkey'), JSON.stringify({ version: 2, record: { v: 0 } }), 'utf8')
+    await writeFile(join(root, 'recs', 't', 'not-json.txt'), 'ignored', 'utf8')
+    await writeFile(join(root, 'recs', 'global.json'), JSON.stringify({ version: 1, record: 'old' }), 'utf8')
+    // Stray unit-root entries: an undeclared directory and a non-document file.
+    await mkdir(join(root, 'recs', 'stray-dir'), { recursive: true })
+    await writeFile(join(root, 'recs', 'stray.txt'), 'ignored', 'utf8')
+    const unit2 = await backend.kv.open(descriptor)
+    expect(await unit2.loadAll()).toEqual({ tables: { t: { good: { v: 1 } } }, global: null })
+    await backend.close()
+  })
+
+  it('propagates non-ENOENT read failures and refuses a global slot that is not declared', async () => {
+    const root = await freshRoot()
+    const backend = new JsonStorageBackend(root)
+    // A file where the unit directory should be: the lazy loadAll readdir
+    // fails with ENOTDIR (opening itself touches nothing on the medium).
+    await writeFile(join(root, 'recs'), 'not a directory', 'utf8')
+    const unit = await backend.kv.open(descriptor)
+    await expect(unit.loadAll()).rejects.toMatchObject({ code: 'ENOTDIR' })
+    await unit.close()
+    const noGlobal = { name: 'plain', version: 1, layout: 'per-record' as const, tables: ['t'], hasGlobal: false }
+    const unit2 = await backend.kv.open(noGlobal)
+    await expect(unit2.setGlobal('x')).rejects.toThrow(/does not declare a global slot/)
+    await backend.close()
+  })
+
+  it('close drains in-flight writes and an unreadable record document reads as absent', async () => {
+    const root = await freshRoot()
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    const big = unit.putRecord('t', 'big', { blob: 'x'.repeat(4 * 1024 * 1024) })
+    await unit.close()
+    await unit.close() // idempotent
+    await expect(big).resolves.toBeUndefined()
+    const onDisk = JSON.parse(await readFile(recordPath(root, 'big'), 'utf8')) as { record: { blob: string } }
+    expect(onDisk.record).toEqual({ blob: 'x'.repeat(4 * 1024 * 1024) })
+    await backend.close()
+  })
+
+  it('reads an unreadable record document as absent (per-record contract)', async () => {
+    const root = await freshRoot()
+    // A directory where the record document should be: readFile fails with
+    // EISDIR on every platform (permission bits are unenforceable on win32).
+    await mkdir(join(root, 'recs', 't', 'locked.json'), { recursive: true })
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    expect(await unit.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await backend.close()
+  })
+
+  it('bootstraps an empty per-record tree from a legacy whole-unit file and preserves it', async () => {
+    const root = await freshRoot()
+    // A legacy single-layout file for the same unit (any older version);
+    // the extra table is not declared and must be skipped.
+    const legacy = JSON.stringify({
+      unit: { name: 'recs', version: 3 },
+      global: null,
+      tables: { t: { old1: { v: 1 }, old2: { v: 2 } }, undeclared: { k: { v: 0 } } },
+    })
+    await writeFile(join(root, 'recs.json'), legacy, 'utf8')
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    expect(await unit.loadAll()).toEqual({ tables: { t: { old1: { v: 1 }, old2: { v: 2 } } }, global: null })
+    await expect(readFile(join(root, 'recs.json'), 'utf8')).resolves.toBe(legacy)
+    await unit.close()
+    const unit2 = await backend.kv.open(descriptor)
+    expect(await unit2.loadAll()).toEqual({ tables: { t: { old1: { v: 1 }, old2: { v: 2 } } }, global: null })
+    await backend.close()
+  })
+
+  it('ignores the legacy whole-unit file when any new document path exists', async () => {
+    const root = await freshRoot()
+    const legacy = JSON.stringify({
+      unit: { name: 'recs', version: 1 },
+      global: null,
+      tables: { t: { old: { v: 1 } } },
+    })
+    await writeFile(join(root, 'recs.json'), legacy, 'utf8')
+    await mkdir(join(root, 'recs', 't'), { recursive: true })
+    await writeFile(recordPath(root, 'broken'), '{oops', 'utf8')
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    expect(await unit.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await expect(readFile(recordPath(root, 'old'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(root, 'recs.json'), 'utf8')).resolves.toBe(legacy)
+    await backend.close()
+  })
+
+  it('leaves a foreign, shapeless, or malformed legacy file alone', async () => {
+    const root = await freshRoot()
+    await writeFile(join(root, 'recs.json'), JSON.stringify({ unit: { name: 'other', version: 3 }, tables: {} }), 'utf8')
+    const backend = new JsonStorageBackend(root)
+    const unit = await backend.kv.open(descriptor)
+    expect(await unit.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await expect(readFile(join(root, 'recs.json'), 'utf8')).resolves.toContain('other')
+    await unit.close()
+    await backend.close()
+
+    const root2 = await freshRoot()
+    await writeFile(join(root2, 'recs.json'), JSON.stringify({ tables: { t: { k: { v: 1 } } } }), 'utf8')
+    const backend2 = new JsonStorageBackend(root2)
+    const unit2 = await backend2.kv.open(descriptor)
+    expect(await unit2.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await expect(readFile(join(root2, 'recs.json'), 'utf8')).resolves.toContain('tables')
+    await backend2.close()
+
+    const root3 = await freshRoot()
+    // A directory where the legacy file should be: the migration read fails loudly.
+    await mkdir(join(root3, 'recs.json'))
+    const backend3 = new JsonStorageBackend(root3)
+    const unit3 = await backend3.kv.open(descriptor)
+    await expect(unit3.loadAll()).rejects.toMatchObject({ code: 'EISDIR' })
+    await backend3.close()
+
+    const root4 = await freshRoot()
+    await writeFile(join(root4, 'recs.json'), 'not json at all', 'utf8')
+    const backend4 = new JsonStorageBackend(root4)
+    const unit4 = await backend4.kv.open(descriptor)
+    expect(await unit4.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await expect(readFile(join(root4, 'recs.json'), 'utf8')).resolves.toBe('not json at all')
+    await backend4.close()
+
+    const root5 = await freshRoot()
+    await writeFile(join(root5, 'recs.json'), JSON.stringify({ unit: { name: 'recs' }, tables: 'not an object' }), 'utf8')
+    const backend5 = new JsonStorageBackend(root5)
+    const unit5 = await backend5.kv.open(descriptor)
+    expect(await unit5.loadAll()).toEqual({ tables: { t: {} }, global: null })
+    await expect(readFile(join(root5, 'recs.json'), 'utf8')).resolves.toContain('not an object')
+    await backend5.close()
   })
 })

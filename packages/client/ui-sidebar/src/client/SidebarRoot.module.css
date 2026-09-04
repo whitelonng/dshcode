@@ -33,7 +33,7 @@
    class whenever the pointer is not inside (SidebarRoot.tsx owns the linger),
    and rebinding ui-theme's indirection pair to `transparent` takes the thumb
    out of every scroll region nested under it — the workspace browser's
-   session list today. `transparent` rather than `display: none` on the bar:
+   session list. `transparent` rather than `display: none` on the bar:
    the reservation (`scrollbar-gutter: stable` on the list) stays in force, so
    revealing the thumb never reflows a row. Rebinding contract and the two
    rendering paths it reaches: ui-theme's README. */
@@ -159,6 +159,23 @@
   white-space: nowrap;
 }
 
+.localBuildBrand {
+  flex: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  height: 24px;
+  white-space: nowrap;
+}
+
+.localBuildTitle {
+  font-size: 12px;
+  line-height: 13px;
+  letter-spacing: 0;
+}
+
 .iconButton {
   flex: none;
   display: inline-flex;
@@ -168,6 +185,7 @@
   height: 28px;
   border: none;
   border-radius: 50%;
+  corner-shape: round;
   padding: 0;
   background: transparent;
   cursor: pointer;
@@ -210,18 +228,20 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.buildRevision {
+.buildVersion {
+  flex: none;
   display: inline-flex;
   align-items: center;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 3px;
+  height: 10px;
+  padding: 0 3px;
+  border-radius: 2px;
   color: var(--dsw-alias-label-primary-inverted);
   background: var(--dsw-alias-label-primary);
   font-family: var(--ds-font-family-code);
-  font-size: 8px;
+  font-size: 6px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 10px;
+  white-space: nowrap;
 }
 
 /* New Session: 38px bar, 12px radius (figma 133:7634 geometry, squared-off
@@ -236,7 +256,7 @@
   padding: 8px 16px;
   margin: 0 2px 8px;
   box-sizing: border-box;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: 12px;
   background: var(--dsw-alias-button-elevated-fill);
   color: var(--dsw-alias-label-primary);

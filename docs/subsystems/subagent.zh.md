@@ -4,7 +4,7 @@
 
 subagent seam 让一个 agent（智能体）将工作委派给子 agent。与 [bash](shell.zh.md) 一样，它是**一项可选能力**，不属于 agent loop（智能体循环），因此其类型定义在此而非 [core.md](core.zh.md) 中。它不同于其他能力 seam，因为**同一上下文中可共存多个提供方实现**，并按名称注册（`ctx.subagents`），而 bash 只允许一个执行器。该注册表遵循 [LLM（大语言模型）适配器注册表](llm-streaming.zh.md)，而非单服务的 bash 执行器。
 
-Service Definition：[dsh-subagent](../../packages/subagent/subagent)（`ctx.subagents` + 下文词汇）。Service Provider 是六个兄弟包：`dsh-subagent-spawn-in-process`、`-fork`、`-acp`、`-codex`、`-claude-code`、`-dsh-sdk`；面向模型的 Consumer 包括 [dsh-tool-subagent](../../packages/subagent/tool-subagent)（按提供方委派）、[dsh-tool-subagent-control](../../packages/subagent/tool-subagent-control)（可选的全局 `send_message`、`interrupt_agent` 与 `list_agents` 控制工具）和 [dsh-tool-subagent-report](../../packages/subagent/tool-subagent-report)（可选的 child 作用域 `report` 返回通道）。同一个 `ctx.subagents` 服务通过内部激活管理器负责可继续子 agent 编排，并直接基于会话存储和可选的会话持久化提供只读的 child 与后代发现。产品提供方设计理由见 [Codex 与 Claude Code Agent Note](../../.agents/notes/implemented/feature/2026-08-04-claude-code-and-codex-subagent-backends.zh.md)；通用 seam 的设计理由见 [subagent Agent Note](../../.agents/notes/implemented/feature/2026-06-21-subagent-capability-seam.zh.md)、[可继续 subagent Agent Note](../../.agents/notes/implemented/feature/2026-07-28-continuable-subagent-conversations.zh.md)、[report 工具 Agent Note](../../.agents/notes/implemented/feature/2026-07-30-continuable-subagent-report-tool.zh.md)、[持久化目录 Agent Note](../../.agents/notes/implemented/feature/2026-07-22-durable-subagent-catalog-and-list-agents.zh.md)、[列表身份投影 Agent Note](../../.agents/notes/implemented/architecture/2026-08-06-subagent-list-identity-projection.zh.md)和[服务合并 Agent Note](../../.agents/notes/implemented/simplification/2026-07-26-merge-subagent-control-service.zh.md)。
+Service Definition：[dsh-subagent](../../packages/subagent/subagent)（`ctx.subagents` + 下文词汇）。Service Provider 是六个兄弟包：`dsh-subagent-spawn-in-process`、`dsh-subagent-fork-in-process`、`dsh-subagent-acp`、`dsh-subagent-codex`、`dsh-subagent-claude-code`、`dsh-subagent-dsh-sdk`；面向模型的 Consumer 包括 [dsh-tool-subagent](../../packages/subagent/tool-subagent)（按提供方委派）和 [dsh-tool-subagent-control](../../packages/subagent/tool-subagent-control)（可选的全局 `send_message`、`interrupt_agent` 与 `list_agents` 控制工具）。同一个 `ctx.subagents` 服务通过内部激活管理器负责可继续子 agent 编排，并直接基于会话存储和可选的会话持久化提供只读的 child 与后代发现。产品提供方设计理由见 [Codex 与 Claude Code Agent Note](../../.agents/notes/implemented/feature/2026-08-04-claude-code-and-codex-subagent-backends.zh.md)；通用 seam 的设计理由见 [subagent Agent Note](../../.agents/notes/implemented/feature/2026-06-21-subagent-capability-seam.zh.md)、[可继续 subagent Agent Note](../../.agents/notes/implemented/feature/2026-07-28-continuable-subagent-conversations.zh.md)、[相邻 Agent 消息 Agent Note](../../.agents/notes/implemented/architecture/2026-08-27-adjacent-agent-steer-messaging.zh.md)、[持久化目录 Agent Note](../../.agents/notes/implemented/feature/2026-07-22-durable-subagent-catalog-and-list-agents.zh.md)、[列表身份投影 Agent Note](../../.agents/notes/implemented/architecture/2026-08-06-subagent-list-identity-projection.zh.md)和[服务合并 Agent Note](../../.agents/notes/implemented/simplification/2026-07-26-merge-subagent-control-service.zh.md)。
 
 源码：[`packages/subagent/subagent/src/types.ts`](../../packages/subagent/subagent/src/types.ts)、[`packages/subagent/subagent/src/index.ts`](../../packages/subagent/subagent/src/index.ts)和 [`packages/subagent/subagent/src/continuation.ts`](../../packages/subagent/subagent/src/continuation.ts)
 
@@ -25,6 +25,7 @@ Service Definition：[dsh-subagent](../../packages/subagent/subagent)（`ctx.sub
  * to `maxDepth`; the other names match.
  */
 interface SubagentCapabilities {
+  readonly agentOptions: boolean
   readonly outputSchema: boolean
   readonly depthLimit: boolean
   readonly toolFilter: boolean
@@ -34,7 +35,7 @@ interface SubagentCapabilities {
 
 ## 单次启动请求
 
-工具层根据模型输入和自身配置构建此请求；服务在 `start` 之前针对指定提供方进行校验。必填的 `parent` 提供会话 cwd、谱系与委派深度。可选的 output schema、depth、工具过滤器和 persona 需要对应的能力 flag 匹配。不支持的 schema 在启动时即失败；进程内后端将 filter 和 persona 的作用域限定在子 agent 创建阶段，并通过强制 capture 工具实现所支持的 object-rooted schema。
+工具层根据模型输入和自身配置构建此请求；服务在 `start` 之前针对指定提供方进行校验。必填的 `parent` 提供会话 cwd、谱系与委派深度。可选的 Agent 提供方、模型、推理强度与 token 覆盖、output schema、depth、工具过滤器和 persona 需要对应的能力 flag 匹配。进程内后端会把 `agentOptions` 合并到父 Agent 选项之上，将 filter 和 persona 的作用域限定在子 agent 创建阶段，并通过强制 capture 工具实现所支持的 object-rooted schema。DSH SDK 后端会把四个 Agent 路由字段合并到实例默认值之上，并在子运行时初始化期间校验；ACP、Codex 与 Claude Code 会在启动传输前拒绝 `agentOptions`。
 
 ```ts type-equiv
 /**
@@ -63,6 +64,13 @@ interface SubagentStartRequest {
    * remaining turn work when it fires afterward.
    */
   readonly signal: AbortSignal
+  /**
+   * Optional host-Agent provider, model, reasoning-effort, and output-token
+   * overrides. Requires {@link SubagentCapabilities.agentOptions}; in-process
+   * providers merge them over the parent Agent's options when they create the
+   * child, while the DSH SDK provider merges them over its instance defaults
+   * before initializing the separate child runtime.
+   */
   readonly agentOptions?: AgentOptions
   /**
    * Object-rooted JSON Schema within `assertObjectJsonSchema`'s enforced subset. Start rejects
@@ -125,21 +133,21 @@ persisted Session
 
 `SubagentRuntime.startContinuable()` 会预留稳定的子 agent id，对版本化的 `subagent/descriptor` payload 建立快照，向指定提供方索取其分离的 `ContinuableCreateSpec`，通过私有的 activation-owner 作用域创建子 Agent，建立任何可继续父级的所有权，并提交初始提示词。当收件箱（inbox）准入产出消息 id 时，它以 `{ childId, messageId }` resolve——无需等待轮次开始，也无需等待消息进入会话日志。在该准入之前的任何失败都会以两个 id 都不返回的方式 reject，并 dispose（资源释放）任何已创建的 handle，回滚 Activation 与父级所有权。
 
-`SubagentRuntime.followup()` 是唯一的继续执行消息操作，其路由仅取决于 Activation 的驻留状态：
+`SubagentRuntime.sendMessage()` 是唯一由模型编写消息的操作。它接收确切在线 sender 与目标 id，只允许直接 parent 或直接可继续 child，自行推导 sender 来源信息，并根据目标 child 的 Activation 驻留状态路由：
 
-| Activation 状态 | `followup` |
+| 目标 Activation 状态 | `sendMessage` |
 |---|---|
-| `running` | 在同一 Activation 中入队 |
-| `waiting` | 唤醒同一 Activation |
-| 无 Activation | 冷恢复一个新的 Activation |
+| `running` | 在同一 Activation 中 steer 最近的 step |
+| `waiting` | 唤醒并 steer 同一 Activation |
+| 无 Activation | 冷恢复新的 Activation，然后 steer |
 
 `running` 表示 Agent 拥有活跃的准入或轮次，或正在唤醒收件箱工作；`waiting` 表示它已完全停稳，但仍拥有至少一个尚未完成 dispose 的子 Activation；`settled` 表示已完全停稳且其拥有的每个子级都已 dispose，此时管理器会 dispose [`AgentHandle`](core.zh.md#creation-and-ownership) 并移除该 Activation。管理器根据 Agent 的完全停稳状态与其拥有的子级集合推导这些内部条件，而非维护第二套执行状态机。
 
-Agent 收件箱是唯一的队列。每条继续执行消息都会成为一个 `Agent.followup()` FIFO 轮次，因此已接受的消息共享同一个可观测顺序，且后续消息无法改变已在进行中的轮次。投递成功会返回被接受的 `MessageId`；既有的 `agent/inbox/inserted`、`agent/inbox/claimed` 与 `agent/inbox/discarded` 事件仍是消息生命周期的观测点，继续执行层不定义任何 subagent 专属的投递路由。
+Agent 收件箱是唯一队列。每条 Agent 消息都使用 `Agent.steer()`：空闲目标会启动一个轮次，运行中目标则在最近的 step 边界领取消息。投递成功会返回被接受的 `MessageId`；既有的 `agent/inbox/inserted`、`agent/inbox/claimed` 与 `agent/inbox/discarded` 事件仍是消息生命周期的观测点，继续执行层不定义任何 subagent 专属的投递路由。
 
-后续操作的权限来自确切的在线 Agent 工具上下文。已认证的 Agent 必须是持久化子 agent 在 `SessionHeader.parentSession` 中记录的直接父级。`MessageSource` 与 `senderSessionId` 记录谁提供了已准入的消息，但不授予任何权限；可选的面向模型工具使用 `CoordinatorMessageSource`。
+权限来自确切在线 sender。parent 到 child 的投递要求目标的 `SessionHeader.parentSession` 指向 sender；child 到 parent 的投递要求 sender 的驻留 Activation 指向目标。sibling、相隔多于一条边的 ancestor、self-target、陈旧 Agent 对象与一次性 child 都会被拒绝。每条已接受消息都以 `Agent <sender-id> sent a message:` 作为前缀，并记录 `AgentMessageSource`；来源信息记录 sender，但不授予权限。
 
-对于这两种操作，调用方 signal 仅在收件箱接受之前掌管查找、物化与准入。此后管理器独立掌管该 Activation：之后的调用方取消既不会取消已接受的轮次，也不会 dispose 子 agent，并且该 seam 不对外暴露任何 steering（中途引导）操作。
+对于 `startContinuable()` 与 `sendMessage()`，调用方 signal 仅在收件箱接受之前掌管查找、物化与准入。此后管理器独立掌管该 Activation：之后的调用方取消既不会取消已接受的轮次，也不会 dispose 子 agent。浏览器中的人类提示仍由私有 Queue 适配器处理，因此继续产生独立 FIFO 轮次。
 
 `SubagentRuntime.interrupt(targetSessionId, authority)` 是唯一的公开停止操作：它同步完成鉴权，对在线目标发出 `Agent.cancel(cause, { keepInbox: true })`，然后不等待完全停稳即返回。Activation、其尚未领取的待处理 inbox 工作与已发布的后代均不受影响；已被领取进入中断轮次的工作不会重新入队。被中断的 driver 进入 idle 后，一次唤醒发送会恢复被暂停的 FIFO 队列。不存在的目标——未知、一次性或已结算——以及未绑定管理器的组合是被接受的 no-op。对在线目标，错误的 parent 地址或不在其在线祖先链中的调用方会以 `UNAUTHORIZED` 拒绝；陈旧的 ancestor 对象和指向自身的 ancestor 请求会在查找目标前拒绝。
 
@@ -159,21 +167,19 @@ type SubagentInterruptAuthority =
 最终结算会等待 `ctx.sessions.flush(session)`，但会忽略其参与布尔值，因为任意 listener 都无法证明某个持久化后端已存储该状态。rejection 会被记录，但不会使 Activation 失败；管理器仍会 dispose 该 handle 并释放所有权，此后持久化的子 agent 状态在后续恢复时可能缺失或陈旧。管理器卸载会调用内部的管理器全局 drain，关闭准入并 dispose 每片在线森林；`drainContinuableDescendants(parents)` 只关闭由 host 确切拥有的在线 Agent 之下的准入，并 dispose 其可继续后代，而无关森林保持在线。两者都会等待各自作用域内已获准的物化过程，自顶向下传播取消，按 child-first 顺序释放 handle，并且即使个别分支失败也会等待所有选中分支。持久化子会话不受该进程内拆卸的影响。
 
 ```ts type-equiv
-/** Attribution for a model coordinator's follow-up to one of its children. */
-interface CoordinatorMessageSource {
-  readonly kind: 'coordinator'
+/** Durable attribution for one model-authored message between adjacent Agents. */
+interface AgentMessageSource {
+  readonly kind: 'agent-message'
   /** A message another agent addressed to this one (`relay` context form). */
   readonly form: 'relay'
-  /** Session id of the agent whose tool call produced the follow-up. */
+  /** Session id of the Agent whose tool call produced the message. */
   readonly senderSessionId: SessionId
 }
 ```
 
 ```ts type-equiv
-/** Options for following up with one continuable child. */
-interface SubagentFollowupOptions {
-  /** Durable attribution retained on the delivered message; it grants no authority. */
-  readonly source: MessageSource
+/** Options for one model-authored message between adjacent Agents. */
+interface SubagentSendMessageOptions {
   /** Caller cancellation, owning the operation only until inbox acceptance. */
   readonly signal: AbortSignal
 }
@@ -189,33 +195,13 @@ interface ContinuableStart {
 }
 ```
 
-可选的可继续 child 设置贡献可以在 child 基础组合完成后、Activation 发布前安装限定在作用域内的能力。该注册表按顺序执行且具有事务性：设置失败或被撤销时会回滚未发布的 Activation；child 作用域 dispose 时会释放所有安装；新注册项在下一个 Activation 生效；移除注册项时则会立即撤销每个驻留中的安装。
-
-`SubagentRuntime.reportFrom()` 通过该扩展点实现报告，无需新增第二条队列或承载结果的 child 包装层。调用由确切的在线 child Agent 授权，调用方不能指定接收方。管理器从 child 的持久化 `parentSession` 中推导唯一接收方，要求该 parent Agent 必须在线，将选中内容封装为一条 `subagent-report` 用户消息，并返回该消息的稳定 `MessageId`。静默投递使用 `Agent.inject()`，不会唤醒 parent；next-step 投递使用 `Agent.steer()`，会唤醒空闲 parent，或加入运行中 parent 最近的 step 边界。两种模式都不会结束 child 轮次，最终回答也不会隐式报告。
-
-```ts type-equiv
-/** Durable attribution for a continuable child's explicit parent report. */
-interface SubagentReportMessageSource {
-  readonly kind: 'subagent-report'
-  /** A message another agent addressed to this one (`relay` context form). */
-  readonly form: 'relay'
-  /** Session id of the reporting child. */
-  readonly senderSessionId: SessionId
-}
-```
-
-```ts type-equiv
-/** Deployment scheduling policy for accepted child reports. */
-type SubagentReportDelivery = 'quiet' | 'next-step'
-```
-
-上报是 child 自己的选择，因此管理器还保有一份属于自己的记账：当驻留 Activation 结算时，它会向该 child 持久化的直接 parent 投递一条通知，说明该 epoch 如何结束，并携带其最终 assistant 内容。对每个调用方拿到过 id 的 child，这条投递都是无条件的；它发生在会让 parent 被判定为已结算的所有权释放之前，并通过与上报相同的唤醒准入记账到达驻留 parent。若 parent 自身所在的谱系已在拆卸中，这条通知会以不唤醒的方式送达，因为唤醒一个静息 Agent 是开启一个轮次，而不是排队等待工作。其来源信息使用一个独立的 kind，因此 transcript（文本记录）绝不会把运行时的记账呈现为 child 自己写下的内容。
+当驻留 Activation 结算时，管理器会向该 child 持久化的直接 parent 投递一条通知，说明该 epoch 如何结束，并携带其最终 assistant 内容。对每个调用方拿到过 id 的 child，这条投递都是无条件的；它发生在会让 parent 被判定为已结算的所有权释放之前，并通过与 Agent 消息相同的唤醒准入记账到达驻留 parent。若 parent 自身所在的谱系已在拆卸中，这条通知会以不唤醒的方式送达，因为唤醒一个静息 Agent 是开启一个轮次，而不是排队等待工作。其来源信息使用一个独立的 kind，因此 transcript（文本记录）绝不会把运行时的记账呈现为 child 自己写下的内容。
 
 ```ts type-equiv
 /**
  * Durable attribution for the runtime's own account of a continuable child
  * settling. Deliberately a different kind from
- * {@link SubagentReportMessageSource}: a report is content the child chose,
+ * {@link AgentMessageSource}: an Agent message is content the sender chose,
  * while this message is the manager stating what became of the child, and a
  * transcript that merged them would credit the child with words it never wrote.
  */
@@ -230,17 +216,7 @@ interface SubagentSettledMessageSource {
 }
 ```
 
-```ts type-equiv
-/** Options for one continuable child's report to its direct parent. */
-interface SubagentReportOptions {
-  /** Already-resolved parent scheduling policy. */
-  readonly delivery: SubagentReportDelivery
-  /** Caller cancellation, owning authorization and admission until acceptance. */
-  readonly signal: AbortSignal
-}
-```
-
-提供方只参与准备初始创建 spec，`spawn` 与 `fork` 在此有所不同。其返回的 spec 只携带分离的、提供方专属的创建输入——目前是可选的父级历史种子——不含 Agent、`AgentHandle`、提示词投递、结果、dispose 或恢复操作。冷恢复根本不经由提供方分发：管理器折叠通用描述符，通过同一个 activation-owner 作用域调用 `ctx.agents.resume()`，并提交等待中的轮次。
+提供方只参与准备初始创建 spec，`spawn` 与 `fork` 在此有所不同。其返回的 spec 只携带分离的、提供方专属的创建输入——即可选的父级历史种子——不含 Agent、`AgentHandle`、提示词投递、结果、dispose 或恢复操作。冷恢复根本不经由提供方分发：管理器折叠通用描述符，通过同一个 activation-owner 作用域调用 `ctx.agents.resume()`，并提交等待中的轮次。
 
 ```ts type-equiv
 /**
@@ -280,13 +256,13 @@ interface ContinuableCreateSpec {
 }
 ```
 
-描述符（[descriptor.ts](../../packages/subagent/subagent/src/descriptor.ts) 中的 `SubagentDescriptorData`）是每个由会话支撑的 subagent 所使用、按模式判别的持久化身份。两种模式都携带提供方名称。`one-shot` 描述符可以携带调用方拥有的可选显示 `label`；`continuable` 描述符要求以委派 `description` 作为持久化创建标签，并另外对已解析的子 agent `agentOptions.provider`／`model` 与可选的 `persona`／`toolFilter` 建立快照，用于冷恢复。它绝不会对可合并扩展的 `AgentOptions` 对象建立快照，因此无关的扩展值不会破坏继续执行，后续新增组合配置输入则是一次有意的版本更改。描述符省略 `subagentDepth`（冷恢复以持久化 header 中的 `delegationDepth` 作为单调下界）和 `outputSchema`（单次运行或 Activation 的结果约定，而非持久化身份）。
+描述符（[descriptor.ts](../../packages/subagent/subagent/src/descriptor.ts) 中的 `SubagentDescriptorData`）是每个由会话支撑的 subagent 所使用、按模式判别的持久化身份。两种模式都携带提供方名称。`one-shot` 描述符可以携带调用方拥有的可选显示 `label`；`continuable` 描述符要求以委派 `description` 作为持久化创建标签，并另外对已解析的子 agent `agentOptions.provider`／`model`／`reasoningEffort` 与可选的 `persona`／`toolFilter` 建立快照，用于冷恢复。它绝不会对可合并扩展的 `AgentOptions` 对象建立快照，因此无关的扩展值不会破坏继续执行，后续新增组合配置输入则是一次有意的版本更改。描述符省略 `subagentDepth`（冷恢复以持久化 header 中的 `delegationDepth` 作为单调下界）和 `outputSchema`（单次运行或 Activation 的结果约定，而非持久化身份）。
 
-本地一次性提供方会在子 agent 的初始轮次内、首次请求前追加描述符。继续执行管理器会在任何提供方提供的谱系之后、初始提示词获准之前追加描述符；`header.seedLength` 仍是 fork 谱系边界：恢复时的描述符权威读取子 agent 自身的后缀，而供列表使用的身份投影以 last-wins 折叠 `subagent/descriptor`，子 agent 自己的描述符会覆盖 fork seed 中祖先的描述符。该事件只进入日志：不含 `surfaceOp`，绝不进入模型历史，并由仅追加日志跨压缩保留。格式错误的当前版本描述符属于损坏；本运行时无法对不受支持的版本进行分类。
+本地一次性提供方会在子 agent 的初始轮次内、首次请求前追加描述符。继续执行管理器会在任何提供方提供的谱系之后、初始提示词获准之前追加描述符；`Session.inheritedEventCount` 仍是 fork 谱系边界：恢复时的描述符权威读取子 agent 自身的后缀，而供列表使用的身份投影以 last-wins 折叠 `subagent/descriptor`，子 agent 自己的描述符会覆盖 fork seed 中祖先的描述符。seeded cold list 会跳过 cache hint，直到权威 observation 提供该精确 cut。该事件只进入日志：不含 `surfaceOp`，绝不进入模型历史，并由仅追加日志跨压缩保留。格式错误的当前版本描述符属于损坏；本运行时无法对不受支持的版本进行分类。
 
 ## 持久化枚举：`listChildren()`、`listDescendants()` 与其条目
 
-`SubagentRuntime.listChildren(parentSessionId)` 从 `ctx.sessions.list()` 与可选 `ctx.sessionPersistence.list()` 的实时优先合并中枚举 parent 直接且由会话支撑的 subagent——不经查询服务，也不会加载或恢复任何 Agent。候选是持久 header 携带 `origin: 'subagent'` 的直接 child；该标记只负责枚举分类与粗粒度的通用路由拒绝，不能证明描述符有效、child 可恢复或操作已获授权——身份由投影折叠负责，恢复由 Activation 约定负责。每行的 `mode`／`label` 是已注册 `subagent` projection unit 的值，经三级阶梯供值：存活 child 由注册表水位缓存供值（零日志读取）；冷 child 先读可选的投影 checkpoint 缓存（`cachedSnapshot`——过 own-suffix seq 门的身份即定值，own descriptor 一经追加不可变）；否则在一次 `persistence.inspect()` 读取上经注册表折叠（有界并发，每次列表重新计算）。该缓存是纯可选加速层：服务缺席、行里是 `null` 哨兵或 key 缺席、seq 门不过、读取出错，都静默落到权威重折。折叠规则是 `subagent/descriptor` last-wins 且没有失败通道：子 agent 自己的描述符覆盖 fork seed 中祖先的描述符，格式错误或版本不认识的载荷折叠为可序列化的 `null` 哨兵，视同无值。结果是按 `createdAt`、再按 id 排序的 `SubagentListEntry[]`：取到身份即生成带有 `mode: 'one-shot' | 'continuable'` 和 `activity: 'running' | 'inactive'` 的 `child` 条目；可继续条目始终携带 `label`，一次性条目则只在启动调用方提供展示元数据时携带该字段。已定局而折叠无身份的候选生成 `corrupt` diagnostic——缺失、格式错误与版本不认识的描述符有意不再细分（`unsupported` 仍保留在类型中但从不产出）；运行中而无身份的候选被省略（描述符落盘前的创建窗口）；冷检查失败生成一条 `unavailable` diagnostic 并在下次列表自然重试，因此一个损坏的 sibling 不会隐藏健康 child。`hasChildren` 标记存在持久 subagent origin 的直接后代，读取自同一份合并材料。活动状态只表示逻辑记录是否在 `ctx.sessions` 中存活，而不表示结果或可恢复性。缺少持久化时，枚举退化为仅存活枚举而不是报错——此时冷 child 本就无法恢复。缺少 `ctx.sessionProjections` 注册表时，`listChildren()` 抛出携带错误码 `SUBAGENT_CONTROL_PROJECTIONS_UNAVAILABLE` 的 `SubagentError`，缺少会话存储时则抛出 `SUBAGENT_CONTROL_SESSION_STORE_UNAVAILABLE`，两者都在任何读取之前检查，因此零 child 的部署同样确定失败；列表工具在插件加载时要求 `ctx.subagents` 与 `ctx.agents`。UI 等服务消费方可以展示两种模式，并为无标签的一次性 child 选择回退展示；面向模型的 `list_agents` 适配器（[dsh-tool-subagent-control](../../packages/subagent/tool-subagent-control) 中可单独加载的 `/list-agents` 插件）则只保留可继续条目，并通过在线 Agent 注册表将状态细化为自己的 `running`／`idle`／`ready` 词汇，其中 `ready` 把仅存于存储的 child 命名为可恢复而非终态。枚举不会查询继续执行管理器的 Activation map、Agent 注册表或提供方可用性；`send_message` 仍是消息送达时的权威操作，列表中的运行中可继续 child 仍可能因所有权冲突而拒绝投递。读路径的设计理由见[列表身份投影 Agent Note](../../.agents/notes/implemented/architecture/2026-08-06-subagent-list-identity-projection.zh.md)。
+`SubagentRuntime.listChildren(parentSessionId)` 从 `ctx.sessions.list()` 与可选 `ctx.sessionPersistence.list()` 的实时优先合并中枚举 parent 直接且由会话支撑的 subagent——不经查询服务，也不会加载或恢复任何 Agent。候选是持久 header 携带 `origin: 'subagent'` 的直接 child；该标记只负责枚举分类与粗粒度的通用路由拒绝，不能证明描述符有效、child 可恢复或操作已获授权——身份由投影折叠负责，恢复由 Activation 约定负责。每行的 `mode`／`label` 是已注册 `subagent` projection unit 的值，经三级阶梯供值：存活 child 由 `stateOf()` 供值（零日志读取）；冷 child 先读可选的投影 checkpoint 缓存（`cachedSnapshot`——过 own-suffix seq 门的身份即定值，own descriptor 一经追加不可变）；否则在一次 `persistence.inspect()` 读取上经注册表折叠（有界并发，每次列表重新计算）。该缓存是纯可选加速层：服务缺席、行里是 `null` 哨兵或 key 缺席、seq 门不过、读取出错，都静默落到权威重折。折叠规则是 `subagent/descriptor` last-wins 且没有失败通道：子 agent 自己的描述符覆盖 fork seed 中祖先的描述符，格式错误或版本不认识的载荷折叠为可序列化的 `null` 哨兵，视同无值。结果是按 `createdAt`、再按 id 排序的 `SubagentListEntry[]`：取到身份即生成带有 `mode: 'one-shot' | 'continuable'` 和 `activity: 'running' | 'inactive'` 的 `child` 条目；可继续条目始终携带 `label`，一次性条目则只在启动调用方提供展示元数据时携带该字段。已定局而折叠无身份的候选生成 `corrupt` diagnostic——缺失、格式错误与版本不认识的描述符有意不再细分（`unsupported` 仍保留在类型中但从不产出）；运行中而无身份的候选被省略（描述符落盘前的创建窗口）；冷检查失败生成一条 `unavailable` diagnostic 并在下次列表自然重试，因此一个损坏的 sibling 不会隐藏健康 child。`hasChildren` 标记存在持久 subagent origin 的直接后代，读取自同一份合并材料。活动状态只表示逻辑记录是否在 `ctx.sessions` 中存活，而不表示结果或可恢复性。缺少持久化时，枚举退化为仅存活枚举而不是报错——此时冷 child 本就无法恢复。`listChildren()` 要求运行时的投影注册表；缺少会话存储时会抛出携带错误码 `SUBAGENT_CONTROL_SESSION_STORE_UNAVAILABLE` 的 `SubagentError`，并在任何读取之前检查，因此零 child 的部署同样确定失败；列表工具在插件加载时要求 `ctx.subagents` 与 `ctx.agents`。UI 等服务消费方可以展示两种模式，并为无标签的一次性 child 选择回退展示；面向模型的 `list_agents` 适配器（[dsh-tool-subagent-control](../../packages/subagent/tool-subagent-control) 中可单独加载的 `/list-agents` 插件）则只保留可继续条目，并通过在线 Agent 注册表将状态细化为自己的 `running`／`idle`／`ready` 词汇，其中 `ready` 把仅存于存储的 child 命名为可恢复而非终态。枚举不会查询继续执行管理器的 Activation map、Agent 注册表或提供方可用性；`send_message` 仍是消息送达时的权威操作，列表中的运行中可继续 child 仍可能因所有权冲突而拒绝投递。读路径的设计理由见[列表身份投影 Agent Note](../../.agents/notes/implemented/architecture/2026-08-06-subagent-list-identity-projection.zh.md)。
 
 `SubagentRuntime.listDescendants(rootSessionId)` 将同一份实时优先语料与基于投影的解释应用到根的完整后代树，并按稳定 pre-order 输出。普通会话和一次性 child 仍作为遍历节点，因此其下的可继续后代仍可发现；只有 `origin: 'subagent'` 的候选会生成条目。每个返回的 child 或 diagnostic 都从枚举所得的持久 header 附加树位置；冷检查在提供身份前还会重新校验完整生命周期：
 
@@ -416,7 +392,7 @@ interface SubagentRun {
 
 ## 提供方约定：`SubagentProvider`
 
-每个提供方都是一个具名的子 agent 传输层，多个提供方可以共存。服务在 `start()` 之前校验请求的启动时能力，并拒绝在没有 `prepareContinuable` 的提供方上发起可继续 start。`inheritsParentContext` 仅描述对话种子注入（`fork`：true；`spawn` 和 `acp`：false），使消费方能生成准确的面向模型措辞，而不暗示继承了工具、服务或权限。
+每个提供方都是一个具名的子 agent 传输层，多个提供方可以共存。服务在 `start()` 之前校验请求的启动时能力，并拒绝在没有 `prepareContinuable` 的提供方上发起可继续 start。`inheritsParentContext` 仅描述对话种子注入（`fork`：true；`spawn` 和 `acp`：false），使消费方能生成准确的面向模型措辞，而不暗示继承了工具、服务或权限。如果某个提供方的一次性路由拥有静态的提供方自有默认值，它会公开可选且不可变的 `agentRouteDefaults`，使 Consumer 能够在预检前以正确基线合并模型与工具覆盖。
 
 ```ts type-equiv
 /**
@@ -438,6 +414,13 @@ interface SubagentProvider {
    * It says nothing about tool registration, injected services, or authority inheritance.
    */
   readonly inheritsParentContext: boolean
+  /**
+   * Optional static provider-owned provider/model route for one-shot Agent
+   * options. Consumers merge tool/model overrides over these values before
+   * preflight; providers whose route derives from the parent omit it. The value
+   * is detached immutable data and requires `agentOptions` support.
+   */
+  readonly agentRouteDefaults?: Readonly<{ provider: string; model: string }>
   /**
    * Establish a ONE-SHOT child and return its handle after publication.
    * The service has already validated that every requested start-time
@@ -486,6 +469,22 @@ spawn 和 fork 后端通过 `parent.ctx` 创建一个普通的单次 agent，将
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxsubagentmodelselection--subagentmodelselectionconfig"></a>
+
+### `ctx.subagentModelSelection` — `SubagentModelSelectionConfig`
+
+Singleton settings owner read by delegation tools when an Agent is published.
+
+```ts cordis-catalog
+/**
+ * Read a detached selection preference for the next eligible Agent publication.
+ * @returns the enabled state and exact allowed routes.
+ */
+current(): SubagentModelSelectionSettings
+```
+
+Source: [`packages/subagent/tool-subagent/src/model-selection-settings.ts`](../../packages/subagent/tool-subagent/src/model-selection-settings.ts)
+
 <a id="ctxsubagents--subagentruntime"></a>
 
 ### `ctx.subagents` — `SubagentRuntime`
@@ -505,21 +504,20 @@ Named provider registry with one-shot runs, durable discovery, and continuable-c
 async startContinuable(spec: ContinuableStartSpec): Promise<ContinuableStart>
 
 /**
- * Deliver one later message to a continuable child as its next FIFO turn. A
- * resident child's Agent inbox accepts it directly (waking a `waiting`
- * Activation), while an absent one is cold-resumed from its persisted
- * Session. The Agent inbox is the only queue, so every accepted message has
- * one observable order.
- * @param parent - the exact live direct parent authorizing this delivery.
- * @param childId - durable child session id.
- * @param content - user-role content to deliver.
- * @param options - the message source fields and caller cancellation, which stops the
- *   operation only before inbox acceptance.
+ * Steer one model-authored message to the sender's direct parent or direct
+ * continuable child. A running target admits it at the nearest step boundary;
+ * an idle target starts a turn, and an absent direct child cold-resumes from
+ * persistence. The service derives durable sender attribution from the exact
+ * live sender. Caller cancellation stops only pre-acceptance work.
+ * @param sender - exact live Agent authorizing and originating the message.
+ * @param targetId - durable direct-parent or direct-child session id.
+ * @param content - model-authored content to deliver.
+ * @param options - caller cancellation before inbox acceptance.
  * @returns the accepted message's inbox id.
- * @throws when continuation services are unavailable, parent authority is
- *   rejected, or the message was not admitted.
+ * @throws when continuation services are unavailable, adjacency is rejected,
+ *   or the message was not admitted.
  */
-async followup( parent: Agent, childId: SessionId, content: ContentBlock[], options: SubagentFollowupOptions, ): Promise<MessageId>
+async sendMessage( sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions, ): Promise<MessageId>
 
 /**
  * Interrupt one live continuable child's current turn under a human parent
@@ -537,29 +535,6 @@ async followup( parent: Agent, childId: SessionId, content: ContentBlock[], opti
  *   live target.
  */
 interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void
-
-/**
- * Deliver selected content from one live continuable child to its durable
- * direct parent. The child is the authority credential; callers cannot name a
- * recipient. Reporting does not conclude the child's turn or Activation.
- * @param child - exact live reporting child.
- * @param content - selected model-facing content.
- * @param options - parent scheduling and pre-acceptance cancellation.
- * @returns the stable identity of the parent-accepted message.
- * @throws when continuation services are unavailable, sender authorization
- *   fails, or the direct parent is not live.
- */
-async reportFrom( child: Agent, content: ContentBlock[], options: SubagentReportOptions, ): Promise<MessageId>
-
-/**
- * Compose one deployment capability into every continuable child's
- * unpublished creation context on fresh creation and cold resume. Grants wait
- * for the next Activation; removing the contribution revokes every resident
- * installation immediately.
- * @param contribution - synchronous child-scope installer.
- * @returns the exact Cordis effect disposer.
- */
-registerContinuableSetup(contribution: ContinuableSetupContribution): () => void
 
 /**
  * Close continuable admission below exact live parent Agents, stop only their
@@ -587,27 +562,16 @@ async drainContinuableChildren(parent: Agent, childIds: readonly SessionId[]): P
 
 /**
  * Enumerate the parent's direct session-backed subagents without loading or
- * resuming an Agent and without any query service: the listing merges the live
- * session store with optional session persistence (live-preferred) and
- * serves each child's durable mode/label from the registered `subagent`
- * projection unit down a three-rung ladder — the registry's watermark
- * snapshot for a live child; for a cold one, a durable projection-cache
- * row when the optional cache serves an own-suffix identity (its `seq`
- * gate proves the value postdates the fork seed, where a child's own
- * descriptor is immutable once appended), else one persistence inspection
- * folded through the registry. The
- * projection fold is the single classification authority; per-child
- * diagnostics relay a fold that served no identity or a failed inspection,
- * never a list-time descriptor parse. Absent persistence, enumeration is
- * live-only (a cold child cannot be resumed then either, so its absence is
- * capability absence, not an error). This service consults no Agent
- * registrations, Activations, or providers.
+ * resuming an Agent. The Session query service supplies one live-preferred
+ * corpus and shared point observations; the projection cache supplies
+ * immutable descriptor hits without opening cold logs. The registered
+ * `subagent` projection remains the sole mode/label classifier.
  *
- * Every persistence read receives `signal`, and the listing rechecks
- * cancellation around each of those awaits. Read rejections that settle
+ * Every query receives `signal`, and the listing rechecks cancellation
+ * around each await. Read rejections that settle
  * after an abort become a stable `SubagentError` with code `CANCELLED`.
  * @param parentSessionId - parent session whose direct children are listed.
- * @param signal - caller-owned cancellation forwarded to persistence reads
+ * @param signal - caller-owned cancellation forwarded to Session queries
  *   and observed around every read await.
  * @returns children and per-child diagnostics ordered by `createdAt`, then id.
  * @throws {@link SubagentError} when the projection registry or the session
@@ -631,6 +595,55 @@ listChildren(parentSessionId: SessionId, signal?: AbortSignal): Promise<Subagent
  * @throws {@link SubagentError} under the same conditions as {@link listChildren}.
  */
 listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>
+
+/**
+ * Remote face of {@link listChildren} for one browser: the durable listing
+ * plus live Agent activity and the delivery-time parent availability hint.
+ * Parent availability is a hint; {@link prompt} performs the authoritative
+ * check. Named apart from the provider-name {@link list}, which owns the
+ * member.
+ * @param parentSessionId - parent session whose direct children are listed.
+ * @param signal - carrier cancellation forwarded to Session queries.
+ * @returns the catalog view for that parent.
+ * @throws {RemoteError} `gateway/bad-request` for an empty parent id,
+ *   `gateway/cancelled` for an aborted read, `subagent/projections-unavailable` when
+ *   the deployment has no projection registry, otherwise `gateway/internal`.
+ */
+@Remote('list') async remoteExportList(parentSessionId: SessionId, signal: AbortSignal): Promise<SubagentCatalog>
+
+/**
+ * Deliver one browser-authored message to a continuable child through the
+ * exact live direct parent, retaining the caller-minted request identity and
+ * validated browser zone on the accepted message. Success identifies the
+ * message the child's FIFO inbox accepted; later execution is independent of
+ * this call.
+ * Image parts are admitted and persisted through the attachment store
+ * before delivery, and the child's model must accept image input.
+ * @param request - durable address, minted identity, content, and optional browser zone.
+ * @param signal - carrier cancellation, owning the call until inbox acceptance.
+ * @returns the accepted message's inbox identity.
+ * @throws {RemoteError} `gateway/bad-request`, `subagent/attachment-invalid`,
+ *   `subagent/invalid-time-zone`, `subagent/parent-unavailable`,
+ *   `subagent/not-resumable`, `subagent/unauthorized`,
+ *   `subagent/delivery-unavailable`, `gateway/cancelled`, or `gateway/internal`.
+ */
+@Remote('prompt') async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>
+
+/**
+ * Remote face of {@link interrupt} under one durable parent address. No
+ * catalog, history, persistence, or parent Agent lookup runs: the core
+ * primitive alone authorizes the address against the live Activation, which
+ * is what keeps a live child interruptible while its parent Agent is offline.
+ * Absent, idle, and already-completed targets are accepted no-ops there.
+ * @param childSessionId - durable child session id to interrupt.
+ * @param parentSessionId - durable direct parent whose authority is claimed.
+ * @param mode - required continuable-address discriminator.
+ * @returns acknowledgement that the cancel signal was admitted, not that the target is quiescent.
+ * @throws {RemoteError} `gateway/bad-request` for an empty id,
+ *   `subagent/unauthorized` when the address does not own the live target,
+ *   otherwise `gateway/internal`.
+ */
+@Remote('interruptByParent') interruptByParent( childSessionId: SessionId, parentSessionId: SessionId, mode: 'continuable', ): SubagentInterruptReceipt
 
 /**
  * Register a provider under its name. Registration is effect-scoped and HMR

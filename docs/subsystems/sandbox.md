@@ -93,6 +93,8 @@ interface SandboxPolicy extends SandboxExecutionPolicy {
 }
 ```
 
+<a id="wrapped-argv-and-classification-dialects"></a>
+
 ## Wrapped argv and classification dialects
 
 `RunnerFailureRule` combines evidence that a runner failed before executing the command. A consumer requires a nonzero exit, the optional allowed-exit-code gate, and a case-insensitive fatal signature within one remaining stderr line. Case-insensitive exact full-line informational exclusions are removed first, so a benign runner notice cannot prove failure by itself. The matched line remains available as error detail; classification does not rewrite stderr.

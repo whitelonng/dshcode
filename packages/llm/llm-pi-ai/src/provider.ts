@@ -33,7 +33,7 @@ import { catalogProvider } from './catalog.ts'
  * catalog route would.
  *
  * The table is deliberately narrow: the protocols a hand-declared route
- * actually reaches for today, each completely describable with a key, an
+ * actually reads, each completely describable with a key, an
  * endpoint, and headers. Bedrock signs with SigV4 over AWS credentials and a
  * region, Vertex needs a project, a location, and application-default
  * credentials, Azure needs provider environment plus an api-version, and Codex

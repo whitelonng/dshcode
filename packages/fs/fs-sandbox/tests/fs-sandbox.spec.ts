@@ -17,6 +17,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { FsError, FsTargetKey } from '@deepseek-ai/dsh-fs'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import { SandboxedFileSystem } from '@deepseek-ai/dsh-fs-sandbox'
 
@@ -29,6 +30,7 @@ let fiber: Awaited<ReturnType<Context['plugin']>>
 
 async function boot(mode: SandboxMode): Promise<void> {
   ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SandboxPolicyService, { mode, workspaceRoot: workspace })
   fiber = await ctx.plugin(SandboxedFileSystem, { cwd: workspace })
   fs = ctx.fs as SandboxedFileSystem
@@ -171,6 +173,7 @@ describe('workspace-write with the filesystem root as the workspace (a root endi
     // A degenerate but valid config: the filesystem root containing the target.
     // It exercises the separator-suffixed-root branch on POSIX and Windows.
     const rootCtx = new Context()
+    await rootCtx.plugin(SessionProjectionRegistry)
     await rootCtx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: parse(base).root })
     const rootFiber = await rootCtx.plugin(SandboxedFileSystem, { cwd: workspace })
     const rootFs = rootCtx.fs as SandboxedFileSystem

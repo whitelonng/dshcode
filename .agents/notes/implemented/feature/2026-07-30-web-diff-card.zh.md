@@ -30,7 +30,7 @@ chat 行把 diff 常驻渲染在路径链接摘要之下，上限 `CHAT_DIFF_MAX
 
 ## Alternatives considered
 
-**并排（双栏）diff。** owner 目前拒绝：它更密但不适合狭窄的 chat 行，目标是与 TUI 单栏统一形式对齐。详情面板里的双栏模式是后续的 props 改动，不是重设计。
+**并排（双栏）diff。**不予采纳：它更密，但不适合狭窄的 chat 行，而所选设计与 TUI 的单栏统一形式一致。详情面板中的双栏模式可以与本卡片设计分开引入。
 
 **git 式行号槽。** `FileDiff` 约定只携带 `{ path, oldText, newText }` —— `structuredPatch` 的 hunk 起始行在 `diff.ts` 里被丢弃，所以没有行号抵达客户端。渲染行号槽需要后端约定改动（携带 `oldStart`/`newStart`）并同步升级 TUI 以保持一致；推迟，使本变更保持为对既有约定的纯 Web 消费。
 
@@ -40,7 +40,7 @@ chat 行把 diff 常驻渲染在路径链接摘要之下，上限 `CHAT_DIFF_MAX
 
 `DiffBlock` 只读 diff view 的字段，因此它是渲染意图所携带内容的纯函数 —— 与产出该视图的 presenter 一样回放安全。没有 diff 能力的 UI 仍得到 bridge 的通用回退；工具的 result 形状没有任何改变。无新增运行时依赖：不同于 terminal 卡片的 `anser`，diff 不需要解析器。
 
-`DiffBlock` 的多文件支路（一张卡、多个路径头）今天没有生产者：`write`/`edit` 每次调用各改一个文件，所以真实卡片显示一个文件带一个或多个 hunk。该支路为将来的多文件改动工具而构建并测试，不是为当前消费者。
+`DiffBlock` 的多文件支路（一张卡、多个路径头）没有已交付生产者：`write`/`edit` 每次调用各改一个文件，所以真实卡片显示一个文件带一个或多个 hunk。该支路为将来的多文件改动工具而构建并测试，不是为当前消费者。
 
 ## Testing
 
@@ -48,7 +48,7 @@ chat 行把 diff 常驻渲染在路径链接摘要之下，上限 `CHAT_DIFF_MAX
 
 `packages/client/ui-tool/tests/diff-card.client.spec.tsx` 钉住每个渲染点的接线：`diffCardModel` 的派生及其每个 null 支路、result hunk 替换 call 时 diff、窗口截断的 call 仍从 result 渲染、chat 行的 diff 体、`FileMutationRow` 的常驻卡片及其路径链接经 host 以 cwd 解析打开、其在 `write` 与 `edit` 下的注册、以及面板的 Output 区。
 
-fixture（`packages/client/connection/src/client/fixture.ts`）携带三个 diff turn，使 `?fixture` 服务与 per-package 接线测试套件在两个渲染点演练全部三个支路：单 hunk 编辑（turn 62，keyed `FileMutationRow`）、新建/写入（turn 63）、多 hunk 编辑（turn 67，一个文件内两处分散 hunk 之间的 `⋯` gap）。built-boot snapshot（`apps/web/tests/built-boot.snapshot.ts`）是启动装配 smoke，只断言图挂载并抵达 chat 内容（`data-sample="bash-global"`）；按其自身约定它不带 diff 行为断言，那由接线套件负责。
+fixture（`packages/client/connection/src/client/fixture.ts`）携带三个 diff turn，使 `?fixture` 服务与 per-package 接线测试套件在两个渲染点演练全部三个支路：单 hunk 编辑（turn 62，keyed `FileMutationRow`）、新建/写入（turn 63）、多 hunk 编辑（turn 67，一个文件内两处分散 hunk 之间的 `⋯` gap）。built-boot 预期输出测试（`apps/web/tests/built-boot.expected.e2e.ts`）是启动装配 smoke，只断言图挂载并抵达 chat 内容（`data-sample="bash-global"`）；按其自身约定它不带 diff 行为断言，那由接线套件负责。
 
 ## Related
 

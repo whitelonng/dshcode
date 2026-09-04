@@ -1,3 +1,8 @@
+---
+description: "Image understanding for text-only models: the model-facing describe_image tool asks an OpenAI-compatible vision-language endpoint to describe an image, and only the returned text crosses into the conversation."
+kind: "package-group"
+---
+
 # vision/ — vision capability family
 
 English | [中文](README.zh.md)

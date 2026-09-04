@@ -36,4 +36,4 @@ Chat 和 Trajectory Conversation Definition 从持久消息读取 `interrupted`�
 
 ## Testing
 
-`packages/core/agent-loop/tests/cancel.spec.ts` 覆盖内容、引用的 seq、事件顺序、下一请求的一致性、仅 reasoning 的输出、工具调用省略、恢复期间的取消和空前缀情形。`packages/llm/llm/tests/assembler.spec.ts` 覆盖 `interruptedBlocks()`。`packages/client/ui-conversation/tests/conversation-node-definitions.client.spec.ts` 和 `packages/client/ui-trajectory/tests/conversation-definitions.client.spec.ts` 覆盖两种客户端投影。keyless 的 `cancel` ACP 快照和 `goal-round-driver` goal 快照覆盖完整应用。
+`packages/core/agent-loop/tests/cancel.spec.ts` 覆盖内容、引用的 seq、事件顺序、下一请求的一致性、仅 reasoning 的输出、工具调用省略、恢复期间的取消和空前缀情形。`packages/llm/llm/tests/assembler.spec.ts` 覆盖 `interruptedBlocks()`。`packages/client/ui-chat/tests/conversation-node-definitions.client.spec.ts` 和 `packages/client/ui-trajectory/tests/conversation-definitions.client.spec.ts` 覆盖两种客户端投影。keyless 的 `cancel` ACP 快照和 `goal-round-driver` goal 快照覆盖完整应用。

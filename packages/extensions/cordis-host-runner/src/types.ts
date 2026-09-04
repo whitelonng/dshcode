@@ -4,7 +4,8 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { JsonValue, SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
 /** Stable identity of one dynamic plugin instance. */
 export type CordisDynamicPluginId = Branded<'CordisDynamicPluginId'>

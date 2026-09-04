@@ -1,30 +1,45 @@
+---
+description: "The model-facing goal tools for users and maintainers choosing, composing, or debugging get_goal, create_goal, and update_goal."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-tool-goal
 
 English | [中文](README.zh.md)
 
-The model-facing control tools for [`ctx.goals`](../goal/README.md): `get_goal`, `create_goal`, and `update_goal`. The [goal-tool Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.md) owns the authority split and Codex-shaped UX.
+## Summary
 
-## Tools
+`dsh-tool-goal` gives the model three tools over the persisted goal service: `get_goal` reads the current goal, `create_goal` starts a new one, and `update_goal` edits, pauses, resumes, completes, or blocks it. The model may infer a long-running objective from a direct human request and create a goal; updates must carry the exact id and revision read beforehand. Authority is enforced at execution: create, edit, pause, and resume require a direct human turn on a top-level agent, while complete and blocked also accept the current goal round during automatic continuation. A configured threshold (default 3) bounds how soon an autonomous round may self-report `blocked`. Mount it with `dsh-goal` whenever the model should manage goals itself.
 
-- `get_goal()` returns the current goal or `null`, including the compare-and-set id/revision, durable phase, admitted/capped goal rounds, any blocker reason, and current process-local activation.
-- `create_goal(objective, max_goal_rounds?)` creates one goal from a direct top-level human turn. The model may infer long-running goal intent without an exact command phrase; non-human turns and subagents are rejected at execution.
-- `update_goal(goal_id, revision, action, objective?, max_goal_rounds?, blocked_reason?)` supports `edit`, `pause`, `resume`, `complete`, and `blocked`. Replacements belong only to `edit`; `blocked_reason` is required only for `blocked` and is persisted with the stable code `model-reported`. Strict-schema empty-string and zero fillers count as omitted, while meaningful values remain limited to their action.
+## Table of Contents
 
-All calls are exclusive, so a model-ordered batch observes earlier mutations and their new revisions. UI clients receive pure generic cards: read for `get_goal`, other for mutations. Mutation cards select the first meaningful action value and otherwise show the goal id, so accepted fillers never produce blank input.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-All three canonical values match the compact JSON already rendered to Native callers: `{ goal: null }` or `{ goal: { id, revision, objective, phase, roundsStarted, maxGoalRounds, blockedReason? }, activation }`. Programmatic consumers therefore receive the same domain structure without parsing the rendered JSON.
+-----
 
-An autonomous goal round that successfully reports `complete` or `blocked` marks that tool execution with `concludeTurn()` so the physical turn stops after the step. Direct-human mutations never contribute this stop: the assistant may acknowledge the change and concurrent human steering remains available to the loop.
+<a id="use-this-package"></a>
+## Use this package
 
-## Authority
+Mount `dsh-tool-goal` beside the goal service when the model should create and update persisted goals itself. The tools are the model-facing half of the goal surface; the `/goal` command is the human-facing half, and the continuation driver uses the same tools to complete or block goals at the end of autonomous rounds.
 
-Execution requires the exact live `exec.agent`, its inherited `AgentRegistry` initiator, running status, and an open turn. Create, edit, pause, and resume additionally require an accepted `{ kind: 'user' }` message or steering event in a runtime-root agent's current turn. Durable fork lineage does not demote a resumed root; live subagent ownership does.
+### Tools
 
-`{ kind: 'user' }` is a host attestation. `Agent.followup()` and `steer()` assign it when their caller omits a source, so plugins, schedulers, and other non-human producers must pass their own source rather than inheriting human authority.
+All three tools return the same compact JSON — `{ goal: null }` when no goal is current, otherwise the goal's id, revision, objective, phase, rounds started, round cap, optional blocker reason, and whether continuation is armed — matching what Native callers already render.
 
-Complete and blocked also accept the exact current goal round: a goal-sourced `user/message` whose id, revision, and round equal the folded current goal. A goal-round blocked call is mechanically rejected until `blockedAfterConsecutiveRounds`; the model judges whether the same condition actually persisted and must describe it in `blocked_reason`. Direct human authority may stop a goal immediately.
+| Tool | What it does |
+|---|---|
+| `get_goal()` | Reads the current goal, or `null` when none is current |
+| `create_goal(objective, max_goal_rounds?)` | Creates one goal from a direct top-level human turn |
+| `update_goal(goal_id, revision, action, objective?, max_goal_rounds?, blocked_reason?)` | `edit`, `pause`, `resume`, `complete`, or `blocked` on the exact goal revision |
 
-## Config
+Call `get_goal` before `update_goal` and copy the exact `goal_id` and `revision`; all calls are exclusive, so a model-ordered batch observes earlier mutations and their new revisions. Replacements belong only to `edit`; `blocked_reason` is required only for `blocked` and is persisted with the stable code `model-reported`. Strict-schema empty-string and zero fillers count as omitted, while meaningful values remain limited to their action.
+
+### Configure it
 
 ```yaml
 - id: tool-goal
@@ -33,8 +48,61 @@ Complete and blocked also accept the exact current goal round: a goal-sourced `u
     blockedAfterConsecutiveRounds: 3
 ```
 
-The value must be a positive safe integer. It supplies both the hard lower bound on model self-blocking and the number named in model guidance.
+The value must be a positive safe integer. It supplies both the hard lower bound on model self-blocking and the number named in model guidance. The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-goal) is the exhaustive source for every accepted field.
 
+### Authority rules
+
+The tools execute only for the exact live calling agent inside its active driver with an open turn. `create`, `edit`, `pause`, and `resume` additionally require a direct human message in a runtime-root agent's current turn — a subagent or a non-human producer cannot create or edit goals. `complete` and `blocked` also accept the exact current goal round: a goal-sourced round may complete the goal immediately, but a blocked call is mechanically rejected until the configured number of consecutive rounds has passed — the model judges whether the same condition actually persisted and must describe it in `blocked_reason`. A direct human request may stop a goal immediately.
+
+An autonomous round that successfully reports `complete` or `blocked` also ends the physical turn after that step, and the model receives a closing instruction to write the final message to the user. Direct-human mutations never trigger that stop: the assistant may acknowledge the change and the loop keeps concurrent human steering available.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the tools enforce authority and render output; the observable contract is covered in [Use this package](#use-this-package).
+
+### Design
+
+- **Authority at execution.** Every call resolves the exact live agent, its inherited `AgentRegistry` initiator, running status, and an open turn; `create`, `edit`, `pause`, and `resume` additionally require an accepted `{ kind: 'user' }` message or steering event in a runtime-root agent's current turn. Durable fork lineage does not demote a resumed root; live subagent ownership does.
+- **Host attestation of human input.** `{ kind: 'user' }` is assigned by `Agent.followup()` and `steer()` when their caller omits a source, so plugins, schedulers, and other non-human producers must pass their own source rather than inheriting human authority.
+- **System-prompt guidance with the configured threshold.** The package registers one `tool:goal` system-prompt section whose fixed text interpolates `blockedAfterConsecutiveRounds`; the same value is the hard lower bound enforced at execution.
+- **Wrap-up context for terminal rounds.** A successful autonomous `complete` or `blocked` defers a closing `<goal_complete>` or `<goal_blocked>` instruction so the model addresses the user once before the turn ends; direct-human mutations never defer this context.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: tool registration, config, system-prompt section, result rendering |
+| [`src/authority.ts`](src/authority.ts) | Execution-time authority checks and goal-round acceptance |
+| [`src/wrapup.ts`](src/wrapup.ts) | Closing-message instruction for terminal autonomous updates |
+| — | No runtime invariant companion is published; this model-facing adapter owns no independent state or event protocol; accepted mutations are checked by the goal domain and authority behavior is package-tested. |
+
+### Tool output
+
+All three tools share one canonical output: the compact JSON `{ goal: null }` or `{ goal: { id, revision, objective, phase, roundsStarted, maxGoalRounds, blockedReason? }, activation }`. `activation` in a result is a live observation and never becomes replay authority. UI clients receive pure generic cards — read for `get_goal`, other for mutations.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+The tools are the model-facing half of the goal surface; read these pages for the state they mutate and the policy they defer to.
+
+- [Goal service](../goal/README.md) — the goal state and lifecycle the tools mutate.
+- [Goal group map](../README.md) — the goal packages and how they compose.
+- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-goal) — the exact schemas the model receives.
+- [Goal-tool Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.md) — the authority split and UX decisions.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### System prompt
@@ -73,8 +141,23 @@ Schemas are prefix-stable while their definitions and visibility are unchanged. 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the goal tools are a poor fit or need special care. They are current package constraints, not a task backlog.
+
 - **Semantic intent remains model judgment** — execution can prove that the current turn contains a direct human message, not whether the request is substantial enough to merit a goal.
 - **Same-condition blocking remains model judgment** — the runtime enforces distinct admitted-round count, not semantic equivalence of obstacles; an independent evaluator is deferred.
-- **No scheduling or direct human rendering** — these tools mutate state only; the same-session driver and [`dsh-command-goal`](../command-goal/README.md) are independent consumers of the same domain.
+- **No scheduling or direct human rendering** — these tools mutate state only; the same-session driver and `dsh-command-goal` are independent consumers of the same domain.
 - **Goal-round authority requires a driver** — the autonomous `complete`/`blocked` path is dormant unless a continuation driver admits goal-sourced user turns; mounting this tool package alone does not create them.
 - **Prompt registration is independent of filtering** — a scope may hide the tools while retaining their guidance unless the deployment scopes both registrations together.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers; it is explicitly non-authoritative. Open question: whether the goal-policy section should be independently scoped from the tool registrations, so a scope cannot hide the tools while keeping the guidance.
+
+</details>

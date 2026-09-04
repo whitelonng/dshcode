@@ -24,7 +24,7 @@ harness 在 Windows 上没有持久 shell。持久 `bash` 栈按构造就是 POS
 
 ### `@deepseek-ai/dsh-terminal-bash` 的 shell 方言
 
-一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`，存量部署逐字节不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 无法从环境安装提示符，因此 backend 在启动时通过会话写入 prompt 函数，并等待受控提示符真正可见——因为 pwsh 从横幅到提示符的间隙可能超过静默上限，所以会在后续 send 上循环等待；`session_exit` 或 `timeout` 结算拒绝 spawn。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 sanitizer、`PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑原样复用——标记仍只是就绪信号、载荷不被消费，与 bash 路径完全一致，且没有新增模型通知通道（与当前实现对齐；延后的 BEL 事件通道保持延后）。
+一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`；bash 的 argv 和环境默认值保持不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 无法从环境安装提示符，因此 backend 在启动时通过会话写入 prompt 函数，并且只接受 backend 的 `stdin_read` 结果；回显引导输入中的可打印提示符字面量不代表就绪。一条 `timeoutMs` 绝对超时计时器负责限制完整启动重试循环，因此 `inferred_idle` 后续 send 无法重新计时。一个不保留 scrollback 的 `@xterm/headless` 实例会消费原始 PTY 数据，并通过 `SubprocessTerminalHandle` 发出终端协议响应；backend 会在调用方输入前排空这些写入，并且只接受协议工作在整次检查期间保持静止时的前台状态，因此调用方输入不会被当作光标位置响应而消费。一个 parser 写入保持活跃，随后到达的原始 chunk 会合并为下一批，从而避免高输出量为每个 chunk 分别调度解析。现有 sanitizer 与有界缓冲区仍负责输出投影。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 `PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑保持共享——标记仍是载荷不被消费的就绪信号，延后的 BEL 事件通道也继续保持延后。
 
 ### `@deepseek-ai/dsh-tool-pwsh-persistent`
 
@@ -38,7 +38,7 @@ minimal 预设用 #2234 的 `disabled: !!js` 插值按平台门控持久 shell �
 
 ### 测试
 
-Windows 测试面沿用 master 的豁免结构：terminal-bash 与 subprocess-local 的测试在 win32 上继续排除（`windowsUnsupportedTests`），其源码在 win32 上继续覆盖豁免（`windowsUnsupportedCoveragePackages`），平台门控 fixture 与 node 翻译命令因此仍是 win32 开发车道的证据；koffi-backed inspector 在 Linux 侧加入 windows-only 覆盖豁免。`tool-pwsh-persistent` 不在豁免之列：其套件在 windows-native 车道上运行、源码受覆盖约束，镜像 `tool-bash-persistent` 的 stub 模式矩阵并加回显剥离模式；真实 pwsh 套件在真实 ConPTY 会话上证明持久 cwd/env、密钥清洗、多行与 here-string 命令、大输出裁剪与退出/重置。ACP keyless snapshot 通过真实 Loader 组合启动持久工具，并固定模型可见的 schema 与结果。
+Windows 测试面沿用 master 的豁免结构：terminal-bash 与 subprocess-local 的测试在 win32 上继续排除（`windowsUnsupportedTests`），其源码在 win32 上继续覆盖豁免（`windowsUnsupportedCoveragePackages`），平台门控 fixture 与 node 翻译命令因此仍是 win32 开发车道的证据；koffi-backed inspector 在 Linux 侧加入 windows-only 覆盖豁免。`tool-pwsh-persistent` 不在豁免之列：其套件在 windows-native 车道上运行、源码受覆盖约束，镜像 `tool-bash-persistent` 的 stub 模式矩阵并加回显剥离模式。session 套件无需真实 shell 即可固定拆分的光标位置查询、响应写入顺序与解析批处理；macOS 和 Windows 上的真实 pwsh 套件证明持久 cwd/env、密钥清洗、UTF-8 输出、多行与 here-string 命令、大输出裁剪及退出/重置。ACP keyless snapshot 通过真实 Loader 组合启动持久工具，并固定模型可见的 schema 与结果。
 
 ## 备选方案
 
@@ -46,6 +46,7 @@ Windows 测试面沿用 master 的豁免结构：terminal-bash 与 subprocess-lo
 - **tasklist 或 wmic 轮询进程树。** 拒绝：`inspectForeground` 每次就绪轮询（约 50ms）都跑，每 tick 生成一次探测进程不可行；wmic 已从现行 Windows 移除。koffi + Toolhelp32 是进程内、廉价的。
 - **为 SIGINT 加原生 helper 或 `GenerateConsoleCtrlEvent`。** 拒绝：向 ConPTY 输入写 `\x03` 即可中断运行中的命令（已实测），零新增代码。语义差异——在提示符处 `\x03` 取消当前行而不是给进程发信号——文档化而不是绕开。
 - **包装器 body 用 base64 编码。** 拒绝：解码需要 `[Convert]`/`[System.Text.Encoding]` 调用，其在 ConstrainedLanguage 下的可用性未证实；反引号转义的双引号字符串只用语言级构造，且已端到端实测。
+- **手写光标位置响应。** 拒绝：响应必须反映 shell 已经发出的光标移动、换行折叠和控制序列。固定坐标会放大控制台重绘并可能耗尽有界输出；`@xterm/headless` 会维护这份协议状态，但不取代逐行输出投影。
 - **容忍回显而不剥离包装器。** 拒绝：完整路径和提示符就绪路径下回显天然被排除，但超时和 START 丢失的回退会把包装器源码（含 marker nonce）泄漏进模型可见文本。
 - **复活 BEL 模型通知通道。** 拒绝：当前实现不消费任何 marker 载荷、不投递任何 BEL 事件；设计对齐当前实现，deferred 项保持 deferred。
 - **把 Windows PowerShell 5.1 当一等目标。** 拒绝：pwsh 7（含 Store 安装）是目标；`resolvePwshPath` 保留 5.1 作为最后的可执行回退，但不承诺持久 shell 在其上的完整行为。
@@ -62,4 +63,6 @@ Windows 测试面沿用 master 的豁免结构：terminal-bash 与 subprocess-lo
 
 **输入回显是接受的平台事实。** PSReadLine 回显提交的输入；marker 锚定提取与包装器原文剥离在完整结果中移除它，部分输出回退中残留有界。
 
-**携带的风险。** Windows ACL 沙箱只读模式下，ConstrainedLanguage 可能拒绝引导代码通过 `[Console]::` 固定编码并写入 prompt marker；此时命令通过可打印提示符和静默档结算，非 ASCII 输出可能沿用宿主代码页。模型重定义 `prompt` 函数同样会使就绪降级到静默档。模型命令中的裸 ESC 字符不受支持（PSReadLine 会吞掉）。koffi 成为进程基座的依赖，承担与沙箱包相同的安装/prebuild 评审。
+**终端协议响应先于调用方输入。** headless 模拟器不保留 scrollback，也不贡献模型可见文本；它跟踪终端控制状态，并通过已挂载的进程管理提供方发出响应。这会增加受维护的 `@xterm/headless` 运行时依赖，并避免光标查询消费后续工具命令。
+
+**携带的风险。** Windows ACL 沙箱只读模式下，ConstrainedLanguage 可能拒绝引导代码通过 `[Console]::` 固定编码并写入 prompt marker；若 marker 就绪持续不可用，启动会在 `timeoutMs` 到期时拒绝，而不会发布引导未完成的 shell。模型后来重定义 `prompt` 函数会使命令就绪降级到静默档。模型命令中的裸 ESC 字符不受支持（PSReadLine 会吞掉）。koffi 与 `@xterm/headless` 分别增加进程基座和终端后端的依赖评审。

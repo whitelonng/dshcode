@@ -12,7 +12,7 @@
 import type { API_REMOTE_FORWARDED_EVENTS } from './remote-events.ts'
 
 /** Type projection of the allowlist; the consumer and the Host read this one. */
-export type ApiRemoteForwardedEvent = typeof API_REMOTE_FORWARDED_EVENTS[number]
+export type ApiRemoteForwardedEvent = typeof API_REMOTE_FORWARDED_EVENTS[number]['event']
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteEventSelection extends Record<ApiRemoteForwardedEvent, true> {}

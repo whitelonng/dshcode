@@ -9,10 +9,16 @@
   ],
   "references": [
     {
+      "path": "../../../vendor/schemastery"
+    },
+    {
       "path": "../locale"
     },
     {
-      "path": "../runtime"
+      "path": "../store"
+    },
+    {
+      "path": "../ui-renderer"
     },
     {
       "path": "../ui-primitives"
@@ -28,9 +34,6 @@
     },
     {
       "path": "../../settings/settings"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     },
     {
       "path": "../ui-settings"

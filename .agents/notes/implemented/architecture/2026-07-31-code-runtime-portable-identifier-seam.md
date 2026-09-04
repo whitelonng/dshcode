@@ -6,7 +6,7 @@ English | [中文](2026-07-31-code-runtime-portable-identifier-seam.zh.md)
 
 ## Problem
 
-The code-runtime seam promises that a binding-namespace list valid on one backend is valid on every backend, so a Code Mode consumer can hand the same bindings to any registered runtime without knowing its language. The first backend, `dsh-code-runtime-worker-thread`, privately owned the identifier rules that enforce part of that promise: an `IDENTIFIER` regex that allowed the JS-only `$`, a `RESERVED_WORDS` set holding only ECMAScript keywords, and a `RESERVED_ERROR_PROPERTIES` set of three JS `Error` slots. Those rules described the worker's own language, not the seam's portability contract.
+The code-runtime seam promises that a binding-namespace list valid on one backend is valid on every backend, so a PTC mode consumer can hand the same bindings to any registered runtime without knowing its language. The first backend, `dsh-code-runtime-worker-thread`, privately owned the identifier rules that enforce part of that promise: an `IDENTIFIER` regex that allowed the JS-only `$`, a `RESERVED_WORDS` set holding only ECMAScript keywords, and a `RESERVED_ERROR_PROPERTIES` set of three JS `Error` slots. Those rules described the worker's own language, not the seam's portability contract.
 
 A second backend written against a different language (CPython) would either re-declare its own rules — letting `lambda` pass the worker and fail Python, or `$tools` pass the worker and fail every non-JS backend — or import the worker's, inverting the dependency so a Service Provider reached into a sibling Service Provider. Neither keeps the portability promise real: it would hold only for the backend a caller happened to test against.
 
@@ -25,7 +25,7 @@ The constants live in the Service Definition even though the worker is the only 
 
 ## Scope
 
-This decision delivers only the Service Definition extension and the worker's adoption of it. The `py-types` renderer and Code Mode language dispatch are owned by the [language-dispatch note](../feature/2026-07-31-code-mode-language-dispatch.md); a Python backend does not exist yet. The Service Definition README keeps its worker-only wording for that reason: linking to a `dsh-code-runtime-python` README that does not exist would break the dead-link gate.
+This decision delivers the Service Definition extension and the worker-thread backend's adoption of it. The `py-types` renderer and PTC mode language dispatch are owned by the [language-dispatch note](../feature/2026-07-31-ptc-language-dispatch.md). The private experimental CPython subprocess backend (`dsh-experimental-code-runtime-python`) adopts the same portable-identifier contract.
 
 `RESERVED_BINDING_GLOBALS` encodes the Python bootstrap's concrete design ahead of the backend itself: it seeds exactly `__builtins__`/`__name__` and wraps the program under `__dsh_main__`. A Python backend that seeds any additional module global (`__doc__`, `__loader__`, `__spec__`, `__file__`, `__package__`, …) MUST widen this set in the same change, exactly as adding a language widens `PORTABLE_RESERVED_WORDS` — a name the bootstrap seeds but the set omits is the portability split this contract exists to prevent.
 

@@ -1,57 +1,121 @@
+---
+description: "Replay-aware token and context-pressure measurement for users and maintainers sizing prompts or building compaction and occupancy displays."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-token-meter
 
 English | [中文](README.zh.md)
 
-Replay-aware token measurement through the singleton `ctx.tokenMeter` service. It advances one isolated fold per session from the durable log, so compaction and other pressure-sensitive plugins can share accounting without depending on `CompactionEngine`.
+## Summary
 
-## Configuration
+`@deepseek-ai/dsh-token-meter` is the replay-aware token measurement service: `ctx.tokenMeter` advances one isolated fold per session from the durable event log, so compaction and other pressure-sensitive plugins share one accounting without depending on the compaction engine. With it you can measure current request and context pressure, price a single message, and — when the session-projection seam is mounted — read the `tokenUsage`, `contextPressure`, and `contextBreakdown` projections. It uses a fixed heuristic for text and routes without image pricing, applies adapter-declared visual-token pricing when available, and reuses provider-reported usage only when the request envelope matches exactly. It adds no prompt, message, schema, or tool of its own, and it never makes decisions for the loop.
 
-The estimator has no settings. It intentionally uses one fixed heuristic: four characters per token plus structural overhead for roles, blocks, and request-envelope fields. Any key is rejected; model capacity belongs to the adapter that owns an exact provider/model route and is available through `ctx.llm.resolveModelInfo().context`.
+## Table of Contents
 
-## Measurement contract
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-`ctx.tokenMeter` directly exposes two operations:
+-----
 
-- `measure(session, requestHeader?)` returns request pressure and the current priced surface at one consumed-log revision.
-- `estimateMessage(message)` prices one message with the fixed heuristic.
+<a id="use-this-package"></a>
+## Use this package
 
-`measure()` synchronizes once and returns one detached, deeply immutable snapshot. `totalTokens` is request-and-response pressure, while `surfaceTokens` is the surface-only heuristic total and equals the sum of `nodes[].tokens`. A `requestHeader` override affects pressure fields only; the surface fields still describe the current session. Every call clones the positional nodes, so measurement is O(surface).
+Mount this plugin when a consumer needs token or context pressure for compaction decisions, occupancy displays, or telemetry. The estimator has no settings and adds no model-visible surface; model capacity belongs to the adapter that owns the exact provider/model route and is available through `ctx.llm.resolveModelInfo().context`.
 
-The fold tracks full request-header snapshots, step boundaries, surface appends and replacements, successful assistant messages, provider usage, and the chunk seqs cited by each assistant message. Provider usage is reused only when the latest successful call's canonical request envelope matches the measured envelope and its total is no lower than that call's full heuristic anchor; a later success replaces the earlier anchor. Otherwise the complete current envelope and surface are estimated. Surface changes remain signed relative to a matching anchor, including negative deltas after shrinking replacements.
+### When to choose it
 
-Usage accounting sums disjoint input, cache-read, cache-write, and output buckets; reasoning is not added again. Every successful call records an assistant anchor, including content-less calls. An explicit empty `sourceEventSeqs` list means a known empty provider stream, while an absent legacy list conservatively treats the durable assistant output as provider output.
+Choose it when several plugins should agree on one replay-based measurement — compaction planning, occupancy UIs, and pressure checks all read the same fold. The measurements replay the durable session log, so they are deterministic, cost no model calls, and reflect exactly what is logged. Text and undeclared image routes use a fixed heuristic; reach for a provider tokenizer when a deployment needs exact billing-grade counts.
 
-## Session projections
+### Measuring pressure
 
-When the composition provides `ctx.sessionProjections`, token-meter registers three units through an optional child fiber.
+`ctx.tokenMeter` exposes two operations. `measure(session, requestHeader?)` returns a detached, deeply immutable snapshot at one consumed-log revision: `totalTokens` is request-and-response pressure, and `surfaceTokens` is the surface-only route-priced total equal to the sum of `nodes[].tokens`. An optional `requestHeader` override selects the priced route and pressure fields; the node set still describes the current session. `estimateMessage(message)` prices one message with the fixed heuristic. Every call clones the positional surface nodes, so measurement is O(surface).
 
-`tokenUsage` carries the complete durable log's `uncachedInputTokens`, `outputTokens`, `cacheReadTokens`, and `cacheWriteTokens`. Usage chunks are counted even when a request later fails; a final assistant-message usage for the same `(turn, step)` replaces that sample instead of double-counting it. Reasoning remains an output subdivision. The single last-sample slot relies on a session-log ordering property: once a later step reports usage, a legal log never reports usage for an earlier step again.
+```text
+const { totalTokens, surfaceTokens, nodes } = ctx.tokenMeter.measure(session)
+const price = ctx.tokenMeter.estimateMessage(message)
+```
 
-`contextPressure` carries optional `pressureTokens` — the newest provider-reported prompt size, summing uncached input plus cache reads and writes — optional `projectedTokens`, and optional `contextWindow` from the newest `request/context` record. Both figures stay absent until a provider reports usage; capacity stays absent for a route whose adapter advertises none. Output is excluded, so `pressureTokens` holds still while a turn streams and steps forward when the next request reports its usage.
+Each measurement resolves the effective envelope's provider/model through the optional `llm` service. Image occurrences use the routed request's visual-token price plus model-visible text when the adapter declares pricing; other routes keep the fixed heuristic. Each node also carries route-independent `heuristicTokens` for replacement shadow prices. Provider usage is reused only when the latest successful call's canonical request envelope matches the measured envelope and its total is no lower than that call's full route-priced anchor; otherwise the complete current envelope and surface are estimated. Surface changes stay signed relative to a matching anchor repriced under the same route, including negative deltas after shrinking replacements.
 
-`projectedTokens` is what the NEXT request's prompt would cost: the sample plus the heuristic repricing of everything the surface gained or lost since it was taken, clamped at zero and folded through the same `surface-fold.ts` the measurement service replays. Only the delta is estimated, so the figure stays anchored to the provider while reacting the moment content lands — or a compaction shadows a span. That last case is why the field exists: compaction summarizes through a direct `ctx.llm.stream()` call and appends no usage of its own, so `pressureTokens` alone reports the pre-compaction prompt until an entire further turn completes. Occupancy displays read `projectedTokens`.
+### Session projections
 
-`contextBreakdown` carries heuristic `systemTokens`, `toolsTokens`, and `messageTokens` — the context's composition rather than its provider-billed size. The envelope figures reprice last-wins on every `request/header`; the message figure replays `surface-fold.ts` — the same positional fold `measure()` runs — so it equals `measure().surfaceTokens` at every event boundary and compaction shrinks it the way it shrinks the next request. All three figures use the measurement service's fixed heuristic and are estimates: they will not sum to `projectedTokens`, whose provider anchor carries exactly the error — CJK text and JSON schemas underprice badly at four characters per token — that the composition rows still contain. Present them as an approximate composition, never as a total.
+When the composition provides `ctx.sessionProjections`, token-meter registers three projection units. `tokenUsage` carries the complete durable log's `uncachedInputTokens`, `outputTokens`, `cacheReadTokens`, and `cacheWriteTokens`. A final assistant-message sample replaces streaming usage from the same attempt; `llm/retry-started` ends that replacement scope, so a retry in the same step contributes another billed attempt. `contextPressure` carries optional `pressureTokens` (the newest provider-reported prompt size), optional `projectedTokens` (what the next request's prompt would cost), and optional `contextWindow` from the newest `request/context` record. `contextBreakdown` carries heuristic `systemTokens`, `toolsTokens`, and `messageTokens` — the context's composition, not its provider-billed size. Unloading the plugin removes all three keys.
 
-All three units use the standard projection baseline, live frame, higher-seq-wins store, and JSON checkpoint paths. Unloading token-meter removes all three keys. A composition without the projection seam keeps the measurement service's existing behavior.
+`contextBreakdown` carries heuristic `systemTokens`, `toolsTokens`, and `messageTokens` — the context's composition rather than its provider-billed size. The envelope figures reprice last-wins on every `request/header`; the message figure replays the same O(1) shadow-price fold as `contextPressure`, so on fully metered logs it equals the sum of `measure().nodes[].heuristicTokens` at every event boundary and compaction shrinks it by its logged shadow price. The route-priced `measure().surfaceTokens` diverges when the routed model reprices images. A replacement without an adjacent shadow-price claim leaves this bounded projection unchanged because it cannot reconstruct the replaced range. All three figures use the measurement service's fixed heuristic and are estimates: they will not sum to `projectedTokens`, whose provider anchor carries exactly the error — CJK text and JSON schemas underprice badly at four characters per token — that the composition rows still contain. Present them as an approximate composition, never as a total.
 
-### Context occupancy is an approximation, by design
+`deriveTurnTokenUsage(events)` folds one complete Turn into exact per-attempt and total usage for browser consumers. Missing lifecycle evidence, unsafe counts, or contradictory exact totals return no result; optional cache, reasoning, and route aggregates appear only when every contributing attempt reports them.
 
-The occupancy fields are independent last-wins records and are **not** one atomic observation of a single request. Switching models pairs the fresh capacity with the previous route's sample until the next request reports usage, and `pressureTokens` describes the last request rather than the surface as it stands right now — `projectedTokens` carries that sample forward over the surface's movement, but its anchor is still the older request.
-
-This is deliberate. An occupancy percentage is a user-facing reference figure, not a billing record or a gating input — nothing in the harness makes decisions from it, and compaction reads `measure()` instead. A UI computes occupancy by dividing measured pressure by the separately resolved capacity for the selected model.
-
-The [Agent Note](../../../.agents/notes/implemented/architecture/2026-07-29-projected-token-usage-and-request-context.md) records the rejected atomic-pair comparison. Consumers that need an exact same-boundary figure should call `measure()` at their own request boundary rather than read this projection.
-
-## Composition
+### Composition
 
 ```yaml
 - name: '@deepseek-ai/dsh-token-meter'
 - name: '@deepseek-ai/dsh-compaction-basic'
 ```
 
-Both plugins have usable defaults. The meter remains independent of model routing and optional compaction. A deployment configures capacity on its LLM adapter and compaction policy on `dsh-compaction-basic`.
+Both plugins have usable defaults. The meter consumes only the optional `llm` service, and only to resolve route-declared request-image pricing; compaction remains optional. A deployment configures capacity and image pricing on its LLM adapter and compaction policy on `dsh-compaction-basic`.
 
+### Reading the numbers
+
+Occupancy is a reference figure, not a billing record: nothing in the harness makes decisions from it, and compaction reads `measure()` instead. A UI computes occupancy by dividing measured pressure by the separately resolved capacity for the selected model. The `contextBreakdown` figures are estimates that will not sum to `projectedTokens`, whose provider anchor carries exactly the heuristic error — CJK text and JSON schemas underprice badly at four characters per token.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design behind the service; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design philosophy
+
+The service is built on one fold and one anchor. Each session gets an isolated replay state — consumed-event cursor, canonical request header, priced surface, step boundary, and measurement anchor — advanced by folding the durable log. Provider usage anchors a measurement only when its canonical envelope matches and its total is no lower than the full route-priced cost of the same call; otherwise the complete envelope and surface are estimated. The route-independent `heuristicTokens` field keeps replacement shadow-price projections deterministic. The fold is total and allocation-fresh: a malformed event throws before any mutation, so the same log fails identically on every retry.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | The `TokenMeter` service: replay state, fold, `measure()` and `estimateMessage()` |
+| [`src/estimate.ts`](src/estimate.ts) | The fixed heuristic: four characters per token plus block and role overhead |
+| [`src/surface-fold.ts`](src/surface-fold.ts) | The positional surface fold shared with `measure()` |
+| [`src/surface-projection.ts`](src/surface-projection.ts) | Shadow-price protocol for the O(1) projection units |
+| [`src/usage-projection.ts`](src/usage-projection.ts) | `tokenUsage` and `contextPressure` projection definitions |
+| [`src/breakdown-projection.ts`](src/breakdown-projection.ts) | `contextBreakdown` projection definition |
+| [`src/client.ts`](src/client.ts) | Browser-safe client surface for projection consumers |
+| [`src/turn-usage.ts`](src/turn-usage.ts) | Pure fold for exact per-attempt and per-Turn usage |
+
+### Fold flow
+
+Each `measure()` call synchronizes the fold to the current durable tail, then reads one coherent snapshot. The fold tracks full request-header snapshots, step boundaries, surface appends and replacements, successful assistant messages, provider usage, and the chunk seqs each assistant message cites. Provider output for a usage anchor is reassembled from the exact cited chunk seqs; an explicit empty list means a known empty provider stream, while a missing legacy list conservatively treats the durable assistant output as provider output.
+
+### Projection semantics
+
+The projection units do not share the full surface fold because their persisted state must stay O(1). `surface-projection.ts` prices appends and consumes the shadow price logged immediately before a replacement; it keeps one running total and at most one pending claim, not per-node prices. Fully metered logs therefore match `measure()`'s plan/commit fold at each event boundary. A replacement without an adjacent matching claim leaves the bounded projection unchanged because it cannot reconstruct the replaced range. The single last-usage-sample slot relies on a session-log ordering property: once a later step reports usage, a legal log never reports usage for an earlier step again.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the measurement service to the compaction consumer and the shared types.
+
+- [Token meter subsystem](../../../docs/subsystems/token-meter.md) — the measurement semantics behind `ctx.tokenMeter`.
+- [dsh-llm service](../llm/README.md) — the model-call service whose capacity metadata `resolveModelInfo()` serves.
+- [Compaction capability](../../../docs/subsystems/compaction.md) — the pressure-sensitive consumer that reads `measure()`.
+- [Projected token usage](../../../.agents/notes/implemented/architecture/2026-07-29-projected-token-usage-and-request-context.md) — the design behind `projectedTokens` and the rejected atomic-pair comparison.
+- [LLM streaming subsystem](../../../docs/subsystems/llm-streaming.md) — the message and block types this service prices.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 Indirectly, through consumers such as `dsh-compaction-basic`; the service itself adds no prompt, message, schema, tool, or model call.
@@ -62,7 +126,27 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
-- **The fixed heuristic is approximate** — content without reusable provider usage is priced by character count plus structural overhead, not an exact provider tokenizer or request serializer.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define where the measurement stops and future work begins. They are current package constraints, not a general token-accounting comparison or a task backlog.
+
+- **The fixed heuristic is approximate** — text without reusable provider usage is priced by character count plus structural overhead, not an exact provider tokenizer or request serializer; only image occurrences on routes with declared pricing carry provider-exact visual tokens.
 - **Every measurement clones the current surface** — coherent immutable snapshots make reads O(surface), including below-threshold pressure checks.
 - **Provider usage is only reusable for an identical canonical envelope** — prompt, prefix, tools, provider, model, or call-config changes deliberately fall back to full heuristic estimation.
 - **Missing legacy source seqs are handled conservatively** — assistant messages without `sourceEventSeqs` cannot distinguish provider output from listener rewrites, so the fold avoids claiming a known empty or exact chunk stream.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is non-authoritative working context: notes for maintainers and open questions. Shipped behavior and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+- The fixed four-characters-per-token heuristic underprices CJK text and JSON schemas; the provider anchor carries exactly that error when usage is reused, and present the composition rows as an approximate composition, never as a total.
+- A per-provider exact tokenizer is not decided; keeping one deterministic heuristic is what makes every consumer's measurement agree and replay-stable.
+
+</details>
+
+**Runtime invariant:** No companion is published. Token estimates are per-call outputs and the private session cache is invalidated at its event mutation boundary. The package's three projections do expose observation streams, but their schemas fix the JSON payloads; the usage folds replace same-attempt samples, so totals need not be monotone when a final sample corrects an earlier chunk, and the composition fold prices through the same `estimate.ts` heuristic as the measurement service and subtracts producer-logged shadow prices derived from that service's own fixed-heuristic node prices, which makes its message figure equal the sum of `measure().nodes[].heuristicTokens` by construction rather than by a relation worth observing at runtime; the route-priced `surfaceTokens` deliberately diverges by the routed model's image repricing.

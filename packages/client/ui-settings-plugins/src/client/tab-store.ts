@@ -12,7 +12,7 @@
 
 import type { SettingsDescribeFace } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
-import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 
 /** What the section renders. */
 export interface ConfigurablePluginsTabState {

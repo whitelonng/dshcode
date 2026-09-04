@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -122,11 +122,11 @@ let callNumber = 0
 const TOOL_NAMES = ['terminal_open', 'terminal_send', 'terminal_read', 'terminal_signal', 'terminal_close', 'terminal_list'] as const
 const testToolSignal = new AbortController().signal
 function call(ctx: Context, name: string, args: unknown, agent?: Agent) {
-  return ctx.tools.execute({ signal: testToolSignal, callId: CallId(`pty-call-${++callNumber}`), name, arguments: args, ...agent ? { agent } : {} })
+  return ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId(`pty-call-${++callNumber}`), name, arguments: args, ...agent ? { agent } : {} })
 }
 
 function callWithSignal(ctx: Context, name: string, args: unknown, agent: Agent, signal: AbortSignal) {
-  return ctx.tools.execute({ callId: CallId(`pty-call-${++callNumber}`), name, arguments: args, agent, signal })
+  return ctx.tools.execute({ callId: ToolCallId(`pty-call-${++callNumber}`), name, arguments: args, agent, signal })
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -186,7 +186,7 @@ describe('tool-terminal foreground API', () => {
     expect(empty).toMatchObject({ isError: false, value: [] })
   })
 
-  it('projects every terminal DTO into the generated Code Mode output map', async () => {
+  it('projects every terminal DTO into the generated PTC mode output map', async () => {
     const { ctx } = await setup(false)
     const schemas = TOOL_NAMES.map((toolName): ToolSdkSchema => {
       const definition = ctx.tools.get(toolName)

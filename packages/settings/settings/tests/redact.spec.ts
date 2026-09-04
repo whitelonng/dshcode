@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { redactSecrets, settingsNamespace } from '../src/index.ts'
+import { redactSecrets } from '../src/index.ts'
 import { MemorySettings } from './memory.ts'
 
 const Profile = z.object({
@@ -104,7 +104,7 @@ describe('redactSecrets', () => {
 })
 
 describe('describe() layers and redaction', () => {
-  const NS = settingsNamespace('adapter')
+  const NS = 'adapter'
 
   async function boot(doc?: Record<string, unknown>) {
     const ctx = new Context()

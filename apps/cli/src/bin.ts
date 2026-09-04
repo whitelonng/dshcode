@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 /**
- * dsh — command-line entry. Dynamic imports per mode keep unrelated modes out
- * of each dispatch path; the adapter prints and exits for
- * `--help`/`--version`/a parse error, so only a valid mode reaches the switch.
+ * Command-line entry for dsh.
  * @module @deepseek-ai/dsh/bin
  */
 
@@ -16,7 +14,6 @@ import { parseDshArgs } from './args.ts'
 // Both the source tree (apps/cli/src) and the bundled bin (apps/cli/lib) sit
 // one directory under apps/cli, so the checked-in manifest resolves with the
 // same relative hop from either artifact.
-/** This app's version, read from its checked-in package.json. */
 function readVersion(): string {
   const manifest = JSON.parse(
     readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),

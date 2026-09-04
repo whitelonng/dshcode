@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { type Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime, { type SubagentStartRequest } from '@deepseek-ai/dsh-subagent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import * as scripted from './scripted-provider.ts'
 
@@ -21,6 +22,7 @@ function baseRequest(over: Partial<SubagentStartRequest> = {}): SubagentStartReq
 
 async function mount(config: Partial<scripted.Config> = {}): Promise<Context> {
   const ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await scripted.mountScriptedProvider(ctx, { name: 'mock', ...config })
   return ctx
@@ -89,6 +91,7 @@ describe('scripted subagent provider fixture', () => {
 
   it('unregisters with its owning fixture fiber', async () => {
     const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SubagentRuntime)
     const fiber = await scripted.mountScriptedProvider(ctx, { name: 'mock' })
     expect(ctx.subagents.list()).toEqual(['mock'])

@@ -18,13 +18,13 @@
       "path": "../../util/atomic-write"
     },
     {
+      "path": "../../preset/agent-presets"
+    },
+    {
       "path": "../../util/brand"
     },
     {
       "path": "../../typert/protocol"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

@@ -1,15 +1,50 @@
-# e2b/ — E2B remote runtime family
+---
+description: "The E2B remote-runtime group map: file and command work inside one remote Linux sandbox, for users and maintainers of the E2B family."
+kind: "package-group"
+---
+
+# packages/e2b
 
 English | [中文](README.zh.md)
 
-An experimental provider-composition POC that places one filesystem/process execution world in an E2B Linux sandbox. E2B supplies only sandbox lifecycle and the two fundamental OS adapters; provider-neutral consumers build higher capabilities above them.
+## Summary
 
-| Package | ctx key | Role |
+The e2b group moves the agent's file and command work into a remote Linux sandbox: file reads and writes, shell commands, and terminals all run in one remote world instead of on your machine. Three packages work together — one provides the shared sandbox, one runs file operations in it, and one runs commands and terminals in it. Existing shell, terminal, and language-server features keep working unchanged once the family is enabled, so no E2B-specific tooling is needed. The harness process, model calls, and session state never move — only the execution world is remote, and the sandbox is ephemeral. It is an experimental POC, and no shipped composition enables it by default.
+
+## Table of Contents
+
+- [Packages](#packages)
+- [Related documentation](#related-documentation)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="packages"></a>
+## Packages
+
+| Package | Role | ctx key |
 |---|---|---|
-| [`e2b`](e2b/README.md) (`@deepseek-ai/dsh-e2b`) | `ctx.e2b` | Create one sandbox, prepare its working/runtime directories, expose the shared SDK handle, and delete it on timeout or disposal |
-| [`fs-e2b`](fs-e2b/README.md) (`@deepseek-ai/dsh-fs-e2b`) | `ctx.fs` | Implement the filesystem seam over E2B Filesystem APIs |
-| [`subprocess-e2b`](subprocess-e2b/README.md) (`@deepseek-ai/dsh-subprocess-e2b`) | `ctx.subprocess` | Implement executable lookup, managed process groups and stdio, remote spill files, and terminal sessions over E2B Commands and PTY APIs |
+| [`e2b`](e2b/README.md) | One shared remote Linux sandbox that file and command work runs in | `ctx.e2b` |
+| [`fs-e2b`](fs-e2b/README.md) | File reads, writes, edits, and listings inside the remote sandbox | `ctx.fs` |
+| [`subprocess-e2b`](subprocess-e2b/README.md) | Shell commands and interactive terminals inside the remote sandbox | `ctx.subprocess` |
 
-The existing [`dsh-bash-local`](../shell/bash-local/README.md), [`dsh-terminal-bash`](../terminal/terminal-bash/README.md), and [`dsh-lsp-stdio`](../lsp/lsp-stdio/README.md) need no E2B-specific forks. They delegate every execution-world operation to `ctx.fs` and `ctx.subprocess`, so mounting the two E2B adapters places their mutable work in the same sandbox.
+-----
 
-This boundary does not move the harness process, Cordis objects, model calls, agent/session state, session persistence, skills, higher-level protocol state, or E2B SDK buffers. The [portable execution-world decision](../../.agents/notes/implemented/architecture/2026-07-28-portable-execution-world-consumers.md) owns both the generic composition and this POC boundary.
+<a id="related-documentation"></a>
+## Related documentation
+
+- [Portable execution-world decision](../../.agents/notes/implemented/architecture/2026-07-28-portable-execution-world-consumers.md) — why the execution world can move without moving the harness, and what stays local.
+- [Subprocess subsystem](../../docs/subsystems/subprocess.md) — the subprocess seam contract and the generated Cordis surface, including `ctx.e2b`.
+- [Filesystem subsystem](../../docs/subsystems/filesystem.md) — the filesystem seam contract and the generated Cordis surface.
+
+-----
+
+<a id="dev-note"></a>
+## Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

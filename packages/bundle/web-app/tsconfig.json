@@ -24,6 +24,9 @@
       "path": "../../boot/cmdline"
     },
     {
+      "path": "../../client/connection/tsconfig.host.json"
+    },
+    {
       "path": "../../host/frontend-static"
     },
     {
@@ -40,9 +43,6 @@
     },
     {
       "path": "../../subprocess/subprocess"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

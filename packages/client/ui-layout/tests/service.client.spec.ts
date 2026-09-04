@@ -1,9 +1,3 @@
-/**
- * LayoutController behavior: the cross-plugin panel-action face. Geometry
- * lives in the entry store (layout-store.spec.ts) — here we assert the
- * delegation contract: attachPanels wiring, the three actions forwarding, the
- * unwired fail-loud, and re-attach overwriting a stale action set.
- */
 import { describe, expect, it, vi } from 'vitest'
 import { LayoutController } from '@deepseek-ai/dsh-client-ui-layout/src/client/service.ts'
 import type { PanelActions } from '@deepseek-ai/dsh-client-ui-layout/src/client/service.ts'

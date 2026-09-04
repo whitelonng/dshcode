@@ -4,12 +4,14 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
+import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { EncodedImageAttachment } from '@deepseek-ai/dsh-attachment/types'
 import type { ImageBlock } from '@deepseek-ai/dsh-llm'
 import { NamedEntries, ScopedLayers } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
+import { SessionSeq } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionEventMap } from '@deepseek-ai/dsh-session'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import { CommandId } from './brand.ts'
@@ -224,13 +226,15 @@ function normalizeResult(command: string, value: unknown): CommandResult {
       throw new TypeError(`command "${command}" success text must be a string when supplied`)
     }
     if (result.sourceEventSeq !== undefined
-      && (!Number.isSafeInteger(result.sourceEventSeq) || (result.sourceEventSeq as number) < 0)) {
+      && (!Number.isSafeInteger(result.sourceEventSeq)
+        || (result.sourceEventSeq as number) < 0
+        || Object.is(result.sourceEventSeq, -0))) {
       throw new TypeError(`command "${command}" success sourceEventSeq must be a non-negative safe integer when supplied`)
     }
     return Object.freeze({
       kind: 'success',
       ...result.text === undefined ? {} : { text: result.text },
-      ...result.sourceEventSeq === undefined ? {} : { sourceEventSeq: result.sourceEventSeq as number },
+      ...result.sourceEventSeq === undefined ? {} : { sourceEventSeq: SessionSeq(result.sourceEventSeq as number) },
     })
   }
   if (result.kind === 'error') {
@@ -256,7 +260,7 @@ export class CommandRuntime extends TypertRemoteService {
   /** Monotonic per-instance counter behind {@link mintCommandId}. */
   private commandSeq = 0
   /** Instance token keeping minted ids unique across process restarts over one resumed log. */
-  private readonly instanceToken = crypto.randomUUID().slice(0, 8)
+  private readonly instanceToken = randomUUID().slice(0, 8)
 
   constructor(ctx: Context) {
     super(ctx, 'commands')

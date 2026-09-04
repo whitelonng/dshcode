@@ -8,7 +8,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, ReadResultView, ToolResult } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
-import type {} from '@deepseek-ai/dsh-system-prompt'
 import { buildWindow, formatReadOutput, langFromPath, readMetaFromMeta } from './read-render.ts'
 import { resolveRegularReadTarget } from './read-target.ts'
 
@@ -69,7 +68,7 @@ export function parseReadArgs(args: { file_path: string; offset?: number; limit?
 export function applyReadTool(ctx: Context, caps: ReadToolCaps): void {
   ctx.systemPrompt.section({
     name: 'tool:read',
-    order: 100,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_READ'),
     text: 'Use the read tool — not shell commands like cat — to inspect text files. Results include line numbers. Use offset and limit to continue reading large files.',
   })
 

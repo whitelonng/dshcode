@@ -27,9 +27,6 @@
       "path": "../../client/connection/tsconfig.host.json"
     },
     {
-      "path": "../../runtime-diagnostics/invariants"
-    },
-    {
       "path": "../../core/tools"
     }
   ]

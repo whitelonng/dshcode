@@ -13,17 +13,18 @@ import { afterEach, describe, expect, it, onTestFailed } from 'vitest'
 import { deriveReplayScript, parseSessionLog, type ReplayEntry } from '@deepseek-ai/dsh-llm-replay'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
-  assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
+  assertFixtureInventory, captureExpandedTurnProcessAria, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/queue-actions', import.meta.url))
-const FIXTURE = fileURLToPath(new URL('./snapshots/live-interactions/session.jsonl', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/queue-actions', import.meta.url))
+const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/live-interactions/session.jsonl', import.meta.url))
 const COLLAPSED_EXPECTED = join(SNAPSHOT_DIR, 'collapsed.expected.md')
 const EDITING_EXPECTED = join(SNAPSHOT_DIR, 'editing.expected.md')
 const LAYOUT_EXPECTED = join(SNAPSHOT_DIR, 'layout.expected.md')
 const PRESERVED_EXPECTED = join(SNAPSHOT_DIR, 'preserved.expected.md')
+const PRESERVED_EXPANDED_EXPECTED = join(SNAPSHOT_DIR, 'preserved-expanded.expected.md')
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
 const MODE = webSnapshotMode()
 
@@ -37,6 +38,17 @@ const WAKE = 'Wake the preserved queue'
 /** Durable turn-end classifications observed by the scenario. */
 function turnEndReasons(events: readonly SessionEvent[]): string[] {
   return events.flatMap(event => event.type === 'turn/end' ? [event.data.reason.kind] : [])
+}
+
+/**
+ * Wait until the browser renders the hung replay turn's streamed partial.
+ * The hang entry emits one `partial` text delta before stalling, and the
+ * ready-file only proves the Host hung — capturing before the delta renders
+ * freezes a golden without it, racing the capture against the follow stream.
+ * @param page - the scenario's browser page.
+ */
+async function waitForStreamedPartial(page: Page): Promise<void> {
+  await expect.poll(() => page.getByText('partial', { exact: true }).count(), { timeout: 15_000 }).toBe(1)
 }
 
 describe('web e2e: queue row actions', () => {
@@ -76,23 +88,26 @@ describe('web e2e: queue row actions', () => {
     await writeFile(overridePath, JSON.stringify(replay))
 
     const sessionEvents: SessionEvent[] = []
-    scaffold = await launchWebScaffold({ replayFixture: FIXTURE, replayOverride: overridePath })
+    scaffold = await launchWebScaffold({ replayFixture: FIXTURE, replayOverride: overridePath, compareReplaySession: false })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     const tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     onTestFailed(() => saveFailureShot(page, 'web-e2e-queue-actions'))
 
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     const firstSettled = scaffold.whenTurnSettled()
     await input.fill(ACTIVE_PROMPT)
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await waitForStreamedPartial(page)
 
     for (const text of [REMOVE, EDIT]) {
+      // A just-submitted composer is read-only for the prompt round-trip.
+      await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
       await input.fill(text)
       await input.press('Enter')
     }
@@ -131,7 +146,7 @@ describe('web e2e: queue row actions', () => {
     expect(queueRightInset).toBeCloseTo(composerMetrics.dockInset, 1)
     await page.setViewportSize({ width: 1680, height: 1000 })
 
-    const editRow = page.getByText(EDIT, { exact: true }).locator('..')
+    const editRow = page.locator('[data-queue-dock] li', { hasText: EDIT })
     await editRow.getByRole('button', { name: 'Edit queued message' }).click()
     const editor = page.getByRole('textbox', { name: 'Edit queued message' })
     await editor.fill(EDITED)
@@ -140,7 +155,7 @@ describe('web e2e: queue row actions', () => {
     await page.getByRole('button', { name: 'Save queued message' }).click()
     await page.getByText(EDITED, { exact: true }).waitFor()
 
-    const removeRow = page.getByText(REMOVE, { exact: true }).locator('..')
+    const removeRow = page.locator('[data-queue-dock] li', { hasText: REMOVE })
     await removeRow.getByRole('button', { name: 'Remove queued message' }).click()
     await expect.poll(() => page.getByText(REMOVE, { exact: true }).count()).toBe(0)
 
@@ -166,6 +181,12 @@ describe('web e2e: queue row actions', () => {
 
     const preservedSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(PRESERVED_EXPECTED, preservedSnapshot, MODE)
+    const expanded = await captureExpandedTurnProcessAria(
+      page,
+      '[class*="centerCol"]',
+      scaffold.workspaceCwd,
+    )
+    await compareOrRefreshGolden(PRESERVED_EXPANDED_EXPECTED, expanded, MODE)
 
     const settled = scaffold.whenTurnSettled()
     await input.fill(WAKE)
@@ -186,21 +207,23 @@ describe('web e2e: queue row actions', () => {
     await writeFile(overridePath, JSON.stringify([{ kind: 'hang', readyFile } satisfies ReplayEntry]))
 
     const sessionEvents: SessionEvent[] = []
-    scaffold = await launchWebScaffold({ replayFixture: FIXTURE, replayOverride: overridePath })
+    scaffold = await launchWebScaffold({ replayFixture: FIXTURE, replayOverride: overridePath, compareReplaySession: false })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     const tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     onTestFailed(() => saveFailureShot(page, 'web-e2e-context-layout'))
 
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     const settled = scaffold.whenTurnSettled()
+    await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
     await input.fill('/goal Keep the composer context panels aligned')
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    await waitForStreamedPartial(page)
     await page.locator('[data-goal-bar]').waitFor({ timeout: 10_000 })
 
     const sessions = scaffold.ctx.sessions.list()
@@ -214,6 +237,8 @@ describe('web e2e: queue row actions', () => {
     await page.locator('[data-testid="todo-panel"]').waitFor({ timeout: 10_000 })
 
     for (const text of ['Layout queue first', 'Layout queue second']) {
+      // A just-submitted composer is read-only for the prompt round-trip.
+      await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
       await input.fill(text)
       await input.press('Enter')
     }
@@ -267,7 +292,10 @@ describe('web e2e: queue row actions', () => {
   it.skipIf(MODE === 'record')('keeps its snapshot inventory closed', async () => {
     await assertFixtureInventory(
       SNAPSHOT_DIR,
-      ['collapsed.expected.md', 'editing.expected.md', 'layout.expected.md', 'preserved.expected.md', 'ui.expected.md'],
+      [
+        'collapsed.expected.md', 'editing.expected.md', 'layout.expected.md',
+        'preserved.expected.md', 'preserved-expanded.expected.md', 'ui.expected.md',
+      ],
     )
   })
 })

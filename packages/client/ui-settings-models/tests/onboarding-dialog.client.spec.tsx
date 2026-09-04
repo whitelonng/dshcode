@@ -3,12 +3,14 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Schema from '@deepseek-ai/schemastery'
-import type { RpcResponse, SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
+import type { SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import { bindSnapshotSelector, RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { DeepSeekOnboardingDialog } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingDialogProps } from '../src/client/DeepSeekOnboardingDialog.tsx'
 import { SettingsDescribeMirror } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { ModelsSettingsStore } from '../src/client/store.ts'
+import { createModelsOperations } from '../src/client/operations.ts'
 import { en } from '../src/client/locales.ts'
 import { settingsSchema } from './settings-schema.client.ts'
 
@@ -17,15 +19,12 @@ afterEach(() => {
   document.getElementById('root')?.remove()
 })
 
-let nextRpc = 0
-function ok<T>(value: T): RpcResponse<T> {
-  return { rpcId: `onboarding-${nextRpc++}` as never, result: { ok: true, value } }
+/** Credentials answers over the Remote carrier, which has no envelope. */
+function remoteOk<T>(value: T) {
+  return { ok: true as const, value }
 }
-function fail<T>(message: string): RpcResponse<T> {
-  return {
-    rpcId: `onboarding-${nextRpc++}` as never,
-    result: { ok: false, error: { code: 'internal', message, details: {} } },
-  }
+function remoteFail(message: string) {
+  return { ok: false as const, error: new RemoteError('gateway/internal', message, {}) }
 }
 
 const DeepSeekConfig = Schema.object({
@@ -41,11 +40,15 @@ const DeepSeekConfig = Schema.object({
   })),
 })
 
+type AttentionSnapshot = Parameters<Parameters<DeepSeekOnboardingDialogProps['useSessionPendingInteraction']>[0]>[0]
+const noAttention: AttentionSnapshot = new Map()
+const useSessionPendingInteraction: DeepSeekOnboardingDialogProps['useSessionPendingInteraction'] = selector => selector(noAttention)
+
 function deepSeekNamespace(apiKeyEnv: string | null): SettingsNamespaceView {
   const value = apiKeyEnv === null ? {} : { apiKeyEnv }
   return {
     ns: 'llm-deepseek',
-    schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as unknown,
+    schema: JSON.parse(JSON.stringify(DeepSeekConfig.toJSON())) as JsonValue,
     value,
     base: value,
     user: {},
@@ -65,9 +68,8 @@ function harness(options: {
   credential?: { source?: string; writable: boolean }
   describeFailure?: string
   settingsWritable?: boolean
-  providersReject?: boolean
+  providersFailure?: string
   setFailure?: string
-  setReject?: string
 } = {}) {
   if (document.getElementById('root') === null) {
     const appRoot = document.createElement('div')
@@ -77,32 +79,36 @@ function harness(options: {
   let fileConfigured = false
   const configured = options.configured ?? (() => fileConfigured)
   const apiKeyEnv = options.apiKeyEnv === undefined ? 'DEEPSEEK_API_KEY' : options.apiKeyEnv
-  const mutate = vi.fn(() => Promise.resolve(ok(deepSeekNamespace(apiKeyEnv))))
-  const set = vi.fn((_payload: { ref: string; value: string }) => {
-    if (options.setReject !== undefined) return Promise.reject(new Error(options.setReject))
-    if (options.setFailure !== undefined) return Promise.resolve(fail(options.setFailure))
+  const mutate = vi.fn(() => Promise.resolve(remoteOk(deepSeekNamespace(apiKeyEnv))))
+  const set = vi.fn((_ref: string, _value: string) => {
+    if (options.setFailure !== undefined) return Promise.resolve(remoteFail(options.setFailure))
     fileConfigured = true
-    return Promise.resolve(ok({}))
+    return Promise.resolve(remoteOk(undefined))
   })
   const face = {
     llm: {
-      providers: () => {
-        if (options.providersReject === true) return Promise.reject(new Error('provider transport unavailable'))
-        return Promise.resolve(ok({
-          providers: options.provider === false
+      listProviders: () => {
+        if (options.providersFailure !== undefined) return Promise.resolve(remoteFail(options.providersFailure))
+        return Promise.resolve(remoteOk(
+          options.provider === false || options.providerActive === false
             ? []
-            : [{
-              provider: 'deepseek-official',
-              displayName: 'DeepSeek',
-              settingsNs: options.providerSettingsNs ?? 'llm-deepseek',
-              settingsPath: [],
-              active: options.providerActive ?? true,
-            }],
-        }))
+            : [{ id: 'deepseek-official', name: 'DeepSeek' }],
+        ))
       },
+      listConfigurableProviders: () => Promise.resolve(remoteOk(
+        options.provider === false
+          ? []
+          : [{
+            provider: 'deepseek-official',
+            displayName: 'DeepSeek',
+            settingsNs: options.providerSettingsNs ?? 'llm-deepseek',
+            settingsPath: [],
+          }],
+      )),
+      discoverModels: () => Promise.resolve(remoteOk([])),
     },
     settings: {
-      describe: () => Promise.resolve(ok({
+      describe: () => Promise.resolve(remoteOk({
         writable: options.settingsWritable ?? true,
         hasDocument: false,
         namespaces: options.settingsNamespace === false ? [] : [deepSeekNamespace(apiKeyEnv)],
@@ -111,22 +117,23 @@ function harness(options: {
     },
     credentials: {
       describe: () => options.describeFailure === undefined
-        ? Promise.resolve(ok({
-          credentials: {
-            DEEPSEEK_API_KEY: {
-              configured: configured(),
-              ...configured() && options.credential?.source !== undefined
-                ? { source: options.credential.source }
-                : {},
-              writable: options.credential?.writable ?? true,
-            },
+        ? Promise.resolve(remoteOk({
+          DEEPSEEK_API_KEY: {
+            configured: configured(),
+            ...configured() && options.credential?.source !== undefined
+              ? { source: options.credential.source }
+              : {},
+            writable: options.credential?.writable ?? true,
           },
         }))
-        : Promise.resolve(fail(options.describeFailure)),
+        : Promise.resolve(remoteFail(options.describeFailure)),
       set,
     },
   }
-  const controller = new ModelsSettingsStore(face as never, settingsSchema, new SettingsDescribeMirror(face as never))
+  // The page plugin's context, scripted down to the namespaces it reaches.
+  const ctx = { remote: face } as never
+  const operations = createModelsOperations(ctx)
+  const controller = new ModelsSettingsStore(ctx, settingsSchema, new SettingsDescribeMirror(ctx))
   const openSection = vi.fn()
   const complete = vi.fn()
   const unusedHook = (() => { throw new Error('unused standard hook') }) as never
@@ -135,10 +142,11 @@ function harness(options: {
     complete,
     openSection,
     useSessions: unusedHook,
+    useSessionPendingInteraction,
     useWorkspaces: unusedHook,
     controller,
     useModels: bindSnapshotSelector(controller.store),
-    api: face as never,
+    operations,
     schema: settingsSchema,
     t: key => en[key],
   }
@@ -195,10 +203,9 @@ describe('DeepSeekOnboardingDialog', () => {
     expect(h.set).not.toHaveBeenCalled()
   })
 
-  it('keeps the modal open and reports rejected and failed credential writes', async () => {
+  it('keeps the modal open and reports a refused credential write', async () => {
     for (const [options, message] of [
       [{ setFailure: 'credential was rejected' }, 'credential was rejected'],
-      [{ setReject: 'connection lost' }, 'connection lost'],
     ] as const) {
       const h = harness(options)
       const view = render(<DeepSeekOnboardingDialog {...h.props} />)
@@ -230,7 +237,7 @@ describe('DeepSeekOnboardingDialog', () => {
       harness({ describeFailure: 'credentials service is absent' }),
       harness({ credential: { writable: false } }),
       harness({ settingsWritable: false }),
-      harness({ providersReject: true }),
+      harness({ providersFailure: 'the provider directory is unavailable' }),
       harness({ providerActive: false }),
       harness({ settingsNamespace: false }),
       harness({ apiKeyEnv: null }),

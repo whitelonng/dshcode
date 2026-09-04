@@ -5,6 +5,7 @@ import {
   type TrajectoryCellKind,
   type TrajectoryCellProps,
 } from './trajectory-record.ts'
+import type { TrajectoryKey, TrajectoryTranslate } from './locales.ts'
 import css from './TrajectoryCell.module.css'
 
 export { formatElapsedSeconds }
@@ -15,14 +16,14 @@ export type {
 } from './trajectory-record.ts'
 
 /** Display label per kind (matches the design tags). */
-const KIND_LABEL: Record<TrajectoryCellKind, string> = {
-  system: 'System',
-  user: 'User',
-  context: 'Context',
-  compacted: 'Compacted',
-  message: 'Message',
-  tool: 'Tool',
-  subtool: 'Sub',
+const KIND_LABEL_KEY: Record<TrajectoryCellKind, TrajectoryKey> = {
+  system: 'kind.system',
+  user: 'kind.user',
+  context: 'kind.context',
+  compacted: 'kind.compacted',
+  message: 'kind.message',
+  tool: 'kind.tool',
+  subtool: 'kind.sub',
 }
 
 const TAG_CLASS: Record<TrajectoryCellKind, string | undefined> = {
@@ -41,6 +42,7 @@ const TAG_CLASS: Record<TrajectoryCellKind, string | undefined> = {
  * @returns the cell element.
  */
 export function TrajectoryCell({
+  t,
   index,
   kind,
   text,
@@ -64,7 +66,7 @@ export function TrajectoryCell({
   selected = false,
   className,
   ...rest
-}: TrajectoryCellProps) {
+}: TrajectoryCellProps & { t: TrajectoryTranslate }) {
   const rootClass = [
     css.root,
     selected ? css.selected : undefined,
@@ -75,7 +77,7 @@ export function TrajectoryCell({
     <div className={rootClass} data-kind={kind} data-selected={selected || undefined} {...rest}>
       <span className={css.index}>#{index}</span>
       <span className={css.tagSlot}>
-        <span className={[css.tag, TAG_CLASS[kind]].filter((c): c is string => c !== undefined).join(' ')}>{KIND_LABEL[kind]}</span>
+        <span className={[css.tag, TAG_CLASS[kind]].filter((c): c is string => c !== undefined).join(' ')}>{t(KIND_LABEL_KEY[kind])}</span>
       </span>
       <span className={css.text}>{text}</span>
       <span className={css.trailing}>
@@ -86,7 +88,7 @@ export function TrajectoryCell({
             <span className={css.metric}>{think ?? ''}</span>
           </>
         ) : null}
-        <span className={css.time}>{formatElapsedSeconds(timeSeconds)}</span>
+        <span className={css.time}>{formatElapsedSeconds(timeSeconds, t)}</span>
       </span>
     </div>
   )

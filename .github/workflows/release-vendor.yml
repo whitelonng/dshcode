@@ -72,8 +72,10 @@ jobs:
       - name: Build
         run: pnpm run build:lib:host
 
+      # Concurrency here is rehearsal-only: the credentialed publish workflows
+      # invoke release:pack without the flag and keep the strictly serial path.
       - name: Pack release tarballs
-        run: pnpm run release:pack --family vendor --out dist/npm-vendor
+        run: pnpm run release:pack --family vendor --out dist/npm-vendor --concurrency 8
 
       - name: Verify packed install
         run: pnpm run release:verify-packed-install --family vendor --from dist/npm-vendor

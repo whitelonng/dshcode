@@ -14,6 +14,7 @@ import { isDeepStrictEqual } from 'node:util'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import type { ToolExecution, ToolExecutionResult, ToolExecutionToken } from '@deepseek-ai/dsh-tools'
 import { Config, resolveConfig, workspaceBaselineIdentity, type ResolvedConfig } from './config.ts'
 import { findProjectRoot, loadBaselineInstructionSet } from './files.ts'
@@ -29,6 +30,8 @@ import {
 import type { AgentInstructionChange } from './render.ts'
 
 export { Config, name }
+/** Services required by workspace instruction projection. */
+export const inject = ['sessionProjections']
 export {
   discoverBaselineInstructionFiles,
   loadBaselineInstructions,
@@ -50,7 +53,7 @@ function visibleBaselineSource(
     }
   }
   for (const seq of agent.session.surface.nodes.toReversed()) {
-    const event = agent.session.events[seq]
+    const event = agent.session.eventAt(seq)
     if (event?.type === 'user/message'
       && event.data.source.kind === 'agent-instructions'
       && event.data.source.baseline === true) return event.data.source
@@ -99,7 +102,6 @@ export function apply(ctx: Context, config: Config): void {
   const projectionTails = new WeakMap<Agent, Promise<void>>()
   // Execution ancestry and the enclosing durable step are the two commit
   // boundaries before an asynchronous projection may mutate the agent inbox.
-  const openSteps = new WeakMap<Session, boolean>()
   const stepTouches = new WeakMap<Session, ProjectionTouch[]>()
 
   const compose = async (
@@ -226,7 +228,7 @@ export function apply(ctx: Context, config: Config): void {
     const alreadySupplied = desired !== undefined && (
       claimed.some(message => sameContextPayload(message, desired))
       || agent.session.surface.nodes.some((seq) => {
-        const event = agent.session.events[seq]
+        const event = agent.session.eventAt(seq)
         return event?.type === 'user/message' && sameContextPayload(event.data, desired)
       })
     )
@@ -280,15 +282,13 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   const stepIsOpen = (session: Session): boolean => {
-    const known = openSteps.get(session)
-    if (known !== undefined) return known
-    let open = false
-    for (const event of session.events) {
-      if (event.type === 'step/start') open = true
-      else if (event.type === 'step/end' || event.type === 'turn/end') open = false
+    const boundary = ctx.sessionProjections.stateOf(session, 'turnBoundary')
+    if (boundary === undefined) {
+      throw new Error('agent-instructions requires the turnBoundary session projection')
     }
-    openSteps.set(session, open)
-    return open
+    return boundary.openTurnStartSeq !== null
+      && boundary.lastStepBoundary?.kind === 'start'
+      && boundary.lastStepBoundary.seq > boundary.openTurnStartSeq
   }
 
   const projectTouch = (touch: ProjectionTouch): void => {
@@ -303,16 +303,7 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   ctx.on('session/event', (session, event) => {
-    if (event.type === 'step/start') {
-      openSteps.set(session, true)
-      return
-    }
-    if (event.type === 'turn/end') {
-      openSteps.set(session, false)
-      return
-    }
     if (event.type !== 'step/end') return
-    openSteps.set(session, false)
     const pending = stepTouches.get(session)
     if (pending === undefined) return
     stepTouches.delete(session)
@@ -344,7 +335,7 @@ export function apply(ctx: Context, config: Config): void {
     // precedes it and the driver-appended runtime context follows it.
     const lastClaimedIndex = decision.messages.findLastIndex(message => messages.includes(message))
     const entered = decision.messages.toSpliced(lastClaimedIndex + 1, 0, desired)
-    return { kind: 'enter', messages: entered }
+    return { ...decision, messages: entered }
   })
 
   ctx.on('tools/result', (exec: ToolExecution, result: ToolExecutionResult) => {

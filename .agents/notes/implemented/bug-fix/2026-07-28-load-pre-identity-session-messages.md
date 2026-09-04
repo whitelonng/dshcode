@@ -6,9 +6,9 @@ English | [中文](2026-07-28-load-pre-identity-session-messages.zh.md)
 
 ## Problem
 
-The identified immutable message change replaced four durable event payloads with complete message values. Existing v0 JSONL and SQLite sessions still held the immediately preceding shapes: direct `content`/`source` on user and steering events, `content`/`provenance` on assistant events, and `callId`/`content`/`isError` on tool results. Their headers still matched `SESSION_FORMAT_VERSION`, but current-shape validation rejected them before resume could construct a live `Session`.
+The identified immutable message change replaced four durable event payloads with complete message values. Existing v0 JSONL Sessions still held the immediately preceding forms: direct `content`/`source` on user and steering events, `content`/`provenance` on assistant events, and `callId`/`content`/`isError` on tool results. Their headers still matched `SESSION_FORMAT_VERSION`, but current-form validation rejected them before resume could construct a live `Session`.
 
-Changing the message representation without a version bump made those logs indistinguishable at the header level from current v0 logs. The runtime needs a narrow import rule that restores data created by the supported first-party backends without weakening validation for unrelated obsolete or malformed events.
+Changing the message representation without a version bump made those logs indistinguishable at the header level from current v0 logs. The runtime needs a narrow import rule that restores data created by the supported first-party provider without weakening validation for unrelated obsolete or malformed events.
 
 ## Decision
 
@@ -22,15 +22,15 @@ The upgrade is read-only. Stored legacy records remain unchanged; a resumed sess
 
 **Reject the logs under the pre-release compatibility stance.** This is the default for unrelated v0 churn, but it strands real first-party sessions even though every old field maps unambiguously to the current message representation.
 
-**Rewrite the complete stored log in place.** This would canonicalize the artifact but violate the append-only storage contract, require separate atomic replacement mechanisms for JSONL and SQLite, and expand a read compatibility fix into a migration system.
+**Rewrite the complete stored log in place.** This would canonicalize the artifact but violate the append-only storage contract, require an atomic replacement mechanism, and expand a read compatibility fix into a migration system.
 
 **Mint random ids on each load.** The messages would satisfy the type shape but lose stable identity across inspect, resume, restart, and mixed legacy/current appends.
 
 ## Consequences
 
-Pre-identity JSONL and SQLite sessions resume with their original message content, sources, assistant provider/model fields, tool correlation, errors, metadata, and surface replacements. The returned events are otherwise indistinguishable from current imported message snapshots and remain deeply frozen.
+Pre-identity JSONL Sessions resume with their original message content, sources, assistant provider/model fields, tool correlation, errors, metadata, and surface replacements. The returned events are otherwise indistinguishable from current imported message snapshots and remain deeply frozen.
 
-This is one explicit same-version import exception, not a general v0 compatibility layer. Adding another exception requires another complete, unambiguous mapping at the persistence boundary; malformed current data continues to fail rather than being guessed into validity. The shared coordinator contract exercises the upgrade against the in-memory reference, JSONL, and SQLite backends, including deterministic reload and tool-result replacement identity.
+This is one explicit same-version import exception, not a general v0 compatibility layer. Adding another exception requires another complete, unambiguous mapping at the persistence boundary; malformed current data continues to fail rather than being guessed into validity. The shared coordinator contract exercises the upgrade against the in-memory reference and JSONL provider, including deterministic reload and tool-result replacement identity.
 
 ## Related
 

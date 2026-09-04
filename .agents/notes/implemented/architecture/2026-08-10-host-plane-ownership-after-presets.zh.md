@@ -32,7 +32,7 @@ Status: implemented
 
 **把 meter 留在 preset，改为给投影注册表分层。** 这是更精确的修法，代价也大得多：`snapshot`、`checkpoint` 与主动驱动都需要一次「会话 → 作用域」的解析，而冷读在没有 api-proxy 的 `presenterScopeFor` 时并不具备。相对于一个完全没有 per-preset 状态的 Service，这不成比例，因此改为把通则写在注册表上。
 
-**对未加入的 agent 否决发布。** 大声胜过静默，注册表也支持这么做——同步的 `agent/created` 监听器抛出会把创建整体回滚。否决的理由是：在名单之外组装 agent 是合法的——`recompose` 写明了它随后绑定的那个裸 agent，而 ACP 桥、SDK server 与 headless bundle 今天都会创建一个。否决会把能力缺口变成一次故障。
+**对未加入的 agent 否决发布。** 大声胜过静默，注册表也支持这么做——同步的 `agent/created` 监听器抛出会把创建整体回滚。否决的理由是：在名单之外组装 agent 是合法的——`recompose` 写明了它随后绑定的那个裸 agent，而 ACP 桥、SDK server 与 headless bundle 都会创建一个。否决会把能力缺口变成一次故障。
 
 **让配套也在 `agent/created` 处检查加入情况。** 否决：发布时分不清漏掉的加入与之后才会被绑定的 agent，因此该检查会拒绝一条已写明的路径。提示词组装分得清。
 

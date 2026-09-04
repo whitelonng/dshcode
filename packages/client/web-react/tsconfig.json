@@ -10,9 +10,6 @@
   "references": [
     {
       "path": "../ui-slots"
-    },
-    {
-      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

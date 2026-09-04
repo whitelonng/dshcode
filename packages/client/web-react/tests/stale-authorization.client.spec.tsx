@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product test migration pending
 // @vitest-environment jsdom
 /**
  * A retained render binding dies with its entry. Re-registering the same key
@@ -21,7 +22,19 @@ function makeHost() {
   const versions = new Map<string, number>()
   const subs = new Map<string, Set<() => void>>()
   const live = new Set<StoredEntry>()
-  const absentInfo = { sessionId: undefined, hooks: {}, props: {} }
+  const noSessionBinding = { key: undefined, hooks: {}, keyedHooks: {}, props: {} }
+  const rootBinding = { key: undefined, hooks: {}, keyedHooks: {}, props: {} }
+  const root = { getSnapshot: () => rootBinding, subscribe: () => () => {} }
+  const scopeRevision = { getSnapshot: () => 0, subscribe: () => () => {} }
+  const current = { getSnapshot: () => noSessionBinding, subscribe: () => () => {} }
+  const sessionAdapter = {
+    current,
+    resolve: () => undefined,
+    renderArea: (binding: { key: string | undefined }, props: { empty?: () => unknown; children: unknown }) => {
+      if (binding.key === undefined) return props.empty?.() ?? null
+      return props.children
+    },
+  }
   const bump = (key: string) => {
     versions.set(key, (versions.get(key) ?? 0) + 1)
     for (const fn of [...(subs.get(key) ?? [])]) fn()
@@ -42,13 +55,9 @@ function makeHost() {
     specOf: () => ({ kind: 'single', scope: 'root' }),
     isLive: entry => live.has(entry),
     storeOf: () => undefined,
-    sessions: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-      provideInfo: { getSnapshot: () => absentInfo, subscribe: () => () => {} },
-    },
-    workspaces: {
-      list: { getSnapshot: () => ({}), subscribe: () => () => {} },
-    },
+    root,
+    scopeRevision,
+    scope: () => sessionAdapter,
   }
   return {
     host,

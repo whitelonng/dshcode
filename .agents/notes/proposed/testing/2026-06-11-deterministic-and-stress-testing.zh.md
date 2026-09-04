@@ -4,6 +4,8 @@ Status: proposed
 
 [English](2026-06-11-deterministic-and-stress-testing.md) | 中文
 
+[CI 测试可靠性 Skill](../../implemented/testing/2026-08-28-ci-test-reliability-skill.zh.md) 提供当前的测试编写与诊断指引，但没有实现本提案中的 lint 规则、通用回放 fixture 或 nightly stress job。这些机制仍处于提案状态。
+
 ## 问题
 
 若干 agent loop（智能体循环）测试通过 `setTimeout(30)` 睡眠来同步——这是一笔不稳定性债务，浪费 agent 的重试周期，还可能掩盖时序 bug。另外，我们的核心架构承诺（任何会话日志回放后都能得到相同的派生历史）目前只在两个测试中断言，但在*所有*测试中断言的成本极低。此外，inbox 唤醒竞态只被手动验证过一次，没有任何机制持续复验。

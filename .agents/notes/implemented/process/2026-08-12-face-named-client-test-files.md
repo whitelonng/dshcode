@@ -56,6 +56,6 @@ The rule costs a suffix on every client test filename and buys a mechanical part
 
 The Host program now sees 11 files under `packages/client` (the four Host-face specs and the carrier's Host-face declarations, resolved through its project reference) instead of the 60 that leaked in while the exclusion was pattern-based but the filenames were not.
 
-vitest discovers every renamed file through `**/*.spec.{ts,tsx}`, so no test configuration changed; the full client suite runs 235 files and 3181 tests. knip's per-workspace `tests/**/*.spec.{ts,tsx}` entry patterns match the new names for the same reason.
+vitest discovers every renamed file through `**/*.spec.{ts,tsx}`, so no test configuration changed; the full client suite runs 235 files and 3181 tests.
 
 An unsuffixed new test is the failure mode this leaves open: it type-checks in the Host program against Client source instead of failing loudly.

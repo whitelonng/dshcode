@@ -22,7 +22,7 @@ Scripting the keyless proof required one snapshot-harness addition: `dsh-llm-rep
 
 ## Alternatives considered
 
-- **Surface the completion text on the `update_goal` UI card** — rejected: `complete` carries no free text today, and adding a `summary` argument would route a user-facing report through tool arguments while still cutting off the model's natural post-result message.
+- **Surface the completion text on the `update_goal` UI card** — rejected: `complete` carries no free text, and adding a `summary` argument would route a user-facing report through tool arguments while still cutting off the model's natural post-result message.
 - **Keep `concludeTurn()` and add a "one more text-only step" loop primitive** — rejected: new `agent-loop` machinery for behavior the ordinary stop already provides once nothing concludes the turn.
 - **Instruct inside the tool result content** — rejected: the goal tools' canonical output is compact JSON consumed programmatically; a prose instruction block inside it would mix the model-facing contract with the tool's replayable value.
 

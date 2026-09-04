@@ -28,7 +28,7 @@ Status: implemented
 
 ## 后果
 
-- bash 与 pwsh 工具在前台、后台与沙箱化 shell 工作上行为可互换（沙箱面随 Windows ACL 沙箱决策到来），pwsh 的提示词/描述句每句都有渲染器背书——reviewer 的「拿代码 grep 对证」检查通过。
+- bash 与 pwsh 工具在前台、后台与沙箱化 shell 工作上行为可互换（沙箱表层由 Windows ACL 沙箱决策负责），渲染器覆盖固定了每一句 pwsh 提示词与描述。
 - 对齐也反向发生过一次：pwsh 工具的结构化前台中止（`HarnessError('tool call aborted', TOOL_ABORTED)`，name 为 `AbortError`）被回移到 bash 工具，取代其无码的 `Error('command aborted')`——这是模型可见/入日志的变更，由两侧的精确形状测试与 cancel-tool-calls fixture（测试前置数据）钉住。
 - `@deepseek-ai/dsh-shell-env` 成为新的交付包；`dsh-tool-bash` 的 `dshHome` 配置迁往那里，因此挂载 shell 工具的组合也必须挂载 `shell-env`（主干组合包已如此）。
 - Windows 专属语义（CRLF 归一化、强制终止 exit-1/signal-null、仅 POSIX 的自信号）一如既往由测试钉住。

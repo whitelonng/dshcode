@@ -17,10 +17,28 @@ function importOrder(css: string): string[] {
 }
 
 const imports = importOrder(baseCss)
+const normalizedCss = baseCss
+  .replaceAll(/\/\*[\s\S]*?\*\//g, '')
+  .replaceAll(/\s+/g, ' ')
+const literalContentSelectors = [
+  'code',
+  'pre',
+  '[data-diff]',
+  '[data-read]',
+  '[data-search]',
+  '[data-terminal]',
+]
 
 describe('web shell base.css', () => {
   it('leaves theme styles to the dynamic ui-theme client entry', () => {
     expect(imports).toEqual([])
     expect(baseCss).not.toContain(THEME_PACKAGE)
+  })
+
+  it('auto-spaces prose while preserving literal content', () => {
+    expect(baseCss).toMatch(/body\s*\{[^}]*text-autospace:\s*normal;/)
+    expect(normalizedCss).toContain(
+      `${literalContentSelectors.join(', ')} { text-autospace: no-autospace; }`,
+    )
   })
 })

@@ -138,6 +138,30 @@ const homeAndGuide = pairedPages([
     section: { root: 'SDK', en: 'SDK' },
     order: 1,
   },
+  {
+    source: 'docs/user/guide/github-review.md',
+    route: 'guide/github-review.md',
+    label: { root: 'GitHub 评审会话', en: 'GitHub review sessions' },
+    sidebar: { root: 'zh-guide', en: 'en-guide' },
+    section: { root: '自动化', en: 'Automation' },
+    order: 1,
+  },
+  {
+    source: 'docs/user/guide/schedule.md',
+    route: 'guide/schedule.md',
+    label: { root: '会话内提醒', en: 'Session reminders' },
+    sidebar: { root: 'zh-guide', en: 'en-guide' },
+    section: { root: '自动化', en: 'Automation' },
+    order: 2,
+  },
+  {
+    source: 'docs/user/guide/mcp-memory.md',
+    route: 'guide/mcp-memory.md',
+    label: { root: '记忆 MCP', en: 'Memory MCP' },
+    sidebar: { root: 'zh-guide', en: 'en-guide' },
+    section: { root: '集成', en: 'Integrations' },
+    order: 1,
+  },
 ])
 
 const develop = pairedPages([
@@ -215,6 +239,14 @@ const develop = pairedPages([
     sidebar: { root: 'zh-develop', en: 'en-develop' },
     section: { root: '实战', en: 'Practice' },
     order: 2,
+  },
+  {
+    source: 'docs/user/develop/practice/dynamic-cordis.md',
+    route: 'develop/practice/dynamic-cordis.md',
+    label: { root: '运行时 Cordis 工具', en: 'Runtime Cordis tools' },
+    sidebar: { root: 'zh-develop', en: 'en-develop' },
+    section: { root: '实战', en: 'Practice' },
+    order: 3,
   },
 ])
 
@@ -304,8 +336,11 @@ const subsystemGroups = [
   ]],
   ['平台与接入', 'Platform and access', [
     ['web-server.md', 'HTTP 服务器', 'HTTP server'],
-    ['typert.md', 'Typert', 'Typert'],
+    ['web-client.md', 'Web Client 架构', 'Web Client architecture'],
     ['client-modules.md', '客户端模块', 'Client modules'],
+    ['slots.md', '客户端 Slots', 'Client slots'],
+    ['conversation.md', 'Conversation 组装', 'Conversation assembly'],
+    ['typert.md', 'Typert', 'Typert'],
     ['storage.md', '存储', 'Storage'],
     ['workspace.md', '工作区', 'Workspaces'],
     ['settings.md', '用户设置', 'User settings'],
@@ -328,6 +363,8 @@ const subsystemsReference = subsystemGroups.flatMap(([rootSection, enSection, fi
 ))
 
 const reference = [
+  // `docs/deepseek-llm-api-wire-extensions.md` is a repository-only provider protocol reference.
+  // Projected links intentionally resolve to its GitHub source instead of a public site route.
   ...pairedPages(([
     ['docs/architecture.md', 'reference/index.md', '架构', 'Architecture', 0],
   ] as const).map(([source, route, rootLabel, enLabel, order]): PairedPage => ({
@@ -342,6 +379,7 @@ const reference = [
     ['docs/capability-seams.md', 'reference/capability-seams.md', '能力服务', 'Capability services', 2],
     ['docs/agent-lifecycle.md', 'reference/agent-lifecycle.md', 'Agent 生命周期', 'Agent lifecycle', 3],
     ['docs/tool-execution-pipeline.md', 'reference/tool-execution-pipeline.md', 'Tool 执行', 'Tool execution', 4],
+    ['docs/api-gateway.md', 'reference/api-gateway.md', 'API Gateway', 'API Gateway', 5],
   ] as const).map(([source, route, rootLabel, enLabel, order]): PairedPage => ({
     source,
     route,
@@ -402,14 +440,6 @@ const reference = [
     section: { root: '开发手册', en: 'Cookbook' },
     order,
   }))),
-  ...pairedPages([{
-    source: 'docs/cookbook/adding-a-conversation-node.md',
-    route: 'reference/cookbook/adding-a-conversation-node.md',
-    label: { root: '新增 Conversation Node', en: 'Adding a Conversation Node' },
-    sidebar: { root: 'zh-reference', en: 'en-reference' },
-    section: { root: '开发手册', en: 'Cookbook' },
-    order: 5,
-  }]),
 ]
 
 /**
@@ -438,7 +468,7 @@ export interface DocsSection {
  */
 const sections: Record<DocsLocale, readonly DocsSection[]> = {
   root: [
-    { label: '入门' }, { label: 'SDK' },
+    { label: '入门' }, { label: 'SDK' }, { label: '自动化' }, { label: '集成' },
     { label: '基础' }, { label: '框架能力' }, { label: '实战' }, { label: 'Cordis 框架教程' },
     { label: '概念' }, { label: '生成参考' }, { label: 'Cordis API' }, { label: '开发手册' },
     { label: '总览' },
@@ -450,7 +480,7 @@ const sections: Record<DocsLocale, readonly DocsSection[]> = {
     { label: '平台与接入', collapsed: true },
   ],
   en: [
-    { label: 'Guide' }, { label: 'SDK' },
+    { label: 'Guide' }, { label: 'SDK' }, { label: 'Automation' }, { label: 'Integrations' },
     { label: 'Basics' }, { label: 'Framework' }, { label: 'Practice' }, { label: 'Cordis framework tutorial' },
     { label: 'Concepts' }, { label: 'Generated reference' }, { label: 'Cordis Core API' }, { label: 'Cookbook' },
     { label: 'Overview' },

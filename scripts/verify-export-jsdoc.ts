@@ -22,37 +22,28 @@ const PROTOCOL_EXPORTS = new Set(['Config', 'inject', 'name', 'reusable', 'apply
 
 /** Per-file walk state threaded through the scope recursion. */
 interface Walk {
-  /** Repo-relative path of the file being walked. */
   rel: string
-  /** The parsed source file. */
   sf: ts.SourceFile
-  /** Raw file text (rawJsDoc reads comment ranges out of it). */
   text: string
-  /** The program's checker, consulted only for heritage-member lookups. */
   checker: ts.TypeChecker
-  /** The aggregate violation list, appended in place. */
   violations: string[]
 }
 
-/** True when a statement carries the `export` modifier. */
 function isExported(stmt: ts.Statement): boolean {
   return ts.canHaveModifiers(stmt) && (ts.getModifiers(stmt)?.some(m => m.kind === ts.SyntaxKind.ExportKeyword) ?? false)
 }
 
-/** True for a class member a consumer cannot reach: `private`/`protected`/`#name`. */
 function isNonPublic(member: ts.ClassElement): boolean {
   const mods = ts.canHaveModifiers(member) ? ts.getModifiers(member) : undefined
   return (mods?.some(m => m.kind === ts.SyntaxKind.PrivateKeyword || m.kind === ts.SyntaxKind.ProtectedKeyword) ?? false)
     || ('name' in member && ts.isPrivateIdentifier(member.name))
 }
 
-/** True when a class member carries the `static` modifier. */
 function isStatic(member: ts.ClassElement): boolean {
   const mods = ts.canHaveModifiers(member) ? ts.getModifiers(member) : undefined
   return mods?.some(m => m.kind === ts.SyntaxKind.StaticKeyword) ?? false
 }
 
-/** The `this`-receiver exemption every function-like check shares. */
 function thisReceiver(p: ts.ParameterDeclaration): boolean {
   return ts.isIdentifier(p.name) && p.name.text === 'this'
 }
@@ -577,6 +568,10 @@ export function collectExportJsdocViolations(scanRoot: string = root): string[] 
   const violations: string[] = []
   const rels = globSync('packages/*/*/src/**/*.ts', { cwd: scanRoot })
     .map(path => path.split(sep).join('/'))
+    // An emitted `src/**/*.d.ts` face duplicates its `.ts` twin (parameter
+    // properties lose their docs across the emit) and would report violations
+    // the source scan already owns; keep scanning only source-less modules.
+    .filter(rel => !(rel.endsWith('.d.ts') && existsSync(resolve(scanRoot, `${rel.slice(0, -'.d.ts'.length)}.ts`))))
     .sort()
   const program = ts.createProgram(rels.map(rel => resolve(scanRoot, rel)), loadCompilerOptions(scanRoot))
   const checker = program.getTypeChecker()
@@ -611,7 +606,6 @@ function main(): void {
   process.exit(1)
 }
 
-// Run only when invoked as a script, not when imported by a test.
 if (process.argv[1] && import.meta.filename === resolve(process.argv[1])) {
   main()
 }

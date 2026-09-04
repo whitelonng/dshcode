@@ -28,7 +28,7 @@ An AppContainer token carries no ambient read access: every readable path must b
 
 ### Why not landstrip?
 
-The [landstrip evaluation](../../rejected/feature/2026-07-26-evaluate-landstrip-for-windows-sandbox-rung.md) was rejected before implementation (not battle-tested; the in-house launcher plan won), and its Windows backend is AppContainer-shaped, inheriting the same arbitrary-read problem.
+The landstrip evaluation was rejected before implementation (not battle-tested; the in-house launcher plan won), and its Windows backend is AppContainer-shaped, inheriting the same arbitrary-read problem.
 
 ## Consequences
 

@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import LlmRuntime, { createUserMessage, LlmAdapter  } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { turnBoundaryProjectionDefinition } from '@deepseek-ai/dsh-agent-loop'
 import SessionTitleService, { type SessionTitleProvider } from '@deepseek-ai/dsh-session-title'
 import * as providerPlugin from '@deepseek-ai/dsh-session-title-first-prompt-llm'
 
@@ -36,6 +38,8 @@ describe('first-prompt LLM title provider', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
     await ctx.plugin(SessionTitleService, TITLE_CONFIG)
     let registered: SessionTitleProvider | undefined
     vi.spyOn(ctx.sessionTitle, 'register').mockImplementation((provider) => {
@@ -55,6 +59,8 @@ describe('first-prompt LLM title provider', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
     await ctx.plugin(SessionTitleService, TITLE_CONFIG)
     const adapter = new RecordingAdapter()
     ctx.llm.registerAdapter(['title-route'], adapter)

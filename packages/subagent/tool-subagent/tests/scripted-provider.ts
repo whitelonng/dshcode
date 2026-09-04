@@ -13,6 +13,7 @@ import type {
 } from '@deepseek-ai/dsh-subagent'
 
 const DEFAULT_CAPABILITIES: SubagentCapabilities = {
+  agentOptions: true,
   outputSchema: true,
   depthLimit: true,
   toolFilter: true,
@@ -33,6 +34,8 @@ export interface Config {
   capabilities?: Partial<SubagentCapabilities>
   /** Whether tool descriptions say the child inherits completed turns. */
   inheritsParentContext?: boolean
+  /** Provider-owned child route defaults. */
+  agentRouteDefaults?: Readonly<{ provider: string; model: string }>
   /** Structured value returned when the request asks for one. */
   structured?: unknown
   /** Observes each start; the child's result additionally waits for the returned promise. */
@@ -109,7 +112,10 @@ export function mountScriptedProvider(ctx: Context, config: Config) {
     name: 'scripted-subagent-provider',
     inject: ['subagents'],
     apply(pluginCtx: Context): void {
-      pluginCtx.subagents.registerProvider(new ScriptedSubagentProvider(config.name, config))
+      const provider = new ScriptedSubagentProvider(config.name, config)
+      pluginCtx.subagents.registerProvider(config.agentRouteDefaults === undefined
+        ? provider
+        : Object.assign(provider, { agentRouteDefaults: config.agentRouteDefaults }))
     },
   })
 }

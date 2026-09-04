@@ -11,7 +11,6 @@ import FileReferenceService, {
   FILE_REFERENCE_PROMPT,
   type FileReferenceCandidate,
 } from '@deepseek-ai/dsh-file-reference'
-import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import {
   DEFAULT_FILE_SEARCH_EXCLUDED_DIRECTORIES,
@@ -69,7 +68,7 @@ export class LocalFileReferenceService extends FileReferenceService {
       const fiber = agent.ctx.inject(['systemPrompt', 'tools'], (scope) => {
         scope.systemPrompt.section({
           name: 'context:file-reference',
-          order: 99,
+          order: scope.systemPrompt.getSectionOrder('FILE_REFERENCE'),
           text: () => agent.ctx.tools.get('read', agent) === undefined ? '' : FILE_REFERENCE_PROMPT,
         })
       })

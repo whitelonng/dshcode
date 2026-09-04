@@ -1,16 +1,18 @@
 /**
- * The session-projcache domain declaration: one `sessions` table keyed by
+ * The projection-cache domain declaration: one `sessions` table keyed by
  * {@link SessionId}, each record the full projection checkpoint for one
- * session (`key → {ver, seq, val}` rows). The spec object
- * is the single source of the domain's identity, version, and record schema;
- * the storage-domain routing decides the medium (the shipped composition's
- * json backend lands it at `<root>/session_projcache.json`, beside
- * `workspace.json`).
+ * session (`key → {ver, seq, val}` rows). The spec object is the single
+ * source of the domain's identity, version, layout, and record schema; the
+ * storage-domain routing decides the medium (the shipped composition's json
+ * backend stores the domain `per-record`: one document per session under
+ * `<root>/session_projcache/sessions/`, so a checkpoint write rewrites one
+ * session's document instead of the whole unit).
  * @module @deepseek-ai/dsh-session-projection-cache/src/spec
  */
 
 import { z } from 'zod'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
+import type { SessionId, SessionSeqCursor } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 
 /**
@@ -23,7 +25,8 @@ import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
  */
 export const checkpointRow = z.object({
   ver: z.number().int().nonnegative(),
-  seq: z.number().int().gte(-1),
+  seq: z.number().int().gte(-1).transform((value): SessionSeqCursor =>
+    value === -1 ? -1 : SessionSeq(value)),
   val: z.json(),
 })
 
@@ -32,13 +35,15 @@ export const checkpointRow = z.object({
  * that distinguish one session lifecycle from another under the same id. A
  * session id names a slot, not a lifecycle — a deleted-then-recreated id, or
  * a persistence root swapped under a surviving cache, would otherwise let an
- * old row pass every watermark check and seed state folded from an unrelated
- * log. Reads validate this against the live header (listing) or the stored
- * header (cold read) before accepting any row.
+ * old record pass every watermark check and seed state folded from an
+ * unrelated log. Reads validate this against the live header (listing) or
+ * the stored header (cold read) before accepting any record.
  */
 export const checkpointIdentity = z.object({
   createdAt: z.number().int().nonnegative(),
   cwd: z.string().optional(),
+  isSeeded: z.boolean(),
+  inheritedEventCount: z.number().int().nonnegative().transform(SessionLogOffset),
 })
 
 /** The identity fields a record is bound to, inferred from {@link checkpointIdentity}. */
@@ -59,12 +64,15 @@ export const checkpointRecord = z.object({
 export type CheckpointRecord = z.infer<typeof checkpointRecord>
 
 /**
- * The session-projcache domain spec. Version bumps discard the whole medium
- * (cache semantics: a stale or unreadable cache costs a longer tail replay,
- * never a wrong value).
+ * The session-projcache domain spec. The `per-record` layout scopes version
+ * bumps per session: after a bump, a stale session document is discarded on
+ * open (cache semantics — a stale or unreadable cache costs a longer tail
+ * replay, never a wrong value) while the rest of the domain stays usable,
+ * instead of rejecting the whole medium.
  */
 export const projectionCacheDomainSpec = defineDomain({
   name: 'session_projcache',
-  version: 3,
+  version: 5,
+  layout: 'per-record',
   tables: { sessions: domainTable<SessionId, CheckpointRecord>(checkpointRecord) },
 })

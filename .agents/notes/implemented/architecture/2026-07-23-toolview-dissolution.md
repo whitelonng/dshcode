@@ -18,7 +18,7 @@ This decision originally placed `'conversation.chat.toolview'` under the chat en
 
 ## Accepted semantic changes
 
-Four behavioral deltas were accepted deliberately, not overlooked. Cross-view appearance was initially per-view registration; the follow-up note records why root/subcall composition later justified one Tool-wide presentation owner. Same-key double registration is a loud throw where the registry let later-wins silently override — a discipline correction, not a loss. Session-dimension dispatch, when a row needs it, belongs inside the component (the standard kit already carries `useSessions`), not in registry predicates — there is no shipped session-variant exemplar today. Registry-level shape override by third parties (a scoped registration shadowing a global one) has no equivalent; a real future need routes through key-naming conventions or a small in-component resolver, never a revived parallel registry.
+Four behavioral deltas were accepted deliberately, not overlooked. Cross-view appearance was initially per-view registration; the follow-up note records why root/subcall composition later justified one Tool-wide presentation owner. Same-key double registration is a loud throw where the registry let later-wins silently override — a discipline correction, not a loss. Session-dimension dispatch, when a row needs it, belongs inside the component (the standard kit already carries `useSessions`), not in registry predicates — there is no shipped session-variant exemplar. Registry-level shape override by third parties (a scoped registration shadowing a global one) has no equivalent; a real future need routes through key-naming conventions or a small in-component resolver, never a revived parallel registry.
 
 ## Alternatives considered
 

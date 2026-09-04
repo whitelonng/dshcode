@@ -18,15 +18,15 @@ Status: implemented
 
 ## 决策
 
-彻底删除可变的会话摘要。`SessionSummary` 与 `SessionMeta` 这个名称一并移除；后端存储和返回的元数据仅为 `SessionHeader`。`SessionPersistence.update()` 从抽象服务和所有后端中移除。JSONL 去掉整套伴随文件机制（`writeSidecar`/`readSidecar`/`touchSummary`/`removeSidecars`/`sidecarPath` 以及 load/list 的覆盖逻辑）；SQLite 去掉 `updated_at`/`title`/`first_prompt` 列以及每次追加时的 `updated_at` 更新，其 `SCHEMA_VERSION` 从 `1 → 2`。
+彻底删除可变的会话摘要。`SessionSummary` 与 `SessionMeta` 这个名称均不存在；后端存储和返回的元数据仅为 `SessionHeader`。抽象服务不包含 `SessionPersistence.update()`。交付的 JSONL provider 不包含摘要伴随文件机制（`writeSidecar`/`readSidecar`/`touchSummary`/`removeSidecars`/`sidecarPath` 或 load/list 覆盖逻辑），仓库外 provider 实现相同的无摘要服务约定。
 
 摘要原本要提供的一切，在消费方真正需要时都**可从仅追加日志中派生**（`firstPrompt` = 第一条 `user/message`；近期度 = 最后一个事件的 `time` 或文件 mtime），或者已经存在于不可变 header 中（`createdAt`、`cwd`）。唯一*不可*派生的是用户*手动编辑*的标题，但它从未实现，纯属 YAGNI；如果未来真有功能需要，它可以作为独立的日志事件或 header 字段回归。
 
-这次移除同时收窄两个后端的公开服务约定和磁盘格式；摘要是有意为未来设计的结果，而非意外；如今原 Agent Note 描述 `SessionMeta` 之处已是 `SessionHeader`，这就是摘要消失的原因。它还为[共享持久化写入协调器](../architecture/2026-06-18-shared-persistence-write-coordinator.zh.md)扫清障碍：不再有可变摘要后，协调器的钩子接口不需要 `updateSummary` 钩子，JSONL 伴随文件与 SQLite 列之间的持久性分歧也随之消失，使两个后端的写入路径趋于一致。
+这次移除收窄公开服务约定与 JSONL 磁盘格式；摘要是有意为未来设计的结果，而非意外；原 Agent Note 描述 `SessionMeta` 之处由 `SessionHeader` 承担，这就是摘要消失的原因。它还简化了[共享持久化写入协调器](../architecture/2026-06-18-shared-persistence-write-coordinator.zh.md)：没有可变摘要后，协调器不需要 `updateSummary` 钩子，仓库外 provider 可复用相同的无摘要编排。
 
 ## 无需迁移
 
-这是未发布的软件（见[根 AGENTS.md](../../../../AGENTS.md)「Pre-release stance: foundation over blast radius」一节），因此没有需要保留的磁盘数据库或日志。SQLite 不迁移 v1 数据库：`openDatabase` 守卫现在拒绝任何非当前版本的磁盘 `user_version`（`onDisk !== 0 && onDisk !== SCHEMA_VERSION`），无论版本更旧*还是*更高，因此陈旧的 v1 数据库会被干净地拒绝，而不会按新的列集合进行不完整读取。新建数据库写入当前版本号；这是唯一需要正常工作的路径。
+交付的 JSONL provider 不存在可变摘要格式或迁移路径：它只读写 `SessionHeader` 与仅追加日志。仓库不包含 first-party SQLite Session provider。[JSONL-only 持久化决策](2026-08-30-jsonl-only-session-persistence.zh.md)负责删除 provider 写入的数据库的兼容性切断，并要求 operator 在升级前先用旧 build 导出数据。
 
 ## 后果
 

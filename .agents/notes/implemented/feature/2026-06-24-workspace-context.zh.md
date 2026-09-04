@@ -38,7 +38,7 @@ Status: implemented
 
 ### 动态发现与刷新
 
-第一方 `read`、`write` 或 `edit` 调用成功后，不可变的 `tools/result` 观察器会协调被触及的后代路径链，以及该会话已经知道的每个作用域，然后在 agent inbox 中排入一条 `Additional instructions from: <path>` system-reminder，供下一次请求使用。在 Code Mode 下，成功的子分派 touch 会沿不透明的父级执行 token 逐层上浮，直到顶层结果落定。在 agent loop 步骤内产生的 touch，须等持久 `step/end` 后才开始异步投影；打开的步骤之外直接执行工具时，则立即投影。这两个边界在不让工具流水线等待文件系统发现的前提下，保证结果／步骤的相邻关系具有确定性。
+第一方 `read`、`write` 或 `edit` 调用成功后，不可变的 `tools/result` 观察器会协调被触及的后代路径链，以及该会话已经知道的每个作用域，然后在 agent inbox 中排入一条 `Additional instructions from: <path>` system-reminder，供下一次请求使用。在 PTC mode 下，成功的子分派 touch 会沿不透明的父级执行 token 逐层上浮，直到顶层结果落定。在 agent loop 步骤内产生的 touch，须等持久 `step/end` 后才开始异步投影；打开的步骤之外直接执行工具时，则立即投影。这两个边界在不让工具流水线等待文件系统发现的前提下，保证结果／步骤的相邻关系具有确定性。
 
 内容编辑会追加 `Updated instructions from: <path>`，说明新内容取代先前内容，并包含当前的完整文件。如果优先级从一个候选项变为另一个，消息还会指出先前路径并说明它不再适用。如果没有候选项保留，插件会追加 `Instructions removed: <path>`，并说明先前加载的指令不再适用。
 

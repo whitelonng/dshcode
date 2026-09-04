@@ -32,7 +32,7 @@ Status: implemented
 两者都是 `doc-sync`（文档同步门禁）的成员，风格与 `verify-md-wrap` 一致（tsx ESM，只校验不生成，首个违规即以非零退出码退出）：
 
 - **`scripts/verify-agent-note-classification.ts`**：定义封闭的生命周期与类别集合。它断言生命周期文件夹下的每个文件都位于规范集合中的类别文件夹内（生命周期根目录下散落的 `.md` 或未知类别文件夹都会失败），并拒绝集中式 `INDEX.md`。规范集合位于 `scripts/agent-note-tree.ts` 中，[README](../../README.zh.md) 则以行文记录每个类别。
-- **`scripts/verify-doc-refs.ts`**：检查引用文档的源码注释。Agent Note 路径不仅出现在 Markdown 中，也出现在 TypeScript 文档注释中（例如以仓库根为起点的 `.agents/notes/implemented/testing/2026-06-19-acp-snapshot-tests.md`）。`verify-md-links` 看不到这些引用，因此目录重组可能静默留下失效引用。该门禁扫描 `packages/**` 与 `examples/**` 下仓库自有的 `.ts` 文件（排除已构建的 `lib/` 与 `vendor/`），查找 `docs/….md` 和 `.agents/notes/….md` token，解析每个以仓库根为起点的路径并断言其存在。它要求使用 `.md` 扩展名，因此会忽略行文中不带扩展名的引用。
+- **`scripts/verify-doc-refs.ts`**：检查引用文档的源码注释。Agent Note 路径不仅出现在 Markdown 中，也出现在 TypeScript 文档注释中（例如以仓库根为起点的 `.agents/notes/implemented/testing/2026-06-19-acp-snapshot-tests.md`）。`verify-md-links` 看不到这些引用，因此目录重组可能静默留下失效引用。该门禁扫描 `packages/**` 下仓库自有的 `.ts` 文件（排除已构建的 `lib/` 与 `vendor/`），查找 `docs/….md` 和 `.agents/notes/….md` token，解析每个以仓库根为起点的路径并断言其存在。它要求使用 `.md` 扩展名，因此会忽略行文中不带扩展名的引用。
 
 ## 曾考虑的替代方案
 

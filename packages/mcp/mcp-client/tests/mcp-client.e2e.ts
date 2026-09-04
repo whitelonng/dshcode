@@ -22,7 +22,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { CallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { apply } from '@deepseek-ai/dsh-mcp-client/src/index.ts'
 import { publicToolName } from '@deepseek-ai/dsh-mcp-client/src/tools.ts'
@@ -87,8 +87,8 @@ function textOf(block: unknown): string {
 }
 
 let callSeq = 0
-function nextCallId(): CallId {
-  return CallId(`e2e-${++callSeq}`)
+function nextCallId(): ToolCallId {
+  return ToolCallId(`e2e-${++callSeq}`)
 }
 
 // ---- Fixture server tests ----

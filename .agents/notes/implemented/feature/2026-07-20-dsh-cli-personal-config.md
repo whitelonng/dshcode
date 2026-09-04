@@ -42,7 +42,7 @@ The TUI and Web register the exact personal path through Cordis HMR after boot. 
 
 - An installed `dsh` command can run from any directory, while source users invoke `pnpm dsh` from the checkout; both can apply personal providers, models, installed bundle entries, and other Loader entries with no checkout edit. The behavior was verified end to end against a personal Anthropic proxy with Opus 4.8, including a bash tool round trip.
 - Because an id-targeted patch replaces the whole `config`, a personal override restates the base fields it keeps and can drift when the base entry changes shape; the loader's entry-not-found/name-mismatch warnings and [`dsh --dump-config`](../../../../apps/cli/README.md#profiles) (which prints the composed tree those patches produce) are the diagnostics.
-- Personal patches resolve ids against the booted file's own tree, so nested-include overlays (Code Mode) are not personalized; live-run parity for those leaves is deferred.
+- Personal patches resolve ids against the booted file's own tree, so nested-include overlays (PTC mode) are not personalized; live-run parity for those leaves is deferred.
 - `dsh-app-boot` depends on `js-yaml` and imports the include's `!!js` YAML dialect (`entryListSchema`) directly, and, like `apps/cli`, depends on `@deepseek-ai/dsh-home-paths` for `resolveDshHome`.
 - Live watching belongs only to long-running TUI and Web processes. Headless automation gets deterministic startup configuration and exits without retaining a watcher.
 

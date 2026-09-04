@@ -9,7 +9,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
-import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { AgentPresetSection } from '../src/client/AgentPresetSection.tsx'
 import type { AgentPresetSectionProps } from '../src/client/AgentPresetSection.tsx'
 import type { AgentPresetSectionState, CopyDraft } from '../src/client/section-store.ts'
@@ -176,16 +176,30 @@ describe('the preset list', () => {
     const actions = renderSection({
       rows: [
         { id: 'standard', trust: 'system', isDefault: true },
-        { id: 'ghost', trust: 'user', isDefault: false, name: '幽灵预设', broken: 'the composition file agent.cordis.yml is missing' },
+        {
+          id: 'ghost', trust: 'user', isDefault: false, name: '幽灵预设', description: '我自己写的',
+          broken: 'the composition file agent.cordis.yml is missing',
+        },
       ],
     })
 
     const ghost = rowFor('ghost')
-    // The reason is on the card, and the body cannot pick what cannot mount.
-    expect(within(ghost).getByText(en.brokenBadge)).toBeTruthy()
+    // The badge carries the reason for a pointer, and the body cannot pick
+    // what cannot mount.
+    expect(within(ghost).getByText(en.brokenBadge).textContent)
+      .toBe(`${en.brokenBadge}the composition file agent.cordis.yml is missing`)
+    // A picker card keeps showing what the preset is; a package specifier in
+    // its place would tell a chooser nothing they can act on there.
+    expect(within(ghost).getByText('我自己写的')).toBeTruthy()
+    // Reachable without a pointer: the disabled body leaves the tab order, so
+    // this node is the only reading assistive technology gets.
     expect(within(ghost).getByRole('alert').textContent).toContain('is missing')
+    // `aria-disabled`, not `disabled`: the card stays in the tab order so a
+    // keyboard reaches the reason the face no longer shows, and refuses the
+    // pick itself rather than by being unreachable.
     const body = within(ghost).getByRole('button', { name: `${en.brokenBadge}: 幽灵预设` })
-    expect(body).toHaveProperty('disabled', true)
+    expect(body).toHaveProperty('disabled', false)
+    expect(body.getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(body)
     expect(actions.makeDefault).not.toHaveBeenCalled()
     // Copying a broken preset would only mint another broken one; deleting

@@ -14,7 +14,7 @@
  * disabled card the user cannot act on.
  */
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CardShell } from './card-form.ts'
@@ -46,7 +46,19 @@ export interface PluginCardProps {
  */
 export function PluginCard(props: PluginCardProps) {
   const [open, setOpen] = useState(false)
+  const saveStarted = useRef(false)
   const { state } = props
+  // Collapse only after Host-confirmed settlement; a rejected write keeps its
+  // diagnostics and retained drafts visible for correction.
+  useEffect(() => {
+    if (state.saving) {
+      saveStarted.current = true
+      return
+    }
+    if (!saveStarted.current) return
+    saveStarted.current = false
+    if (!state.dirty && !state.failed) setOpen(false)
+  }, [state.dirty, state.failed, state.saving])
   if (!state.available) return null
   const title = props.t(props.titleKey)
   const blocked = !state.dirty || state.invalid || state.saving

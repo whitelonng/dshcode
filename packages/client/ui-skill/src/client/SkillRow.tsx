@@ -1,7 +1,3 @@
-// Skill toolview registrant: a domain-owned row over the keyed toolview hole.
-// The compact accent row keeps loaded instructions scannable in the transcript;
-// the exact durable tool output remains available in a bounded disclosure card.
-
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
   IconChevronDownOutline14, IconInspectOutline12, IconSkillOutline16, StateDot,
@@ -13,7 +9,6 @@ import css from './SkillRow.module.css'
 /** Skill row lifecycle derived solely from the durable call slice. */
 type SkillRowState = 'running' | 'ok' | 'error' | 'stopped'
 
-/** Full row props: the toolview runtime share plus this package's locale seat. */
 type SkillRowProps = ToolCallViewProps & PropsLocale<'skill'>
 
 /** Compact, replay-stable view model for the dedicated row. */
@@ -146,7 +141,7 @@ export function SkillRow({ block, inspect, t }: SkillRowProps) {
       >
         <span className={css.leading}>{leading}</span>
         {status !== null ? <span className={css.visuallyHidden}>{status}</span> : null}
-        <span className={css.title}>Skill</span>
+        <span className={css.title}>{t('row.title')}</span>
         <span className={css.separator} aria-hidden />
         <span className={model.errorSummary === null ? css.summary : `${css.summary} ${css.errorSummary}`}>
           {summary}
@@ -161,7 +156,7 @@ export function SkillRow({ block, inspect, t }: SkillRowProps) {
           {inspect !== undefined ? (
             <button type="button" className={css.inspectButton} onClick={inspect}>
               <IconInspectOutline12 />
-              Inspect
+              {t('row.inspect')}
             </button>
           ) : null}
         </div>

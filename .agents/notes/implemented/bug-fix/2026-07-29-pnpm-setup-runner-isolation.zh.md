@@ -10,9 +10,9 @@ Status: implemented
 
 ## 决策
 
-[主 CI 工作流](../../../../.github/workflows/ci.yml)与 [CI master 工作流](../../../../.github/workflows/ci-master.yml)中的每个 `pnpm/action-setup` 步骤都设置 `dest: ${{ runner.temp }}/setup-pnpm`。每个 runner 服务独占自己的临时目录，因此一个设置过程无法替换另一个 runner 的安装目录。持久 store 的复用仍由 `PNPM_CONFIG_STORE_DIR` 独立处理，遵循 [pnpm 配置决策](../process/2026-07-26-pnpm-action-setup-for-symmetric-ci-caching.zh.md)。
+[主 CI 工作流](../../../../.github/workflows/ci.yml)与 [CI master 工作流](../../../../.github/workflows/ci-master.yml)中的每个**非 Windows** `pnpm/action-setup` 步骤都设置 `dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}`。每个 runner 服务独占自己的临时目录，因此一个设置过程无法替换另一个 runner 的安装目录；run/attempt 后缀还能防止同一 runner 上顺序作业因残留的锁定 `pnpm.exe` 而失败。Windows 原生作业与 [python SDK exe 构建](../../../../.github/workflows/build-exe-for-python-sdk.yml)在 `setup-pnpm-js-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}` 下使用独立的 pnpm 可执行文件（非 `standalone: true`，目录本身起分离作用）：run/attempt/job 后缀让每次作业都使用全新目录，即使顺序作业落到同一自托管 runner、且前一作业留下被锁定的 @reflink 原生模块。持久 store 的复用仍由 `PNPM_CONFIG_STORE_DIR` 独立处理，遵循 [pnpm 配置决策](../process/2026-07-26-pnpm-action-setup-for-symmetric-ci-caching.zh.md)。
 
-[工作流回归测试](../../../../scripts/ci-workflow.spec.ts)会找出 `ci.yml` 与 `ci-master.yml` 中的每个 `pnpm/action-setup` 步骤，并拒绝缺少 runner 专属目标目录的步骤。这可确保后续新增的作业也处于同一隔离边界内。
+[工作流回归测试](../../../../scripts/ci-workflow.spec.ts)会找出 `ci.yml`、`ci-master.yml` 与 `build-exe-for-python-sdk.yml` 中的每个 `pnpm/action-setup` 步骤，并拒绝缺少 runner 专属目标目录的步骤。这可确保后续新增的作业也处于同一隔离边界内。
 
 ## 曾考虑的替代方案
 

@@ -12,7 +12,7 @@ First, model-written registration must be validated where it happens: a malforme
 
 ## Decision
 
-The toolset ships as [`@deepseek-ai/dsh-tool-cordis`](../../../../packages/extensions/tool-cordis/README.md) and is demoed by `examples/web-cordis`. It gives the model three tools over the live Cordis runtime in the current DSH process: inspect it, mount an in-memory temporary Plugin, and unmount that Plugin to quiescence.
+The toolset ships as [`@deepseek-ai/dsh-tool-cordis`](../../../../packages/extensions/tool-cordis/README.md), with its runnable overlay and usage in the [runtime Cordis guide](../../../../docs/user/develop/practice/dynamic-cordis.md). It gives the model three tools over the live Cordis runtime in the current DSH process: inspect it, mount an in-memory temporary Plugin, and unmount that Plugin to quiescence.
 
 The vm isolates accidental global pollution, and the context façade hides framework internals. Neither restricts the authority of exposed services: a temporary Plugin can call `ctx.shell` with the host executor's privileges and reach the real filesystem and web services. It runs in the shared DSH runtime and may affect other sessions in that process. This is an opt-in development tool with bash-equivalent trust, not a security boundary or product default.
 
@@ -75,7 +75,7 @@ The correctness investment therefore goes where it pays for every capability at 
 
 **A hand-maintained service/event reference in the tool.** The first cut of the inspect tool carried a hand-written table of service method signatures. It was replaced by the generated `api-catalog.ts` because a hand table drifts from the JSDoc the moment a signature changes and nothing gates the drift, whereas the generated artifact is freshness-checked against the same AST the docs use.
 
-**A new `cordis/mount` session event.** A durable event recording each mount's source and name has clear precedent (`hook/invoked`, `compaction/start`). It was declined for v1: mount and unmount are already visible as `tool/call` / `tool/result` pairs and the tool-set change is already logged as a full changed request header, so a dedicated event would only duplicate the record. It remains addable if an audit use case needs the mount source and name outside the tool call.
+**A new `cordis/mount` session event.** A durable event recording each mount's source and name has clear precedent (`hook/invoked`, `compaction/start`). Rejected: mount and unmount are already visible as `tool/call` / `tool/result` pairs and the tool-set change is already logged as a full changed request header, so a dedicated event would only duplicate the record. It remains addable if an audit use case needs the mount source and name outside the tool call.
 
 **A hardened / capability-restricted sandbox.** Trapping Node built-ins and handing mount code a whitelist façade rather than the raw context might suggest an intent to sandbox for safety. It is explicitly not that: the traps and the façade narrow the *API* mount code sees — steering it onto cordis services and away from leak-prone Node built-ins and framework internals — for correctness and to close the unguarded-context escape, but the capabilities the façade exposes (`ctx.shell`, `ctx.fs`, `ctx.web`) reach the real runtime, so it is not a security boundary. A real one (separate process, permission prompts) was out of scope for a dev/opt-in toolset and would fight the entire point — handing the model the live runtime.
 

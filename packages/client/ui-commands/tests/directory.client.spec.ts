@@ -187,6 +187,30 @@ describe('resetConnected (reconnect hard)', () => {
   })
 })
 
+describe('resetSession (preset-change hard)', () => {
+  it('drops and prewarms only the changed Session', async () => {
+    const { dir, pull, countOf } = bench()
+    const first = dir.refresh(S1)
+    const second = dir.refresh(S2)
+    pull(S1, 0).resolve(CMDS)
+    pull(S2, 0).resolve(S2_CMDS)
+    await Promise.all([first, second])
+
+    dir.resetSession(S1)
+    expect(dir.status(S1)).toBe('pending')
+    expect(dir.resolve(S1, 'plan')).toBeUndefined()
+    expect(dir.status(S2)).toBe('ready')
+    expect(dir.resolve(S2, 'attach')).toBeDefined()
+    expect(countOf(S1)).toBe(2)
+    expect(countOf(S2)).toBe(1)
+
+    pull(S1, 1).resolve([{ name: 'fresh', description: 'new composition' }])
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(dir.resolve(S1, 'fresh')).toBeDefined()
+  })
+})
+
 describe('warm', () => {
   it('launches a pull from cold, again after failure, and never over pending/ready', async () => {
     const { dir, pull, countOf } = bench()

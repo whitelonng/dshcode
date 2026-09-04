@@ -17,7 +17,7 @@
   foo.zh.md: 89e6c98d92887913cadf06b2adb97f26cde4849b
   ```
 
-  用 blob hash 而不是 commit hash，这样同一个 PR 里改动的文件也能算出记录（`git hash-object foo.md`），一致性是纯内容比较。`--write` 会先把这些快照存入本地 Git 对象库再写下记录，未提交的 worktree 内容也不例外；它还会在内容寻址的 `refs/dsh/translation-pairing/snapshots/` ref 下固定每个不同的已存 blob，使垃圾回收无法让已记录的恢复指针失效。因此记录的 hash 能还原任一侧上次确认时的确切文本，所以失去同步的配对是「按被改一侧的 diff 最小化地修补另一侧」，从不整篇重译。日常工作会直接完成这份修补；用户显式调用扩展工作流时，可改由 `pnpm run gen-translation-brief <pair>` 以能安全对齐的最窄粒度汇集这次更新，并由 `--apply` 在结构校验后拼接仅涉及围栏代码块的改动（[briefed-updates Agent Note](../../.agents/notes/implemented/process/2026-07-26-briefed-minimal-translation-updates.zh.md)）。两侧对齐后，`pnpm run verify-translation-pairing --write <pair>` 重新记录两个 hash；那份 YAML diff 就是「确认一致」这个动作本身，可以被评审，也正因如此，`--write` 要求点名你确认过的配对（`--write --all` 是显式的全语料形式）。
+  用 blob hash 而不是 commit hash，这样同一个 PR 里改动的文件也能算出记录（`git hash-object foo.md`），一致性是纯内容比较。`--write` 会先把这些快照存入本地 Git 对象库再写下记录，未提交的 worktree 内容也不例外；它还会在内容寻址的 `refs/dsh/translation-pairing/snapshots/` ref 下固定每个不同的已存 blob，使垃圾回收无法让已记录的恢复指针失效。记录的 hash 能还原任一侧上次确认时的确切文本，所以失去同步的配对是「按被改一侧的 diff 最小化地修补另一侧」，从不整篇重译。日常工作会直接完成这份修补；用户显式调用扩展工作流时，可改由 `pnpm run gen-translation-brief <pair>` 以能安全对齐的最窄粒度汇集这次更新，并由 `--apply` 在结构校验后拼接仅涉及围栏代码块的改动（[briefed-updates Agent Note](../../.agents/notes/implemented/process/2026-07-26-briefed-minimal-translation-updates.zh.md)）。两侧对齐后，`pnpm run verify-translation-pairing --write <pair>` 重新记录两个 hash；那份 YAML diff 就是「确认一致」这个动作本身，可以被评审，也正因如此，`--write` 要求点名你确认过的配对（`--write --all` 是显式的全语料形式）。
 
   当两个分支都包含同一配对的有效确认时，已安装的 `dsh-translation-pairing` Git 合并驱动只会在 Git 默认文本合并能分别干净合并记录所指向的英文三方 blob 与中文三方 blob，且合并后的配对仍保留必需的语言切换行和结构签名时，组合出一份新记录。中文文件必须保留指向英文的反向链接；普通撰写的英文源必须保留指向中文的链接，而清单内的生成英文源不作此要求。任何合并驱动无法验证的结构都保留为普通冲突；`pnpm run resolve-translation-pairing-conflicts` 会对已经停止的合并执行同一套遇错即保留冲突的操作，暂存每份可安全生成的配对记录，并在还有其他配对冲突时以非零状态退出。[自动配对合并 Agent Note](../../.agents/notes/implemented/process/2026-08-08-automatic-translation-pairing-merges.zh.md) 负责记录该机制与备选方案。
 - **语言切换行。** 中文文件一律在 H1 标题后立即以 `[English](foo.md) | 中文` 链回英文。普通撰写的英文文件在同一位置以 `English | [中文](foo.zh.md)` 互链；清单内的生成英文源省略此行，以便与生成器输出逐字节一致。发布到 GitHub 以外位置的 README（例如 PyPI 项目元数据）可以改用指向同一对侧文件的规范 `https://github.com/deepseek-ai/deepseek-harness/blob/master/<repository-path>` URL，使切换行在该位置仍可访问。
@@ -39,11 +39,11 @@
 
 这个门禁带来的实际规则是：**当一个 PR 修改了已配对文档的任一侧时，同一个 PR 在术语指导下直接一次完成对侧文件的更新，并用 `--write <pair>` 重新记录配对**，与本仓库既有的代码与 README 的 doc-sync 规则完全一致。留下失去同步的配对的 PR 会在 CI 变红。
 
-门禁的限制很明确：**门禁通过意味着这组文档在当前内容上的一致性得到了确认，不代表确认本身正确可靠。** 它检查记录的 hash 与 Markdown 结构；它无法判断两侧是否真的在说同样的话，也无法判断措辞是否准确、术语是否得当、行文是否自然；这部分约定由评审者把关，见 [translation-rules.md](translation-rules.zh.md)。重新记录了 hash 但另一侧翻得潦草的配对能通过门禁；它不得通过评审。
+门禁的限制很明确：**门禁通过意味着这组文档在当前内容上的一致性得到了确认，不代表确认本身正确可靠。** 它检查记录的 hash 与 Markdown 结构；它无法判断两侧是否在说同样的话，也无法判断措辞是否准确、术语是否得当、行文是否自然；这部分约定由评审者把关，见 [translation-rules.md](translation-rules.zh.md)。重新记录了 hash 但另一侧翻得潦草的配对能通过门禁；它不得通过评审。
 
 ## 范围与排除
 
-**范围**：根目录 CONTRIBUTING 与 BRAND_GUIDELINES 文档、除 vendor 源码外的全部 README，以及 `.agents/notes/**`、`docs/**` 与 `python/**` 下的全部活跃文档。匹配 README 时只看文件名且不区分大小写，因此今后新增的目录无需再修改 manifest。依赖目录、被忽略的构建产物目录以及冻结的 `.agents/notes/archived/` 目录树只在发现阶段排除，不属于持续演进的翻译源文档。
+**范围**：根目录 `CONTRIBUTING.md`、`BRAND_GUIDELINES.md` 与 `SAFETY.md` 文档、除 vendor 源码外的全部 README，以及 `.agents/notes/**`、`docs/**` 与 `python/**` 下的全部活跃文档。匹配 README 时只看文件名且不区分大小写，因此今后新增的目录无需再修改 manifest。依赖目录、被忽略的构建产物目录以及冻结的 `.agents/notes/archived/` 目录树只在发现阶段排除，不属于持续演进的翻译源文档。
 
 有经评审的中文对侧的生成英文参考文档和图文档遵循配对规则。生成器仍是英文真源，新鲜度门禁与配对门禁各自独立强制其约束；重新生成导致英文变化后，配对会保持失去同步状态，直至经评审的中文对侧完成更新并重新记录。Cordis subsystem 区块生成器等同时拥有两侧输出的生成器，会把配对文档路径投影到各自 locale，同时保持其余生成字节一致。生成的英文源文件不含普通撰写文档所带的语言切换行，因为添加该行会使生成器新鲜度检查失败；中文对侧仍链接回英文源。生成页的中文对侧只能改写若直译便不再符合经评审译文事实的自指生成与维护说明；所有技术内容仍受普通忠实性规则约束。
 
@@ -59,4 +59,4 @@
 
 ## 分工
 
-日常更新对侧文件时，负责处理的 agent 会先加载 [terminology.md](terminology.md)，再直接一次性更新且只处理一遍；它不会调用翻译 skill（技能）、生成简报、执行单独的翻译评审轮次，也不会委派给 subagent。扩展版 [dsh-translate-docs](../../.agents/skills/dsh-translate-docs/SKILL.md) 工作流保留这些较重的机制，仅供用户显式调用。门禁负责检查配对是否完整、记录的 hash、中文反向链接和普通撰写源的切换行（生成源按本文规则例外），以及本文列出的结构签名；翻译质量、术语和签名未涵盖的结构要求仍由评审把关。提示词约定也有可执行实现：[scripts/translation-prompt.ts](../../scripts/translation-prompt.ts) 会把仓库内置的模板（注入术语表；模板自带经人工校准的规则）渲染为英译中或中译英两个方向的提示词，并解析三段式响应；`doc-sync` 中的 `verify-translation-prompt` 会检查两个渲染方向与仓库内示例。
+日常更新对侧文件时，负责处理的 agent 会先加载 [terminology.md](terminology.md)，再直接一次性更新；它不会调用翻译 skill（技能）、生成简报、执行单独的翻译评审轮次，也不会委派给 subagent。扩展版 [dsh-translate-docs](../../.agents/skills/dsh-translate-docs/SKILL.md) 工作流保留这些较重的机制，仅供用户显式调用。门禁负责检查配对是否完整、记录的 hash、中文反向链接和普通撰写源的切换行（生成源按本文规则例外），以及本文列出的结构签名；翻译质量、术语和签名未涵盖的结构要求仍由评审把关。提示词约定也有可执行实现：[scripts/translation-prompt.ts](../../scripts/translation-prompt.ts) 会把仓库内置的模板（注入术语表；模板自带经人工校准的规则）渲染为英译中或中译英两个方向的提示词，并解析三段式响应；`doc-sync` 中的 `verify-translation-prompt` 会检查两个渲染方向与仓库内示例。

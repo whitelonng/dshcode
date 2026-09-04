@@ -10,12 +10,12 @@
 
 import { readFile, stat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
+import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 
@@ -71,7 +71,7 @@ export const Config: z<Config> = z.object({
 })
 
 /** Settings namespace carrying the endpoint, model, and key reference the Plugins card edits. */
-export const DESCRIBE_IMAGE_SETTINGS_NAMESPACE = settingsNamespace('describe-image')
+export const DESCRIBE_IMAGE_SETTINGS_NAMESPACE = 'describe-image'
 
 /** One resolved, validated configuration snapshot; defaults and beyond-schema constraints applied. */
 export interface ResolvedConfig {
@@ -419,14 +419,16 @@ export function describeImageCallView(args: DescribeImageArgs): GenericCallView 
 export function apply(ctx: Context, config: Config): void {
   resolveConfig(config)
   let current: () => Config = () => config
-  installSettingsSection(ctx, DESCRIBE_IMAGE_SETTINGS_NAMESPACE, Config, config, {
-    setSource: (source) => {
-      current = source
-    },
-    onChange: () => {},
-    validate: (value) => {
-      resolveConfig(value)
-    },
+  ctx.inject(['settings'], (settingsCtx: Context & { settings: SettingsProvider }) => {
+    settingsCtx.settings.installSection(ctx, DESCRIBE_IMAGE_SETTINGS_NAMESPACE, Config, config, {
+      setSource: (source: () => Config) => {
+        current = source
+      },
+      onChange: () => {},
+      validate: (value: Config) => {
+        resolveConfig(value)
+      },
+    })
   })
   const spec = (): ResolvedConfig => resolveConfig(current())
   ctx.tools.register(defineTool({

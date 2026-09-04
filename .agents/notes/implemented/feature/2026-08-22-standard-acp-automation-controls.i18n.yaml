@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-22-standard-acp-automation-controls.md
+2026-08-22-standard-acp-automation-controls.md: 5523fd547dd850e2e52eb818ef418df5a325106e
+2026-08-22-standard-acp-automation-controls.zh.md: 23140eb3e76b26716239d0f53fe3206efd87baa9

@@ -68,7 +68,7 @@ Unit and real-loop tests pin timestamp formatting, unique/mixed/missing browser 
 
 ## Consequences
 
-- Browser-zone meaning is request-local and durable without changing Session, fork, JSONL, or SQLite schemas.
+- Browser-zone meaning is request-local and durable without changing Session, fork, or JSONL schemas.
 - The model receives the requested browser-local assumption on each Schedule Web request step; mixed or missing provenance asks instead of guessing.
 - Tools remain explicit: context helps the model choose fields but does not become a hidden package-seam default.
 - Timing context remains append-only until compaction; a positive interval reduces history growth but can omit fresh browser guidance on later requests.

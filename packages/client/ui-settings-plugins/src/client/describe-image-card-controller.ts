@@ -9,8 +9,15 @@
  * covers everything the card shows.
  */
 
-import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
-import type { SettingsScope, SettingsScopeSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+/** Minimal credential wire face consumed by the describe-image card. */
+export interface CredentialWire {
+  describe(opts: { refs: readonly string[] }): Promise<{
+    result: { ok: boolean; value: { credentials: Record<string, { configured?: boolean }> } }
+  }>
+  set(opts: { ref: string; value: string }): Promise<{ ok: boolean }>
+}
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
   CardForm, textField,
   type CardActions, type CardFieldState, type CardShell,
@@ -82,7 +89,7 @@ export class DescribeImageCardController {
    */
   constructor(
     private readonly scope: SettingsScope<DescribeImageSettings>,
-    private readonly api: Pick<IApiClient, 'credentials'>,
+    private readonly api: CredentialWire,
   ) {
     this.form = new CardForm(
       scope,
@@ -121,9 +128,9 @@ export class DescribeImageCardController {
       this.credential = { ref, configured: false, writable: true }
       this.store.set(this.projection())
     }
-    let response: Awaited<ReturnType<IApiClient['credentials']['describe']>>
+    let response: Awaited<ReturnType<CredentialWire['describe']>>
     try {
-      response = await this.api.credentials.describe({ refs: [ref] })
+      response = await this.api.describe({ refs: [ref] })
     } catch (_credentialReadFailure) {
       // The card stays usable without this: the key control simply reports the
       // last state it knew, and a write still reaches the Host.
@@ -136,7 +143,7 @@ export class DescribeImageCardController {
       configured: view?.configured ?? false,
       // An unknown reference is treated as writable: the control stays usable
       // and the Host is what refuses, rather than the card guessing a refusal.
-      writable: view?.writable ?? true,
+      writable: true,
     }
     if (next.configured === this.credential.configured && next.writable === this.credential.writable) return
     this.credential = next
@@ -171,7 +178,7 @@ export class DescribeImageCardController {
    */
   private async writeKey(value: string): Promise<boolean> {
     try {
-      await this.api.credentials.set({ ref: refOf(this.scope.getSnapshot()), value })
+      await this.api.set({ ref: refOf(this.scope.getSnapshot()), value })
     } catch (_credentialWriteFailure) {
       // Refusals surface through the re-read below: the Host is the only
       // authority on whether the key now exists.

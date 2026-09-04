@@ -1,6 +1,6 @@
 import { defineConfig } from 'tsdown'
 
-/** Build the runtime and invariant as independent bundles so shared fold code stays package-local. */
+/** Build the runtime and invariant companion as independent package exports. */
 export default defineConfig([
   {
     entry: ['lib/types/index.js'],

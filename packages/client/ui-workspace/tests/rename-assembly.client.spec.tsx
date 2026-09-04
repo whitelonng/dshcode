@@ -7,15 +7,17 @@
  * the list state — no push-frame wait. Coverage split: the assembled-app
  * snapshot (apps/web/tests/session-actions.snapshot.ts) pins the full-app
  * transcript; the
- * verb's wire behavior stays with the runtime package
+ * verb's wire behavior stays with the Session Controller client package
  * (session.spec.ts#rename), the dialog's own arms with rows.spec /
  * workspace-browser.spec.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, waitFor, within } from '@testing-library/react'
-import type { ISession, SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ISession } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotTestRuntime, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, SlotTestRuntime, TestRemote, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 
@@ -31,11 +33,14 @@ beforeEach(() => { localStorage.clear() })
 /** Runtime with the locale face installed (the browser entry declares `locale:` — zh default backs the t seat). */
 async function createRuntime(): Promise<SlotTestRuntime> {
   const runtime = await SlotTestRuntime.create()
-  runtime.provide('connection', {
-    hostDescription: { getSnapshot: () => undefined, subscribe: () => () => {} },
-  })
+  runtime.releaseWorkspaceSource()
+  // The rename flow never picks a directory; the namespace only has to be there
+  // for ui-workspace's inject to settle.
+  const directoryPicker = {}
+  Object.assign(new TestRemote(runtime.ctx), { directoryPicker })
+  runtime.ctx.provide('remote.directoryPicker', directoryPicker as never)
   const locale = new LocaleRuntime(runtime.ctx)
-  runtime.provide('locale', locale)
+  runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
   return runtime
 }
@@ -50,7 +55,7 @@ describe('session rename through the assembled browser', () => {
   it('renames via the row menu: binding.session.rename fires, the dialog closes, the row re-labels from the list', async () => {
     const runtime = await createRuntime()
     const rename = vi.fn<ISession['rename']>(async title => ({
-      ok: true, value: { title: title.trim().replace(/\s+/g, ' '), seq: 7 },
+      ok: true, value: { title: title.trim().replace(/\s+/g, ' '), seq: SessionSeq(7) },
     }))
     await runtime.sessions.add({
       id: SID,
@@ -97,7 +102,7 @@ describe('session rename through the assembled browser', () => {
   it('a rejected rename keeps the dialog open with the error surfaced', async () => {
     const runtime = await createRuntime()
     const rename = vi.fn<ISession['rename']>(async () => ({
-      ok: false, error: { code: 'internal', message: 'title write failed', details: {} },
+      ok: false, error: new RemoteError('gateway/internal', 'title write failed', {}),
     }))
     await runtime.sessions.add({
       id: SID,

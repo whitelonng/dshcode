@@ -13,8 +13,11 @@
  * in `./types.ts`): such a log was likely written by a newer harness, and
  * silently skipping a required event would reconstruct a wrong session.
  * Downstream (out-of-repo) plugin events are outside this list by
- * construction; a registration surface for them is deferred until such a
- * consumer exists.
+ * construction. The persisted `SessionEvent.ignorable` marker is the
+ * compatibility mechanism; event-name registration was rejected because
+ * it does not classify omission safety and would make reads
+ * composition-dependent. The rationale is in
+ * `.agents/notes/implemented/architecture/2026-08-30-retain-ignorable-external-session-events.md`.
  */
 export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'agent-preset/selected',
@@ -37,18 +40,21 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'llm/retry',
   'llm/retry-started',
   'message/delete',
+  'model/selection',
   'permission/preset',
   'plan/mode',
   'request/context',
   'request/header',
   'sandbox/mode',
   'schedule/change',
+  'session-log-deepseek/delivery-accepted',
   'session/end-seed',
   'session/title',
   'session/title-llm-request',
   'step/end',
   'step/start',
   'subagent/descriptor',
+  'subagent/model-selection-policy',
   'team/member',
   'team/message/delivered',
   'team/message/queued',

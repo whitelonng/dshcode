@@ -6,7 +6,7 @@ English | [中文](2026-07-30-independent-ci-consumer-build.zh.md)
 
 ## Problem
 
-The [larger-runner topology](2026-07-22-evidence-based-larger-hosted-runners.md) gave the static and built-consumer inventories separate jobs, but the static job owned their shared build. It uploaded the emitted tree only after every static gate completed, and the consumer job declared a job-level dependency before restoring that tree. Compiled-output snapshots and publication checks genuinely require a complete build; they do not require runtime-closure checks, documentation generation, module-graph verification, or Knip.
+The [larger-runner topology](2026-07-22-evidence-based-larger-hosted-runners.md) gave the static and built-consumer inventories separate jobs, but the static job owned their shared build. It uploaded the emitted tree only after every static gate completed, and the consumer job declared a job-level dependency before restoring that tree. Compiled-output snapshots and publication checks genuinely require a complete build; they do not require runtime-closure checks, documentation generation, or module-graph verification.
 
 That wider dependency made runner availability part of the required critical chain. In one failover run, static waited 8 minutes 1 second for a runner and ran for 1 minute 41 seconds; only then could consumers enter the same shared pool, where they waited another 10 minutes 34 seconds before running for 1 minute 58 seconds. Reusing the static build saved repository work but serialized two independent runner allocations.
 

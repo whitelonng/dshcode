@@ -16,7 +16,7 @@ A due reminder waits for the Agent's idle maintenance phase and calls `followup(
 
 `schedule/change` remains the only durable Schedule state. Its dispatch operation records that the follow-up was synchronously queued, which prevents ordinary restart replay after the dispatch is durable. Dispatch does not claim model success, user acknowledgement, or an external notification. The narrow crash interval between enqueue and durable dispatch remains at-least-once.
 
-Schedule exposes no presentation projection, Host sidecar, browser event node, keyed event slot, or client renderer. Session persistence retains its shared `flush()` contract and has no Schedule-driven success event. The opt-in Web overlay loads only `@deepseek-ai/dsh-schedule`.
+Schedule exposes no delivery-receipt projection, Host sidecar, browser event node, keyed event slot, or receipt renderer. Session persistence retains its shared `flush()` contract and has no Schedule-driven success event. A separate Session projection may publish the complete currently active record set, and `dsh-client-ui-schedule` may render that set read-only; neither contains dispatch success, acknowledgement, or transcript history. The opt-in Web overlay loads the Host Schedule services and enables the Web bundle's default-disabled catalog row.
 
 ## Alternatives considered
 
@@ -30,10 +30,10 @@ Schedule exposes no presentation projection, Host sidecar, browser event node, k
 
 ## Verification
 
-Package lifecycle tests pin idle waiting, maintenance ownership, follow-up-before-dispatch ordering, synchronous enqueue failure, model-independent dispatch, and restart replay. The assembled Web scenario snapshots the resulting assistant row and asserts that a persisted Schedule dispatch has no special history view. Source and dependency audits reject the removed presentation symbols, event, sidecar, slot, renderer package, and overlay entry.
+Package lifecycle tests pin idle waiting, maintenance ownership, follow-up-before-dispatch ordering, synchronous enqueue failure, model-independent dispatch, and restart replay. The assembled Web scenario snapshots the resulting assistant row and asserts that a persisted Schedule dispatch has no special history view, toast, or receipt. Projection and catalog tests separately prove that only active records appear and disappear on terminal transitions. Source and dependency audits reject the removed receipt symbols, event, sidecar, keyed event slot, and renderer path.
 
 ## Consequences
 
-- Schedule is contained in its package plus ordinary composition and catalog wiring; Session, persistence, Host, client runtime, and conversation UI carry no Schedule-specific behavior.
+- Schedule delivery is contained in its package plus ordinary composition; Session, persistence, Host carriers, and conversation rendering carry no Schedule-specific receipt behavior. The optional active-state projection and header catalog remain a separate read-only concern.
 - Users see the reminder only through the conversation's normal model response. A failed model turn remains a failed turn rather than a contradictory success receipt.
 - Consumers that need external or acknowledged delivery require a different product boundary with its own notification and acknowledgement semantics.

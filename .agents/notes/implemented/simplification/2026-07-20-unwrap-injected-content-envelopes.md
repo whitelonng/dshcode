@@ -19,7 +19,7 @@ Injected session content projects verbatim; the caller owns any framing. `derive
 
 The `ContextEnvelope` type and every `envelope` field are removed — `context/message` in `SessionEventMap`, `InjectOptions`, `HookContext`, and the `inject()`/`additionalContexts` plumbing in `dsh-agent-loop`. `agent-instructions` no longer requests `'raw'`; its self-framed content renders as before. The `renderTagged`/`renderContextEnvelope` helpers are deleted. `context/message.meta` still carries durable, model-hidden JSON state.
 
-The `source` attribution the envelopes carried is not lost — it remains on the durable events; it simply no longer renders into the transcript.
+The `source` attribution remains on the durable events and is omitted from the transcript.
 
 ## Alternatives considered
 

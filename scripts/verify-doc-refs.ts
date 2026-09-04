@@ -12,7 +12,7 @@ import { findReferenceViolations, uniqueRepoFiles, type ReferenceViolation as Vi
 const root = resolve(import.meta.dirname, '..')
 
 /** Repo-authored TypeScript that may cite docs in comments. */
-const PATTERNS = ['packages/**/*.ts', 'examples/**/*.ts']
+const PATTERNS = ['packages/**/*.ts']
 
 /** Paths excluded from the scan: built output and vendored upstream source. */
 const isExcluded = (p: string): boolean =>

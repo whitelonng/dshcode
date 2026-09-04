@@ -12,7 +12,7 @@ The same cold list used the JSONL artifact mtime for `updatedAt`. Opening a Sess
 
 ## Decision
 
-`dsh-host-apiproxy` registers `sessionListMetadata`, a projection containing `blank` and `lastPromptAt`. The attached summary folds the same functions directly over the live log. `blank` changes only from true to false on `turn/start`; `lastPromptAt` changes only on a `user/message` whose source kind is `user`.
+`dsh-api-session-controller` registers `sessionListMetadata`, a projection containing `blank` and `lastPromptAt`. The attached summary folds the same functions directly over the live log. `blank` changes only from true to false on `turn/start`; `lastPromptAt` changes only on a `user/message` whose source kind is `user`.
 
 A cold summary trusts cached `blank: false`, because a checkpoint prefix containing `turn/start` remains non-blank. Cached `blank: true` and a cache miss do not prove the current log is blank. When persistence exposes a physical artifact through `locate()` and its observed size is at most the `coldBlankProbeMaxBytes` eligibility threshold (default 1 KiB per Session), the gateway calls `readFrom(id, 0)` and folds exact list metadata from the stored prefix. Files above the threshold, backends without a location, vanished artifacts, and failed reads all produce `blank: false`, keeping the Session visible.
 
@@ -24,7 +24,7 @@ A cold summary trusts cached `blank: false`, because a checkpoint prefix contain
 
 **Read every cold log.** Rejected because list latency and I/O would scale with total stored conversation bytes. The physical-size eligibility check targets small historical artifacts that can be checked cheaply and degrades larger unknowns toward visibility. It intentionally does not add a persistence operation solely to make the threshold atomic with the read: concurrent growth may increase one probe's read cost, but the additional events can only preserve visibility or change a blank result to non-blank.
 
-**Store blankness and recency in an authoritative persistence index.** Deferred because JSONL has an immutable first line and would require a second durable artifact with ordered updates, while SQLite would require a schema field. The broader exact-index design remains in the [last-activity proposal](../../proposed/architecture/2026-07-29-durable-last-activity-index.md).
+**Store blankness and recency in an authoritative persistence index.** Deferred because the shipped JSONL provider has an immutable first line and would require a second durable artifact with ordered updates. An out-of-tree provider may use its own index only with defined update atomicity, versioning, and recovery. The broader exact-index design remains in the [last-activity proposal](../../proposed/architecture/2026-07-29-durable-last-activity-index.md).
 
 **Continue ordering JSONL by mtime.** Rejected because mtime records every artifact write, including pickup boundaries, rather than the latest human prompt. Its error direction promotes untouched Sessions to the front.
 

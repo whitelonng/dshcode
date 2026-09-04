@@ -249,7 +249,9 @@ describe('Fork CI workflow', () => {
         DSH_COVERAGE_TEST_TIMEOUT_MS: '60000',
       },
     })
-    expect(stepRuns(coverage)).toContain('pnpm run check:ci:coverage')
+    // The command text may carry a tee for the failure-annotation step, so
+    // match it as a prefix instead of pinning the exact string.
+    expect(stepRuns(coverage).some(run => run.startsWith('pnpm run check:ci:coverage'))).toBe(true)
 
     // A renamed or resuffixed check changes the check name branch protection
     // sees; the lane is blocking now, so keep the plain name.

@@ -1,9 +1,9 @@
 name: Release (Python)
 
-# A PR labeled python-release-dry-run or a manual run with publish=false builds
-# and validates the complete release without registry credentials. Publication
-# is accepted only from a manual run on the matching python-v* tag when the
-# private publisher-repository identity and public-PyPI switch are configured.
+# A manual run with publish=false builds and validates the complete release
+# without registry credentials. Publication is accepted only from a manual run
+# on the matching python-v* tag when the private publisher-repository identity
+# and public-PyPI switch are configured.
 on:
   workflow_dispatch:
     inputs:
@@ -12,8 +12,6 @@ on:
         required: true
         type: boolean
         default: false
-  pull_request:
-    types: [labeled]
 
 permissions:
   contents: read
@@ -26,11 +24,10 @@ concurrency:
 
 jobs:
   build:
-    name: Build four wheels
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'python-release-dry-run'
+    name: Build five wheels
     uses: ./.github/workflows/build-exe-for-python-sdk.yml
     with:
-      targets: node24-linux-x64,node24-linux-arm64,node24-macos-arm64
+      targets: node24-linux-x64,node24-linux-arm64,node24-macos-arm64,node24-win-x64
       release: true
 
   python-compat:
@@ -154,6 +151,7 @@ jobs:
             "deepseek_harness_runtime_bin-$VERSION-py3-none-macosx_14_0_arm64.whl" \
             "deepseek_harness_runtime_bin-$VERSION-py3-none-manylinux_2_28_aarch64.whl" \
             "deepseek_harness_runtime_bin-$VERSION-py3-none-manylinux_2_28_x86_64.whl" \
+            "deepseek_harness_runtime_bin-$VERSION-py3-none-win_amd64.whl" \
             "deepseek_harness_sdk-$VERSION-py3-none-any.whl" > "$expected"
           find dist -maxdepth 1 -type f -name '*.whl' -exec basename {} \; | sort > "$actual"
           diff -u "$expected" "$actual"

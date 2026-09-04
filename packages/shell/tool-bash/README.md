@@ -1,66 +1,132 @@
+---
+description: "The model-facing bash tool for users and maintainers choosing, configuring, or debugging one-shot command execution, background jobs, and sandbox escalation."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-tool-bash
 
 English | [中文](README.zh.md)
 
-The model-facing `bash` tool registered over the `ctx.shell` executor seam. Foreground execution stays behind that seam; a background process handle is registered with the generic `ctx.jobs` runtime and controlled through `job_output`, `job_list`, and `job_kill` from `@deepseek-ai/dsh-tool-jobs`.
+## Summary
 
-Requires a loaded executor Service Provider (e.g. `@deepseek-ai/dsh-bash-local`) and the [`@deepseek-ai/dsh-shell-env`](../shell-env/README.md) registry; the plugin stays pending until every injected service exists (`inject: ['tools', 'bash', 'systemPrompt', 'bashEnv']`). The tool contract is bash-dialect — mount a bash-parsing executor.
+`dsh-tool-bash` gives the agent a `bash` tool that runs commands through the mounted shell executor and returns stdout, stderr, and exit markers. Each call runs in a fresh shell — no cwd, variables, or functions survive — and `run_in_background` turns long-running commands into background jobs the agent collects with `job_output` and stops with `job_kill`. Every call runs with the managed `DSH_*` environment from `dsh-shell-env`, and under a sandboxing executor a denied command may be retried once with a wider `sandbox_permissions` mode plus a `justification` through user approval. Non-zero exits are reported, not failed, so the agent decides how to react. Mount it together with an executor provider such as `dsh-bash-local` or `dsh-bash-sandbox` and the `dsh-shell-env` plugin.
 
-The package root exposes only the Cordis plugin contract (`name`, `inject`, `Config`, `apply`); result rendering and background-process adaptation remain package-internal.
+## Table of Contents
 
-The plugin also contributes the `tool:bash` prompt section (order 105): check the `[exit code: N]` marker on every result and investigate failures before moving on.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-## Tools
+-----
 
-### `bash`
+<a id="use-this-package"></a>
+## Use this package
 
-| Arg | Type | Notes |
+Load this plugin in any composition where the agent should run bash commands: it registers the `bash` tool once an executor provider and the `dsh-shell-env` registry are mounted, and stays pending until the `tools`, `shell`, `systemPrompt`, and `shellEnv` services exist.
+
+### Minimal configuration
+
+The common path is an executor provider, the environment registry, and this tool; add the job runtime when the agent may run commands in the background.
+
+```yaml
+- name: '@deepseek-ai/dsh-bash-local'
+- name: '@deepseek-ai/dsh-shell-env'
+- name: '@deepseek-ai/dsh-tool-bash'
+
+# Optional: background jobs
+- name: '@deepseek-ai/dsh-jobs-local'
+- name: '@deepseek-ai/dsh-tool-jobs'
+```
+
+The single config field toggles background support.
+
+| Field | Default | Meaning |
 |---|---|---|
-| `command` | string (required) | Run via `bash -c`. No state persists between calls — use `workdir`, not `cd`. |
-| `description` | string (required) | One-line, active-voice summary of the command (5-10 words), for UI/log display only — no effect on execution. |
-| `timeoutMs` | number | Timeout override in milliseconds. The executor applies its configured default and cap. |
-| `workdir` | string | Working directory for this call. Defaults to the filesystem identity of the calling agent's session cwd (`session.header.cwd`) so each session runs in its own workspace; a relative `workdir` is resolved against that same identity. |
-| `run_in_background` | boolean | Return a job id immediately; no timeout applies. |
-| `sandbox_permissions` | string enum | ADVERTISED ONLY when the mounted executor sandboxes (`ctx.shell.sandboxMode` reports a confining default): the wider mode a denied command needs, from the closed target vocabulary `workspace-write`/`danger-full-access` (never cut down to the executor's default — the effective mode is per-session; strict widening is checked at execution against it, and a non-widening request fails without prompting anyone). |
-| `justification` | string | Required together with `sandbox_permissions` (each without the other is a validation error): one sentence for the user explaining why this exact command needs the wider access. |
+| `enableRunInBackground` | `true` | Expose `run_in_background`; when `false`, forced background calls are rejected |
 
-`command`, `workdir`, and `timeoutMs` are resolved against the executor's config defaults via `ctx.shell.resolve()` before execution, so the Service Definition (`ShellExecSpec`) receives explicit `workdir`/`timeoutMs` values. The workdir default is applied in the tool layer from the calling agent's `session.header.cwd` BEFORE `resolve()` — the per-session cwd must come from `exec.agent`, since N sessions share one executor; only when no session cwd is available does the executor fall back to its own config / `process.cwd()`. When sandbox policy is present, the tool reuses its already-canonical `workspaceRoot` as the workdir base so confinement and process launch cannot resolve the same session spelling differently.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-bash) is the exhaustive source for every accepted field and its JSDoc; the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash) carries the full argument schema.
 
-### Managed shell environment
+### Running a command
 
-Every foreground and background model bash call receives a freshly collected trusted `DSH_*` environment through the shared [`dsh-shell-env`](../shell-env/README.md) registry: `DSH_HOME` (the absolute Harness home), `DSH_SHELL=1`, the agent's `DSH_SESSION_ID`, and `DSH_SESSION_JSONL` when the active persistence backend locates one. The registry contract — contributor registration, loud duplicate/undeclared-key failure, the built-in reservations, and the contributor example — lives in that package's README. The snapshot passes through the dedicated `ShellExecRequest.dshEnv` channel; the local executor removes all inherited `DSH_*` before merging it, so nested harnesses and concurrent parent/child agents cannot leak stale identities, and `process.env` is never modified. The tool description teaches the generic `$DSH_*` convention rather than naming persistence-specific variables or adding a permanent system-prompt section.
+The tool executes `bash -c <command>` and returns the combined output. Commands run in a fresh shell every call, so state never persists — pass `workdir` instead of `cd`. A non-zero exit is reported as `[exit code: N]` for the agent to interpret, not surfaced as a tool error. A `description` in active voice (5–10 words) labels the call in the UI; `timeoutMs` overrides the executor's default and cap. Output beyond the executor's stream caps is truncated to its tail, with the full output saved to a spill file whose path is reported.
 
-Result text contains stdout, an optional `[stderr]` section, then applicable sandbox-denial, timeout, signal, exit-code, and truncation markers. Timeout is reported independently of final exit status; nonzero exit remains a model-interpreted result rather than `isError`. Truncation links a safe complete spill file or reports it unavailable. Only infrastructure failures such as spawn errors and aborts produce `isError`.
+### Running long commands in the background
 
-The canonical success is `{ kind: 'foreground', ...ShellRunResult }` for a completed foreground process or `{ kind: 'background', jobId }` for a published task. The Native renderer preserves the text above, including exactly `started background job <id>`; programmatic consumers use the typed fields without parsing those strings. Executor stream caps remain acquisition limits on `ShellRunResult` and carry their spill paths.
+Passing `run_in_background: true` returns a job id immediately and no timeout applies; the command keeps running while the agent works on something else. The agent reads its output with `job_output` (non-blocking unless `wait: true`), lists jobs with `job_list`, and stops it with `job_kill`; a finished job notifies the owning agent in-session. Background support needs the generic job runtime (`dsh-jobs-local`) and its control tools (`dsh-tool-jobs`) mounted.
 
-When `run_in_background` is true, this plugin preflights `ctx.jobs.start()` before spawning, registers the calling agent as owner, and adapts the returned `ShellProcess` handle into generic cancel/done/incremental-output hooks. The job runtime owns ids, cross-session isolation, completion notices, waiting, and disposal cleanup; this plugin only maps bash exit/sandbox facts into job output and outcome detail. `enableRunInBackground: false` removes the parameter and rejects a forced background call at execution time.
+### Sandboxed execution and escalation
 
-## UI presentation
+When the mounted executor confines commands (for example `dsh-bash-sandbox`), a blocked file operation is reported as `[sandbox: file access denied under <mode> mode]` — a policy denial, not a command failure. The model may then retry the exact same command once in the same turn with `sandbox_permissions` (the narrowest wider mode that suffices) and a one-sentence `justification`; the approval prompt raised by that retry is how the user consents. Escalation is never speculative: a request with no real prior denial, or one that is not strictly wider than the current mode, fails closed without running anything, and a rejected escalation is final for that command.
 
-The tool owns its `presentCall`/`presentResult` render intent. A foreground call is a terminal card carrying command, description, cwd, output, and parsed exit status. Because the card shows the exit as its own pill, the `[exit code: N]` / `[killed by signal: …]` marker the parse consumes leaves the output; every other marker (truncation, timeout, sandbox) stays in it. A background start is a generic execute card because it returns only a job id; the generic `job_*` tools own their own cards. These presenters are pure and replay-safe.
+### What can go wrong
 
-## The tool builds its request from named args only
+A composition with no executor provider never activates the tool. Background calls without the job runtime fail with `background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs`, and `sandbox_permissions` without a sandboxing executor fails with `sandbox_permissions is not available in this composition (no sandboxing executor to escalate)`. `enableRunInBackground: false` removes the parameter and rejects a forced background call at execution time.
 
-`ShellExecRequest` carries optional `stdoutMaxBytes`, `stdin`, ordinary `env`, and managed `dshEnv`, used by trusted in-process plugins and this tool's environment registry. The model-facing tool exposes none of `stdoutMaxBytes`, `stdin`, or `env`: it builds requests from named command/workdir/timeout/signal/sandbox fields plus the registry-collected `dshEnv`. Extra model keys are ignored and cannot replace managed values. Shell syntax provides equivalent command-level behavior, while the local executor scrubs ambient credentials and stale `DSH_*` values. See the [stdin/env Agent Note](../../../.agents/notes/implemented/architecture/2026-06-30-bash-stdin-env-trusted-plugin-api.md).
+-----
 
-## Permissions and escalation
+<a id="understand-the-implementation"></a>
+## Understand the implementation
 
-Commands run with the executor's full authority unless a sandboxing executor ([`dsh-bash-sandbox`](../bash-sandbox/)) confines them — the deny-only sandbox reports denials as result facts, rendered here as the denial marker; per-call allow/deny/ask policy is the `tools/pre-execute` waterfall (see docs/architecture.md).
+<details>
+<summary>Implementation internals — click to expand</summary>
 
-Escalating bash calls resolve `ctx.approval` before execution. `allowed-once` applies the requested mode only to that call; rejection, cancellation, unavailability, or missing approval context executes nothing and returns a distinct error. On a real denial, the model may retry the same command once in the same turn with the narrowest sufficient mode and justification; the approval prompt itself is the consent step. Escalation is never speculative, and a disabled or rejected approval is final. The [sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) owns the rationale.
+This section explains the design decisions behind the tool and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
 
-## Per-session mode switching
+### Design philosophy
 
-For sandboxing executors, each call resolves mode as one-shot escalation, then session override, then executor default. Non-sandboxing and agent-less calls carry no session override. The policy owner contributes the current capability-neutral standing mode; denial results still own the operation-specific effective mode and retry guidance. See the [`dsh-shell` fold](../shell/README.md) and [sandbox switching contract](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md).
+- **Model-facing consumer of the shell seam.** The tool is the Consumer role of the bash capability: it registers the `bash` schema, renders results, and resolves per-call policy, while the executor seam owns process mechanics.
+- **Request from named args only.** The tool never exposes `stdin`, `env`, or `stdoutMaxBytes`; it builds each request from command/workdir/timeout/signal fields plus the registry-collected `dshEnv`, so model-supplied keys cannot replace managed values ([bash stdin/env Agent Note](../../../.agents/notes/implemented/architecture/2026-06-30-bash-stdin-env-trusted-plugin-api.md)).
+- **Non-zero exits are reported, not errored.** Only infrastructure failures (spawn errors, aborts) surface as tool errors; the model interprets exit codes and markers.
+- **Background work belongs to the job runtime.** A background call registers a process handle with `ctx.jobs`; ids, ownership, completion notices, and disposal are the runtime's, and this tool only maps bash exit and sandbox facts into job output.
 
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: tool registration, prompt section, arg validation, escalation, request assembly |
+| [`src/background.ts`](src/background.ts) | Map a settled background process onto generic job outcome vocabulary |
+| [`src/render.ts`](src/render.ts) | Model-facing result text: streams, markers, truncation notices |
+| — | No runtime invariant companion is published; the environment registry validates ownership and collected values at each mutation/read; it publishes no independent snapshot that a companion could cross-check. |
+
+### Request resolution
+
+The tool resolves the workdir before `ctx.shell.resolve()` runs: an explicit relative `workdir` is resolved against the session cwd, and a sandbox policy's canonical workspace root wins so confinement and launch use the same identity. Sandbox policy resolves per call through `ctx.sandboxPolicy`; an escalation request goes through `ctx.approval` before anything executes, and the tool fails at load if the executor confines but no policy service is mounted.
+
+### Rendering story
+
+The result text is stdout, then a marked `[stderr]` section, then conditional markers: truncation notice, sandbox denial (plus the same-turn escalation hint when the composition advertises escalation), timeout, signal, and exit code — each on its own line. The exit marker doubles as the UI card's exit-status pill: the shared `parseExitStatus` from `dsh-shell` consumes it from the output body, so replay shows the pill without duplicating the marker.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the shell family to the executor seam, the job runtime, and the decision notes behind the behavior.
+
+- [shell package map](../README.md) — the bash capability family and its roles.
+- [Bash executor subsystem](../../../docs/subsystems/shell.md) — request/spec vocabulary, results, and background processes.
+- [shell-env](../shell-env/README.md) — the managed `DSH_*` environment every call receives.
+- [tool-jobs](../../jobs/tool-jobs/README.md) — `job_output`, `job_list`, and `job_kill` controls for background runs.
+- [bash stdin/env Agent Note](../../../.agents/notes/implemented/architecture/2026-06-30-bash-stdin-env-trusted-plugin-api.md) — why the tool exposes no stdin or env.
+- [sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) — escalation and mode-switching rationale.
+- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash) — the exact `bash` argument schema.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-bash) — every accepted config field and its source declaration.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### System prompt
 
 #### What the model sees
 
-Every request in this plugin's registration scope contains the bash guidance below. The policy owner contributes current sandbox state through its cache-safe runtime context rather than changing this section. Scoped tool restrictions can hide the schemas without removing this independently registered section.
+Every request in this plugin's registration scope contains the bash guidance below at first-party order 1000. The policy owner contributes current sandbox state through its cache-safe runtime context rather than changing this section. Scoped tool restrictions can hide the schema without removing this independently registered section.
 
 ##### Bash guidance
 
@@ -122,7 +188,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 #### What the model sees
 
-Validation and policy failures are normalized as `Error: <message>`. This package's stable messages are `invalid command: expected a non-empty string`, `invalid description: expected a non-empty string`, `invalid timeoutMs: expected a positive number, got <value>`, `invalid escalation: sandbox_permissions requires a justification`, `invalid escalation: justification is only valid together with sandbox_permissions`, `invalid justification: expected a non-empty sentence`, `background execution is disabled for this bash tool`, `background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs`, `sandbox_permissions is not available in this composition (no sandboxing executor to escalate)`, `sandbox escalation to "<mode>" is not strictly wider than this call's current "<mode>" mode`, the approval-availability/rejection/cancellation variants, and `tool call aborted`.
+Validation and policy failures are normalized as `Error: <message>`. This package's stable messages are `invalid command: expected a non-empty string`, `invalid description: expected a non-empty string`, `invalid timeoutMs: expected a positive number, got <value>`, the escalation pairing failures, `run_in_background is disabled for this deployment (enableRunInBackground: false)`, `background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs`, `sandbox_permissions is not available in this composition (no sandboxing executor to escalate)`, the approval availability/rejection/cancellation variants, and `tool call aborted`.
 
 #### Token effect
 
@@ -134,6 +200,21 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the tool is a poor fit or needs special care. They are current package constraints, not a task backlog.
+
 - **Replay exit pills parse from result text** — output whose final line happens to be exactly `[exit code: N]` / `[killed by signal: …]` shows a wrong pill on session replay and loses that line from the card body, because the parse treats it as the marker it consumes; a display-only known residual.
 - **The `bash` tool opts out of `timeout-policy` budgets** — it keeps the executor-owned `BASH_TIMEOUT` path, per [the tool-call timeout-policy Agent Note](../../../.agents/notes/implemented/architecture/2026-07-07-tool-call-timeout-policy.md).
 - **Background processes have no executor timeout** — callers must use `job_kill`, or rely on owner/service disposal, when work no longer matters.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

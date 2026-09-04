@@ -1,21 +1,44 @@
+---
+description: "面向用户与维护者的 pi-ai 多提供方适配器说明：通过 pi-ai 目录与手工声明网关路由 harness LLM 服务。"
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-llm-pi-ai
 
 [English](README.md) | 中文
 
-基于 [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) 的 harness LLM（大语言模型）seam 通用多提供方适配器。一个插件实例拥有一份以路由为键的提供方 profile 字典；每个请求使用 `GenerateOptions.provider` 选择 profile，并针对该路由已配置的 catalog 解析 `GenerateOptions.model`。点名了已安装 pi-ai 提供方的路由会继承其端点、协议格式（wire format）与模型 catalog 作为默认值，并逐字段覆盖；pi-ai 未提供的路由则整体声明出来，因此接入 OpenAI 兼容网关、自建服务，或比已安装 catalog 更新的提供方，都属于配置而非改代码。
+## 概述
 
-包根入口导出 Cordis 插件约定、`PiAiAdapter` 与 `supportedProtocols()`；profile 解析、catalog 物化、提供方构造、回放转换和流转换保留在包内部。
+`@deepseek-ai/dsh-llm-pi-ai` 是 harness LLM 服务基于 pi-ai 的多提供方适配器：一个插件实例拥有一份提供方路由字典，每条路由都通过 [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai) 服务。点名已安装 pi-ai 提供方的路由会继承其端点、协议格式与模型目录作为默认值；pi-ai 不提供的路由可以直接声明，因此 OpenAI 兼容网关或自托管服务器只是配置，而非代码变更。profile 与凭据通过可选 settings 与凭据 seam 按请求解析，因此编辑用户设置文档即可改变下一个请求，无需重启。提供登录的提供方可以通过 harness 授权 seam 登录，存储的登录——OAuth grant，或在 pi-ai 自己的登录提示里键入的密钥——为其路由完成认证，并在存储的跨进程锁下自行刷新。插件可以零路由休眠挂载，一旦 settings 分节提供 profile 便立即激活它们。
 
-## 配置
+## 目录
 
-按提供方配置凭据、模型 catalog 与部署特定传输设置，并以提供方路由本身为键。每个 profile 都可以设置 `retryPolicy`；省略时使用 normal 模式并重试五次。`apiKeyEnv` 是按请求解析的凭据*引用*，因此机密不进入该文件。省略它会让该路由处于未认证状态；对已安装 catalog 路由而言，这意味着交给 pi-ai 的提供方原生环境发现。已配置却解析不出任何值的引用则相反，会让请求以 `MISSING_CREDENTIAL` 失败，因为放行下去就会用环境里恰好持有的某个无关密钥完成认证。一条凭据服务该路由下的全部模型。
+- [使用本包](#use-this-package)
+- [理解实现](#understand-the-implementation)
+- [进一步探索](#further-exploration)
+- [模型体验](#model-experience)
+- [已知限制与延期工作](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## 使用本包
+
+当组合需要通过 pi-ai 的提供方目录、或通过 pi-ai 已安装目录未描述的网关路由模型请求时挂载本插件。`providers` 字典就是整个配置面：每个键都是请求用 `GenerateOptions.provider` 选择的提供方路由名。
+
+### 何时选择
+
+当同一组合服务多个提供方、某条路由需要 pi-ai 目录默认值并修正少数字段、或必须通过自有端点与协议到达手工声明网关时，选择本适配器。当部署不需要其他提供方时，选择 `dsh-llm-deepseek` 直连 DeepSeek 路由。两个适配器可以同时挂载，因为它们的路由名不冲突；注册其他适配器已拥有的路由会导致插件加载失败。
+
+### 配置提供方路由
+
+每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode、最多重试五次。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
 
 ```yaml
-- id: llm
-  name: '@deepseek-ai/dsh-llm-pi-ai'
+- name: '@deepseek-ai/dsh-llm-pi-ai'
   config:
     providers:
-      # Catalog route: endpoint, protocol, and models all come from pi-ai.
       openai:
         apiKeyEnv: OPENAI_API_KEY
         baseURL: https://proxy.example.com:8443
@@ -26,200 +49,188 @@
         retryPolicy:
           mode: normal
           maxRetries: 3
-          backoff:
-            initialDelayMs: 500
-            maxDelayMs: 10000
-            jitterRatio: 0.1
-      # Catalog route with its catalog narrowed to one model and that model's
-      # capacity corrected; every unset field still comes from the catalog.
       anthropic:
         apiKeyEnv: ANTHROPIC_API_KEY
-        streamIdleTimeoutMs: 300000
         models:
           - id: claude-sonnet-4-5
             contextWindow: 200000
-      # Catalog route with one model reshaped in place; the rest of the
-      # catalog keeps serving (a models list would replace it instead).
-      deepseek:
-        apiKeyEnv: DEEPSEEK_API_KEY
-        modelOverrides:
-          deepseek-v4-pro:
-            reasoningEfforts:
-              off:
-              high: high
-      # Hand-declared route: pi-ai ships nothing under this key, so the profile
-      # supplies the whole provider.
       acme-gateway:
         displayName: Acme Gateway
         apiKeyEnv: ACME_GATEWAY_API_KEY
         api: openai-completions
         baseURL: https://gateway.acme.example/v1
-        # Request shape for an endpoint whose URL pi-ai cannot recognize; it
-        # would otherwise be addressed as though it were OpenAI itself.
         compat:
           thinkingFormat: deepseek
-          supportsDeveloperRole: false
-          maxTokensField: max_tokens
         models:
-          - id: acme-large
-            name: Acme Large
-            contextWindow: 65536
-            maxTokens: 4096
-            # Declared capabilities are advisory metadata for model selectors:
-            # image input and generation are modalities, image understanding is
-            # a separate claim that also implies image input.
-            input: [text, image]
-            output: [text, image]
-            capabilities:
-              imageUnderstanding: true
           - id: acme-think
             name: Acme Think
             contextWindow: 262144
-            maxTokens: 32768
-            # key = selectable level, value = its wire spelling; only off may
-            # leave the value empty (supported, send nothing).
             reasoningEfforts:
               off:
               high: high
-              max: ultra
 ```
 
-字典形状使重复路由无法表示，发布前的数组形状（每个 profile 携带 `provider` 字段）会加载失败并给出迁移指引。`providers` 也可以为空或整体省略：适配器将以**休眠**姿态挂载——零路由、模型选择器不多一条——一旦 `llm-pi-ai:` settings 分节提供了 profile 就即时注册路由，分节清空时随之撤销。无论是否休眠，插件都会在可配置提供方目录（`ctx.llm.listConfigurableProviders()`，settings 路径 `providers.<provider>`）中声明每个已安装 catalog 提供方，并与当前 profile 声明的每条路由取并集，因此配置界面既能在任何路由存在之前就提供完整 catalog，也能寻址一条手工声明的路由。每个条目都带上 `declared`：pi-ai 在这个键下是否什么都没有。它跟随已安装 catalog 而非设置文档，因为收窄一个内置提供方的模型同样会存下 profile，而那条路由仍然是 pi-ai 认识的——只有适配器分得清两者，所以由目录直接给出答案，而不是留给界面去猜。哪些适配器存在归组合面；哪些提供方在运行可以完全交给用户的设置文档。向 `ctx.llm` 注册具有原子性：如果与另一适配器已拥有的任何提供方路由冲突，插件会加载失败，不注册剩余路由。模型 id 不是生命周期配置；路由未配置的模型会在发起任何提供方请求前以 `LlmError('UNKNOWN_MODEL')` 失败。
+| 字段 | 默认值 | 含义 |
+|---|---|---|
+| `apiKeyEnv` | 无 | 按请求解析的凭据引用；省略时交由 pi-ai 环境发现 |
+| `displayName` | 提供方名 | 选择器界面显示的标签 |
+| `api` | 目录协议 | 协议格式；仅目录不提供的路由需要 |
+| `baseURL` | 目录端点 | 路由上所有模型的端点 |
+| `models` | 已安装目录 | 整体替换路由目录；每个条目从已安装模型取默认值 |
+| `modelOverrides` | 无 | 重塑个别已安装目录模型，而不替换其余模型 |
+| `compat` | 目录检测 | 无法识别端点的协议兼容开关 |
+| `defaultContextWindow` | `262,144` | 未描述模型的容量回退 |
+| `defaultMaxTokens` | `32,768` | 未描述模型的输出上限回退 |
+| `requestImagePixelBudget` | `4,194,304` | 每张确定性请求图片的总像素预算 |
+| `requestImageMaxBytes` | `1 MiB` | 每张请求图片在 base64 扩展前的编码字节目标 |
+| `maxRequestImageBytes` | `20 MiB` | 带最旧优先卸载的 base64 图片载荷总上限 |
+| `retryPolicy` | normal，5 次重试 | 由 `dsh-llm-retry` 执行的提供方自有重试策略 |
 
-## Catalog 解析
+生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
-profile 的 `models` 列表是*替换*该路由已安装 catalog，而不是扩充它；省略它（或留空）则原样服务该 catalog。每个条目都会从同 `id` 的已安装模型继承自身未设置的字段，因此把 catalog 路由收窄到两个模型、更正某个容量，或加入一个比已安装 catalog 更新的模型，都是一行编辑——但一旦声明了 `models` 列表，该路由要继续服务的每个模型就都必须出现在其中，条目哪怕只写一个 `id` 也足够。可配置的条目字段是 `id`、`name`、`contextWindow`、`maxTokens`、`input`、`output`、`capabilities`、`reasoningEfforts` 与 `compat`。定价沿用已安装条目或直接缺席；声明的输入/输出模态与能力会流入 harness 缝（`LlmModelInfo`），模型选择器的徽标与图片准入预检读取的正是它们。
+### 登录提供方
 
-`modelOverrides` 无需这份代价就能就地重塑单个已安装 catalog 模型：每个键是一个 catalog 模型 id，每个值可写 `models` 条目接受的同一批字段，只是 id 落在键上，而 catalog 的其余部分原样继续服务——「改一个模型、其余三十七个原样保留」只是一次三行编辑。一条覆盖会成为该 catalog 条目的配置，因此容量、档位与 compat 沿与 `models` 条目相同的路径解析，携带相同的诊断与相同的请求默认值语义。覆盖只在正服务自身 catalog 的 catalog 路由上才有意义：与 `models` 列表并存的一份（该列表本就替换了 catalog）、落在手工声明路由上的一份（其模型已在 `models` 中完整写出），或点名了 catalog 未描述模型的一份，都会被拒绝而非跳过，因为一个静默保持原样的模型，就是一个否则要有人费力追查的笔误。
+pi-ai 提供登录的提供方可以通过 harness 授权 seam 登录：流程提供 OAuth 或交互式密钥提示（密钥键入 pi-ai 自己的登录提示，而非设置表单），得到的凭据存储在 harness 凭据存储的 `llm-pi-ai/<provider id>` 记录中。存储的登录在其路由的 `apiKeyEnv` 覆盖之下完成认证，并在存储的跨进程锁下自行刷新；退出登录即删除存储记录。落在记录文法之外——小写连字符标识符——的手工声明路由键无法登录，因为对它的记录写入会以 `LlmError('UNSTORABLE_PROVIDER_ID')` 拒绝；这类路由改用 `apiKeyEnv` 或提供方 ambient 设置认证。
 
-### 按模型的推理（reasoning）档位
+### 解析模型目录
 
-`reasoningEfforts` 声明模型可选的思考级别：每个键是选择器提供的一个档位，其值是分派在协议中发送的拼写，因此 `high: high` 原样透传规范名称，而 `max: ultra` 则为使用自有词汇的网关改名。键取自 pi-ai 的档位集合（`off`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`）；未声明的档位不会被提供。省略该字段会保留已安装 catalog 条目的能力；没有 catalog 条目的手工声明模型默认提供 `off` / `low` / `max` 三档。`false` 声明一个不具备推理能力的模型，profile 正是以此从其网关无法服务的 catalog 模型上剥除推理；空声明会被拒绝，而不是在这两种含义之间去猜。
+profile 的 `models` 列表会替换而非扩展路由的已安装目录；每个条目从同 id 已安装模型取未设置字段的默认值，因此把路由收窄到两个模型、修正一个容量或添加比已安装目录更新的模型都是一行编辑。`modelOverrides` 无需该代价即可重塑个别已安装目录模型——修正一个模型，保留其余三十七个——当它与 `models` 列表并存、位于手工声明路由上、或点名目录未描述的模型时会被拒绝，因为静默不变的模型会成为别人日后寻找的拼写错误。
 
-该声明会转换为 pi-ai 的 `Model.reasoning` + `thinkingLevelMap`，其中每个档位都被显式决定——未声明的档位一律固定为不支持，而不是留给 pi-ai 自己的默认规则：那套规则并不对称（键缺席对五个基础档位意味着「支持」，对 `xhigh`/`max` 却意味着「不支持」），也本不该要求 profile 作者了解。`off` 是唯一的三态键：不写它，选择器不提供 Off，显式请求 Off 会被拒绝——不点名任何档位的请求仍会在不带该参数的情况下发出，提供方随后做什么是它自己的默认行为；声明而不给值（`off:`），则会提供 Off，选中它时什么也不发送——对 `deepseek` 方言则是一个显式的 `thinking: {type: "disabled"}`——这同时覆盖完全不点名任何档位的请求；声明并给值（`off: none`），该值就会作为档位参数在协议中发送。没有任何写法能把 catalog 映射中的键恢复为「未设置」：这份声明就是对外提供的全部，因此把你要保留的 catalog 档位重述出来。
+### 带推理与协议兼容运行
 
-### 协议兼容开关
+`reasoningEfforts` 声明模型可选择的 thinking 等级：每个键都是选择器提供的等级，其值是该等级过线的拼写，因此 `max: ultra` 可以为拥有自有词汇的网关重命名等级。省略该字段时保留已安装目录条目的能力；`false` 声明非推理模型。对于 pi-ai 无法识别的端点，`compat` 开关重塑请求——哪个角色携带系统提示词、哪个字段限制输出、thinking 等级如何传递——可逐路由、逐模型配置。条目与已安装目录都没有尺寸的模型，会采用路由的 `defaultContextWindow` 与 `defaultMaxTokens` 回退值。
 
-pi-ai 依据提供方 id 与 baseURL 决定每个请求的形状：系统提示词由哪个角色承载、输出上限写在哪个字段、思考级别如何传输。私有网关的 URL 什么也说明不了，而对于 pi-ai 无法识别的端点，其检测会当作 OpenAI 本身来回答——推理模型的系统提示词以 `developer` 发出、输出上限写作 `max_completion_tokens`、思考级别只发一个裸的 `reasoning_effort`——而多数 OpenAI 兼容网关至少会拒绝其中之一。因此 `compat` 既可配置在路由上（作为其模型的默认值），也可按模型配置（逐字段胜出），解析顺序为模型 → 路由 → 已安装 catalog 条目 → pi-ai 自身的检测；路由级开关会为每个读取它的模型遮蔽 catalog 条目的值，而且除了重述其值，没有任何写法能把某个字段交还给 catalog。
+### 运行时更改配置
 
-每个开关归属于其 pi-ai compat 类型声明了它的那些协议，且归组依据是 compat **类型**而非协议名：三个 Responses 协议（`openai-responses`、`azure-openai-responses`、`openai-codex-responses`）共用同一个 compat 类型，因此可设在其中之一的开关，三者皆可设。`supportsDeveloperRole` 可设在 `openai-completions` 与这三者上；`thinkingFormat` 只能设在 `openai-completions`；`supportsTemperature` 只能设在 `anthropic-messages`；`supportsStrictMode` 还可达 `bedrock-converse-stream`。模型级开关若其协议并不接受，解析失败并点名该协议实际提供哪些开关；路由级开关则落在读取它的模型上、跳过其余模型，只有当路由上没有任何模型能读取它时才被拒绝。
+profile 通过可选 settings seam 每次操作重新读取：base 与用户的 `llm-pi-ai:` 设置分节按提供方合并，因此用户可以新增路由、覆盖组合路由的一个字段或把路由指向另一个代理，全部在下一个请求生效、无需重启。适配器无法服务的分节会在写入处被拒绝——`settings.mutate` 回答 `settings-rejected`——之后失效的已存储分节会保留 namespace 最后有效值。当路由集合或某路由的重试策略变化时，插件会原子地重新注册：冲突路由会让此前路由继续服务。
 
-三类键会被拒绝而非丢弃：没有任何协议声明的键（笔误）；pi-ai 已安装 catalog 为具名厂商掌管的键（`openRouterRouting`、`zaiToolStream`、`deferredToolsMode`、`sessionAffinityFormat`、`supportsOpenAIGrammarTools`、`supportsToolSearch`、`supportsExplicitPromptCacheMode`、`supportsToolReferences`、`vercelGatewayRouting`、`sendSessionAffinityHeaders`）——需要某厂商专属开关的路由，本就是一条应当以该厂商命名的 catalog 路由；以及完全没有写值的键（`supportsDeveloperRole:`），schemastery 会把它放行为 null，若照单收下就会用空值替换已安装 catalog 的值。开放集由漂移门禁钉在 pi-ai 的四个 compat 类型上，承载它们的协议集派生自 `Model.compat` 本身，每个字段的类型也派生自上游而非重述，因此上游新增字段、给别的协议加上 compat 类型、或拓宽某个值并集，都会使构建失败，直到有人为它做出分类。
+### 从端点发现模型
 
-条目与已安装 catalog 都没有给出尺寸的模型，会采用该路由的 `defaultContextWindow`（262,144）与 `defaultMaxTokens`（32,768），因此一份只公布 id 的列表同样能产出可服务的路由。两个回退值本质上都是猜测，这正是它们作为路由字段、供网关服务更小模型的部署一次性更正的原因，而不是埋在适配器里的常量；回退值只用于给模型定尺寸，绝不会变成单次请求上限。
+插件会回答"该提供方可以提供哪些模型？"，供配置界面正在编辑或起草的路由使用。已安装目录提供的路由直接由目录回答，不发网络请求；只有目录未描述的路由才会经网络询问（`openai-completions` 与 `openai-responses` 形状）。已配置且具名的路由会在 Host 内部提供已存凭据与 profile `headers`，因此通过 `settings.yaml` 或 Cordis 配置设置的部署标头可以到达 `GET /models`，但不会成为发现请求或 Models 页面的字段；表单中新键入的密钥仍优先于已存凭据。回答是界面可以提供给用户采纳的候选元数据——不存储任何内容，`settings.yaml` 仍然是决定路由服务内容的唯一事实。
 
-请求模态的解析顺序是：条目的 `input` → 已安装 catalog 条目 → 路由的 `defaultInput`（默认 `[text]`），与上面两个容量字段的顺序和「回退值」定位完全一致。因此 catalog 模型保留 catalog 为它记录的模态，更窄的路由默认值也绝不会把它剥掉；而**未被 catalog 描述的**模型全都接受图片的网关，只需在路由上写一次 `[text, image]`，不必逐条目写。条目的空列表与缺省同义——它描述的是一个什么都不接受的模型，因此不作答，解析继续往下走——这正是当 `models` 条目点到某个 catalog 模型却不声明模态时，该模型仍保留 catalog 自有模态的原因。路由的那个则不得为空，因为它下面已经没有可以代为作答的层级。
+### 失败与恢复
 
-`[text]` 是「尚未声明」，而不是对端点的猜测——这也是为什么这里的回退值取保守值，而两个容量回退值只是取一个说得过去的值。这里没有任何环节会去询问网关实际接受什么，而两种猜错的代价并不对等：模态中不含图片时，Harness 会在图片被附加之前就拒绝，因此少声明的代价是一次点名该模型的拒绝；而多声明会接纳一张图片、再由提供方在轮次中途拒绝——此时消息已经持久化，会话便会不断重复一个不可能成功的请求。
+pi-ai 不提供的路由需要 `api`、`baseURL` 与非空 `models` 列表；无法服务的 profile 会在写入处被拒绝，并点名路由与模型。失败携带稳定 code：无法使用的凭据以 `INVALID_CREDENTIAL` 失败并点名路由与引用，`apiKeyEnv` 引用解析为空的路由以 `MISSING_CREDENTIAL` 失败，未配置模型以 `UNKNOWN_MODEL` 失败，终止性提供方失败则区分 `QUOTA` 与暂时性 `RATE_LIMIT`。`GenerateOptions.stop` 以 `UNSUPPORTED_OPTION` 被拒绝，因为 pi-ai 的通用流式 UI 无法跨提供方保证它。
 
-`output` 声明模型可以产出的响应模态；`image` 即生图，缺席表示只产出文本。`capabilities.imageUnderstanding` 声明模型能理解图片内容——这是比「接受图片输入」更强的声明，声明它的模型通常也会声明图片输入，但这里不强求二者成对。两个字段都是建议性元数据：Harness 通过 `LlmModelInfo.outputModalities` 与 `LlmModelInfo.capabilities` 把它们暴露给模型选择器与能力展示面，而本适配器的文本缝从不调用生图，因此除声明本身之外没有任何东西依赖它们。两个字段都不继承任何值——pi-ai 的 `Model` 类型承载不了它们，已安装 catalog 也不声明任何能力——所以什么都没声明的条目解析为纯文本下限、零能力声明。
+-----
 
-路由完全无法服务时解析仍会失败得响亮，并点名出问题的路由与模型：catalog 未提供的路由需要 `api`、`baseURL`，以及一个由唯一标识的模型组成的非空 `models` 列表。该解析在分节 schema 内部运行，因此无法服务的 profile 会在**写入之处**被拒绝——`settings.mutate` 以 `settings-rejected` 点名路由与模型——而不是先存下来、再悄悄让该 namespace 下每条路由失效。对于已经存下的、在此失败的分节，settings seam 会保留该 namespace 上一份可用值，因此这不会把部署卡死。`api` 接受 `supportedProtocols()` 中的协议，且仅在 catalog 无法提供协议时才需要：catalog 中不存在的模型会继承其同门模型一致同意的协议，因此向单协议 catalog 路由添加模型无需重述任何内容。
+<a id="understand-the-implementation"></a>
+## 理解实现
 
+<details>
+<summary>实现细节——点击展开</summary>
 
-`baseURL` 设定该路由下每个模型的端点，因此仍支持 `https://proxy.example.com:8443` 等私有 proxy；省略它的 catalog 路由会保留每个 catalog 模型自己的端点。在 catalog 路由上点名 `api` 会把整条路由改指到该协议，这正是部署把某个提供方在 Responses 与 Chat Completions 之间迁移的方式。
+本节解释适配器背后的设计；可观察行为已在[使用本包](#use-this-package)中完整说明。
 
-`supportedProtocols()` 刻意窄于 pi-ai 的完整流式 API 集合：它只保留 profile 能用密钥、端点与标头**完整描述**的那些协议。Bedrock 要用 AWS 凭据与 region 做 SigV4 签名，Vertex 需要 project、location 与应用默认凭据，Azure 需要提供方环境外加 api-version，Codex 走 OAuth——提供它们只会交回一个无法完成认证的路由。catalog 路由仍可经自己的 provider 抵达这些协议；被拒绝的只有显式覆盖。
+### 设计理念
 
-## 动态配置（settings + credentials）
+适配器建立在不可变快照与按操作解析之上。每个操作都会在第一次 `await` 前捕获整个快照——profile 加一个持有每条路由所构建 `Provider` 的 `createModels()` 集合——配置变更会构建新集合而非修改使用中的集合，因此在一个配置下开始的请求绝不会在另一个配置下结束。路由自己的凭据引用经 harness seam 解析，并以请求 `apiKey` 选项传入，pi-ai 将其视为优先级最高的 auth 覆盖——这正是快速失败（fail-loud）引用语义的所在。该覆盖未覆盖的一切都经集合自身的 auth 到达 pi-ai：凭据存储持有登录写入、刷新轮换的记录（以 `llm-pi-ai/<provider id>` 寻址），auth context 回答提供方解析时提出的 ambient 问题。两者跨快照保持稳定，因此配置变更重建集合时不会忘记谁已登录。
 
-适配器经由一个 thunk **每操作读取一次** profile，而非在构造期冻结。插件在可选的 `ctx.settings` seam 上用同一份 `Config` schema 注册 `llm-pi-ai` namespace，并以其 `cordis.yml` 条目为组合 `base`；由于 `providers` 是字典，base 与用户的 `llm-pi-ai:` settings 分节**按提供方**合并：用户可以新增路由、覆盖组合路由的单个字段，或把路由指向另一个 proxy，全部在下一次请求生效，无需重启。未挂载 settings 服务时，仅由 entry 配置驱动适配器，行为不变。
+### 源码地图
 
-凭据在每次流调用时通过 `apiKeyEnv` 与可选的 `ctx.credentials` seam 解析；未挂载该 seam 时，适配器只读取该引用指向的环境变量。只有完全没有点名任何凭据的 profile——仅限这一种情况——才交给 pi-ai 的环境发现。每个解析出的密钥都会在使用前去除首尾空白并校验格式，因此 HTTP 标头无法承载的值会被拒绝，而不是以语义不明的 `fetch` `TypeError` 形式浮现；这种拒绝会抛出 `LlmError('INVALID_CREDENTIAL')`，点名失败的路由与凭据引用，但绝不透露密钥的任何部分。路由集合与每条路由捕获的重试策略是注册级事实：两者任一变化时，插件都会原子地替换自己的注册（同一适配器实例，候选集合先经校验），因此某条路由若已被另一适配器占有，先前的路由会继续服务，而改回可用配置时注册会重新生效。提供方键的顺序绝不算作变化。本适配器无法服务的分节会在写入处被拒——注册的 `validate` 会解析整份 profile 集合，因此 `ctx.settings.mutate` 以 resolver 自身的错误拒绝（该协议将其报为 `settings-rejected`），什么都不会存储。已存储分节若因其他途径变得不可服务——比如外部编辑了 `settings.yaml`——则由 settings seam 保留该 namespace 最后可用的值并告警。entry 配置本身仍会使插件加载失败；而 llm 注册表拒绝的路由（已被另一适配器族占有的那种）会被记录下来，先前注册的路由继续服务。
+| 文件 | 职责 |
+|---|---|
+| [`src/index.ts`](src/index.ts) | 插件入口：profile 解析、settings 接线、目录与路由注册 |
+| [`src/auth.ts`](src/auth.ts) | 覆盖 harness 凭据平面的凭据存储与 ambient auth context |
+| [`src/login.ts`](src/login.ts) | 面向提供登录的已安装提供方的授权流程 |
+| [`src/config.ts`](src/config.ts) | Profile schema、解析与可服务性校验 |
+| [`src/catalog.ts`](src/catalog.ts) | 已安装目录集成与漂移门禁 |
+| [`src/provider.ts`](src/provider.ts) | 受支持协议表与提供方构建 |
+| [`src/context.ts`](src/context.ts) | Harness 到 pi-ai 的上下文转换、图片处理、回放恢复 |
+| [`src/stream.ts`](src/stream.ts) | 把 pi-ai 事件转换为 harness `StreamChunk` 值 |
+| [`src/replay.ts`](src/replay.ts) | 带版本的 `ReplayEnvelope` 存储与校验 |
+| [`src/discovery.ts`](src/discovery.ts) | 面向配置界面的端点询问 |
 
-适配器通过 `ctx.llm.listModels(provider)` 公开每条已配置路由的模型。这是从请求路径所用的同一个 pi-ai `Models` 集合读取的提供方无关 selector 元数据，因此发现不会创建第二个模型注册表。`ctx.llm.resolveModelInfo(provider, model)` 会执行一次精确 descriptor 查找，并返回其身份、上下文窗口、已配置输出上限和可选思考级别，让权威元数据保留在拥有路由的适配器上，而非消费方。模型**已配置**的 `maxTokens` 会成为 seam 的 `defaultMaxTokens`，因此未点名输出上限的请求会携带部署选定的那一个；而从已安装 catalog 继承来的值是模型的输出**能力**，绝不会自行变成请求默认值。
+### 注册与目录
 
-携带推理元数据的模型——来自已安装 catalog，或来自其条目的 `reasoningEfforts`——会公开 pi-ai 有序的 `getSupportedThinkingLevels(model)` 结果，不经筛选或规范化，其中包括 `off`，以及模型对 `xhigh` 或 `max` 的特定支持。Harness 将每个规范 pi-ai 级别公开为不透明 ID；提供方／模型在协议格式中的表示仍保留在 pi-ai 的 `thinkingLevelMap` 中。
+插件会在可配置提供方目录中声明它能认证的每个已安装目录提供方，并加入当前 profile 声明的每条路由，因此配置界面可以在任何路由存在之前提供完整目录。每个条目都携带 `declared`——pi-ai 是否在该键下不提供任何内容——因为只有适配器能区分手工声明路由与收窄目录路由。路由注册具有原子性：与其他适配器冲突的候选集合会让此前路由继续服务。零路由的裸挂载即休眠姿态：settings 分节提供 profile 前不注册任何内容，分节清空时路由随之消失。
 
-**没有**推理元数据的模型——pi-ai 标记为不具备推理能力的 catalog 模型，或遮蔽了这样一个 catalog id 并继承该判定的手工声明条目——完全不公开 `reasoning`。pi-ai 会把这类模型报告为只支持 `off` 一档，但 `off` 会被翻译成*省略* reasoning 选项，而那与「不点名任何档位」产出的请求逐字节相同：选它关不掉任何东西，于是自身默认就在思考的提供方，会在界面显示 `off` 被选中的同时继续思考。把该能力报告为不可用，界面就只剩提供方默认这一项，不会再出现自相矛盾的控件。不遮蔽任何 catalog 条目的手工声明模型，在其条目未声明 `reasoningEfforts` 时默认提供 `off` / `low` / `max` 三档。配置 profile 的 `reasoning` 值（包括 `off`）在存在时是部署默认值；省略它会保留提供方默认值。每次请求的 `GenerateOptions.reasoningEffort` 优先；未出现在确切模型能力中的档位会让**请求**在网络 I/O 前以 `UNSUPPORTED_REASONING_EFFORT` 失败，而不会被自动调整。**描述**一个模型则从不这样失败：同一提供方下各模型接受的档位并不一致，因此 `resolveModel` 对该模型拿不下的 profile 档位报告为「没有默认值」，而不是抛错。在那里抛错会让整个提供方从任何基于它构建的模型目录中消失——一个配错的 profile 字段连支持该档位的模型也一并藏起来——所以坏配置暴露在被执行处，而不是被描述处。pi-ai 的通用流选项通过省略 `reasoning` 表示 `off`。
+### 回放与词汇
 
-受支持的 profile 字段是 `apiKeyEnv`、`displayName`、`api`、`baseURL`、`models`、`modelOverrides`、`compat`、`defaultContextWindow`、`defaultMaxTokens`、`defaultInput`、`headers`、`reasoning`、`thinkingBudgets`、`cacheRetention`、`transport`、`timeoutMs`、`websocketConnectTimeoutMs`、`streamIdleTimeoutMs`、`maxRequestImageBytes`、`requestImagePixelBudget`、`requestImageMaxBytes` 和 `retryPolicy`。每条 profile 解析后的重试策略会随该提供方路由一同捕获；省略时使用共享的有界 normal 默认值并重试五次。流空闲间隔必须是正的有限 Node 定时器延迟，默认为五分钟，且只覆盖未完成提供方读取，不包括消费方思考时间。每条图片路由从提供方无关的规范化附件派生确定性请求版本，受 `requestImagePixelBudget`（默认总像素 2048×2048）和 `requestImageMaxBytes`（默认原始字节 1MiB）约束。读取附件前，`maxRequestImageBytes` 先按请求版本的保守上界替换超预算的最旧图片；保留版本生成后再用确切 base64 长度检查。20MiB 默认值可保留十五个按 1MiB 上限生成的请求版本，并为请求正文留下余量。同一版本用于内联 base64，其稳定描述会公开附件 ID 和实际请求图片尺寸。若已配置标头中有同名项，则以 Harness 应用归因为准。
+成功 assistant 响应会存储带版本的、无损 JSON 回放状态，与产生它们的提供方和模型放在一起——响应级事实加每个流式块一条逐块条目。请求时，`LlmRuntime` 仅当同一适配器实例拥有两条路由时才传递回放状态；适配器校验它并恢复原生响应 id 与提供方签名，无法使用的状态会降级为提供方无关内容而不是让请求失败。pi-ai 工具调用参数是解析后的对象，因此适配器解析输入并重新字符串化输出，以符合 harness 原始 JSON 约定；pi-ai 流内错误事件映射为终止 `finish` 分片。
 
-适配器强制 pi-ai SDK `maxRetries` 为零，因此一次 `stream()` 调用只会发起一次提供方请求。已移除 profile 字段 `maxRetries` 和 `maxRetryDelayMs` 会使加载失败，而不是静默倍增或隐藏单独组合的 agent（智能体）级重试预算。空闲超时会 abort SDK 的稳定请求信号，并以 `TIMEOUT` 呈现；较早的调用方 abort 仍为 `ABORTED`。
+</details>
 
-## 端点询问
+-----
 
-插件提供 `ctx.llm.registerModelDiscovery('llm-pi-ai', …)`，用来回答「这个提供方能服务哪些模型？」——针对配置界面正在编辑或起草的路由。它刻意**不是** catalog 刷新：什么都不存储，回复是界面供用户采纳的候选。`settings.yaml` 始终是唯一决定路由服务什么的东西。
+<a id="further-exploration"></a>
+## 进一步探索
 
-点名了**已安装 catalog 所提供路由**的请求，直接由该 catalog 作答，完全不联网：pi-ai 的注册表才是它自家提供方的权威列表，且携带列表端点不会公布的上下文窗口与输出上限。这类路由根本不需要 `baseURL`。只有 catalog 未描述的路由——网关、自建服务——才会经协议层询问；若它也没给端点，则会被告知去设置一个或手工填写模型。
+当包级约定不够用时阅读以下页面。它们从服务约定逐步进入孪生适配器与共享类型。
 
-草稿携带的是用户当下键入的凭据（如果有）；已经存好凭据的路由，在配置界面上只呈现一个脱敏描述符，因此询问会解析该路由的 `apiKeyEnv`，而不是不带认证发出去、再把端点的 401 报成密钥不对。键入的密钥优先，因为那正是被测试的那一把。解析只发生在真正要联网的路径上，因此 catalog 路由作答时完全不会触碰凭据。用户提供或已存储的探测密钥也会经过同样的去除空白与格式校验：HTTP 标头无法承载的值会被立即以 `LlmError('INVALID_CREDENTIAL')` 拒绝，而不会传到 `fetch`——否则会呈现为一个和端点不可达难以区分的、语义不明的 `ByteString` 失败。
+- [dsh-llm 服务](../llm/README.zh.md)——本适配器注册其上的提供方无关服务。
+- [llm-deepseek 适配器](../llm-deepseek/README.zh.md)——`deepseek-official` 路由的 DeepSeek 直连孪生。
+- [LLM 流式子系统](../../../docs/subsystems/llm-streaming.zh.md)——`StreamChunk` 协议与适配器约定。
+- [llm-retry](../llm-retry/README.zh.md)——应用每个 profile `retryPolicy` 的重试执行器。
+- [孪生 LLM 适配器](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.zh.md)——为什么 DeepSeek 路由交付两个结构不同的适配器。
+- [生成配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-llm-pi-ai)——每个受支持配置字段及其源声明。
 
-询问只读 `openai-completions` 与 `openai-responses`，它们「`GET /models` + bearer 认证」的形状是网关、自建服务与官方端点三方一致认可的那一种。Azure 尽管出身 OpenAI 也被排除——它用 `api-key` 标头认证并要求 `api-version` 查询参数——Codex 则走 OAuth；其余协议一律以 `DISCOVERY_UNSUPPORTED` 回答，让界面回退到手工填写，而不是把认证失败报成一个没有模型的提供方。`baseURL` 按前缀而非待解析 URL 处理，因此 `https://gateway.example/openai/v1` 这类部署路径会保留其路径段。
+-----
 
-多数列表只公布 id；`context_window`/`context_length` 与 `max_output_tokens`/`max_tokens` 在网关提供时会被读取，没有可用 id 的条目会被跳过而不是让整份列表失败，其余仍由采纳方补齐。回复在四兆字节上限下读取，且上限落在实际收到的字节上——端点是用户自己填的 URL，因此会先看声明长度，但绝不把它当作边界。端点不可达、凭据被拒、响应非 JSON、以及响应没有 `data` 数组，都会以 `DISCOVERY_FAILED` 失败，消息点名端点；仅当 401 或 403 时才点名凭据。读取响应体期间被取消会呈现为 `ABORTED`，与请求发出之前被取消一致。
-
-## 提供方／模型路由与回放
-
-每次解析产出一份**不可变**快照——profiles 加上一个持有各路由所建 `Provider` 的 `createModels()` 集合——每个操作都在自己第一个 `await` 之前整体捕获一份快照。配置变化会构造**新**集合，而不是改动正在被使用的那个：`Models.streamSimple()` 是惰性的，它在流首次被消费时才解析 provider，而那已在 credential await 之后，因此改动共享集合会让一个在旧配置下开始的请求在新配置下结束，或者撞上一个已不存在的 provider。这正是 seam 的每步调用冻结（`llm.prepareCall()`）能贯通到底的原因——回复途中切换模型会在下一步生效，绝不会影响在途的那一步。请求经 `Models.streamSimple()` 抵达提供方。保持 catalog 协议不变的 catalog 路由会**复用**已安装提供方，只替换其模型列表，因为该提供方持有本包无法重建的 API 实现——Bedrock 经由独立入口加载其 Smithy 模块——从零件重建会静默收窄可用提供方的范围。其余路由都由 `createProvider()` 基于 `supportedProtocols()` 背后的协议表构造，表中条目正是 pi-ai 自己的提供方工厂所用的同一批 factory。
-
-路由的 `apiKeyEnv` 密钥仍在请求抵达 pi-ai 之前经 harness 自身 seam 解析，并作为请求的 `apiKey` 选项传入——pi-ai 将其视为优先级最高的 auth 覆盖，harness 因此保住自己明确失败的引用语义。在该覆盖之下，集合携带本插件的凭据存储与 ambient auth context：已存储的登录（OAuth grant，或在 pi-ai 自己的登录提示里键入的密钥）经由它们为路由完成认证，并在存储的跨进程锁下自行刷新。存储以 `llm-pi-ai/<provider id>` 为记录地址；手写路由键若落在记录文法之外（大写、点、下划线），读取时视为「没有存储任何东西」而不是寻址错误——这样的路由无法登录（对它的记录写入会以 `LlmError('UNSTORABLE_PROVIDER_ID')` 拒绝），只能经 `apiKeyEnv` 或提供方 ambient 设置认证。完全没有点名任何凭据的路由会解析为「已配置但无密钥」，把该要求留给协议——那才是它真正所在的位置。
-
-所选模型 descriptor 提供协议实现。这包括原生 API 差异，例如 descriptor 使用 Responses API 而非 Chat Completions 的 OpenAI 模型；harness 适配器不会按模型名称硬编码端点选择。
-
-成功的 assistant 响应会将经版本化的无损 JSON 回放状态与生成该响应的提供方和模型一同存储，其形式是 `ReplayEnvelope`：一个响应级半区（kind、版本、API、路由、响应 id、原生停止原因），加上每个流式块一条、携带该块 signature 的逐块条目。逐块对齐正是 `BlockAssembler` 在组装丢弃某个块（`max-tokens` 下的工具调用）时裁剪的对象，因此存储的条目始终描述存储的内容——保留的块保有其 signature。请求时，`LlmRuntime` 只有在历史提供方路由与目标提供方路由当前由同一个 `PiAiAdapter` 实例拥有时，才会传递回放状态。即使目标提供方或模型改变，适配器也会验证状态并恢复 pi-ai 响应 id 与提供方 signature；随后由 pi-ai 判定目标 API 可以复用哪些元数据。没有回放状态的历史会被转换为外来的、与提供方无关的内容，绝不伪装为原生 pi-ai 响应。
-
-持久化内容是权威记录；回放状态只负责恢复原生保真度。当前构建无法使用的已存状态——其他适配器的 kind、其他版本（包括旧日志携带的平铺前信封形式）、格式错误的元数据、消息与回放状态之间的提供方／模型不匹配，或内容／块不匹配——会把这一条 assistant 消息降级为同样的外来提供方无关转换而不是让请求失败，插件通过其 `onReplayDegrade` 钩子记录 `INVALID_REPLAY_STATE` 诊断。
-
-## 词汇差异
-
-- pi-ai 工具调用参数是已解析对象；harness 存储原始 JSON 字符串。适配器会解析输入，并将输出重新字符串化。
-- pi-ai 将失败报告为流内错误事件；它们会映射到 `finish {kind:'error'|'aborted', failure}` 分片。提供方特定错误文本会区分终止型 `QUOTA` 与暂时型 `RATE_LIMIT`，针对已解析模型上下文窗口评估的文本与 usage 信号则将溢出规范化为 `CONTEXT_WINDOW_EXCEEDED`。终止时的 `stop` 若消息不含内容块，则会映射为 `finish {kind:'error'}`，code 为 `EMPTY_RESPONSE`（默认策略会重试），而非成功空消息。
-- pi-ai 将推理 token 折叠到输出 usage 中；没有可映射的独立推理计数。
-- pi-ai 的 `off` 思考级别会原样穿过 Harness 能力 seam，并在分派时变为被省略的 pi-ai 通用 `reasoning` 选项。
-- `GenerateOptions.stop` 会以 `UNSUPPORTED_OPTION` 被拒绝，因为 pi-ai 的通用流式输出接口无法保证所有提供方都支持它。
-
-## 应用归因
-
-每个请求都携带 dsh-llm `attributionHeaders()` 的共享归因标头，并通过 pi-ai `headers` 流选项合并。不会合成提供方特定应用归因标头。详见 [dsh-llm § 应用归因](../llm/README.zh.md#app-attribution-attributionts)。
-
-## 依赖体量
-
-pi-ai 会安装多个提供方 SDK，并延迟加载 catalog 模型所选的 SDK。该可选适配器包将依赖体量隔离在自身范围内。
-
+<a id="model-experience"></a>
 ## 模型体验
 
-### 通过 pi-ai 发起的提供方请求
+### 经 pi-ai 的提供方请求
 
-#### 模型看到的内容
+#### 模型看到什么
 
-所选 catalog 模型会收到 `GenerateOptions.system`、历史、工具，以及 pi-ai 通用流式 API 支持的采样字段。每张保留图片前都有稳定文本，写明完整附件 ID 和实际请求尺寸。请求累积的 base64 图片载荷超过路由的 `maxRequestImageBytes` 时，被 offload 的图片会从最老开始替换为固定文本，要求模型在有路径时重新读取文件，否则请用户重新附上图片。系统不会读取或转换被 offload 的规范化附件。只有当适配器验证提供方原生回放元数据与历史内容匹配时，才会恢复这些元数据。
+所选目录模型会收到 `GenerateOptions.system`、历史、工具与 pi-ai 通用流式 API 支持的采样字段。每张保留图片前都会有文本，注明其完整附件 id 与实际请求尺寸。当前执行文件系统可以映射附件提供方的宿主对象时，该文本还会携带只读规范化对象路径，并警告规范化或请求投影可能缩放或重新编码上传内容。当累计 base64 图片载荷超过路由的 `maxRequestImageBytes` 时，每张卸载图片都会在替换文本中保留自己的身份与当前已解析访问方式。卸载的规范化附件不会读取或变换。提供方原生回放元数据只在适配器针对历史内容校验通过后恢复。
 
 #### Token 影响
 
-精确输入取决于提供方 tokenization。保留图片会增加稳定的附件与坐标描述；offload 占位文本替代被省略图片的视觉 token。回放元数据可能让原生 API 复用提供方侧状态。
+提供方分词决定精确输入。保留图片会添加稳定的附件与尺寸描述符；卸载占位符会替代省略图片的视觉 token。回放元数据可能让原生 API 复用提供方侧状态。
 
 #### KV Cache 影响
 
-转换保留逻辑请求顺序，不添加文本；复用取决于所选提供方的序列化与回放状态。更改适配器实例、提供方、模型或任何上游请求 token，都可能使复用从首个出现差异的 token 起失效。跨过图片上限会改写较早的一条消息（新被 offload 的图片变为占位文本），复用在该消息处截止，直到被 offload 的前缀稳定。
+转换保持逻辑请求顺序，图片句柄与卸载占位符则会添加模型可见文本。即使附件身份与请求字节保持稳定，执行世界路径变化也会改写历史句柄，并可能从该图片起阻止复用。更换适配器实例、提供方、模型或其他上游 token 具有相同的后缀影响。越过图片上限会把较早图片替换为占位文本，因此复用在该消息处结束，直到被卸载前缀稳定。
 
 ### 提供方响应
 
-#### 模型看到的内容
+#### 模型看到什么
 
-pi-ai 事件会变为 harness 推理、文本、工具调用、usage 与 finish 分片。适配器把解析后的工具参数作为原始 JSON 字符串传给 harness。
+pi-ai 事件变成 harness 的推理、文本、工具调用、用量与 finish 分片。适配器把解析后的工具参数以原始 JSON 字符串传给 harness。
 
 #### Token 影响
 
-只有在 loop 记录生成内容后，它才会影响后续输入。提供方不单独报告推理 token 时，pi-ai 会将其折叠到输出 usage 中。
+生成内容只在 loop 记录后才影响后续输入。提供方未单独报告推理 token 时，pi-ai 会把推理 token 并入输出用量，并原样保留其精确 `totalTokens` 值。
 
 #### KV Cache 影响
 
-已记录响应内容会追加到下一个请求，不会使其较早可复用前缀失效。未记录传输元数据与 usage 计量不影响 cache 身份。
+已记录的响应内容会追加到下一个请求，不会使其更早可复用前缀失效。未记录的传输元数据与用量计量不影响缓存标识。
 
-## 已知限制与暂缓事项
+## 已知限制与延期工作
 
-- **`maxRequestImageBytes` 只统计 base64 图片载荷**：文本、工具、图片描述和 JSON 结构不计入上限，因此该值必须低于网关请求体上限并留出余量。offload 是确定性请求投影，不记录为会话事件。
-- **一次登录只存活于发起它的进程中**：授权尝试不可持久，登录途中刷新页面会丢弃它，人需要重来。登出即对已存储记录执行 `deleteRecord`，它只在本地遗忘而不通知签发方。
-- **提供方自带的凭据发现经由本插件的 ambient context 作答**：不指定凭据的路由交由 catalog 提供方自行解析，它会询问环境值（`AZURE_OPENAI_API_KEY`、`AWS_PROFILE` 以及各提供方自己的那一组）与本地凭据文件是否存在。两类问题都在这里作答：先查凭据 seam 再查进程环境，文件存在性则按宿主进程的文件系统判断并展开 `~`。它做不到的是*读取*凭据文件的内容——自行解析 `~/.aws/credentials` 的提供方是直接读盘的，不经过 seam。
-- **settings 能新增或覆盖路由，但不能移除组合路由**：用户层合并在组合 `base` 之上，因此删除 `cordis.yml` 提供的提供方属于组合变更；对该 namespace 执行 `replace` 只会重置用户层。
-- **分层合并对字典键没有删除语义**：settings seam 把组合 `base` 与用户层按键递归合并，因此 base 声明的某个 `reasoningEfforts` 档位、`modelOverrides` 条目或 `compat` 字段，用户层只能覆盖、无法移除——而 `reasoningEfforts` 里缺席本身*就是*语义（「不提供」），于是 base 声明过的档位会一直被提供。只有 `cordis.yml` entry config 为用户层正在编辑的同一模型声明了按模型推理字段才会触发；受支持的姿态是把这些字段留给 settings 文档（shipped 组合以 dormant 方式挂载该适配器），且 `models` 列表是数组、整体替换，这是带内的解决办法。
-- **`headers` 可能承载一条脱敏器看不见的凭据**：profile 的 `headers` 是纯字符串字典，因此设在其中的 `Authorization` 或 `api-key` 会被脱敏后的 `describe()` 原样返回，并被任何配置 UI 渲染出来。请把凭据存为 `apiKeyEnv` 引用；把该字典整体改为只写与其余[协议边界工作](../llm/README.zh.md#known-limitations-and-deferred-work)一并暂缓。
-- **路由的 catalog 不会自我刷新**：catalog 就是 `settings.yaml` 所写的内容，因此模型列表的新鲜度只到最近一次编辑为止。这里没有任何环节会去问提供方它服务哪些模型；路由要多一个模型，得有人写进去。
-- **每条路由只有一种协议格式**：`api` 作用于整条路由，因此混合协议的 catalog 路由（跨 Responses 与 Chat Completions 的 OpenAI 式 catalog）无法承载另一种协议的模型，向这类路由添加它未描述的模型必须点名 `api` 并把全部模型一起迁过去。把该提供方拆成两个路由键是变通办法。
-- **模态声明不经验证**：没有任何环节会去询问端点接受什么，因此声明了网关并不提供的 `image` 的模型会在 prompt 准入后被提供方拒绝。持久图片会留在历史中，同一个错误声明的模型可能再次失败。系统仍允许切换到纯文本模型，因为共享 LLM 运行时会在该次请求中把图片引用投影为稳定文本。
-- **未认证路由取决于其协议**：不点名凭据会让路由解析为「已配置但无密钥」，但 pi-ai 的 OpenAI 兼容实现仍要求 API key 或 `Authorization` 标头，因此无鉴权的本地服务需要一个由 `apiKeyEnv` 引用的占位凭据，或在 `headers` 中给出 `Authorization` 条目。
-- **不支持 `GenerateOptions.stop`**：pi-ai 的通用流选项无法保证所有提供方都支持 stop sequence，因此适配器会拒绝该字段。
-- **历史中的 `system` 消息使用 pi-ai 通用上下文转换**：提供方特定位置由 pi-ai 决定，而非由 harness 拥有的协议覆盖决定。
-- **无法获取提供方 HTTP 状态**：pi-ai 错误事件不会在所有提供方上公开稳定 HTTP 状态；失败只公开稳定 harness 错误 code。
-- **重试策略由提供方持有，而不是 SDK 重试**：每个提供方 profile 都可以提供嵌套的 `retryPolicy`；省略时解析为 normal 模式并重试五次，`dsh-llm-retry` 会在 agent 的失败步骤扩展点上执行有效路由策略。pi-ai SDK 重试仍保持禁用，因此持久化的 agent 步骤与 `llm/retry` 事件记录每次可见尝试，直接 `ctx.llm.stream()` 调用仍只尝试一次。
+<a id="known-limitations-and-deferred-work"></a>
+
+
+这些限制说明适配器在哪里停止、由未来工作接续。它们是当前包约束，不是通用 pi-ai 对比或任务积压。
+
+- **`maxRequestImageBytes` 只计算 base64 图片载荷**——文本、工具、描述符与 JSON 结构在该上限之外，因此它必须留有余量地低于网关请求体上限。卸载是确定性请求投影，不会记录为会话事件。
+- **登录只存在于发起它的进程中**——授权尝试不持久，因此登录中途刷新页面会放弃它，用户需要重新开始。退出登录是对已存储记录执行 `deleteRecord`，只在本地忘记它，不会告知签发方。
+- **提供方原生发现经本插件的 ambient context 回答**——不点名凭据的路由交由目录提供方自身解析，它会询问环境值（`AZURE_OPENAI_API_KEY`、`AWS_PROFILE` 及各提供方自有集合）与本地凭据文件。两个问题都在这里得到回答：凭据 seam 先于进程环境被查询，文件存在性则针对宿主进程的文件系统以 `~` 展开后检查。它做不到的是*读取*凭据文件内容——自行解析 `~/.aws/credentials` 的提供方会直接读取，不经该 seam。
+- **设置可以新增或覆盖路由，不能移除组合路由**——用户层覆盖组合 base，因此删除 `cordis.yml` 提供的提供方属于组合变更。
+- **分层合并对字典键没有删除**——base 声明的 `reasoningEfforts` 等级、`modelOverrides` 条目或 `compat` 字段可以被用户层覆盖，但不能被移除。
+- **`headers` 可以携带 redactor 永远看不到的凭据**——profile 解析会拒绝 Fetch 无法表示的名称与值，但该字典仍是纯字符串；以 `apiKeyEnv` 引用存储凭据。
+- **路由目录不会自行刷新**——目录就是 `settings.yaml` 的内容；这里没有任何机制向提供方查询它提供的模型。
+- **每条路由一种协议格式**——混合协议目录路由无法承载另一协议格式的模型；把提供方拆到两个路由键是变通办法。
+- **模态声明不受校验**——声明 `image` 而其网关不支持的模型会在提示词准入后被提供方拒绝。持久图片仍留在历史中，同一误声明模型可能再次失败；切换到纯文本模型仍然可行，因为共享 LLM 运行时会针对该请求把图片引用投影为稳定文本。
+- **未认证路由取决于其协议**——不点名凭据的路由解析为已配置但无密钥，但 pi-ai 的 OpenAI 兼容实现仍要求 API 密钥或 `Authorization` 标头，因此无密钥本地服务器需要由 `apiKeyEnv` 引用或 `headers` 中的 `Authorization` 条目提供的占位凭据。
+- **不支持 `GenerateOptions.stop`**——pi-ai 的通用流式选项无法跨提供方保证停止序列行为。
+- **历史中的 `system` 消息使用 pi-ai 通用上下文转换**——提供方专属放置遵循 pi-ai，而非 harness 自有的协议覆盖。
+- **提供方 HTTP 状态不可用**——pi-ai 错误事件不跨提供方暴露稳定 HTTP 状态。
+- **重试策略由提供方自有，而非 SDK 重试**——pi-ai SDK 重试保持禁用，因此持久 agent 步骤与 `llm/retry` 事件拥有每个可见尝试，直接 `ctx.llm.stream()` 调用仍是单次尝试。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者的工作上下文——点击展开</summary>
+
+本开发备注是不具权威性的工作上下文：尚未决定的探索方向与维护者备注。已交付的行为与既定理由以上文、包代码和相关 Agent Note 为准。
+
+- 提供的协议集合刻意比 pi-ai 的完整 API 集合更窄：Bedrock、Vertex、Azure 与 Codex 通过 profile 无法以密钥、端点与标头完整描述的流程认证；目录路由仍可经自有提供方到达它们，只有显式覆盖会被拒绝。Codex 可经授权流程的 OAuth grant 登录。
+- `compat` 开关集合由漂移门禁钉在 pi-ai 的 compat 类型上；上游升级若新增字段、为更多协议赋予 compat 类型或扩大值联合，会在有人分类前让构建失败。
+
+</details>
+
+**运行时不变式：** 不发布伴生入口。本包没有独立事件序列或可变数据关系，相关约定在所属 seam 强制执行。

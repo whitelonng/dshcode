@@ -27,7 +27,7 @@ interface SessionPersistence {
 }
 ```
 
-`path` is an absolute local path to the backend's dedicated log for `meta`; `kind` identifies the representation. JSONL returns `{ kind: 'jsonl', path }` using its resolved root and path helpers. SQLite and any backend without an honest local per-session artifact return `undefined`. The query creates and flushes nothing, so it can report a lazy target path before that file exists.
+`path` is an absolute local path to the provider's dedicated log for `meta`; `kind` identifies the representation. JSONL returns `{ kind: 'jsonl', path }` using its resolved root and path helpers. An out-of-tree provider without an honest local per-Session artifact returns `undefined`. The query creates and flushes nothing, so it can report a lazy target path before that file exists.
 
 The model-facing bash package owns a `ctx.shellEnv` registry. A contributor declares its stable name, every `DSH_*` key it may return, a description for each key, and `resolve(execution: ToolExecution)`. Duplicate contributor names, duplicate key ownership, reserved keys, malformed declarations, undeclared runtime output, and non-string output fail loudly. Registration is a Cordis effect and is removed with the contributing plugin fiber. `list()` exposes declarations without running resolvers, keeping the environment API enumerable for diagnostics and future prompt/UI consumers.
 
@@ -60,7 +60,7 @@ Resume reuses the loaded header and therefore the same id and location. Fork and
 
 ## Testing
 
-Unit coverage pins registry declaration validation, effect disposal, per-execution collection, the `dshHome` precedence, and the local executor's `DSH_*` scrub/rebuild order. Request-recording tests cover foreground/background snapshots, no-agent calls, absent/JSONL persistence, ignored model `env`, and parent/child isolation. JSONL/SQLite locator contract tests and both hook bridge suites pin available and unavailable transcript dialects.
+Unit coverage pins registry declaration validation, effect disposal, per-execution collection, the `dshHome` precedence, and the local executor's `DSH_*` scrub/rebuild order. Request-recording tests cover foreground/background snapshots, no-agent calls, absent/JSONL persistence, ignored model `env`, and parent/child isolation. JSONL and no-artifact locator contract tests plus both hook bridge suites pin available and unavailable transcript dialects.
 
 A keyless full-loop integration drives the real agent loop, JSONL persistence, tool-bash, and bash-local on the first turn. The child prints `DSH_HOME`, `DSH_SHELL`, session id, JSONL target, and an inherited stale sentinel; the test verifies current values, absence of the stale variable, pre-flush file absence, and the eventual persisted header. Snapshot coverage pins the generic bash description in the recorded request header. No with-key test is required because the contract is deterministic local execution rather than model choice.
 

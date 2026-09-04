@@ -1,9 +1,3 @@
-/* Geometry mirrors CodeBlock (12px radius, code-block surface + banner row,
-   markdown code-block font) so a read card and a fenced code block read as one
-   family. Content keeps `white-space: pre` and scrolls horizontally rather than
-   folding, because a source line's indentation is part of what a reader is
-   reading. */
-
 .block {
   --dsl-read-radius: 12px;
   --dsl-read-line-height: 22px;

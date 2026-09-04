@@ -1,12 +1,39 @@
-# dsh-session-checkpoint-policy
+---
+description: "Semantic session durability checkpoints for users and maintainers deploying persisted agents that must not lose a model request or tool side effect on crash."
+kind: "package-reference"
+---
+
+# @deepseek-ai/dsh-session-checkpoint-policy
 
 English | [中文](README.zh.md)
 
-Semantic durability policy for persisted agents. It checkpoints the event-sourced session before a model adapter receives a request, before a top-level tool body may produce an external side effect, and at each `agent/pre-step` boundary so the preceding response and ordered tool results are durable before the next request.
+## Summary
 
-## Plugin (namespace: `session-checkpoint-policy`)
+`dsh-session-checkpoint-policy` is a zero-config plugin that makes a persisted session durable at the moments that matter: before a model request reaches the adapter, before a top-level tool body can produce an external side effect, and at each step boundary so the preceding response and tool results are stored before the next request. Load it beside one persistence backend, and a crash after any checkpoint resumes with the recorded work — a request, a tool call, or a completed step — instead of losing it. The policy adds no prompt, tool schema, or configuration; checkpoint failures are fail-closed, so neither the adapter nor a top-level tool body runs when the durable write cannot be confirmed. Streaming `assistant/chunk` events get no per-chunk checkpoint, and a persisted call without a result records an unknown outcome rather than retrying automatically.
 
-This zero-config function plugin consumes `ctx.sessions`, `ctx.llm`, `ctx.tools`, and the presence of `ctx.sessionPersistence`. Load it beside one persistence backend:
+## Table of Contents
+
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Mount this plugin in any composition that persists sessions and must survive a crash without redoing or losing work. Persistence and checkpoint scheduling are separate plugins: a backend stores the event log, and this policy decides when the store must be flushed.
+
+### When to choose it
+
+Choose it for every persisted agent that can be interrupted — a crash between a recorded tool call and its result, or between a model request and its response, is exactly the failure this policy contains. Loading a backend without it is valid but weaker: events still inside the backend's batching window or an outstanding write can be lost. Skip the policy when nothing persists sessions, or when a specialized deployment deliberately replaces the checkpoint schedule.
+
+### Minimal configuration
+
+No configuration fields exist; the plugin is a single load beside one persistence backend:
 
 ```yaml
 - id: session-persistence
@@ -16,12 +43,52 @@ This zero-config function plugin consumes `ctx.sessions`, `ctx.llm`, `ctx.tools`
   name: '@deepseek-ai/dsh-session-checkpoint-policy'
 ```
 
-Persistence and checkpoint scheduling are intentionally separate Cordis plugins. A persistence backend starts bounded background batches for `session/event` appends and makes each requested `session/flush` an immediate quiescence barrier; this policy chooses the request, tool-dispatch, and next-step barriers. Loading a backend without this policy is valid, but a crash may lose events still inside the configured batching window or an outstanding write. First-party persisted apps and runtimes mount both plugins explicitly; a specialized deployment may deliberately omit or replace the policy.
+### What becomes durable
 
-The policy wraps `llm/stream` lazily, so the downstream stream is not constructed until the live session's buffered request events are durable. It wraps `tools/execute` after pre-execute policy and guards; a top-level tool body runs only after its recorded call is durable. If cancellation lands while that flush is pending, the wrapper returns the canonical `ABORTED_BEFORE_DISPATCH` result without entering the tool body. Nested tool dispatches reuse the outer model-visible call's checkpoint. `agent/pre-step` persists the preceding response/result batch before request derivation.
+Three barriers are checkpointed. The model request is flushed before the adapter stream is constructed, so a crash before a response cannot replay an unpersisted request. A top-level tool call is flushed before the tool body runs, so a recorded call is durable before any external side effect; nested tool dispatches reuse the outer call's checkpoint. At each `agent/pre-step` boundary, everything the preceding step committed — its response and ordered tool results — is flushed before the next request is derived.
 
-Checkpoint rejection is fail-closed at the model and tool boundaries: neither the adapter nor the top-level tool body runs. A step-boundary rejection fails the turn before another request starts. Concurrent tool checkpoints share the session store's serialized persistence drain and cannot duplicate sequence numbers.
+### Observable behavior and failures
 
+After a checkpoint, the checkpointed work is durable: resume restores it from the store like any persisted session. If cancellation lands while a tool checkpoint flush is pending, the wrapper returns the canonical `ABORTED_BEFORE_DISPATCH` result and never enters the tool body. A checkpoint rejection is fail-closed at both boundaries — the adapter or top-level tool body does not run — and a step-boundary rejection fails the turn before another request starts.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the policy joins the loop and the persistence seam; the observable contract is covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The plugin is a listener-only composition over three seams, with no state of its own: it wraps `llm/stream` so the downstream stream is not constructed until the live session's buffered request events are durable, wraps `tools/execute` after pre-execute policy and guards so a top-level tool body runs only after its recorded call is durable, and listens to `agent/pre-step` to persist the preceding response/result batch before request derivation. The session store's flush is the shared durability barrier; concurrent tool checkpoints serialize through it and cannot duplicate sequence numbers.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: `apply` installs the three checkpoint listeners |
+| — | No runtime invariant companion is published; checkpoint ordering is enforced at the intercepted waterfall and persistence seams; this stateless policy owns no independent mutable relation. |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the durability model to the seam it joins and the shipped backends.
+
+- [Session persistence subsystem](../../../docs/subsystems/persistence.md) — the flush checkpoint, batching window, and crash recovery every backend shares.
+- [Session package map](../README.md) — adjacent persistence, projection, title, and telemetry packages.
+- [Session persistence seam](../session-persistence/README.md) — the `ctx.sessionPersistence` service this policy flushes through.
+- [JSONL persistence backend](../session-persistence-jsonl/README.md) — the shipped backend this policy is usually loaded beside.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Interrupted calls
@@ -40,6 +107,21 @@ The repair result is appended after the reusable prefix, so it does not invalida
 
 ## Known Limitations and Deferred Work
 
-- The policy durably records execution intent, not generic exactly-once effects. Side-effecting tools should forward `exec.callId` as an idempotency key when their provider supports one.
-- Streaming `assistant/chunk` events have no per-chunk checkpoint. Bounded background batches normally persist them before the next semantic checkpoint, but a hard crash may lose the current in-memory batch or outstanding write.
-- A persisted call without a result cannot prove whether its external effect completed. Recovery therefore records an unknown outcome instead of retrying automatically.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define where the policy's durability guarantee stops. They are current package constraints, not a task backlog.
+
+- **Durable execution intent, not exactly-once effects** — the policy records that a call was dispatched, not that its external effect completed. Side-effecting tools should forward `exec.callId` as an idempotency key when their provider supports one.
+- **No per-chunk checkpoint for streaming** — `assistant/chunk` events rely on bounded background batches; a hard crash may lose the current in-memory batch or outstanding write.
+- **Unknown outcome, not automatic retry** — a persisted call without a result cannot prove whether its external effect completed, so recovery records an unknown outcome instead of retrying.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

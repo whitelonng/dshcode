@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-07-19-gui-web-client-architecture.md) | 中文
 
-> 分工线：通道无关的分层模型与 RPC 协议（消息模型/类型体系/约定面/客户端基类）见 [分层与 RPC 协议笔记](2026-07-19-gui-layering-and-rpc-protocol.zh.md)；本篇 = 浏览器侧：client cordis 树如何装载、UI 插件如何经 slot 与服务组合、React-free 对象层如何以不可变快照供给 React。
+> 分工线：历史上的通道无关分层模型与 RPC 协议见[已归档的分层与 RPC 协议笔记](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)；本篇 = 浏览器侧：client cordis 树如何装载、UI 插件如何经 slot 与服务组合、React-free 对象层如何以不可变快照供给 React。
 
 ## Problem
 
@@ -17,7 +17,7 @@ Status: implemented
 ```
 ┌─ Host ─────────────────────────┐   ┌─ Browser ─────────────────────────────────────────┐
 │ sessions/agents/SessionLog     │   │ client cordis root ctx                             │
-│ apiproxy: RPC + mux/host 双流  │◀─▶│  ├ vendored Loader + ctx.modules（内核，壳静态持有）│
+│ Connection + Gateway: RPC/events│◀─▶│  ├ vendored Loader + ctx.modules（内核，壳静态持有）│
 │ webserver:                     │   │  ├ immediately entries: connection/runtime/        │
 │  ├ GET /plugins/<id>/client.js │   │  │   ui-theme/i18n（fetch bundle，boot 预拉）       │
 │  └ GET / 注入 __DSH_BOOT__ 图  │   │  ├ lazy entries: layout/sidebar/                   │
@@ -42,18 +42,18 @@ slot 体系有自己的笔记——[slot 体系标准](2026-07-22-slot-type-chai
 
 ## 服务与 scope 寻址
 
-服务是插件对其他插件的唯一 API（UI 组件与注入面都不是 API；无人调用的插件不挂服务——ui-trajectory 即最小插件样板：无 ctx 服务，只做视图 slot 注册）。名册：`ctx.connection`（api client + 流句柄）、`ctx.slots`（注册表包装层，发 `slots/changed`，渲染入口，渲染器安装约定）、`ctx.sessions`（列表 store、当前会话状态、scope 树）、`ctx.loader`、`ctx.theme`、`ctx.i18n`、`ctx.layout`（跨插件视图导航）、`ctx.conversation`（send/cancel/startSession）。过去住在服务 store 里的观看态（面板宽、选中、草稿）现按 [slot 体系标准](2026-07-22-slot-type-chain-implementation.zh.md) 住 entry 声明的 store。
+服务是插件对其他插件的唯一 API（UI 组件与注入面都不是 API；无人调用的插件不挂服务——ui-trajectory 即最小插件样板：无 ctx 服务，只做视图 slot 注册）。名册：`ctx.connection`（RPC 传输 + generation 状态）、`ctx.slots`（注册表包装层，发 `slots/changed`，渲染入口，渲染器安装约定）、`ctx.sessions`（列表 store、当前会话状态、scope 树）、`ctx.loader`、`ctx.theme`、`ctx.i18n`、`ctx.layout`（跨插件视图导航）、`ctx.conversation`（send/cancel/startSession）。过去住在服务 store 里的观看态（面板宽、选中、草稿）现按 [slot 体系标准](2026-07-22-slot-type-chain-implementation.zh.md) 住 entry 声明的 store。
 
 slot 之外不存在第二种组件注册模型——原视图环与工具环都已溶解进来。会话视图即 ui-conversation 声明的 `'conversation.view'` list slot entry，tab 元数据随注册 options（`id`/`order`/`label`）走，per-view chrome 住视图组件自身。最终 Chat 业务 Node 通过 keyed/session `'conversation.chat.node'` slot 分发；ui-tool 拥有其中的 `tool-call` entry，递归渲染传入的 `subCalls`，并声明 keyed/session `'tool.call.toolview'` 子 slot。key 空间仍在运行时开放（SlotMap 声明 slot、从不声明 key），root 与任意深度的后代都按 `entryKey: toolName` 分发，以 `GenericToolCard` 兜底。业务包通过 `ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({ name: 'tool.call.toolview', key: '<tool>' }, Row))` 注册原子视图；声明本身就是加载与重载依赖（[决策](2026-08-05-slot-declaration-injection.zh.md)）。ui-conversation 还通过 `'conversation.details.tool'` 委托 selected call 的详情正文，使 ui-tool 的 card model 保持为唯一展示所有者，同时避免 conversation 导入 Tool 组件。与 target 无关的事件注册表和视图注册表是数据组装 seam，不是平行组件注册表（[决策](2026-08-09-client-conversation-node-assembly.zh.md)）。
 
 **scope 寻址**与 host 侧 agent（智能体）scope 惯例同构：服务是 root 单例，方法不收 sessionId——它们读调用方 ctx 上的 scope 标（`scopeOf(ctx)`）。在会话 scope 内，`ctx.conversation.send('hi', 'queue')` 自动打到该会话；跨会话调用换 ctx 定向（`ctx.sessions.scope(id)!.conversation.send(...)`）；从 root ctx 直接调 scoped 方法即 throw。client 会话 scope 的铸造方式与 host agent scope 相同（no-op 插件 fiber + scope 键 extend），首次观看时惰性建，只有会话被移除且无人观看才拆——仅 host 会话死亡不拆 scope（冻结为只读视窗）。
 
-## 数据对象层（`packages/client/runtime/src/client/sessions/`）
+## 数据对象层（`packages/api/session-controller/src/client/`）
 
 帧从这里进、快照从这里出、Conversation assembler 坐在中间——React-free（零 React import，grep 可断言）：
 
 ```
-mux/host frames (ConnectionController pump, injected sinks)
+$events frames (ConnectionController pump, injected sinks)
         │
         ▼
 SessionManager.handleMuxEnvelope / handleHostEnvelope
@@ -73,7 +73,7 @@ Notifier 微任务合批 ──► ConversationSnapshot 缓存 ──uSES──�
 - **SessionManager**（manager.ts）：实例簇 + 帧总入口 + 会话列表。带 sessionId 的帧只投已存在实例（mux 广播不得把每个会话都实例化）；例外是审批/问答 `requested` 帧——它们不落 history、open 无法回补，故缓冲进 `pendingBuffers`，实例化时回放。
 - **Notifier**（notifier.ts）：两条通知通道，按变更来源取用。`markDirty()`（默认；帧驱动一律用它）按微任务合批——N 次变更、一次通知、一次重渲染；flush 先重建快照缓存再通知。`notifyNow()`（仅用户手势的直接回响）同 tick 重建并通知——受控输入的回响若延到微任务，DOM 会回滚、光标跳尾。帧驱动代码用 notifyNow 会让合批塌回逐帧渲染；禁。
 - **ConversationNodeAssembler**（`runtime/src/client/conversation/`）：Session 拥有的增量引擎在原始事件上运行各自独立注册的 Definition。`match(event)` 无须扫描 Context 即可选出 `(kind, id)`；start/update 构造 Definition state；引擎计算的 Location 携带 Turn/Step 关闭信息；向前查询 Context 时记录依赖，并由后续 prepend 修复；`buildViewNode(target)` 只物化 dirty Context。Chat builder 保留结构顺序和 per-key value identity，`useSession` selector 负责消费隔离，Assistant token 发布则合并到每个 animation frame 一次。[Conversation Node 决策](2026-08-09-client-conversation-node-assembly.zh.md)拥有组装边界，[Tool 展示所有权](2026-08-08-client-tool-presentation-ownership.zh.md)拥有 Tool 递归渲染。
-- **ConnectionController**（在 `packages/client/connection`）：开 mux/host 双流、for-await 泵入，代际围栏之内指数退避重连（500ms 翻倍至 10s 封顶、抖动、无限重试）；sinks 单向注入（Controller 不认识 Session）。重连 = 重建：`onConnected` → 列表刷新 + 各已打开会话 resync。对象层只面向 `IApiClient`；Web 承载以 HTTP POST 载两个 client→server 象限、以[每逻辑流一条 WebSocket](2026-08-04-websocket-downlink-carrier.zh.md)载两个 server→client 象限，客户端类族归分层笔记属地。
+- **ConnectionController**（位于 `packages/client/connection`）：打开 `$events` Remote 流、通过 for-await 泵入，并在 generation 围栏内指数退避重连（500ms 翻倍至 10s 封顶、抖动、无限重试）；sink 单向注入，Controller 不认识 Session。重连即重建：`onConnected` → 列表刷新 + 各已打开会话 resync。对象层通过 `ctx.remote` 调用生成的命名空间；Web 载体以 HTTP POST 承载 Remote 一元调用，以 API Gateway 的 WebSocket mux 承载逻辑流，Connection 则拥有请求传输与 generation。
 
 ## React 面（`packages/client/ui-renderer`）
 

@@ -39,7 +39,7 @@ interface ToolProviderResult {
 
 ## 提示词段落
 
-`PromptSection` 是一份只读的同进程注册约定。其文本可以是静态的，也可以从当前组装上下文动态解析。协作式组装完成后，一个有效的 `complete` 段会成为唯一的提示词段落。
+`PromptSection` 是一份只读的同进程注册约定。其文本可以是静态的，也可以从当前组装上下文动态解析。各段先按 order 升序排列，再按名称的代码单元顺序排列；仓库贡献方通过 `getSectionOrder()` 解析服务持有的具名分配。Runtime-context 贡献方通过 `getContextOrder()` 解析独立分配。协作式组装完成后，一个有效的 `complete` 段会成为唯一的提示词段落。
 
 ```ts type-equiv
 /** One contributed section of the system prompt (registry input). */
@@ -47,9 +47,8 @@ interface PromptSection {
   /** Unique name — a duplicate registration throws (see {@link SystemPrompt.section}). */
   readonly name: string
   /**
-   * Sections are concatenated in ascending order. Convention: `-100` is the
-   * harness identity, `0` the deployment persona, tool guidance uses 100–199;
-   * other negative orders also render before the persona.
+   * Sections are concatenated in ascending order. Equal orders use code-unit
+   * name order.
    */
   readonly order: number
   /**
@@ -108,6 +107,20 @@ Registry service for the prompt inputs assembled before each model step.
  * @returns the exact Cordis effect disposer.
  */
 section(section: PromptSection): () => void
+
+/**
+ * Resolve the centrally owned placement of a repository prompt section.
+ * @param name - stable section placement name.
+ * @returns the section's numeric sort order.
+ */
+getSectionOrder(name: PromptSectionOrderName): number
+
+/**
+ * Resolve the centrally owned placement of a repository runtime context.
+ * @param name - stable context placement name.
+ * @returns the context's numeric sort order.
+ */
+getContextOrder(name: PromptContextOrderName): number
 
 /**
  * Register ordered dynamic context in the calling context's scope. Scoped

@@ -30,4 +30,4 @@ Web 承载层组合与 acp-agent 相同的沙箱化产品路径：`dsh-sandbox-l
 
 ## 后果
 
-Web 会话从受限状态启动（默认 `workspace-write` + `ask`），一次沙箱拒绝的升级会以可应答的卡片形式抵达浏览器；部署方可以通过 `BootHostOptions.sandbox` 放宽或收紧默认值，无需触动装配。问题应答使用同一注册表模式（ui-user-questions 基于问题 pending 表），Session 导航会在用户打开会话前识别审批、计划审阅与普通问题等待。权限选择在每次挂载时读取一次；来自另一个 client 切换的实时刷新暂缓实现。覆盖率：proxy 注册表与权限 RPC 的单元测试套件、会话对象与 fixture 的单元测试套件、针对 fixture 模式审批应答与预设切换的无密钥 Web 冒烟测试，以及真实组合的 plan-review 与问题快照；这些快照会固定 pending 侧边栏状态直至解决。
+Web 会话从受限状态启动（默认 `workspace-write` + `ask`），sandbox 拒绝升级会通过审批通道抵达浏览器。部署方可以通过 `BootHostOptions.sandbox` 放宽或收紧默认值，无需触动装配。问题应答使用同一注册表模式（ui-user-questions 基于问题 pending 表），Session 导航会在用户打开会话前识别审批、计划审阅与普通问题等待。权限选择在每次挂载时读取一次；来自另一个 client 切换的实时刷新暂缓实现。覆盖包括 proxy 注册表与权限 RPC 单元测试套件、会话对象与 fixture 单元测试套件，以及针对审批应答与 preset 切换的无密钥 Web 冒烟测试。

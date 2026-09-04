@@ -1,6 +1,7 @@
 /** Operation-sequence and recorded-time projections for the trajectory overview. */
 
 import type { TrajectoryTurnModel } from './layout.ts'
+import type { TrajectoryTranslate } from './locales.ts'
 import { formatDurationMillis } from './trajectory-record.ts'
 import type { TrajectoryCellKind, TrajectoryCellProps } from './trajectory-record.ts'
 
@@ -37,10 +38,14 @@ export interface TrajectoryTimelineModel extends TrajectoryTimeRange {
 /**
  * Format a timeline duration as an integer-millisecond label.
  * @param milliseconds - Non-negative duration in milliseconds.
+ * @param t - Trajectory locale translator.
  * @returns Millisecond label with thousands separators.
  */
-export function formatTimelineOffset(milliseconds: number): string {
-  return formatDurationMillis(milliseconds)
+export function formatTimelineOffset(
+  milliseconds: number,
+  t: TrajectoryTranslate,
+): string {
+  return formatDurationMillis(milliseconds, t)
 }
 
 function laneFor(kind: TrajectoryCellKind): number {

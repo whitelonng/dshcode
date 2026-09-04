@@ -26,6 +26,7 @@ const requiredArtifacts = [
   'packages/api/gateway/lib/index.js',
   'packages/typert/registry/lib/client.js',
   'packages/typert/registry/lib/index.js',
+  'packages/session/session-projection/lib/index.js',
 ].every(path => existsSync(artifact(path)))
 
 describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
@@ -42,6 +43,7 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       registryHost: 'packages/typert/registry/lib/index.js',
       remotesClient: 'packages/api/remotes/lib/client.js',
       session: 'packages/core/session/lib/index.js',
+      sessionProjections: 'packages/session/session-projection/lib/index.js',
     }).map(([key, path]) => [key, artifactUrl(path)]))
     const script = `
       import { createServer } from 'node:http'
@@ -53,11 +55,13 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       const connectionHost = await import(urls.connectionHost)
       const { default: TypertRemoteService } = await import(urls.apiGatewayHost)
       const { default: GoalService } = await import(urls.goal)
+      const { default: SessionProjectionRegistry } = await import(urls.sessionProjections)
       const { TYPERT } = await import(urls.goalTypert)
       const { default: TypertRegistry } = await import(urls.registryHost)
       const { Session, SessionId } = await import(urls.session)
 
       const routes = []
+      const credentialRecords = new Map()
       const host = new Context()
       host.provide('webServer', {
         register(route) {
@@ -67,10 +71,20 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
         tapIndex() { return () => {} },
         port: 0,
       })
+      host.provide('credentials', {
+        readRecord(key) { return Promise.resolve(credentialRecords.get(key)) },
+        async modifyRecord(key, mutate) {
+          const current = credentialRecords.get(key)
+          const next = await mutate(current)
+          if (next !== undefined) credentialRecords.set(key, next)
+          return next ?? current
+        },
+      })
       await host.plugin({ inject: connectionHost.inject, apply: connectionHost.apply })
       await host.plugin(TypertRegistry)
       await host.plugin(AgentRegistry)
       await host.plugin(TypertRemoteService)
+      await host.plugin(SessionProjectionRegistry)
       await host.plugin(GoalService)
       host.typert.register(TYPERT)
 
@@ -101,11 +115,30 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
       if (routes.length !== 1 || routes[0].path !== '/api') {
         throw new Error('Connection did not register exactly one /api route')
       }
-      const server = createServer((request, response) => { void routes[0].handler(request, response) })
+      const server = createServer((request, response) => {
+        if ((request.url ?? '/').startsWith('/?')) {
+          if (host.connection.authorizeIndex(request, response)) {
+            response.writeHead(200, { 'content-type': 'text/html' })
+            response.end('<body>shell</body>')
+          }
+          return
+        }
+        void routes[0].handler(request, response)
+      })
       await new Promise(resolveListen => server.listen(0, '127.0.0.1', resolveListen))
       const address = server.address()
       if (address === null || typeof address === 'string') throw new Error('HTTP server has no TCP address')
       const origin = 'http://127.0.0.1:' + String(address.port)
+      const login = await fetch(host.connection.authenticatedUrl(origin), { redirect: 'manual' })
+      const setCookie = login.headers.get('set-cookie')
+      if (login.status !== 303 || setCookie === null) throw new Error('browser token exchange failed')
+      const cookie = setCookie.split(';', 1)[0]
+      const hostFetch = globalThis.fetch
+      globalThis.fetch = (input, init = {}) => {
+        const headers = new Headers(init.headers)
+        headers.set('cookie', cookie)
+        return hostFetch(input, { ...init, headers })
+      }
 
       const handoffs = new Map()
       globalThis.window = {
@@ -164,8 +197,8 @@ describe.skipIf(!requiredArtifacts)('Goal Remote built LIB chain', () => {
         scopedResult: scopedResult.value,
         rootGoal: host.goals.get(rootAgent)?.objective,
         scopedGoal: host.goals.get(scopedAgent)?.objective,
-        rootEvents: rootAgent.session.events.length,
-        scopedEvents: scopedAgent.session.events.length,
+        rootEvents: rootAgent.session.snapshotEvents().length,
+        scopedEvents: scopedAgent.session.snapshotEvents().length,
       }
 
       await client.fiber.dispose()

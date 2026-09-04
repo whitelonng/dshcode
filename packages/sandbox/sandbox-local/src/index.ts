@@ -33,11 +33,11 @@ import {
 } from '@deepseek-ai/node-addon-landlock-run'
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { assertNever } from '@deepseek-ai/dsh-llm'
 import { SandboxProvider, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
 import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { AclWriteGrant, assertTempRootOutsideWorkspace, tempWriteSid, workspaceWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
+import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { bwrapProfileArgs, landlockProfileArgs, seatbeltProfileArgs } from './profiles.ts'
 
 /** Plugin config. All optional — `static Config` supplies the defaults. */
@@ -169,7 +169,7 @@ const PLATFORM_CHAINS: Record<string, readonly SelectedRunner['runner'][]> = {
  * Enforcement completeness a rung claims when selected WITHOUT a probe (a
  * chain of one). `bwrap` and Seatbelt govern every promised file effect by
  * construction, so the claim is a profile fact; `landlock` is listed for the
- * table's totality but is unreachable unprobed today (the Linux chain has
+ * table's totality but is unreachable without a probe (the Linux chain has
  * two rungs, so it is only ever selected through its probe, whose report is
  * what distinguishes full from per-ABI-partial — and the launcher additionally
  * self-reports partial enforcement on stderr at every confined run).
@@ -226,7 +226,7 @@ const WINDOWS_ACL_RUNNER_FAILURE_EXIT = 127
  * cleanup failure reported on a non-zero child exit) is never misclassified
  * as "the command did not run". Keep the Landlock tuple aligned with the
  * assembled snapshot fixture at
- * `examples/acp-agent/tests/fixtures/partial-landlock-sandbox.ts`.
+ * `packages/test-support/session-snapshot/tests/fixtures/partial-landlock-sandbox.ts`.
  */
 const RUNNER_FAILURE_RULES = {
   bwrap: [{ fatalSignatures: ['bwrap: '] }],

@@ -26,7 +26,7 @@ The node-compat CI matrix (Node 22.19 and 26) gains `dsh-source-launch-smoke` (`
 
 **Make the source graph erasable-only so Node 26 strip mode accepts it.** Rejected: parameter properties and value namespaces pervade vendored Cordis/cosmokit/loader/schemastery; rewriting them is unbounded churn re-applied on every vendor sync.
 
-**A repo-owned in-thread loader (`module.registerHooks()` + esbuild or `@swc/core` transform).** Rejected for now: prototypes measured ~0.45s (esbuild path untested end-to-end; SWC breaks on `vendor/hmr`'s decorator + namespace merge in both decorator modes), but it means owning transform correctness and a resolve hook that tsx already provides. Revisit only if the ~0.3s gap becomes a real cost; the profiling evidence lives in the PR discussion.
+**A repo-owned in-thread loader (`module.registerHooks()` plus an esbuild or `@swc/core` transform).** Rejected: prototypes measured about 0.45s, while the esbuild path lacked end-to-end validation and SWC failed on `vendor/hmr`'s decorator plus namespace merge in both decorator modes. This option also makes the repository own transform correctness and a resolve hook that tsx already provides. Revisit only if the measured 0.3s gap becomes a material cost.
 
 **Run built `lib/` for Node 26 and keep native for 24.** Rejected: loses the zero-build development loop on the newest Node line and mixes source and artifact planes.
 

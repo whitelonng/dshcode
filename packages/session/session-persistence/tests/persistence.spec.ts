@@ -1,20 +1,41 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import SessionStore, { Session, SessionId, isJsonValue } from '@deepseek-ai/dsh-session'
-import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
+import SessionStore, {
+  Session,
+  SessionId,
+  SessionLogOffset,
+  SessionSeq,
+} from '@deepseek-ai/dsh-session'
+import { isJsonValue } from '@deepseek-ai/dsh-util-values'
+import type {
+  SessionEvent,
+  SessionHeader,
+  SessionLogOffset as SessionLogOffsetType,
+} from '@deepseek-ai/dsh-session'
 import {
   DEFAULT_PREPARED_SESSION_CACHE_SIZE, DEFAULT_WRITE_BATCH_MAX_DELAY_MS, MAX_WRITE_BATCH_DELAY_MS,
   SessionPersistence, SessionPersistenceRevision, PersistenceCoordinator,
-  type PersistenceBackend, type SessionPersistenceSnapshot, type StoredPrefix, type StoredSuffix,
+  type PersistenceBackend, type SessionEventSuffix, type SessionInspection, type SessionPersistenceSnapshot,
+  type SessionStorageMetadata, type StoredPrefix, type StoredSuffix,
 } from '../src/index.ts'
 import { runPersistenceContract, meta, oneTurnLog } from './contract.ts'
-import { runCoordinatorContract, type CoordinatorFixture } from './coordinator-contract.ts'
+import {
+  legacyMessageLog, preReactLoopLog, runCoordinatorContract, type CoordinatorFixture,
+} from './coordinator-contract.ts'
 
 /** The durable store shape: materialized sessions only (no lazy entries). */
-type MemoryStore = Map<string, { meta: SessionHeader; events: SessionEvent[] }>
+type MemoryStore = Map<string, {
+  meta: SessionHeader
+  inheritedEventCount?: SessionLogOffsetType
+  events: SessionEvent[]
+}>
 
 /** Test-store revision that changes for any metadata or event mutation. */
-function memoryRevision(entry: { meta: SessionHeader; events: SessionEvent[] }): SessionPersistenceRevision {
+function memoryRevision(entry: {
+  meta: SessionHeader
+  inheritedEventCount?: SessionLogOffsetType
+  events: SessionEvent[]
+}): SessionPersistenceRevision {
   return SessionPersistenceRevision(JSON.stringify(entry))
 }
 
@@ -64,8 +85,8 @@ interface CoordinatorInternals {
 /**
  * Reference {@link PersistenceCoordinator} vehicle and abstract-service coverage, backed by a
  * dependency-free map with atomic writes and no torn-tail marker. Supplying the map lets multiple
- * instances share materialized sessions, the in-memory analogue of reload over one file/database;
- * durable behavior is covered by the JSONL and SQLite backends.
+ * instances share materialized sessions, the in-memory analogue of reload over one artifact;
+ * durable behavior is covered by the JSONL provider.
  */
 class MemoryPersistence extends SessionPersistence implements PersistenceBackend<never> {
   override readonly supportsRawArtifacts = false
@@ -93,8 +114,12 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return undefined
   }
 
-  create(m: SessionHeader): Promise<void> {
-    return this.coordinator.create(m)
+  create(m: SessionHeader, inheritedEventCount?: SessionLogOffsetType): Promise<void> {
+    return this.coordinator.create(m, inheritedEventCount)
+  }
+
+  override ensureMaterialized(session: Session): Promise<void> {
+    return this.coordinator.ensureMaterialized(session)
   }
 
   append(id: SessionId, events: readonly SessionEvent[]): Promise<void> {
@@ -109,16 +134,28 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return this.coordinator.prepare(id, signal)
   }
 
-  load(id: SessionId): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
-    return this.coordinator.load(id).then(loaded => ({ meta: loaded.meta, events: [...loaded.events] }))
+  load(id: SessionId): Promise<SessionInspection> {
+    return this.coordinator.load(id).then(loaded => ({
+      meta: loaded.meta,
+      inheritedEventCount: loaded.inheritedEventCount,
+      events: [...loaded.events],
+    }))
   }
 
-  inspect(id: SessionId, signal?: AbortSignal): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+  inspect(id: SessionId, signal?: AbortSignal): Promise<SessionInspection> {
     return this.coordinator.inspect(id, signal)
-      .then(loaded => ({ meta: loaded.meta, events: [...loaded.events] }))
+      .then(loaded => ({
+        meta: loaded.meta,
+        inheritedEventCount: loaded.inheritedEventCount,
+        events: [...loaded.events],
+      }))
   }
 
-  readFrom(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<{ meta: SessionHeader; events: SessionEvent[] }> {
+  borrowSession(id: SessionId, signal?: AbortSignal): ReturnType<PersistenceCoordinator['borrowSession']> {
+    return this.coordinator.borrowSession(id, signal)
+  }
+
+  readFrom(id: SessionId, fromSeq: SessionLogOffsetType, signal?: AbortSignal): Promise<SessionEventSuffix> {
     return this.coordinator.readFrom(id, fromSeq, signal)
   }
 
@@ -130,6 +167,7 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     if (!entry) return undefined
     return {
       meta: structuredClone(entry.meta),
+      inheritedEventCount: SessionLogOffset(entry.inheritedEventCount ?? 0),
       events: structuredClone(entry.events),
       revision: memoryRevision(entry),
     }
@@ -140,26 +178,45 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return entry === undefined ? undefined : memoryRevision(entry)
   }
 
-  async appendBatch(m: SessionHeader, events: readonly SessionEvent[], _isMaterialized: boolean): Promise<void> {
+  async appendBatch(
+    storage: SessionStorageMetadata,
+    events: readonly SessionEvent[],
+    _isMaterialized: boolean,
+  ): Promise<void> {
     // Defense-in-depth: the coordinator already validates serializability, but a
     // durable store must reject non-JSON data at its own boundary too.
     for (const e of events) {
       if (!isJsonValue(e.data)) throw new Error(`event "${e.type}" carries non-JSON-serializable data`)
     }
+    const { meta: m, inheritedEventCount } = storage
     const existing = this.store.get(m.id)
     if (!existing) {
       // The coordinator sends the first batch for materialization; later batches append.
-      this.store.set(m.id, { meta: structuredClone(m), events: structuredClone(events) as SessionEvent[] })
+      this.store.set(m.id, {
+        meta: structuredClone(m),
+        inheritedEventCount,
+        events: structuredClone(events) as SessionEvent[],
+      })
     } else {
       existing.events.push(...structuredClone(events) as SessionEvent[])
     }
   }
 
-  async commitRepair(m: SessionHeader, _tornMarker: undefined, closers: readonly SessionEvent[]): Promise<void> {
+  materializeHeader(storage: SessionStorageMetadata): Promise<void> {
+    const { meta: m, inheritedEventCount } = storage
+    this.store.set(m.id, { meta: structuredClone(m), inheritedEventCount, events: [] })
+    return Promise.resolve()
+  }
+
+  async commitRepair(
+    storage: SessionStorageMetadata,
+    _tornMarker: undefined,
+    closers: readonly SessionEvent[],
+  ): Promise<void> {
     // No torn tails in a Map store, so `_tornMarker` is always undefined; only the
     // synthetic closers are appended (the same DELETE+INSERT a DB backend does,
     // minus the truncate).
-    const entry = this.store.get(m.id)
+    const entry = this.store.get(storage.meta.id)
     /* v8 ignore next -- commitRepair only runs for a materialized (stored) session */
     if (!entry) return
     if (closers.length > 0) entry.events.push(...structuredClone(closers) as SessionEvent[])
@@ -196,9 +253,17 @@ class ControlledBackend implements PersistenceBackend<never> {
   beforeAppend?: (attempt: number) => Promise<void>
   beforeLoadStored?: (attempt: number, signal?: AbortSignal) => Promise<void>
   /** When set, the declared seek hook delegates here so readFrom exercises it; unset throws (tests set it first). */
-  seekHook?: (id: SessionId, fromSeq: number, signal?: AbortSignal) => Promise<StoredSuffix | undefined>
+  seekHook?: (
+    id: SessionId,
+    fromSeq: SessionLogOffsetType,
+    signal?: AbortSignal,
+  ) => Promise<StoredSuffix | undefined>
 
-  loadStoredFrom(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<StoredSuffix | undefined> {
+  loadStoredFrom(
+    id: SessionId,
+    fromSeq: SessionLogOffsetType,
+    signal?: AbortSignal,
+  ): Promise<StoredSuffix | undefined> {
     if (this.seekHook === undefined) throw new Error('seekHook not configured for this test')
     return this.seekHook(id, fromSeq, signal)
   }
@@ -210,6 +275,7 @@ class ControlledBackend implements PersistenceBackend<never> {
     if (entry === undefined) return undefined
     return {
       meta: structuredClone(entry.meta),
+      inheritedEventCount: SessionLogOffset(entry.inheritedEventCount ?? 0),
       events: structuredClone(entry.events),
       revision: memoryRevision(entry),
     }
@@ -221,21 +287,34 @@ class ControlledBackend implements PersistenceBackend<never> {
     return entry === undefined ? undefined : memoryRevision(entry)
   }
 
-  async appendBatch(m: SessionHeader, events: readonly SessionEvent[], _isMaterialized: boolean): Promise<void> {
+  async appendBatch(
+    storage: SessionStorageMetadata,
+    events: readonly SessionEvent[],
+    _isMaterialized: boolean,
+  ): Promise<void> {
+    const { meta: m, inheritedEventCount } = storage
     this.lastAppendedBatch = events
     const attempt = ++this.appendAttempts
     await this.beforeAppend?.(attempt)
     const entry = this.store.get(m.id)
     if (entry === undefined) {
-      this.store.set(m.id, { meta: structuredClone(m), events: structuredClone(events) as SessionEvent[] })
+      this.store.set(m.id, {
+        meta: structuredClone(m),
+        inheritedEventCount,
+        events: structuredClone(events) as SessionEvent[],
+      })
     } else {
       entry.events.push(...structuredClone(events) as SessionEvent[])
     }
   }
 
-  async commitRepair(m: SessionHeader, _tornMarker: undefined, closers: readonly SessionEvent[]): Promise<void> {
+  async commitRepair(
+    storage: SessionStorageMetadata,
+    _tornMarker: undefined,
+    closers: readonly SessionEvent[],
+  ): Promise<void> {
     this.repairAttempts += 1
-    const entry = this.store.get(m.id)
+    const entry = this.store.get(storage.meta.id)
     if (entry !== undefined) entry.events.push(...structuredClone(closers) as SessionEvent[])
   }
 
@@ -253,7 +332,6 @@ class ControlledBackend implements PersistenceBackend<never> {
   }
 }
 
-// Run the shared contract against the in-memory backend.
 runPersistenceContract('memory', async () => {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
@@ -310,7 +388,7 @@ describe('the inherited readRaw default', () => {
 })
 
 // Each fixture shares one map across mounts. No `corruptTail` is supplied because map writes are
-// atomic; the suite asserts that skip while JSONL and SQLite cover the repair branch.
+// atomic; the suite asserts that skip while JSONL covers the repair branch.
 runCoordinatorContract('memory', async (): Promise<CoordinatorFixture> => {
   const store: MemoryStore = new Map()
   return {
@@ -330,7 +408,7 @@ describe('PersistenceCoordinator seed ownership', () => {
 
     try {
       const session = ctx.sessions.create(SessionId('shared-seed'), { seed: oneTurnLog() })
-      const seed = session.events
+      const seed = session.snapshotEvents()
       await ctx.sessions.flush(session)
 
       expect(backend.lastAppendedBatch).toBe(seed)
@@ -468,7 +546,7 @@ describe('PersistenceCoordinator stored identity', () => {
       meta: meta('different'),
       events: [{
         type: 'turn/start',
-        seq: 0,
+        seq: SessionSeq(0),
         time: 1,
         data: { turn: 1 },
       }],
@@ -487,6 +565,35 @@ describe('PersistenceCoordinator stored identity', () => {
     }
   })
 
+  it('rejects an inherited cut beyond the stored prefix before repair', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const id = SessionId('invalid-inherited-cut')
+    backend.store.set(id, {
+      meta: { ...meta(id), isSeeded: true },
+      inheritedEventCount: SessionLogOffset(2),
+      events: [{
+        type: 'turn/start',
+        seq: SessionSeq(0),
+        time: 1,
+        data: { turn: 1 },
+      }],
+    })
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+    try {
+      await expect(coordinator.load(id)).rejects.toThrow(/inherited event count exceeds its stored event count/)
+      expect(backend.repairAttempts).toBe(0)
+      expect((coordinator as unknown as CoordinatorInternals).states.size).toBe(0)
+    } finally {
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('reserves a cold id across asynchronous storage repair', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -495,7 +602,7 @@ describe('PersistenceCoordinator stored identity', () => {
     const header = meta(id)
     const start: SessionEvent = {
       type: 'turn/start',
-      seq: 0,
+      seq: SessionSeq(0),
       time: 1,
       data: { turn: 1 },
     }
@@ -657,14 +764,14 @@ describe('PersistenceCoordinator session preparations', () => {
     const states = (coordinator as unknown as {
       states: Map<SessionId, {
         meta: SessionHeader
-        cursor: number
+        cursor: SessionLogOffsetType
         materialized: boolean
         owner?: Session
       }>
     }).states
     states.set(id, {
       meta: owner.header,
-      cursor: oneTurnLog().length,
+      cursor: SessionLogOffset(oneTurnLog().length),
       materialized: true,
       owner,
     })
@@ -690,12 +797,12 @@ describe('PersistenceCoordinator session preparations', () => {
     const preparation = await coordinator.prepare(id)
     const preparations = (coordinator as unknown as {
       preparations: {
-        reservationFor: (session: Session) => { state: { cursor: number } } | undefined
+        reservationFor: (session: Session) => { state: { cursor: SessionLogOffsetType } } | undefined
       }
     }).preparations
     const reservation = preparations.reservationFor(preparation.session)
     if (reservation === undefined) throw new Error('test preparation must stay reserved')
-    reservation.state.cursor += 1
+    reservation.state.cursor = SessionLogOffset(reservation.state.cursor + 1)
     const detach = ctx.sessions.enter(preparation.session)
 
     try {
@@ -790,7 +897,7 @@ describe('PersistenceCoordinator session preparations', () => {
       first = await coordinator.prepare(id)
 
       expect(backend.loadAttempts).toBe(1)
-      expect(first.session.events[0]).toBe(inspected.events[0])
+      expect(first.session.snapshotEvents()[0]).toBe(inspected.events[0])
 
       first[Symbol.dispose]()
       second = await coordinator.prepare(id)
@@ -818,8 +925,8 @@ describe('PersistenceCoordinator session preparations', () => {
     try {
       const first = await coordinator.inspect(id)
       backend.store.get(id)!.events.push(
-        { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-        { type: 'turn/end', seq: 7, time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
+        { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+        { type: 'turn/end', seq: SessionSeq(7), time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
       )
 
       const refreshed = await coordinator.inspect(id)
@@ -847,13 +954,13 @@ describe('PersistenceCoordinator session preparations', () => {
     try {
       const inspected = await coordinator.inspect(id)
       backend.store.get(id)!.events.push(
-        { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-        { type: 'turn/end', seq: 7, time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
+        { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+        { type: 'turn/end', seq: SessionSeq(7), time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
       )
 
       preparation = await coordinator.prepare(id)
-      expect(preparation.session.events).toHaveLength(9)
-      expect(preparation.session.events[0]).not.toBe(inspected.events[0])
+      expect(preparation.session.snapshotEvents()).toHaveLength(9)
+      expect(preparation.session.snapshotEvents()[0]).not.toBe(inspected.events[0])
       expect(backend.loadAttempts).toBe(2)
     } finally {
       preparation?.[Symbol.dispose]()
@@ -879,8 +986,8 @@ describe('PersistenceCoordinator session preparations', () => {
       const cached = await coordinator.inspect(id)
       preparation = await coordinator.prepare(id)
       backend.store.get(id)!.events.push(
-        { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-        { type: 'turn/end', seq: 7, time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
+        { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+        { type: 'turn/end', seq: SessionSeq(7), time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
       )
 
       await expect(coordinator.inspect(id)).resolves.toBe(cached)
@@ -915,7 +1022,7 @@ describe('PersistenceCoordinator session preparations', () => {
       const inspection = coordinator.inspect(id)
       const append = coordinator.append(id, [{
         type: 'turn/start',
-        seq: oneTurnLog().length,
+        seq: SessionSeq(oneTurnLog().length),
         time: 7,
         data: { turn: 2 },
       }])
@@ -947,7 +1054,7 @@ describe('PersistenceCoordinator session preparations', () => {
     try {
       const append = coordinator.append(id, [{
         type: 'turn/start',
-        seq: oneTurnLog().length,
+        seq: SessionSeq(oneTurnLog().length),
         time: 7,
         data: { turn: 2 },
       }])
@@ -984,7 +1091,7 @@ describe('PersistenceCoordinator session preparations', () => {
     try {
       await coordinator.append(id, [{
         type: 'turn/start',
-        seq: oneTurnLog().length,
+        seq: SessionSeq(oneTurnLog().length),
         time: 7,
         data: { turn: 2 },
       }])
@@ -1012,7 +1119,7 @@ describe('PersistenceCoordinator session preparations', () => {
       session.append('turn/start', { turn: 1 })
 
       const inspected = await coordinator.inspect(session.id)
-      expect(inspected.events).toBe(session.events)
+      expect(inspected.events).toBe(session.snapshotEvents())
       expect(inspected.events.map(event => event.type)).toEqual(['turn/start'])
       await expect(coordinator.load(session.id)).rejects.toThrow(/live turn is open/)
     } finally {
@@ -1030,7 +1137,7 @@ describe('PersistenceCoordinator session preparations', () => {
       meta: meta(id),
       events: [{
         type: 'turn/start',
-        seq: 0,
+        seq: SessionSeq(0),
         time: 1,
         data: { turn: 1 },
       }],
@@ -1072,7 +1179,7 @@ describe('PersistenceCoordinator session preparations', () => {
     const id = SessionId('repair-external-append')
     backend.store.set(id, {
       meta: meta(id),
-      events: [{ type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } }],
+      events: [{ type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } }],
     })
     const commitRepair = backend.commitRepair.bind(backend)
     vi.spyOn(backend, 'commitRepair').mockImplementation(async (header, tornMarker, closers) => {
@@ -1081,8 +1188,8 @@ describe('PersistenceCoordinator session preparations', () => {
       if (entry === undefined) throw new Error('test repair must keep storage materialized')
       const seq = entry.events.length
       entry.events.push(
-        { type: 'turn/start', seq, time: 3, data: { turn: 2 } },
-        { type: 'turn/end', seq: seq + 1, time: 4, data: { turn: 2, reason: { kind: 'completed' } } },
+        { type: 'turn/start', seq: SessionSeq(seq), time: 3, data: { turn: 2 } },
+        { type: 'turn/end', seq: SessionSeq(seq + 1), time: 4, data: { turn: 2, reason: { kind: 'completed' } } },
       )
     })
     let coordinator!: PersistenceCoordinator<never>
@@ -1094,7 +1201,7 @@ describe('PersistenceCoordinator session preparations', () => {
     try {
       preparation = await coordinator.prepare(id)
 
-      expect(preparation.session.events.map(event => event.type)).toEqual([
+      expect(preparation.session.snapshotEvents().map(event => event.type)).toEqual([
         'turn/start',
         'turn/end',
         'turn/start',
@@ -1117,7 +1224,7 @@ describe('PersistenceCoordinator session preparations', () => {
     const id = SessionId('repair-disappeared')
     backend.store.set(id, {
       meta: meta(id),
-      events: [{ type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } }],
+      events: [{ type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } }],
     })
     const commitRepair = backend.commitRepair.bind(backend)
     vi.spyOn(backend, 'commitRepair').mockImplementation(async (header, tornMarker, closers) => {
@@ -1217,7 +1324,7 @@ describe('PersistenceCoordinator session preparations', () => {
       preparation = await coordinator.prepare(id)
       await expect(coordinator.append(id, [{
         type: 'turn/start',
-        seq: oneTurnLog().length,
+        seq: SessionSeq(oneTurnLog().length),
         time: 7,
         data: { turn: 2 },
       }])).rejects.toThrow(/persisted preparation is reserved/)
@@ -1229,7 +1336,239 @@ describe('PersistenceCoordinator session preparations', () => {
   })
 })
 
+describe('PersistenceCoordinator seek reads', () => {
+  it('loads the whole prefix only when a bounded legacy suffix needs earlier message identities', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const id = SessionId('seek-read-from-legacy')
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+    backend.seekHook = async (hookId, fromSeq) => {
+      const entry = backend.store.get(hookId)
+      if (entry === undefined) return undefined
+      return {
+        meta: structuredClone(entry.meta),
+        inheritedEventCount: SessionLogOffset(entry.inheritedEventCount ?? 0),
+        events: entry.events.filter(e => e.seq >= fromSeq),
+      }
+    }
+
+    try {
+      const assertLegacySuffixUsesWholePrefix = async (
+        events: SessionEvent[],
+        fromSeq: SessionLogOffsetType,
+        firstType: SessionEvent['type'],
+      ): Promise<void> => {
+        backend.store.set(id, { meta: meta(id), events })
+        const loadsBefore = backend.loadAttempts
+        const result = await coordinator.readFrom(id, fromSeq)
+        expect(result.events[0]?.type).toBe(firstType)
+        expect(backend.loadAttempts).toBe(loadsBefore + 1)
+      }
+      const legacyMessages = legacyMessageLog()
+      await assertLegacySuffixUsesWholePrefix(legacyMessages, SessionLogOffset(1), 'user/message')
+      await assertLegacySuffixUsesWholePrefix(legacyMessages, SessionLogOffset(3), 'assistant/message')
+      await assertLegacySuffixUsesWholePrefix(legacyMessages, SessionLogOffset(5), 'tool/result')
+      await assertLegacySuffixUsesWholePrefix(preReactLoopLog(), SessionLogOffset(3), 'user/message')
+
+      backend.store.set(id, { meta: meta(id), events: legacyMessages })
+      const directCurrent = await coordinator.readFrom(id, SessionLogOffset(0))
+      backend.store.set(id, { meta: meta(id), events: [...directCurrent.events] })
+      const loadsBeforeCurrent = backend.loadAttempts
+      await coordinator.readFrom(id, SessionLogOffset(1))
+      await coordinator.readFrom(id, SessionLogOffset(3))
+      await coordinator.readFrom(id, SessionLogOffset(5))
+      expect(backend.loadAttempts).toBe(loadsBeforeCurrent)
+
+      for (const [type, data] of [
+        ['user/message', {}],
+        ['assistant/message', {}],
+        ['tool/result', {}],
+      ] as const) {
+        backend.store.set(id, {
+          meta: meta(id),
+          events: [{ type, seq: 0, time: 1, data } as unknown as SessionEvent],
+        })
+        const loadsBefore = backend.loadAttempts
+        await expect(coordinator.readFrom(id, SessionLogOffset(0))).rejects.toThrow('lacks an identified message')
+        expect(backend.loadAttempts).toBe(loadsBefore)
+      }
+      backend.store.set(id, {
+        meta: meta(id),
+        events: [{
+          type: 'external/null', seq: 0, time: 1, data: null, ignorable: true,
+        } as unknown as SessionEvent],
+      })
+      const loadsBeforeNullData = backend.loadAttempts
+      expect((await coordinator.readFrom(id, SessionLogOffset(0))).events[0]?.data).toBeNull()
+      expect(backend.loadAttempts).toBe(loadsBeforeNullData)
+    } finally {
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+})
+
 describe('PersistenceCoordinator observation cancellation', () => {
+  it('borrows live Sessions before, during, and after cold source validation', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const afterBorrowId = SessionId('borrow-became-live-before-validation')
+    const afterValidationId = SessionId('borrow-became-live-after-validation')
+    for (const id of [afterBorrowId, afterValidationId]) {
+      backend.store.set(id, { meta: meta(id), events: oneTurnLog() })
+    }
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+
+    try {
+      const immediate = ctx.sessions.create(SessionId('borrow-already-live'))
+      const immediateSource = await coordinator.borrowSession(immediate.id)
+      expect(immediateSource).toMatchObject({ source: 'live', inspection: { meta: { id: immediate.id } } })
+      immediateSource[Symbol.dispose]()
+
+      const afterBorrow = Session.create(afterBorrowId, oneTurnLog(), meta(afterBorrowId))
+      const afterBorrowGet = vi.spyOn(ctx.sessions, 'get')
+        .mockReturnValueOnce(undefined)
+        .mockReturnValue(afterBorrow)
+      const attachedSource = await coordinator.borrowSession(afterBorrowId)
+      expect(attachedSource).toMatchObject({ source: 'live', inspection: { meta: { id: afterBorrowId } } })
+      attachedSource[Symbol.dispose]()
+      afterBorrowGet.mockRestore()
+
+      const afterValidation = Session.create(afterValidationId, oneTurnLog(), meta(afterValidationId))
+      const afterValidationGet = vi.spyOn(ctx.sessions, 'get')
+        .mockReturnValueOnce(undefined)
+        .mockReturnValueOnce(undefined)
+        .mockReturnValue(afterValidation)
+      const publishedSource = await coordinator.borrowSession(afterValidationId)
+      expect(publishedSource).toMatchObject({
+        source: 'live', inspection: { meta: { id: afterValidationId } },
+      })
+      publishedSource[Symbol.dispose]()
+      afterValidationGet.mockRestore()
+    } finally {
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('returns and releases a current prepared observation', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const id = SessionId('borrow-current-prepared')
+    backend.store.set(id, { meta: meta(id), events: oneTurnLog() })
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+
+    try {
+      const source = await coordinator.borrowSession(id)
+      expect(source).toMatchObject({ source: 'prepared', inspection: { meta: { id } } })
+      source[Symbol.dispose]()
+    } finally {
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('reloads a stale prepared observation and retains one claimed concurrently', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const staleId = SessionId('borrow-stale-prepared')
+    const retainedId = SessionId('borrow-retained-prepared')
+    for (const id of [staleId, retainedId]) {
+      backend.store.set(id, { meta: meta(id), events: oneTurnLog() })
+    }
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+
+    try {
+      const readRevision = backend.readStoredRevision.bind(backend)
+      const revision = vi.spyOn(backend, 'readStoredRevision')
+        .mockResolvedValueOnce(SessionPersistenceRevision('stale'))
+        .mockImplementation(readRevision)
+      const stale = await coordinator.borrowSession(staleId)
+      expect(stale.source).toBe('prepared')
+      expect(backend.loadAttempts).toBe(2)
+      stale[Symbol.dispose]()
+      revision.mockRestore()
+
+      const preparations = (coordinator as unknown as {
+        preparations: { discardReady: (id: SessionId, source: unknown) => string }
+      }).preparations
+      vi.spyOn(backend, 'readStoredRevision').mockResolvedValue(SessionPersistenceRevision('changed'))
+      const discard = vi.spyOn(preparations, 'discardReady').mockReturnValue('retained')
+      const retained = await coordinator.borrowSession(retainedId)
+      expect(retained.source).toBe('prepared')
+      expect(discard).toHaveBeenCalledOnce()
+      retained[Symbol.dispose]()
+    } finally {
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('falls back to a concurrently attached Session after revision validation fails', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const id = SessionId('borrow-failed-validation-became-live')
+    backend.store.set(id, { meta: meta(id), events: oneTurnLog() })
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+    const attached = Session.create(id, oneTurnLog(), meta(id))
+    const get = vi.spyOn(ctx.sessions, 'get')
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(undefined)
+      .mockReturnValue(attached)
+    vi.spyOn(backend, 'readStoredRevision').mockRejectedValue(new Error('revision failed'))
+
+    try {
+      const source = await coordinator.borrowSession(id)
+      expect(source).toMatchObject({ source: 'live', inspection: { meta: { id } } })
+      source[Symbol.dispose]()
+    } finally {
+      get.mockRestore()
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('rethrows revision validation failure when no live Session won the race', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const backend = new ControlledBackend()
+    const id = SessionId('borrow-failed-validation')
+    backend.store.set(id, { meta: meta(id), events: oneTurnLog() })
+    const failure = new Error('revision failed')
+    vi.spyOn(backend, 'readStoredRevision').mockRejectedValue(failure)
+    let coordinator!: PersistenceCoordinator<never>
+    const fiber = await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, backend)
+    }, { inject: ['sessions'] }))
+
+    try {
+      await expect(coordinator.borrowSession(id)).rejects.toBe(failure)
+    } finally {
+      await fiber.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('promptly rejects a queued inspect without invoking it and keeps the same-id chain healthy', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -1360,17 +1699,22 @@ describe('PersistenceCoordinator observation cancellation', () => {
       backend.seekHook = async (hookId, fromSeq) => {
         const entry = backend.store.get(hookId)
         if (entry === undefined) return undefined
-        return { meta: structuredClone(entry.meta), events: entry.events.filter(e => e.seq >= fromSeq) }
+        return {
+          meta: structuredClone(entry.meta),
+          inheritedEventCount: SessionLogOffset(entry.inheritedEventCount ?? 0),
+          events: entry.events.filter(e => e.seq >= fromSeq),
+        }
       }
-      const suffix = await coordinator.readFrom(id, 3)
+      const suffix = await coordinator.readFrom(id, SessionLogOffset(3))
       expect(suffix.events).toEqual(log.slice(3))
       // The hook's `undefined` is the backend contract's not-found result.
-      await expect(coordinator.readFrom(SessionId('missing-seek'), 0)).rejects.toThrow('not found')
+      await expect(coordinator.readFrom(SessionId('missing-seek'), SessionLogOffset(0)))
+        .rejects.toThrow('not found')
 
       // A hook failure with no cancellation in play propagates as-is.
       const hookFailure = new Error('seek backend exploded')
       backend.seekHook = () => Promise.reject(hookFailure)
-      await expect(coordinator.readFrom(id, 0)).rejects.toBe(hookFailure)
+      await expect(coordinator.readFrom(id, SessionLogOffset(0))).rejects.toBe(hookFailure)
 
       // A hook failure after cancellation surfaces the caller's abort reason,
       // not the backend's internal teardown error. The abort fires only once
@@ -1384,7 +1728,7 @@ describe('PersistenceCoordinator observation cancellation', () => {
         await new Promise<void>((resolve) => { signal?.addEventListener('abort', () => { resolve() }, { once: true }) })
         throw new Error('backend teardown after abort')
       }
-      const pending = coordinator.readFrom(id, 0, controller.signal)
+      const pending = coordinator.readFrom(id, SessionLogOffset(0), controller.signal)
       const observed = pending.catch((error: unknown) => error)
       await vi.waitFor(() => { expect(hookEntered).toBe(true) })
       controller.abort(reason)
@@ -1510,7 +1854,7 @@ describe('PersistenceCoordinator retirement', () => {
         await readGate.promise
         return undefined
       }
-      const parked = coordinator.readFrom(id, 0).catch((error: unknown) => error)
+      const parked = coordinator.readFrom(id, SessionLogOffset(0)).catch((error: unknown) => error)
       await readEntered.promise
 
       // First retirement queues behind the gate and stays pending.
@@ -1656,13 +2000,13 @@ describe('PersistenceCoordinator retirement', () => {
       await coordinator.create(meta(id))
       const firstAppend = coordinator.append(id, [{
         type: 'turn/start',
-        seq: 0,
+        seq: SessionSeq(0),
         time: 1,
         data: { turn: 1 },
       }])
       const secondAppend = coordinator.append(id, [{
         type: 'turn/end',
-        seq: 1,
+        seq: SessionSeq(1),
         time: 2,
         data: { turn: 1, reason: { kind: 'completed' } },
       }])
@@ -1796,7 +2140,7 @@ describe('PersistenceCoordinator retirement', () => {
       await coordinator.create(meta(id))
       const append = coordinator.append(id, [{
         type: 'turn/start',
-        seq: 0,
+        seq: SessionSeq(0),
         time: 1,
         data: { turn: 1 },
       }])
@@ -1819,6 +2163,76 @@ describe('PersistenceCoordinator retirement', () => {
 })
 
 describe('SessionPersistence service registration', () => {
+  it('materializes an explicitly durable live session without adding events', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(MemoryPersistence)
+    const session = ctx.sessions.create(SessionId('durable-empty'), { meta: { cwd: '/workspace' } })
+
+    await ctx.sessionPersistence.ensureMaterialized(session)
+    await ctx.sessionPersistence.ensureMaterialized(session)
+
+    await expect(ctx.sessionPersistence.list()).resolves.toEqual([session.header])
+    await expect(ctx.sessionPersistence.load(session.id)).resolves.toEqual({
+      meta: session.header,
+      inheritedEventCount: SessionLogOffset(0),
+      events: [],
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('fails loud when a direct backend does not support empty materialization', async () => {
+    const session = Session.create(SessionId('unsupported-empty'))
+    await expect(SessionPersistence.prototype.ensureMaterialized.call({} as SessionPersistence, session))
+      .rejects.toThrow(/cannot materialize an empty session/)
+  })
+
+  it('fails loud when a coordinator backend omits empty materialization', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    let coordinator!: PersistenceCoordinator
+    await ctx.plugin(Object.assign((inner: Context) => {
+      coordinator = new PersistenceCoordinator(inner, new ControlledBackend())
+    }, { inject: ['sessions'] }))
+    const session = ctx.sessions.create(SessionId('unsupported-coordinator'))
+
+    await expect(coordinator.ensureMaterialized(session)).rejects.toThrow(/cannot materialize an empty session/)
+    await ctx.fiber.dispose()
+  })
+
+  it('accepts current aborted and error turn endings without legacy conversion', async () => {
+    const store: MemoryStore = new Map()
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const endings: SessionEvent[] = [
+      {
+        type: 'turn/end', seq: SessionSeq(5), time: 6,
+        data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } },
+      },
+      {
+        type: 'turn/end', seq: SessionSeq(5), time: 6,
+        data: { turn: 1, reason: { kind: 'error', error: { message: 'failed', code: 'UNKNOWN' } } },
+      },
+    ]
+    for (const [index, ending] of endings.entries()) {
+      const m = meta(`current-ending-${index}`)
+      store.set(m.id, { meta: m, events: [...oneTurnLog().slice(0, -1), ending] })
+    }
+    await ctx.plugin(MemoryPersistence, { store })
+    await Promise.all([...store.keys()].map(id => ctx.sessionPersistence.load(SessionId(id))))
+    await ctx.fiber.dispose()
+  })
+
+  it('rejects preparing an id that already has a live Session', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(MemoryPersistence)
+    const session = ctx.sessions.create(SessionId('live-prepare-conflict'))
+
+    await expect(ctx.sessionPersistence.prepare(session.id)).rejects.toThrow(/while it is live/)
+    await ctx.fiber.dispose()
+  })
+
   it('provides a cancellation-aware default preparation for simple backends', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -1906,7 +2320,7 @@ describe('SessionPersistence service registration', () => {
     const appendLegacy = session.append.bind(session) as (type: string, data: unknown) => SessionEvent
     expect(() => appendLegacy('request/header-delta', { config: { model: 'legacy' } }))
       .toThrow(/unsupported legacy request\/header-delta format/)
-    expect(session.events).toHaveLength(0)
+    expect(session.snapshotEvents()).toHaveLength(0)
     await fiber.dispose()
   })
 
@@ -1919,7 +2333,7 @@ describe('SessionPersistence service registration', () => {
 
     expect(() => appendLegacy('request/header', legacyFallbackHeader().data))
       .toThrow('unsupported legacy request/header reason "fallback"')
-    expect(session.events).toHaveLength(0)
+    expect(session.snapshotEvents()).toHaveLength(0)
     await fiber.dispose()
   })
 

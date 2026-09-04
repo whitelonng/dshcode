@@ -9,8 +9,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { stubSettingsScope } from '../src/settings-scope.ts'
 import { cleanup } from '@testing-library/react'
-import { defineStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
+import { defineStore } from '@deepseek-ai/dsh-client-store'
+import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { PropsRenderSlots, SessionStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
 
@@ -33,7 +34,7 @@ function Frame({ renderSlot, SessionProvider }: FrameProps) {
     <>
       {renderSlot('trt.panel', { label: 'from-owner' }, { fallback: <i>no panel</i> })}
       <SessionProvider empty={() => <i>no session</i>}>
-        {() => renderSlot('trt.chat', {})}
+        {renderSlot('trt.chat', {})}
       </SessionProvider>
       {renderSlot('trt.rows', {})}
     </>
@@ -93,7 +94,7 @@ describe('sessions', () => {
     await runtime.sessions.add({ id: 's1' })
     expect(view.container.textContent).toContain('chat:s1:false')
 
-    await runtime.sessions.updateSnapshot('s1', (draft) => { draft.running = true })
+    await runtime.sessions.updateSessionSnapshot('s1', (draft) => { draft.running = true })
     expect(view.container.textContent).toContain('chat:s1:true')
 
     await runtime.sessions.add({ id: 's2' }) // becomes current by default
@@ -114,7 +115,7 @@ describe('sessions', () => {
     expect(runtime.sessions.list.getSnapshot().ids).toEqual(['s1', 's2'])
     await expect(runtime.sessions.add({ id: 's1' })).rejects.toThrow(/already added/)
     await expect(runtime.sessions.setCurrent('ghost')).rejects.toThrow(/not added/)
-    await expect(runtime.sessions.updateSnapshot('ghost', () => {})).rejects.toThrow(/not added/)
+    await expect(runtime.sessions.updateSessionSnapshot('ghost', () => {})).rejects.toThrow(/not added/)
     await expect(runtime.sessions.remove('ghost')).rejects.toThrow(/not added/)
     expect(() => runtime.sessions.behavior('ghost')).toThrow(/not added/)
     await runtime.dispose()
@@ -125,7 +126,6 @@ describe('sessions', () => {
     const prompt = vi.fn()
     await runtime.sessions.add({ id: 's1', session: { prompt } })
 
-    expect(runtime.sessions.provideInfo('ghost')).toBeUndefined()
     expect(runtime.sessions.scope('ghost')).toBeUndefined()
     expect(runtime.sessions.binding('ghost')).toBeUndefined()
 
@@ -140,66 +140,14 @@ describe('sessions', () => {
     const binding = runtime.sessions.binding('s1')!
     expect(binding.sessionId).toBe('s1')
     expect(binding.ctx).toBe(scope)
-    ;(binding.session as { prompt: () => void }).prompt()
+    await binding.session.prompt([], 'queue')
     expect(prompt).toHaveBeenCalledOnce()
     expect(runtime.sessions.behavior('s1')).toBe(binding.session)
-    // The binding's session doubles as the conversation observable face.
-    expect((binding.session as { getSnapshot(): { sessionId: string } }).getSnapshot().sessionId).toBe('s1')
+    expect(binding.session.getSnapshot().sessionId).toBe('s1')
 
     // A scoped service resolves through the scope ctx (scope-addressed pattern).
-    runtime.provide('probe', { hello: 'world' })
+    runtime.ctx.provide('probe', { hello: 'world' })
     expect(scope.get('probe')).toEqual({ hello: 'world' })
-    await runtime.dispose()
-  })
-
-  it('materializes provide bundles: built-in session hook, custom providers, no-session projection', async () => {
-    const runtime = await runtimeWithFrame()
-    await runtime.sessions.add({ id: 's1' })
-
-    const info = runtime.sessions.provideInfo('s1')!
-    expect(info.sessionId).toBe('s1')
-    expect(info.hooks['session']).toBeDefined() // the built-in useSession source
-    expect(runtime.sessions.provideInfo('s1')).toBe(info) // identity-stable
-
-    // A feature provider (the ui-conversation input pattern): declared names
-    // materialize per session and land in the no-session roster as undefined.
-    const off = runtime.sessions.provide({
-      hooks: ['probe'],
-      props: ['probeActions'],
-      resolve: binding => ({
-        hooks: { probe: { getSnapshot: () => binding.sessionId, subscribe: () => () => {} } },
-        props: { probeActions: { poke: () => {} } },
-      }),
-    })
-    const enriched = runtime.sessions.provideInfo('s1')!
-    expect(enriched.hooks['probe']?.getSnapshot()).toBe('s1')
-    expect(enriched.props['probeActions']).toBeDefined()
-    const maybe = runtime.sessions.maybeProvideInfo(undefined)
-    expect(maybe.sessionId).toBeUndefined()
-    expect(Object.keys(maybe.hooks)).toEqual(['session', 'probe'])
-    expect(runtime.sessions.maybeProvideInfo('s1')).toBe(runtime.sessions.provideInfo('s1'))
-    expect(runtime.sessions.maybeProvideInfo('ghost').sessionId).toBeUndefined()
-
-    // Misdeclared providers fail loud AT REGISTRATION (the production
-    // channel rebuilds live bundles eagerly and rolls the roster back):
-    // missing hook, missing prop, duplicate hook, duplicate prop.
-    expect(() => runtime.sessions.provide({ hooks: ['void'], resolve: () => ({}) }))
-      .toThrow(/missing hook "void"/)
-    expect(() => runtime.sessions.provide({ props: ['void'], resolve: () => ({}) }))
-      .toThrow(/missing prop "void"/)
-    expect(() => runtime.sessions.provide({
-      hooks: ['session'],
-      resolve: () => ({ hooks: { session: { getSnapshot: () => 0, subscribe: () => () => {} } } }),
-    })).toThrow(/duplicate hook "session"/)
-    const propA = runtime.sessions.provide({ props: ['twice'], resolve: () => ({ props: { twice: 1 } }) })
-    expect(() => runtime.sessions.provide({ props: ['twice'], resolve: () => ({ props: { twice: 2 } }) }))
-      .toThrow(/duplicate prop "twice"/)
-    propA()
-    // The rejected registrations rolled back: the roster still materializes.
-    expect(runtime.sessions.provideInfo('s1')).toBeDefined()
-    off()
-    off() // disposer is idempotent
-    expect(Object.keys(runtime.sessions.maybeProvideInfo(undefined).hooks)).toEqual(['session'])
     await runtime.dispose()
   })
 
@@ -222,13 +170,6 @@ describe('sessions', () => {
       .toMatchObject({ displayTitle: 'renamed', running: true })
     runtime.sessions.setSubagentCatalogOpen('s2' as SessionId, true)
     await runtime.sessions.refreshSubagents('s2' as SessionId)
-    // The confirmed-switch write-back lands on the row it names and ignores
-    // one the fixture never added, exactly as production's list upsert does.
-    runtime.sessions.noteAgentPreset('s1' as SessionId, 'minimal')
-    runtime.sessions.noteAgentPreset('missing' as SessionId, 'minimal')
-    await runtime.flush()
-    expect(runtime.sessions.list.getSnapshot().byId['s1' as SessionId])
-      .toMatchObject({ agentPreset: 'minimal' })
     runtime.sessions.open('s1' as SessionId)
     await runtime.flush()
     expect(runtime.sessions.list.getSnapshot().current).toBe('s1')
@@ -308,9 +249,11 @@ describe('stores', () => {
   it('storeOf guards: before renderRoot, and for storeless entries', async () => {
     const runtime = await runtimeWithFrame()
     runtime.slots.register({ name: 'trt.panel' }, () => null)
+    runtime.slots.register({ name: 'trt.chat', store: createSuiteStore() }, () => null)
     expect(() => runtime.storeOf('trt.panel')).toThrow(/before renderRoot/)
     runtime.renderRoot()
     expect(() => runtime.storeOf('trt.panel')).toThrow(/declares no store/)
+    expect(() => runtime.storeOf('trt.chat', 'missing')).toThrow(/no live Session binding/)
     await runtime.dispose()
   })
 
@@ -328,7 +271,7 @@ describe('stores', () => {
     await runtime.sessions.remove('s1')
     expect(localStorage.getItem('trt.store.s1')).toBeNull()
     expect(runtime.sessions.list.getSnapshot().ids).toEqual([])
-    expect(runtime.sessions.provideInfo('s1')).toBeUndefined()
+    expect(runtime.sessions.binding('s1')).toBeUndefined()
 
     await runtime.sessions.add({ id: 's1' })
     const reborn = runtime.storeOf('trt.chat', 's1')
@@ -352,7 +295,7 @@ describe('stores', () => {
 })
 
 describe('workspaces', () => {
-  it('feeds useWorkspaces and records/stubs intent actions', async () => {
+  it('feeds the renderer root source from the Workspace Controller snapshot', async () => {
     const runtime = await runtimeWithFrame()
     runtime.slots.register(
       { name: 'trt.panel' },
@@ -363,43 +306,6 @@ describe('workspaces', () => {
 
     await runtime.workspaces.update((draft) => { draft.phase = 'pending' })
     expect(view.container.textContent).toContain('ws:pending')
-
-    runtime.workspaces.startSession('w1' as WorkspaceId)
-    await expect(runtime.workspaces.connectWorkspace('w2' as WorkspaceId)).resolves.toBe('session-of-w2')
-    expect(runtime.workspaces.calls).toEqual([
-      { method: 'startSession', args: ['w1'] },
-      { method: 'connectWorkspace', args: ['w2'] },
-    ])
-    const stub = vi.fn(() => Promise.resolve('other' as never))
-    runtime.workspaces.stub('connectWorkspace', stub)
-    await expect(runtime.workspaces.connectWorkspace('w3' as WorkspaceId)).resolves.toBe('other')
-    expect(stub).toHaveBeenCalledOnce()
-    await runtime.dispose()
-  })
-
-  it('records the browse calls: listDirectory serves an empty home, createDirectory joins, stubs override', async () => {
-    const runtime = await runtimeWithFrame()
-    // Defaults: an empty home level and parent/name joining.
-    await expect(runtime.workspaces.listDirectory()).resolves.toMatchObject({ path: '/home/test', entries: [] })
-    await expect(runtime.workspaces.listDirectory('/home/test')).resolves.toMatchObject({ path: '/home/test' })
-    await expect(runtime.workspaces.createDirectory('/home/test', 'fresh')).resolves.toBe('/home/test/fresh')
-    // The recorded signal seat mirrors the production face (undefined here;
-    // cancellation tests pass and observe a real one).
-    expect(runtime.workspaces.calls).toEqual([
-      { method: 'listDirectory', args: [undefined, undefined] },
-      { method: 'listDirectory', args: ['/home/test', undefined] },
-      { method: 'createDirectory', args: ['/home/test', 'fresh'] },
-    ])
-    // Stubs replace the defaults like every sibling method.
-    const listing = { path: '/x', home: '/x', crumbs: [], entries: [] }
-    const listStub = vi.fn(() => Promise.resolve(listing as never))
-    runtime.workspaces.stub('listDirectory', listStub)
-    runtime.workspaces.stub('createDirectory', vi.fn(() => Promise.resolve('/x/made' as never)))
-    const scan = new AbortController()
-    await expect(runtime.workspaces.listDirectory('/x', scan.signal)).resolves.toBe(listing)
-    // The stub receives the signal too, like the production face gives the wire.
-    expect(listStub).toHaveBeenLastCalledWith('/x', scan.signal)
-    await expect(runtime.workspaces.createDirectory('/x', 'made')).resolves.toBe('/x/made')
     await runtime.dispose()
   })
 })
@@ -407,7 +313,7 @@ describe('workspaces', () => {
 describe('feature mount and disposal', () => {
   it('mounts a plugin on a real fiber; dispose() cascades entries, declared children, and services', async () => {
     const runtime = await runtimeWithFrame()
-    runtime.provide('layout', { openDetails: vi.fn() })
+    runtime.ctx.provide('layout', { openDetails: vi.fn() })
     const feature = await runtime.mount({
       inject: ['slots', 'layout'],
       apply: (ctx: typeof runtime.ctx) => {
@@ -526,13 +432,23 @@ describe('fixture session face', () => {
     expect(() => bare.cancel()).toThrow(/cancel is not stubbed/)
     expect(() => bare.command()).toThrow(/command is not stubbed/)
     expect(() => bare.loadOlder()).toThrow(/loadOlder is not stubbed/)
+    expect(() => bare.loadThrough()).toThrow(/loadThrough is not stubbed/)
     expect(() => bare.rename()).toThrow(/rename is not stubbed/)
+    const submission = bare.beginSubmission()
+    expect(submission.requestId).toBe('test-submission-1')
+    expect(() => { submission.abandon() }).not.toThrow()
     await runtime.dispose()
   })
 
-  it('projections faces are identity-stable per key, read absent, and notify on set', async () => {
-    const runtime = await SlotTestRuntime.create()
+  it('projects controller values through the real ui-session and renderer path', async () => {
+    const runtime = await runtimeWithFrame()
+    runtime.slots.register({ name: 'trt.chat' }, (props: SessionStandardProps) => (
+      <span>todos:{props.useProjection('todos', value => value?.length ?? 0)}</span>
+    ))
+    const view = runtime.renderRoot()
     await runtime.sessions.add({ id: 's1' })
+    expect(view.container.textContent).toContain('todos:0')
+
     const session = runtime.sessions.behavior('s1')
     const face = session.projections.faceOf('todos')
     expect(session.projections.faceOf('todos')).toBe(face)
@@ -540,27 +456,16 @@ describe('fixture session face', () => {
     const seen: unknown[] = []
     const off = face.subscribe(() => { seen.push(face.getSnapshot()) })
     session.projections.set('todos', [1, 2])
+    await runtime.flush()
     expect(seen).toEqual([[1, 2]])
+    expect(view.container.textContent).toContain('todos:2')
     off()
     session.projections.set('todos', [3])
+    await runtime.flush()
     expect(seen).toEqual([[1, 2]]) // unsubscribed
+    expect(view.container.textContent).toContain('todos:1')
     // A never-subscribed key sets without listeners (the empty-notify arm).
     session.projections.set('untouched', 1)
-    // The provide bundle hands the same store to the render side.
-    const info = runtime.sessions.provideInfo('s1')!
-    expect(info.projections?.faceOf('todos').getSnapshot()).toEqual([3])
-    // A roster change rebuilds the ALREADY-materialized bundle eagerly
-    // (production channel semantics: mounted entries must see the provider)
-    // and skips never-materialized records (they pick the roster up lazily).
-    await runtime.sessions.add({ id: 's-lazy' }, { current: false })
-    const offProbe = runtime.sessions.provide({
-      hooks: ['probe2'],
-      resolve: () => ({ hooks: { probe2: { getSnapshot: () => 1, subscribe: () => () => {} } } }),
-    })
-    const rebuilt = runtime.sessions.provideInfo('s1')!
-    expect(rebuilt).not.toBe(info)
-    expect(rebuilt.hooks['probe2']).toBeDefined()
-    offProbe()
     await runtime.dispose()
   })
 })
@@ -573,11 +478,9 @@ describe('workspaces action face', () => {
     expect(created.title).toBe('/tmp/alpha')
     const registered = await ws.create({ path: '/tmp/beta' })
     expect(registered.path).toBe('/tmp/beta')
-    await expect(ws.pickDirectory()).resolves.toBeNull()
     const renamed = await ws.rename('w1' as WorkspaceId, 'Renamed')
     expect(renamed.title).toBe('Renamed')
     await ws.delete('w1' as WorkspaceId)
-    await ws.openPath('/proj/file.ts')
     await ws.insertBefore('w1' as WorkspaceId, 'w2' as WorkspaceId)
     const moved = await ws.insertSessionBefore('w1' as WorkspaceId, 's1' as SessionId, 's2' as SessionId)
     expect(moved.sessionIds).toEqual(['s1'])
@@ -586,22 +489,18 @@ describe('workspaces action face', () => {
     await ws.archiveSession('s1' as SessionId)
     expect(ws.list.getSnapshot().archivedSessionIds).toEqual(['s1'])
     expect(ws.calls.map(c => c.method)).toEqual(
-      ['create', 'create', 'pickDirectory', 'rename', 'delete', 'openPath', 'insertBefore', 'insertSessionBefore', 'archiveSession'])
+      ['create', 'create', 'rename', 'delete', 'insertBefore', 'insertSessionBefore', 'archiveSession'])
 
     ws.stub('create', () => Promise.resolve({ workspaceId: 'ws-x', title: 'X', path: '/x', sessionIds: [] } as never))
-    ws.stub('pickDirectory', () => Promise.resolve('/picked'))
     ws.stub('rename', () => Promise.resolve({ workspaceId: 'w1', title: 'S', path: '/s', sessionIds: [] } as never))
     ws.stub('delete', () => Promise.resolve())
-    ws.stub('openPath', () => Promise.resolve())
     const insertBefore = vi.fn(() => Promise.resolve())
     ws.stub('insertBefore', insertBefore)
     ws.stub('insertSessionBefore', () => Promise.resolve({ workspaceId: 'w1', title: '', path: '', sessionIds: [] } as never))
     ws.stub('archiveSession', () => Promise.resolve())
     expect((await ws.create({ path: '/y' })).title).toBe('X')
-    await expect(ws.pickDirectory()).resolves.toBe('/picked')
     expect((await ws.rename('w1' as WorkspaceId, 'z')).title).toBe('S')
     await ws.delete('w1' as WorkspaceId)
-    await ws.openPath('/other')
     await ws.insertBefore('w2' as WorkspaceId)
     expect(insertBefore).toHaveBeenCalledWith('w2', undefined)
     expect((await ws.insertSessionBefore('w1' as WorkspaceId, 's1' as SessionId)).sessionIds).toEqual([])

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, CallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, {
   SESSION_FORMAT_VERSION,
   SessionId,
+  SessionSeq,
 } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import {
   buildSessionEventRecords,
@@ -22,7 +24,7 @@ import { TestSessionQueryEngine } from './test-service.ts'
 const id = SessionId('session')
 
 function header(value: string, extra: Partial<SessionHeader> = {}): SessionHeader {
-  return { version: SESSION_FORMAT_VERSION, id: SessionId(value), createdAt: 10, ...extra }
+  return { version: SESSION_FORMAT_VERSION, id: SessionId(value), createdAt: 10, isSeeded: false, ...extra }
 }
 
 function expectCode(code: SessionQueryErrorCode): Error {
@@ -31,7 +33,7 @@ function expectCode(code: SessionQueryErrorCode): Error {
 
 describe('session-query semantic extraction', () => {
   it('extracts first-party message, tool, todo, and failure detail', () => {
-    const callId = CallId('call')
+    const callId = ToolCallId('call')
     const messageContent: SessionEvent<'user/message'>['data']['content'] = [
       { type: 'text', text: ' visible ' },
       { type: 'reasoning', text: 'thought' },
@@ -45,10 +47,10 @@ describe('session-query semantic extraction', () => {
       { type: 'future-content', payload: 'hidden' } as never,
     ]
     const events: SessionEvent[] = [
-      { type: 'user/message', seq: 0, time: 1, data: createUserMessage({
+      { type: 'user/message', seq: SessionSeq(0), time: 1, data: createUserMessage({
         content: messageContent, source: { kind: 'user' },
       }), surfaceOp: 'append' },
-      { type: 'assistant/message', seq: 1, time: 2, data: {
+      { type: 'assistant/message', seq: SessionSeq(1), time: 2, data: {
         turn: 1, step: 1,
         message: createMessage({
           role: 'assistant',
@@ -59,13 +61,13 @@ describe('session-query semantic extraction', () => {
           },
         }),
       }, surfaceOp: 'append' },
-      { type: 'user/message', seq: 2, time: 3, data: createUserMessage({
+      { type: 'user/message', seq: SessionSeq(2), time: 3, data: createUserMessage({
         content: messageContent, source: { kind: 'plugin', plugin: 'test' },
       }), surfaceOp: 'append' },
-      { type: 'tool/call', seq: 3, time: 5, data: { turn: 1, step: 1, callId, name: 'bash', arguments: '{"cmd":"pwd"}' } },
+      { type: 'tool/call', seq: SessionSeq(3), time: 5, data: { turn: 1, step: 1, callId, name: 'bash', arguments: '{"cmd":"pwd"}' } },
       {
         type: 'tool/result',
-        seq: 4,
+        seq: SessionSeq(4),
         time: 6,
         data: {
           turn: 1,
@@ -81,7 +83,7 @@ describe('session-query semantic extraction', () => {
       },
       {
         type: 'tool/result',
-        seq: 5,
+        seq: SessionSeq(5),
         time: 7,
         data: {
           turn: 1,
@@ -90,7 +92,7 @@ describe('session-query semantic extraction', () => {
         },
         surfaceOp: 'append',
       },
-      { type: 'todo/write', seq: 6, time: 8, data: { todos: [{ status: 'in_progress', content: 'ship search' }] } },
+      { type: 'todo/write', seq: SessionSeq(6), time: 8, data: { todos: [{ status: 'in_progress', content: 'ship search' }] } },
     ]
 
     for (const event of events.slice(0, 3)) {
@@ -98,7 +100,7 @@ describe('session-query semantic extraction', () => {
     }
     expect(extractSessionEventText({
       type: 'assistant/message',
-      seq: 9,
+      seq: SessionSeq(9),
       time: 10,
       data: {
         turn: 1,
@@ -129,15 +131,15 @@ describe('session-query semantic extraction', () => {
       [{ kind: 'future-status' } as never, ''],
     ]
     for (const [reason, text] of reasons) {
-      expect(extractSessionEventText({ type: 'turn/end', seq: 0, time: 1, data: { turn: 1, reason } })).toBe(text)
+      expect(extractSessionEventText({ type: 'turn/end', seq: SessionSeq(0), time: 1, data: { turn: 1, reason } })).toBe(text)
     }
     const structural: SessionEvent[] = [
-      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
-      { type: 'step/start', seq: 1, time: 1, data: { turn: 1, step: 1 } },
-      { type: 'step/end', seq: 2, time: 1, data: { turn: 1, step: 1 } },
-      { type: 'assistant/chunk', seq: 3, time: 1, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'raw' } } },
-      { type: 'request/header', seq: 4, time: 1, data: { header: { config: { provider: 'test', model: 'test' } }, reason: 'initial' } },
-      { type: 'future/event', seq: 5, time: 1, data: { text: 'hidden' } } as never,
+      { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
+      { type: 'step/start', seq: SessionSeq(1), time: 1, data: { turn: 1, step: 1 } },
+      { type: 'step/end', seq: SessionSeq(2), time: 1, data: { turn: 1, step: 1 } },
+      { type: 'assistant/chunk', seq: SessionSeq(3), time: 1, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'raw' } } },
+      { type: 'request/header', seq: SessionSeq(4), time: 1, data: { header: { config: { provider: 'test', model: 'test' } }, reason: 'initial' } },
+      { type: 'future/event', seq: SessionSeq(5), time: 1, data: { text: 'hidden' } } as never,
     ]
     expect(structural.map(extractSessionEventText)).toEqual(['', '', '', '', '', ''])
   })
@@ -145,11 +147,11 @@ describe('session-query semantic extraction', () => {
 
 describe('session-query document and filter helpers', () => {
   const events: SessionEvent[] = [
-    { type: 'user/message', seq: 0, time: 10, data: createUserMessage({
+    { type: 'user/message', seq: SessionSeq(0), time: 10, data: createUserMessage({
       content: [{ type: 'text', text: 'Hello\n(AI)+' }], source: { kind: 'user' },
     }), surfaceOp: 'append' },
-    { type: 'assistant/chunk', seq: 1, time: 11, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'raw' } } },
-    { type: 'assistant/message', seq: 2, time: 12, data: {
+    { type: 'assistant/chunk', seq: SessionSeq(1), time: 11, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'raw' } } },
+    { type: 'assistant/message', seq: SessionSeq(2), time: 12, data: {
       turn: 1, step: 1,
       message: createMessage({
         role: 'assistant',
@@ -159,8 +161,8 @@ describe('session-query document and filter helpers', () => {
           ...{ provider: 'mock', model: 'mock' },
         },
       }),
-    }, surfaceOp: { op: 'replace', start: 0, end: 0 }, sourceEventSeqs: [0] },
-    { type: 'turn/end', seq: 3, time: 13, data: { turn: 1, reason: { kind: 'interrupted' } } },
+    }, surfaceOp: { op: 'replace', start: SessionSeq(0), end: SessionSeq(0) }, sourceEventSeqs: [SessionSeq(0)] },
+    { type: 'turn/end', seq: SessionSeq(3), time: 13, data: { turn: 1, reason: { kind: 'interrupted' } } },
   ]
 
   it('classifies every event and omits non-semantic documents', () => {
@@ -228,7 +230,7 @@ describe('session-query document and filter helpers', () => {
     ])).toThrow(expectCode('SESSION_QUERY_INVALID_FILTER'))
     const malformed: SessionEvent[] = [{
       type: 'assistant/message',
-      seq: 0,
+      seq: SessionSeq(0),
       time: 1,
       data: {
         turn: 1, step: 1,
@@ -241,7 +243,7 @@ describe('session-query document and filter helpers', () => {
           },
         }),
       },
-      surfaceOp: { op: 'replace', start: 9, end: 9 },
+      surfaceOp: { op: 'replace', start: SessionSeq(9), end: SessionSeq(9) },
     }]
     expect(() => buildSessionEventRecords(id, malformed)).toThrow(expectCode('SESSION_QUERY_INVALID_SURFACE'))
   })
@@ -274,6 +276,7 @@ describe('session-query document and filter helpers', () => {
   it('exposes the scan path on the combined query service', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(TestSessionQueryEngine)
     const session = ctx.sessions.create(id)
     session.append('user/message', createUserMessage({
@@ -290,6 +293,7 @@ describe('session-query document and filter helpers', () => {
 it('registers exact and abstract search behavior under one ctx key', async () => {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   const fiber = await ctx.plugin(TestSessionQueryEngine)
   const session = ctx.sessions.create(id)
   await expect(ctx.sessionQuery.searchSessions({ query: 'AI' })).resolves.toEqual({ items: [] })

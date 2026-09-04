@@ -2,11 +2,11 @@
 /** ToolCallTree-owned root/subcall markers and selection projection. */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
-import type { HostDescription } from '@deepseek-ai/dsh-client-connection/client'
-import type { ConversationSnapshot, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
-import type { ToolTreeProps } from '../src/client/contract/slots.ts'
+import type { ToolCallOwnerProps, ToolTreeProps } from '../src/client/contract/slots.ts'
 import { ToolCallTree } from '../src/client/tool/ToolCallTree.tsx'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
 
@@ -16,18 +16,21 @@ const t: ToolTreeProps['t'] = makeTranslate(zh, commonZh)
 
 const root = (callId: string, call: ToolResultNode['call']): ToolResultNode => ({
   kind: 'tool-result', seq: 3, time: 3_000, callId, call, callTime: 2_000,
-  content: [], isError: false, callView: null, resultView: null, subCalls: [],
+  content: [], isError: false, subCalls: [],
 })
 
 function props(
   block: ToolResultNode,
   selectedCallId?: string,
-  description?: HostDescription,
+  home?: string,
+  owners?: ToolCallOwnerProps[],
 ): ToolTreeProps {
-  const snapshot = {} as ConversationSnapshot
-  const useSession = ((selector: (value: ConversationSnapshot) => unknown) => selector(snapshot)) as ToolTreeProps['useSession']
-  const renderSlot = ((_key: string, _owner: object, options?: { fallback?: React.ReactNode }) =>
-    options?.fallback ?? null) as unknown as ToolTreeProps['renderSlot']
+  const snapshot = {} as SessionSnapshot
+  const useSession = ((selector: (value: SessionSnapshot) => unknown) => selector(snapshot)) as ToolTreeProps['useSession']
+  const renderSlot = ((_key: string, owner: ToolCallOwnerProps, options?: { fallback?: React.ReactNode }) => {
+    owners?.push(owner)
+    return options?.fallback ?? null
+  }) as unknown as ToolTreeProps['renderSlot']
   return {
     useSession,
     renderSlot,
@@ -47,7 +50,7 @@ function props(
     forkAt: vi.fn(),
     deleteAt: vi.fn(() => Promise.resolve(true)),
     fileMentions: vi.fn(),
-    useHostDescription: (selector => selector(description)) as ToolTreeProps['useHostDescription'],
+    useHostInfo: ((selector: (info: { home: string | undefined }) => unknown) => selector({ home })) as ToolTreeProps['useHostInfo'],
     t,
   } as unknown as ToolTreeProps
 }
@@ -64,16 +67,21 @@ describe('ToolCallTree', () => {
   })
 
   it('recursively renders a selected leaf without selecting its ancestors', () => {
-    const leaf = root('parent:code:1:code:1', { name: 'read', argsRaw: '{"path":"a.ts"}' })
+    const owners: ToolCallOwnerProps[] = []
+    const leaf = {
+      ...root('parent:code:1:code:1', { name: 'read', argsRaw: '{"path":"a.ts"}' }),
+      parentCallId: 'parent:code:1',
+    }
     const child = {
       ...root('parent:code:1', { name: 'run_code', argsRaw: '{"code":"return 1"}' }),
+      parentCallId: 'parent',
       subCalls: [leaf],
     }
     const block = {
       ...root('parent', { name: 'run_code', argsRaw: '{"code":"return 1"}' }),
       subCalls: [child],
     }
-    const view = render(<ToolCallTree {...props(block, leaf.callId)} />)
+    const view = render(<ToolCallTree {...props(block, leaf.callId, undefined, owners)} />)
     const nests = view.container.querySelectorAll('[data-subcalls]')
     expect(nests[0]?.parentElement).toBe(view.container.querySelector('[data-chat-call-id="parent"]'))
     expect(nests[1]?.parentElement).toBe(view.container.querySelector('[data-chat-call-id="parent:code:1"]'))
@@ -81,13 +89,16 @@ describe('ToolCallTree', () => {
     expect(view.container.querySelector('[data-chat-call-id="parent:code:1"]')?.hasAttribute('data-selected')).toBe(false)
     expect(view.container.querySelector('[data-chat-call-id="parent:code:1:code:1"]')?.getAttribute('data-selected')).toBe('true')
     expect(nests).toHaveLength(2)
+    expect(owners.map(owner => [owner.callId, owner.block.parentCallId ?? null])).toEqual([
+      ['parent', null],
+      ['parent:code:1', 'parent'],
+      ['parent:code:1:code:1', 'parent:code:1'],
+    ])
   })
 
   it('abbreviates a POSIX home path in the generic tool summary', () => {
     const block = root('w1', { name: 'read', argsRaw: '{"path":"/h/docs/a.ts"}' })
-    const view = render(<ToolCallTree {...props(block, 'w1', {
-      version: '0', cwd: '/tmp', attachedSessions: 0, home: '/h', canOpenPath: false,
-    })} />)
+    const view = render(<ToolCallTree {...props(block, 'w1', '/h')} />)
     expect(view.getByText('~/docs/a.ts')).toBeTruthy()
   })
 })

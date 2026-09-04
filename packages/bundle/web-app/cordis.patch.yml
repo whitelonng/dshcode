@@ -18,10 +18,6 @@
     persona: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
 
-# TODO: Re-enable shared HMR for Web after its reload lifecycle is tested.
-- id: hmr
-  disabled: true
-
 # Full-text session search is opt-in (the base row's `openAt: never`). This
 # restatement keeps the Web values on one ephemeral in-memory index; a
 # deployment enabling content search overrides `openAt` to `first-search` in a
@@ -34,8 +30,8 @@
 
 - id: tools
   config:
-    # TEMPORARY workaround: DSH_TOOLS_MODE (native|code|both) opts a whole dsh
-    # process into Code Mode while per-session tool-presentation selection is being
+    # TEMPORARY workaround: DSH_TOOLS_MODE (native|ptc|both) opts a whole dsh
+    # process into PTC mode while per-session tool-presentation selection is being
     # designed; unset keeps the schema default (native). Remove the env seam
     # once the web UI owns the choice per session.
     mode: !!js process.env.DSH_TOOLS_MODE
@@ -45,21 +41,13 @@
 # `dsh.client` rows are the browser roster the modules node half scans into
 # window.__DSH_BOOT__; the modules row is simultaneously a host row.
 - insert:
+    # Host-owned opt-in sampled when a new Web session receives its preset
+    # delegation tools. The Plugins page edits this settings namespace.
+    - id: subagent-model-selection-settings
+      name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
+
     - id: code-runtime
       name: '@deepseek-ai/dsh-code-runtime-worker-thread'
-
-    - id: storage
-      name: '@deepseek-ai/dsh-storage'
-
-    - id: storage-json
-      name: '@deepseek-ai/dsh-storage-json'
-      config:
-        root: !!js dshHomePath('storages')
-
-    - id: storage-domain
-      name: '@deepseek-ai/dsh-storage-domain'
-      config:
-        backend: json
 
     # Per-message feedback records with sidecar persistence over the Remote.
     - id: message-feedback
@@ -74,12 +62,6 @@
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 
-    - id: session-projection-cache
-      name: '@deepseek-ai/dsh-session-projection-cache'
-      config:
-        writeEveryEvents: 200
-        writeIntervalMs: 5000
-
     - id: session-reference
       name: '@deepseek-ai/dsh-session-reference'
 
@@ -90,6 +72,11 @@
     # projection key); the projection registry itself is a base-layer row.
     - id: session-stats
       name: '@deepseek-ai/dsh-session-stats'
+
+    # Whole-log turn outline for the chat turn rail (the turnOutline
+    # projection key): every turn stays navigable before its events page in.
+    - id: session-turn-outline
+      name: '@deepseek-ai/dsh-session-turn-outline'
 
     # Resolve bind host, SSH launch, and display once at boot, then mount the
     # matching dual-face directory picker. Mount -native or -browse directly in
@@ -151,10 +138,18 @@
           - id: web-ui
             matches: ['dsh-web-ui']
 
-    # The API gateway: the transport-agnostic dispatch face every client shape
-    # shares. The base layer's agent-default-model service owns the default model.
-    - id: api-gateway
-      name: '@deepseek-ai/dsh-host-apiproxy'
+    # Session commands, cold reads, and live control over Typert Remote.
+    - id: session-controller
+      name: '@deepseek-ai/dsh-api-session-controller'
+
+    # Configuration-surface reads and writes over Typert Remote. Each method
+    # reports an actionable error when its settings-domain provider is absent.
+    - id: settings-controller
+      name: '@deepseek-ai/dsh-api-settings-controller'
+
+    # Workspace commands and reconnect-safe projection over Typert Remote.
+    - id: workspace-controller
+      name: '@deepseek-ai/dsh-api-workspace-controller'
 
     - id: cordis-host-runner
       name: '@deepseek-ai/dsh-cordis-host-runner'
@@ -175,6 +170,9 @@
       config:
         host: !!js ctx.webStartup.host ?? '127.0.0.1'
         port: !!js ctx.webStartup.port ?? 3080
+        compression: gzip
+        compressionLevel: 1
+        compressionThresholdBytes: 1024
 
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
@@ -224,9 +222,6 @@
     - id: api-remotes
       name: '@deepseek-ai/dsh-api-remotes'
 
-    - id: client-runtime
-      name: '@deepseek-ai/dsh-client-runtime'
-
     - id: cordis-client-runner
       name: '@deepseek-ai/dsh-cordis-client-runner'
 
@@ -241,6 +236,9 @@
 
     - id: ui-renderer
       name: '@deepseek-ai/dsh-client-ui-renderer'
+
+    - id: ui-session
+      name: '@deepseek-ai/dsh-client-ui-session'
 
     - id: ui-sidebar
       name: '@deepseek-ai/dsh-client-ui-sidebar'
@@ -271,6 +269,12 @@
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
+
+    - id: ui-approval
+      name: '@deepseek-ai/dsh-client-ui-approval'
+
+    - id: ui-chat
+      name: '@deepseek-ai/dsh-client-ui-chat'
 
     # Official occupants for the generic sidebar and conversation brand slots.
     - id: ui-brand-official
@@ -321,6 +325,13 @@
 
     - id: ui-reference
       name: '@deepseek-ai/dsh-client-ui-reference'
+
+    # Read-only active Schedule catalog. The shipped Web graph resolves the
+    # client package but leaves it disabled; the explicit Schedule overlay
+    # enables this same row together with the host Schedule services.
+    - id: ui-schedule
+      name: '@deepseek-ai/dsh-client-ui-schedule'
+      disabled: true
 
     # Background jobs: the session-header list over the jobsBySession mirror.
     - id: ui-jobs
@@ -420,14 +431,11 @@
 - id: tool-skill
   disabled: true
 
-# The goal SERVICE, its session driver, and the `/goal` command STAY on the
-# host plane; only the model-facing tool moves. The Gateway serves the goal
-# domain as Remote endpoints, and a Remote method picks its receiver Service
-# from a generated descriptor — it resolves `goals` on the host, so a
-# per-session realm would answer `service-unavailable` for every browser call.
-# That is the `shell-env` criterion read from the other side: injection is not
-# the only host relationship a Service can have. The registry is keyed by
-# session, so one host instance serves every session exactly as before presets.
+# The goal service and session driver stay on the host plane, where Gateway
+# remotes resolve them. Presets own the human command and model-facing tool.
+
+- id: command-goal
+  disabled: true
 
 - id: tool-goal
   disabled: true
@@ -470,12 +478,6 @@
 - id: tool-subagent-fork
   disabled: true
 
-# `tool-subagent-report` is host-plane for the same reason as the registry, not
-# because a preset may not want it: it registers a CONTINUABLE SETUP on that
-# singleton rather than a tool this agent calls, and the setup list is not
-# scope-aware — one copy per mounted preset means every child gets `report`
-# registered once per live session, which throws on the second.
-
 - id: workflow-worker-thread
   disabled: true
 
@@ -494,16 +496,13 @@
 - id: tool-web
   disabled: true
 
-# The preset roster. `config/agent-presets/` ships with the deployment and is
-# read-only (its entries carry `system` trust); `$DSH_HOME/.agent-presets` is
-# where a person — or an agent — authors their own, and carries the same trust
-# as shell access because a preset IS a composition.
-#
-# Only the SHIPPED root is an assembly fact: it sits beside the installed app's
-# own config, so `apps/cli`'s `composeProfile` resolves and patches it in — the
-# same treatment `distIndex` gets on the webserver row. The writable root is
-# `dsh-agent-presets`' own default (`includeUserRoot`), so a composition that
-# never reaches that patch still finds a person's presets.
+# The preset roster. The shipped presets are bundled inside
+# `dsh-agent-presets` itself and prepended as a read-only `system` root
+# (`includeShippedRoot`); `$DSH_HOME/.agent-presets` is where a person — or an
+# agent — authors their own, appended by the same package (`includeUserRoot`),
+# and carries the same trust as shell access because a preset IS a
+# composition. This row only names the default and any deployment-added
+# `roots`; no launcher patching is involved.
 - insert:
     - id: agent-presets
       name: '@deepseek-ai/dsh-agent-presets'

@@ -105,7 +105,7 @@ export function CordisRunRow({
         <span className={card.errorSummary === null ? css.summary : css.error}>{summary}</span>
         <span className={css.status}>{status}</span>
         {inspect !== undefined && (
-          <button type="button" className={css.inspect} aria-label="Inspect" onClick={inspect}>
+          <button type="button" className={css.inspect} aria-label={t('action.inspect')} onClick={inspect}>
             <IconInspectOutline12 />
           </button>
         )}

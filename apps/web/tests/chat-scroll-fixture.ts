@@ -3,7 +3,7 @@
 // persisted conversations, while unique markers identify semantic rows
 // without depending on CSS-module names or virtualizer DOM positions.
 import {
-  CallId,
+  ToolCallId,
   createAssistantMessage,
   createToolResultMessage,
   createUserMessage,
@@ -105,7 +105,7 @@ function appendToolStep(
 ): void {
   const calls = [1, 2].map((index) => {
     const marker = markers.tool(turn, index)
-    const callId = CallId(`chat-scroll-${suffix(turn)}-${String(index)}`)
+    const callId = ToolCallId(`chat-scroll-${suffix(turn)}-${String(index)}`)
     const args = JSON.stringify({
       command: `printf '${marker}\\n'`,
       description: marker,
@@ -164,7 +164,7 @@ function fixtureLog(session: Session): string {
       cwd: '{{cwd}}',
       delegationDepth: 0,
     }),
-    ...session.events.map(event => JSON.stringify(event)),
+    ...session.snapshotEvents().map(event => JSON.stringify(event)),
     '',
   ].join('\n')
 }

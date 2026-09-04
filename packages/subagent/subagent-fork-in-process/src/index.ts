@@ -46,7 +46,7 @@ export const Config: z<Config> = z.object({
  * @returns the seed events, contiguous from seq 0; empty when no turn has completed.
  */
 function completedTurnPrefix(parent: Agent): SessionEvent[] {
-  const events = parent.session.events
+  const events = parent.session.snapshotEvents()
   const lastEnd = events.findLast(e => e.type === 'turn/end')
   if (lastEnd === undefined) return []
   // seq === array index (the append contract), so slice up to and including it.
@@ -55,11 +55,18 @@ function completedTurnPrefix(parent: Agent): SessionEvent[] {
 
 /**
  * The fork provider. Supports `depthLimit` and `outputSchema` (via the shared
- * in-process structured runtime), plus `toolFilter`/`persona` (scoped
- * restrict() and a scoped shadowing persona section).
+ * in-process structured runtime), `agentOptions` (merged over the parent
+ * route), and `toolFilter`/`persona` (scoped restrict() and a scoped shadowing
+ * persona section).
  */
 class ForkInProcessProvider implements SubagentProvider {
-  readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
+  readonly capabilities: SubagentCapabilities = {
+    agentOptions: true,
+    outputSchema: true,
+    depthLimit: true,
+    toolFilter: true,
+    persona: true,
+  }
   // Context contract: a forked child IS seeded with the parent's completed-turn prefix.
   readonly inheritsParentContext = true
 
@@ -74,12 +81,6 @@ class ForkInProcessProvider implements SubagentProvider {
     })
   }
 
-  // TODO(fork-continuable-prefix-reuse): no shipped composition calls this —
-  // they bind fork to `backgroundMode: one-shot` because a continuable child's
-  // `report` tool and prompt section precede the inherited history, defeating
-  // the prefix reuse a fork exists for. Reopening needs a byte-identical child
-  // system prompt and tool schemas; see issue #2124 and
-  // .agents/notes/implemented/architecture/2026-08-10-fork-children-stay-one-shot.md.
   prepareContinuable(request: ContinuableCreateRequest): Promise<ContinuableCreateSpec> {
     // The fork prefix is captured ONCE, at creation: it becomes part of the
     // child's own durable transcript, so a later cold resume replays that

@@ -10,7 +10,7 @@ harness 为模型提供了 bash 和 subagent 工具，却没有办法记录结�
 
 ## 决策
 
-新增一个面向模型的 `todo_write(todos: [{ content, status }])` 工具，其整列表状态作为新的 `todo/write` `SessionEventMap` 变体存储在事件溯源的会话日志上。交互式宿主从持久事件渲染：TUI 直接折叠它，web 客户端将其投影进 `ConversationSnapshot.todos`（[web todo 展示](2026-07-23-web-todo-display.zh.md)），而[仅面向自动化的 ACP（Agent Client Protocol）桥接层](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)有意省略 todo 展示。
+新增一个面向模型的 `todo_write(todos: [{ content, status }])` 工具，其整列表状态作为由 todo 包拥有的 `todo/write` `SessionEventMap` 变体存储在事件溯源的会话日志上（见[事件所有权](../architecture/2026-07-20-todo-event-ownership.zh.md)）。交互式宿主从持久事件渲染：TUI 直接折叠它，web 客户端将其投影进 `ConversationSnapshot.todos`（[web todo 展示](2026-07-23-web-todo-display.zh.md)），而[仅面向自动化的 ACP（Agent Client Protocol）桥接层](../simplification/2026-07-23-acp-automation-only-protocol.zh.md)有意省略 todo 展示。
 
 ### 整列表替换，三态 status
 

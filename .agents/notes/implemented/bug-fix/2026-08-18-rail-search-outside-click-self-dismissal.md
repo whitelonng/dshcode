@@ -20,7 +20,7 @@ The outside-click dismissal listener does not mount while the rail gesture is in
 
 **Defer listener attachment by a frame or timeout.** A raw delay encodes the symptom (the click arrives "too early") instead of the cause (a gesture is in flight). `searchOnExpand` is already the explicit in-flight state with the correct end point; a frame boundary is neither.
 
-**Dismiss on `pointerdown` instead of `click`.** The initiating gesture's `pointerdown` precedes the listener mount, so it cannot self-dismiss. Rejected because it changes dismissal semantics for every interaction — a drag or a press-and-slide-away would dismiss where a completed click today does not — to fix a problem scoped to one gesture.
+**Dismiss on `pointerdown` instead of `click`.** The initiating gesture's `pointerdown` precedes the listener mount, so it cannot self-dismiss. Rejected because it changes dismissal semantics for every interaction — a drag or a press-and-slide-away would dismiss where a completed click does not — to fix a problem scoped to one gesture.
 
 ## Consequences
 

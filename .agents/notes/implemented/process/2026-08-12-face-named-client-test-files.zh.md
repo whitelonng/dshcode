@@ -56,6 +56,6 @@ Status: implemented
 
 Host 程序现在在 `packages/client` 下看到 11 个文件（4 个 Host 面 spec，以及经工程引用解析到的载体 Host 面声明），而在排除按模式、文件名却不按模式的状态下漏进来的是 60 个。
 
-vitest 经 `**/*.spec.{ts,tsx}` 仍能发现每个改名后的文件，因此测试配置没有变化；完整 client 套件跑 235 个文件、3181 个用例。knip 各 workspace 的 `tests/**/*.spec.{ts,tsx}` entry 模式同理匹配新名字。
+vitest 经 `**/*.spec.{ts,tsx}` 仍能发现每个改名后的文件，因此测试配置没有变化；完整 client 套件跑 235 个文件、3181 个用例。
 
 这条规则留下的失败模式是新增一个不带后缀的测试：它会在 Host 程序里针对 Client 源码通过类型检查，而不是显式报错。

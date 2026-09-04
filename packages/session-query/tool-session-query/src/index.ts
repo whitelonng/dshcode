@@ -8,7 +8,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-system-prompt'
 import { toolInput } from './input.ts'
 import { operations } from './operations.ts'
 import { presentation } from './presentation.ts'
@@ -17,7 +16,7 @@ import { presentation } from './presentation.ts'
 export const name = 'tool-session-query'
 
 /** Capability services required by the model-facing consumer. */
-export const inject = ['tools', 'systemPrompt', 'sessionQuery']
+export const inject = ['tools', 'systemPrompt', 'sessionQuery', 'sessionProjections']
 
 /** Default maximum number of authorized search hits returned by one call. */
 export const DEFAULT_MAX_SEARCH_RESULTS = 100
@@ -59,7 +58,7 @@ export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
   ctx.systemPrompt.section({
     name: 'tool:session-query',
-    order: 113,
+    order: ctx.systemPrompt.getSectionOrder('TOOL_SESSION_QUERY'),
     text: PROMPT_TEXT,
   })
 

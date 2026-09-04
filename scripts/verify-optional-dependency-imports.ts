@@ -208,7 +208,6 @@ function main(): void {
   process.exit(1)
 }
 
-// Run only when invoked as a script, not when imported by a test.
 if (process.argv[1] && import.meta.filename === resolve(process.argv[1])) {
   main()
 }

@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-GUI 拆分引入了第二个聚合 program（`tsconfig.client.json`，见[分层 RFC](../architecture/2026-07-19-gui-layering-and-rpc-protocol.zh.md)），根 `tsconfig.json` 则继续兼任宿主侧聚合，`tsconfig.build.json` 还是第三份手工维护的全量 emit 图。三处账本并行，造成四个具体的不对称：
+GUI 拆分引入了第二个聚合 program（`tsconfig.client.json`，见[已归档的分层 RFC](../../archived/architecture/2026-07-19-gui-layering-and-rpc-protocol.md)），根 `tsconfig.json` 则继续兼任宿主侧聚合，`tsconfig.build.json` 还是第三份手工维护的全量 emit 图。三处账本并行，造成四个具体的不对称：
 
 - 类型检查与构建的 references 列表逐渐脱节（`packages/goal/command-goal` 在类型检查图里，构建图里却没有）。
 - lefthook 的 pre-push 钩子只运行 `tsc -b tsconfig.json`，客户端侧的类型破坏因此通过本地检查点，直到 CI 才暴露。
@@ -19,7 +19,7 @@ GUI 拆分引入了第二个聚合 program（`tsconfig.client.json`，见[分层
 
 | 文件 | 角色 | 是否构成 program？ |
 |---|---|---|
-| `tsconfig.json` | solution 根文件：`extends` base、`files: []`、两条 references；同时是全仓 `tsc -b tsconfig.json` 图、tsserver 入口，以及 get-tsconfig 消费方（tsx 运行 `examples/`、`scripts/`、文档围栏代码块）就近命中的配置，其裸 workspace 导入经继承来的 `paths` 解析 | 否 |
+| `tsconfig.json` | solution 根文件：`extends` base、`files: []`、两条 references；同时是全仓 `tsc -b tsconfig.json` 图、tsserver 入口，以及 get-tsconfig 消费方（tsx 运行 `scripts/` 与文档围栏代码块）就近命中的配置，其裸 workspace 导入经继承来的 `paths` 解析 | 否 |
 | `tsconfig.base.json` | 共享 compilerOptions 与源码 `paths` 映射；兼任 vite-tsconfig-paths 的解析门面（不含 `include`，因此对每个导入方都生效） | 否 |
 | `tsconfig.base.client.json` | 浏览器侧编译形态（`jsx: react-jsx`、DOM lib、`types: []`），由客户端聚合与每个 `packages/client/*` 包共享 | 否 |
 | `tsconfig.host.json` | 原根聚合原样迁入：宿主各包、examples、测试、scripts、website；排除 `packages/client` | 是 |
@@ -29,7 +29,7 @@ GUI 拆分引入了第二个聚合 program（`tsconfig.client.json`，见[分层
 
 根 `tsconfig.json` 仍是显式执行完整 Project Reference 图的 solution 入口，lefthook pre-push 通过 `tsc -b tsconfig.json --pretty false` 增量覆盖两侧。仓库的 `build` 与 `typecheck` 命令因 Client 依赖 Host tsdown 生成的 Remote 约定而按 Host、Client 顺序运行，具体编排由 [API Remotes 构建 Note](2026-08-08-api-remotes-generated-contract-build.zh.md)负责。`tsconfig.build.json` 与 `tsconfig.vitest.json` 已删除；所有 vitest 配置都把 vite-tsconfig-paths 指向 `tsconfig.base.json`。
 
-solution 根文件刻意 `extends` base：`examples/` 与 `scripts/` 没有更近的 tsconfig，tsx（get-tsconfig）通过根文件解析它们的 workspace 导入。`extends` 把 `paths` 映射带回根文件，`files: []` 则让它始终不构成 program。这不影响两者的*类型检查*：examples、scripts 与 website 的文件由宿主聚合纳入。
+solution 根文件刻意 `extends` base：`scripts/` 没有更近的 tsconfig，tsx（get-tsconfig）通过根文件解析其 workspace 导入。`extends` 把 `paths` 映射带回根文件，`files: []` 则让它始终不构成 program。scripts 与 website 的类型检查仍由 Host aggregate 纳入。
 
 ## 考虑过的替代方案
 

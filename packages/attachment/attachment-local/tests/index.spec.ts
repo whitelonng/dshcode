@@ -1,6 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { existsSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -8,6 +9,7 @@ import sharp from 'sharp'
 import LocalAttachmentStore, {
   DEFAULT_NORMALIZED_IMAGE_MAX_BYTES,
   DEFAULT_NORMALIZED_IMAGE_MAX_DIMENSION,
+  DEFAULT_NORMALIZED_IMAGE_MAX_PIXELS,
   DEFAULT_IMAGE_COMPRESSION_CONCURRENCY,
   DEFAULT_MAX_IMAGE_BYTES,
   DEFAULT_MAX_IMAGE_DIMENSION,
@@ -33,10 +35,26 @@ describe('local attachment service', () => {
       mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
     })
     expect(service.normalizationPolicy).toEqual({
+      maxPixels: DEFAULT_NORMALIZED_IMAGE_MAX_PIXELS,
       maxDimension: DEFAULT_NORMALIZED_IMAGE_MAX_DIMENSION,
       maxBytes: DEFAULT_NORMALIZED_IMAGE_MAX_BYTES,
     })
     expect(service.imageCompressionConcurrency).toBe(DEFAULT_IMAGE_COMPRESSION_CONCURRENCY)
+    const ref = {
+      attachmentId: AttachmentId(`sha256:${'a'.repeat(64)}`),
+      mediaType: 'image/png' as const,
+      bytes: 1,
+      width: 1,
+      height: 1,
+    }
+    expect(service.imageHostPath(ref)).toBe(join(
+      service.root,
+      'objects',
+      'aa',
+      'a'.repeat(64),
+    ))
+    expect(() => service.imageHostPath({ ...ref, attachmentId: AttachmentId('invalid') }))
+      .toThrow(expect.objectContaining({ code: 'INVALID_ATTACHMENT_REF' }))
   })
 
   it('resolves and validates the instance image-compression concurrency', () => {
@@ -57,6 +75,18 @@ describe('local attachment service', () => {
       ))
       const ref = await service.saveImage({ data, mediaType: 'image/png' })
       await expect(service.readImage(ref)).resolves.toEqual({ ref, data })
+      const hostPath = service.imageHostPath(ref)
+      expect(hostPath).toBe(join(
+        dshHome,
+        'attachments',
+        'v1',
+        'objects',
+        String(ref.attachmentId).slice('sha256:'.length, 'sha256:'.length + 2),
+        String(ref.attachmentId).slice('sha256:'.length),
+      ))
+      await expect(readFile(hostPath)).resolves.toEqual(Buffer.from(data))
+      const request = await service.readImageRequest(ref, { maxPixels: 1, maxBytes: 1024 })
+      expect(request).not.toHaveProperty('access')
     } finally {
       await rm(dshHome, { recursive: true, force: true })
     }
@@ -108,15 +138,15 @@ describe('local attachment service', () => {
   it('prepares every batch member before any write', async () => {
     const dshHome = await mkdtemp(join(tmpdir(), 'dsh-attachment-batch-'))
     try {
-      const service = new LocalAttachmentStore(new Context(), { dshHome, normalizedImageMaxBytes: 1 })
+      const service = new LocalAttachmentStore(new Context(), { dshHome })
       const valid = Uint8Array.from(Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgZGIGAAAOAAeCcsnOAAAAAElFTkSuQmCC',
         'base64',
       ))
       await expect(service.saveImages([
         { data: valid, mediaType: 'image/png' },
-        { data: valid, mediaType: 'image/png' },
-      ])).rejects.toMatchObject({ code: 'IMAGE_TOO_LARGE' })
+        { data: Uint8Array.of(1, 2, 3), mediaType: 'image/png' },
+      ])).rejects.toThrow(/Unsupported or malformed image data/)
       expect(existsSync(service.root)).toBe(false)
     } finally {
       await rm(dshHome, { recursive: true, force: true })

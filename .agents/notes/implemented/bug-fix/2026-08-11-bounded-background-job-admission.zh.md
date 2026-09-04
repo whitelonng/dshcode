@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-`LocalJobRegistry` 拥有 `maxConcurrentJobsPerOwner` 配置字段。它只接受正的安全整数，默认值为 `10`，并通过 Service Provider 的 Cordis schema、typed `agent-spine-demo` 组合包与 ACP 应用配置提供。组合包只传输该值；其含义归进程内 Service Provider 所有。
+`LocalJobRegistry` 拥有 `maxConcurrentJobsPerOwner` 配置字段。它只接受正的安全整数，默认值为 `10`，并通过 Service Provider 的 Cordis schema 与 ACP 应用配置提供。profile 组合直接配置提供方配置行；该值的含义归进程内 Service Provider 所有。
 
 [通用任务运行时决策](../architecture/2026-06-20-generic-long-running-tool-runtime.zh.md)拥有共享 Task 生命周期与控制 API；本记录只拥有进程内准入策略。
 

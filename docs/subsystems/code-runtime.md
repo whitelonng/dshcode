@@ -2,7 +2,7 @@
 
 English | [中文](code-runtime.zh.md)
 
-The code-execution seam — a [capability seam](../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md) whose Service Definition ([dsh-code-runtime](../../packages/code-runtime/code-runtime), `ctx.codeRuntime`) runs one model-written program against host-provided async bindings and reports what it printed and returned. Code execution is **one optional capability**, not part of the agent-loop spine — so its vocabulary lives here, not in [core.md](core.md). Backends differ by execution substrate and source language, both readonly descriptors on the service; the worker-thread Service Provider and tool-registry Consumer are specified by the [Code Mode foundation](../../.agents/notes/implemented/feature/2026-06-15-code-mode.md) and [typed-return contract](../../.agents/notes/implemented/feature/2026-07-20-code-mode-typed-tool-returns.md).
+The code-execution seam — a [capability seam](../../.agents/notes/implemented/architecture/2026-06-13-capability-seams.md) whose Service Definition ([dsh-code-runtime](../../packages/code-runtime/code-runtime), `ctx.codeRuntime`) runs one model-written program against host-provided async bindings and reports what it printed and returned. Code execution is **one optional capability**, not part of the agent-loop spine — so its vocabulary lives here, not in [core.md](core.md). Backends differ by execution substrate and source language, both readonly descriptors on the service; the worker-thread Service Provider and tool-registry Consumer are specified by the [PTC mode foundation](../../.agents/notes/implemented/feature/2026-06-15-ptc.md) and [typed-return contract](../../.agents/notes/implemented/feature/2026-07-20-ptc-typed-tool-returns.md).
 
 Source: [`packages/code-runtime/code-runtime/src/types.ts`](../../packages/code-runtime/code-runtime/src/types.ts)
 
@@ -52,7 +52,11 @@ interface CodeRunResult {
    * rendered string; a failed or value-less run leaves this absent.
    */
   value?: CodeJsonValue
-  /** Text the program emitted, in order, bounded only as part of the outer result. */
+  /**
+   * Captured text. Each source channel preserves emission order; interleaving
+   * across independent channels is backend-dependent. Bounded only as part of
+   * the outer result.
+   */
   logs: string[]
   /** Present iff the run failed; see {@link CodeRunFailure} for the taxonomy. */
   error?: CodeRunFailure
@@ -61,7 +65,7 @@ interface CodeRunResult {
 
 ## Bindings: host functions as program globals
 
-Each `CodeBindingNamespace` becomes one global object of async callables inside the program (the Code Mode consumer passes one: `tools`). Arguments and resolutions must be lossless JSON and cross without a seam-level byte cap; the runtime may bridge them through structured clone. A namespace may declare a program-visible error class without making the runtime know the consumer's names: the runtime injects the real constructor and turns rejected calls into its instances. A runtime also treats binding names as hostile input (`__proto__` is an ordinary own property, never a prototype collision):
+Each `CodeBindingNamespace` becomes one global object of async callables inside the program (the PTC mode consumer passes one: `tools`). Arguments and resolutions must be lossless JSON and cross without a seam-level byte cap; the runtime may bridge them through structured clone. A namespace may declare a program-visible error class without making the runtime know the consumer's names: the runtime injects the real constructor and turns rejected calls into its instances. A runtime also treats binding names as hostile input (`__proto__` is an ordinary own property, never a prototype collision):
 
 ```ts type-equiv
 /**
@@ -69,7 +73,7 @@ Each `CodeBindingNamespace` becomes one global object of async callables inside 
  * injects a real error constructor under `name`; rejected member calls become
  * its instances and expose the exact member name through
  * `memberNameProperty`. Both strings are runtime data rather than knowledge
- * of a particular consumer such as Code Mode.
+ * of a particular consumer such as PTC mode.
  */
 interface CodeBindingErrorClass {
   /** Constructor global and resulting `Error.name`; same portable identifier rule as {@link CodeBindingNamespace.global}. */
@@ -131,7 +135,7 @@ type CodeBindingFunction = (args: unknown) => Promise<CodeJsonValue>
 
 ## Captured output and the failure taxonomy
 
-Logs are plain strings in emission order. The runtime captures the program's console and stream output, but channel and console-method metadata are not part of the seam because consumers render only the text. Implementations cap the serialized outer log-array plus completion-value or failure-message payload; fixed result-envelope syntax and consumer presentation whitespace are not part of that variable-payload ledger. Overflow is an explicit failure rather than in-band value substitution.
+Logs are plain strings. Each source channel preserves emission order, while interleaving across independent channels is backend-dependent because channel metadata is not part of the seam. The runtime captures the program's console and stream output, and consumers render only the text. Implementations cap the serialized outer log-array plus completion-value or failure-message payload; fixed result-envelope syntax and consumer presentation whitespace are not part of that variable-payload ledger. Overflow is an explicit failure rather than in-band value substitution.
 
 Failure kinds are **orthogonal outcomes reported independently** (per [defensive-patterns](../defensive-patterns.md)): a budget expiry is not an exception, an abort is not a timeout, and a substrate death (e.g. OOM) is neither:
 
@@ -158,7 +162,7 @@ interface CodeRunFailure {
 
 ## The service
 
-`CodeRuntime` (`ctx.codeRuntime`, abstract — defined in [`packages/code-runtime/code-runtime/src/index.ts`](../../packages/code-runtime/code-runtime/src/index.ts)) is `run(request)` plus two readonly descriptors: `language` (what the program must be written in — `'typescript'` and `'python'` are the well-known values, those `dsh-tools` presents, and only `'typescript'` has a published backend; a consumer generating language-specific presentation switches on it and fails loud on one it cannot present) and `isolation` (the execution substrate — `'worker-thread'`, `'process'`, `'container'`; a diagnostic label, **not a security claim**). Implementations must keep runs isolated from each other (no cross-run state) and dispose to quiescence: in-flight runs are terminated and awaited before teardown completes.
+`CodeRuntime` (`ctx.codeRuntime`, abstract — defined in [`packages/code-runtime/code-runtime/src/index.ts`](../../packages/code-runtime/code-runtime/src/index.ts)) is `run(request)` plus two readonly descriptors: `language` (what the program must be written in — `'typescript'` and `'python'` are the well-known values, those `dsh-tools` presents, the TypeScript backend released and the Python backend experimental and private (not published); a consumer generating language-specific presentation switches on it and fails loud on one it cannot present) and `isolation` (the execution substrate — `'worker-thread'`, `'process'`, `'container'`; a diagnostic label, **not a security claim**). Implementations must keep runs isolated from each other (no cross-run state) and dispose to quiescence: in-flight runs are terminated and awaited before teardown completes.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

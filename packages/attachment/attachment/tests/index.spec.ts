@@ -146,6 +146,12 @@ describe('AttachmentStore.readImageRequest', () => {
     controller.abort(reason)
     expect(() => store.readImageRequest(ref, { maxPixels: 1, maxBytes: 1 }, controller.signal)).toThrow(reason)
   })
+
+  it('exposes no provider-owned host path by default', async () => {
+    const store = new RecordingStore(new Context())
+    const ref = await store.saveImage(image(1))
+    expect(store.imageHostPath(ref)).toBeUndefined()
+  })
 })
 
 describe('isImageAdmissionError', () => {

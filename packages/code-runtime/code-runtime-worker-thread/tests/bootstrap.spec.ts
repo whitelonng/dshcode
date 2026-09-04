@@ -62,7 +62,7 @@ async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
 const BOOT = { maxOutputBytes: 65_536 }
 const TOOL_ERROR_CLASS = { name: 'ToolCallError', memberNameProperty: 'toolName' } as const
 
-/** One worker declaration for the Code Mode tools namespace. */
+/** One worker declaration for the PTC mode tools namespace. */
 function toolNamespace(names: string[]) {
   return { global: 'tools', names, errorClass: TOOL_ERROR_CLASS }
 }

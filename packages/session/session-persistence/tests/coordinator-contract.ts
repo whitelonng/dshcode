@@ -13,7 +13,13 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
-import SessionStore, { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, {
+  SESSION_FORMAT_VERSION,
+  Session,
+  SessionId,
+  SessionLogOffset,
+  SessionSeq,
+} from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { meta, oneTurnLog, appendLog } from './contract.ts'
 
@@ -36,7 +42,7 @@ export interface CoordinatorFixture {
   cleanup: () => Promise<void>
 }
 
-/** A constant absolute cwd; jsonl keys directories off it, memory/sqlite ignore it. */
+/** A constant absolute cwd; JSONL keys directories off it and memory ignores it. */
 const WORK = '/w'
 const OTHER = '/other'
 
@@ -46,7 +52,7 @@ function send(session: Session, events: readonly SessionEvent[]): void {
 }
 
 /** A valid persisted log from immediately before messages gained wrappers and identities. */
-function legacyMessageLog(): SessionEvent[] {
+export function legacyMessageLog(): SessionEvent[] {
   return [
     { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
     {
@@ -109,7 +115,7 @@ function legacyMessageLog(): SessionEvent[] {
 }
 
 /** A complete log in the durable event vocabulary of the react-loop refactor base. */
-function preReactLoopLog(): SessionEvent[] {
+export function preReactLoopLog(): SessionEvent[] {
   const prompt = createUserMessage({
     content: [{ type: 'text', text: 'old prompt' }],
     source: { kind: 'user' },
@@ -283,7 +289,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         const header = meta(id, WORK)
         const start: SessionEvent = {
           type: 'turn/start',
-          seq: 0,
+          seq: SessionSeq(0),
           time: 1,
           data: { turn: 1 },
         }
@@ -322,23 +328,49 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       }
     })
 
-    it('round-trips the seed boundary (seedLength) through persistence', async () => {
-      // A forked child records how many leading events were inherited via the seed; the
-      // boundary must survive a reload (so a resume/replay can tell the inherited prefix from
-      // the child's own events). JSONL stores it in the header; SQLite uses `seed_length`.
+    it('preserves the exact inherited cut through load, inspect, suffix read, prepare, and reopen', async () => {
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
+      const inherited = oneTurnLog()
       try {
         let session!: Session
         const sessionFiber = await ctx.plugin(Object.assign((inner: Context) => {
-          session = inner.sessions.create(SessionId('forked-child'), { meta: { cwd: WORK, seedLength: 3 } })
+          session = inner.sessions.create(SessionId('forked-child'), {
+            seed: inherited,
+            inheritedEventCount: SessionLogOffset(inherited.length),
+            meta: { cwd: WORK, isSeeded: true },
+          })
         }, { inject: ['sessions'] }))
-        send(session, oneTurnLog())
         await ctx.sessions.flush(session)
         await sessionFiber.dispose()
 
         const loaded = await ctx.sessionPersistence.load(SessionId('forked-child'))
-        expect(loaded.meta.seedLength).toBe(3)
+        expect(loaded.meta.isSeeded).toBe(true)
+        expect(loaded.inheritedEventCount).toBe(SessionLogOffset(inherited.length))
+        expect((await ctx.sessionPersistence.inspect(SessionId('forked-child'))).inheritedEventCount)
+          .toBe(SessionLogOffset(inherited.length))
+        const suffix = await ctx.sessionPersistence.readFrom(
+          SessionId('forked-child'),
+          SessionLogOffset(3),
+        )
+        expect(suffix.inheritedEventCount).toBe(SessionLogOffset(inherited.length))
+        expect(suffix.fromSeq).toBe(3)
+        expect(suffix.events[0]?.seq).toBe(3)
+        const preparation = await ctx.sessionPersistence.prepare(SessionId('forked-child'))
+        expect(preparation.session.inheritedEventCount).toBe(SessionLogOffset(inherited.length))
+        preparation[Symbol.dispose]()
+
+        await fiber.dispose()
+        const reopened = await freshCtx(fix)
+        try {
+          const reopenedLoad = await reopened.ctx.sessionPersistence.load(SessionId('forked-child'))
+          expect(reopenedLoad.inheritedEventCount).toBe(SessionLogOffset(inherited.length))
+          const reopenedPreparation = await reopened.ctx.sessionPersistence.prepare(SessionId('forked-child'))
+          expect(reopenedPreparation.session.inheritedEventCount).toBe(SessionLogOffset(inherited.length))
+          reopenedPreparation[Symbol.dispose]()
+        } finally {
+          await reopened.fiber.dispose()
+        }
       } finally {
         await fiber.dispose()
         await fix.cleanup()
@@ -348,7 +380,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
     it('round-trips the delegation depth through persistence', async () => {
       // A subagent child's recursion budget lives in its header; a reload that
       // dropped it would reset the child to top-level and un-bound maxDepth
-      // (JSONL stores it in the header line; SQLite uses `delegation_depth`).
+      // The backend must preserve it in stored metadata.
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
       try {
@@ -458,7 +490,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
           ])
         }
 
-        const replacementSuffix = await ctx.sessionPersistence.readFrom(id, 6)
+        const replacementSuffix = await ctx.sessionPersistence.readFrom(id, SessionLogOffset(6))
         expect(replacementSuffix.events[0]).toMatchObject({
           type: 'tool/result',
           seq: 6,
@@ -482,7 +514,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
 
         const snapshots = [
           await ctx.sessionPersistence.inspect(id),
-          await ctx.sessionPersistence.readFrom(id, 0),
+          await ctx.sessionPersistence.readFrom(id, SessionLogOffset(0)),
           await ctx.sessionPersistence.load(id),
         ]
         for (const snapshot of snapshots) {
@@ -529,7 +561,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
           ])
         }
 
-        const suffix = await ctx.sessionPersistence.readFrom(id, 3)
+        const suffix = await ctx.sessionPersistence.readFrom(id, SessionLogOffset(3))
         expect(suffix.events[0]).toMatchObject({
           type: 'user/message',
           seq: 3,
@@ -563,7 +595,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         const extendedId = SessionId('current-extended-turn-end')
         await ctx.sessionPersistence.create(meta(extendedId, WORK))
         await ctx.sessionPersistence.append(extendedId, [
-          { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
+          { type: 'turn/start', seq: SessionSeq(0), time: 1, data: { turn: 1 } },
           {
             type: 'turn/end', seq: 1, time: 2,
             data: { turn: 1, reason: { kind: 'extension-reason' } },
@@ -689,8 +721,27 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
           await ctx.sessionPersistence.create(meta(malformedId, WORK))
           await ctx.sessionPersistence.append(malformedId, [malformed.event])
           await expect(ctx.sessionPersistence.inspect(malformedId)).rejects.toThrow(malformed.message)
-          await expect(ctx.sessionPersistence.readFrom(malformedId, 0)).rejects.toThrow(malformed.message)
+          await expect(ctx.sessionPersistence.readFrom(malformedId, SessionLogOffset(0)))
+            .rejects.toThrow(malformed.message)
         }
+
+        const malformedReplacementId = SessionId('invalid-old-tool-result-replacement')
+        await ctx.sessionPersistence.create(meta(malformedReplacementId, WORK))
+        await ctx.sessionPersistence.append(malformedReplacementId, [{
+          type: 'tool/result',
+          seq: 0,
+          time: 1,
+          surfaceOp: { op: 'replace', start: -1, end: -1 },
+          data: {
+            turn: 1,
+            step: 1,
+            callId: 'call',
+            content: [{ type: 'text', text: 'result' }],
+            isError: false,
+          },
+        } as unknown as SessionEvent])
+        await expect(ctx.sessionPersistence.inspect(malformedReplacementId))
+          .rejects.toThrow('invalid replace surfaceOp')
 
         for (const type of ['tool/result'] as const) {
           const malformedId = SessionId(`invalid-${type}`)
@@ -720,7 +771,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         } as unknown as SessionEvent])
         await expect(ctx.sessionPersistence.inspect(pluginId))
           .resolves.toMatchObject({ events: [{ type: 'plugin/test', data: null, ignorable: true }] })
-        await expect(ctx.sessionPersistence.readFrom(pluginId, 0))
+        await expect(ctx.sessionPersistence.readFrom(pluginId, SessionLogOffset(0)))
           .resolves.toMatchObject({ events: [{ type: 'plugin/test', data: null, ignorable: true }] })
 
         for (const type of ['user/message', 'assistant/message'] as const) {
@@ -733,7 +784,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
             surfaceOp: 'append',
             data: {},
           } as unknown as SessionEvent])
-          await expect(ctx.sessionPersistence.readFrom(missingContentId, 0))
+          await expect(ctx.sessionPersistence.readFrom(missingContentId, SessionLogOffset(0)))
             .rejects.toThrow('lacks an identified message')
         }
       } finally {
@@ -753,7 +804,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         const p = ctx.sessionPersistence.append(m.id, events)
         // Mutate the caller's array AND an event object after the call but before
         // the queued op runs: the snapshot taken at call time must shield the copy.
-        events.push({ type: 'turn/start', seq: 6, time: 99, data: { turn: 2 } })
+        events.push({ type: 'turn/start', seq: SessionSeq(6), time: 99, data: { turn: 2 } })
         if (userMsg?.type === 'user/message') {
           (userMsg.data as { content: unknown[] }).content = [{ type: 'text', text: 'MUTATED' }]
         }
@@ -1170,8 +1221,8 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         const contFiber = await ctx.plugin(Object.assign((inner: Context) => {
           cont = inner.sessions.create(SessionId('claim'), { seed: [
             ...events,
-            { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-            { type: 'turn/end', seq: 7, time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
+            { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+            { type: 'turn/end', seq: SessionSeq(7), time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
           ], meta: { cwd: WORK, createdAt: 2000 } })
         }, { inject: ['sessions'] }))
         await ctx.sessions.flush(cont)
@@ -1206,6 +1257,59 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         await expect(ctx.sessions.flush(live)).rejects.toThrow(/different cwd|id collision/)
       } finally {
         await fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
+    it('a live session cannot claim ownerless state with a different inherited cut', async () => {
+      const fix = await makeFixture()
+      const { ctx, fiber } = await freshCtx(fix)
+      try {
+        const id = SessionId('wrong-cut-claim')
+        await ctx.sessionPersistence.create(
+          { ...meta(id, WORK), isSeeded: true },
+          SessionLogOffset(0),
+        )
+        const live = ctx.sessions.create(id, {
+          seed: oneTurnLog(),
+          inheritedEventCount: SessionLogOffset(1),
+          meta: { cwd: WORK, isSeeded: true },
+        })
+
+        await expect(ctx.sessions.flush(live))
+          .rejects.toThrow(/different inherited event count|id collision/)
+      } finally {
+        await fiber.dispose()
+        await fix.cleanup()
+      }
+    })
+
+    it('a live session cannot adopt a stored prefix with a different inherited cut', async () => {
+      const fix = await makeFixture()
+      const id = SessionId('wrong-cut-adoption')
+      const first = await freshCtx(fix)
+      try {
+        await first.ctx.sessionPersistence.create(
+          { ...meta(id, WORK), isSeeded: true },
+          SessionLogOffset(0),
+        )
+        await first.ctx.sessionPersistence.append(id, oneTurnLog())
+      } finally {
+        await first.fiber.dispose()
+      }
+
+      const second = await freshCtx(fix)
+      try {
+        const live = second.ctx.sessions.create(id, {
+          seed: oneTurnLog(),
+          inheritedEventCount: SessionLogOffset(1),
+          meta: { cwd: WORK, isSeeded: true },
+        })
+
+        await expect(second.ctx.sessions.flush(live))
+          .rejects.toThrow(/different inherited event count|id collision/)
+      } finally {
+        await second.fiber.dispose()
         await fix.cleanup()
       }
     })
@@ -1262,8 +1366,8 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       const second = await freshCtx(fix)
       try {
         await second.ctx.sessionPersistence.append(SessionId('adopt-append'), [
-          { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-          { type: 'turn/end', seq: 7, time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
+          { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+          { type: 'turn/end', seq: SessionSeq(7), time: 8, data: { turn: 2, reason: { kind: 'completed' } } },
         ])
         const loaded = await second.ctx.sessionPersistence.load(SessionId('adopt-append'))
         expect(loaded.events.map(e => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
@@ -1329,7 +1433,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
       try {
-        const m = { version: 99, id: SessionId('v99'), createdAt: 1, cwd: WORK }
+        const m = { version: 99, id: SessionId('v99'), createdAt: 1, cwd: WORK, isSeeded: false }
         await ctx.sessionPersistence.create(m)
         await ctx.sessionPersistence.append(m.id, oneTurnLog())
         const failure = await ctx.sessionPersistence.load(m.id).then(() => undefined, (error: unknown) => error as Error)
@@ -1345,7 +1449,7 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
       try {
-        const m = { version: -1, id: SessionId('v-older'), createdAt: 1, cwd: WORK }
+        const m = { version: -1, id: SessionId('v-older'), createdAt: 1, cwd: WORK, isSeeded: false }
         await ctx.sessionPersistence.create(m)
         await ctx.sessionPersistence.append(m.id, oneTurnLog())
         const failure = await ctx.sessionPersistence.load(m.id).then(() => undefined, (error: unknown) => error as Error)
@@ -1389,7 +1493,14 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
       const fix = await makeFixture()
       const { ctx, fiber } = await freshCtx(fix)
       try {
-        const m = { version: SESSION_FORMAT_VERSION, id: SessionId('forked-child'), createdAt: 1, cwd: WORK, parentSession: SessionId('the-parent') }
+        const m = {
+          version: SESSION_FORMAT_VERSION,
+          id: SessionId('forked-child'),
+          createdAt: 1,
+          cwd: WORK,
+          parentSession: SessionId('the-parent'),
+          isSeeded: false,
+        }
         await ctx.sessionPersistence.create(m)
         await ctx.sessionPersistence.append(m.id, oneTurnLog())
         const loaded = await ctx.sessionPersistence.load(m.id)
@@ -1441,8 +1552,8 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         await first.ctx.sessionPersistence.append(m.id, oneTurnLog()) // committed 0..5 (balanced)
         // A second turn whose real events are durable but never closed (open turn).
         await first.ctx.sessionPersistence.append(m.id, [
-          { type: 'turn/start', seq: 6, time: 7, data: { turn: 2 } },
-          { type: 'step/start', seq: 7, time: 8, data: { turn: 2, step: 1 } },
+          { type: 'turn/start', seq: SessionSeq(6), time: 7, data: { turn: 2 } },
+          { type: 'step/start', seq: SessionSeq(7), time: 8, data: { turn: 2, step: 1 } },
         ])
       } finally {
         await first.fiber.dispose()
@@ -1468,8 +1579,8 @@ export function runCoordinatorContract(name: string, makeFixture: () => Promise<
         // The repair is durable: the next append continues at the balanced length
         // (seq 10) and a reload round-trips identically.
         await second.ctx.sessionPersistence.append(SessionId('torn'), [
-          { type: 'turn/start', seq: 10, time: 9, data: { turn: 3 } },
-          { type: 'turn/end', seq: 11, time: 10, data: { turn: 3, reason: { kind: 'completed' } } },
+          { type: 'turn/start', seq: SessionSeq(10), time: 9, data: { turn: 3 } },
+          { type: 'turn/end', seq: SessionSeq(11), time: 10, data: { turn: 3, reason: { kind: 'completed' } } },
         ])
         const reloaded = await second.ctx.sessionPersistence.load(SessionId('torn'))
         expect(reloaded.events.map(e => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])

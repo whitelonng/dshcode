@@ -1,7 +1,10 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import LlmRuntime, { createUserMessage, deepFreeze, markAgentLoopRequest  } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import LlmRuntime, { createUserMessage, markAgentLoopRequest } from '@deepseek-ai/dsh-llm'
+import { deepFreeze } from '@deepseek-ai/dsh-util-values'
+import SessionStore, { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { turnBoundaryProjectionDefinition } from '@deepseek-ai/dsh-agent-loop'
 import SessionTitleService, {
   SessionTitleProviderId,
   type SessionTitleProvider,
@@ -51,6 +54,7 @@ describe('SessionTitleService Provider lifecycle', () => {
   it('inherits title events across forks, skips first-prompt retitling, and lets all-messages update later', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SessionTitleService, CONFIG)
     const parent = ctx.sessions.create(SessionId('title-parent'))
     parent.append('turn/start', {
@@ -62,8 +66,8 @@ describe('SessionTitleService Provider lifecycle', () => {
 
     const child = ctx.sessions.fork(parent, undefined, SessionId('title-child'))
     expect(ctx.sessionTitle.get(child)).toEqual(ctx.sessionTitle.get(parent))
-    expect(child.events.find(event => event.type === 'session/title'))
-      .toEqual(parent.events.find(event => event.type === 'session/title'))
+    expect(child.snapshotEvents().find(event => event.type === 'session/title'))
+      .toEqual(parent.snapshotEvents().find(event => event.type === 'session/title'))
 
     const firstGenerate = vi.fn(async (request: SessionTitleProviderRequest) => ({
       title: 'Should not run',
@@ -115,6 +119,7 @@ describe('SessionTitleService Provider lifecycle', () => {
   it('runs a first-prompt provider once after the routed request and retries only through refresh', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SessionTitleService, CONFIG)
     const requests: SessionTitleProviderRequest[] = []
     const provider: SessionTitleProvider = {
@@ -167,9 +172,75 @@ describe('SessionTitleService Provider lifecycle', () => {
     expect(requests[1]?.messages.map(message => message.seq)).toEqual([first.seq, second.seq])
   })
 
+  it('preserves provider input order across bounded title-input chunks', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SessionTitleService, CONFIG)
+    const session = ctx.sessions.create(SessionId('chunked-provider-input'))
+    session.append('turn/start', { turn: 1 })
+    const messages = Array.from({ length: 70 }, (_, index) =>
+      appendHumanPrompt(session, `Prompt ${String(index)}`))
+    await settle()
+    const generate = vi.fn(async (request: SessionTitleProviderRequest): Promise<SessionTitleProviderResult> => ({
+      title: 'Chunked history',
+      messageSeqs: request.messages.map(message => message.seq),
+    }))
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('chunked-provider'),
+      automatic: 'all-prompts',
+      generate,
+    })
+
+    await ctx.sessionTitle.refresh(session)
+
+    expect(generate).toHaveBeenCalledOnce()
+    expect(generate.mock.calls[0]?.[0].messages).toEqual(messages.map((message, index) => ({
+      seq: message.seq,
+      text: `Prompt ${String(index)}`,
+    })))
+  })
+
+  it('cuts a first-message provider request at its scheduled watermark when a newer prompt lands first', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SessionTitleService, CONFIG)
+    const requests: SessionTitleProviderRequest[] = []
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('watermark-cut'),
+      automatic: 'first-prompt',
+      async generate(request) {
+        requests.push(request)
+        return {
+          title: 'Watermarked title',
+          messageSeqs: request.messages.map(message => message.seq),
+        }
+      },
+    })
+    const session = ctx.sessions.create(SessionId('watermark-cut'))
+    session.append('turn/start', {
+      turn: 1,
+    })
+    const first = appendHumanPrompt(session, 'First prompt')
+    await settle()
+    appendHumanPrompt(session, 'A newer prompt before the route')
+    appendRoute(session)
+    await settle()
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.messages).toEqual([{ seq: first.seq, text: 'First prompt' }])
+    expect(ctx.sessionTitle.get(session)).toMatchObject({
+      title: 'Watermarked title',
+      messageSeqs: [first.seq],
+      source: { kind: 'provider', provider: SessionTitleProviderId('watermark-cut') },
+    })
+  })
+
   it('rejects a second provider and drains stale work when the winner is disposed', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SessionTitleService, CONFIG)
     const pending = deferred<SessionTitleProviderResult>()
     let observedSignal: AbortSignal | undefined
@@ -185,7 +256,7 @@ describe('SessionTitleService Provider lifecycle', () => {
     expect(() => ctx.sessionTitle.register({
       id: SessionTitleProviderId('duplicate'),
       automatic: 'first-prompt',
-      generate: async () => ({ title: 'duplicate', messageSeqs: [0] }),
+      generate: async () => ({ title: 'duplicate', messageSeqs: [SessionSeq(0)] }),
     })).toThrow(/already registered/)
 
     const session = ctx.sessions.create(SessionId('dispose-provider'))
@@ -221,6 +292,7 @@ describe('SessionTitleService Provider lifecycle', () => {
   it('supersedes an older all-messages revision and cannot commit an ignored abort', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SessionTitleService, CONFIG)
     const firstResult = deferred<SessionTitleProviderResult>()
     const requests: SessionTitleProviderRequest[] = []
@@ -264,6 +336,8 @@ describe('SessionTitleService Provider lifecycle', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
     await ctx.plugin(SessionTitleService, CONFIG)
     const requests: SessionTitleProviderRequest[] = []
     ctx.sessionTitle.register({
@@ -303,7 +377,7 @@ describe('SessionTitleService Provider lifecycle', () => {
     })))
     await settle()
 
-    expect(session.events.filter(event => event.type === 'request/header')).toHaveLength(1)
+    expect(session.snapshotEvents().filter(event => event.type === 'request/header')).toHaveLength(1)
     expect(requests).toHaveLength(2)
     expect(requests[1]).toMatchObject({
       messages: [
@@ -318,6 +392,8 @@ describe('SessionTitleService Provider lifecycle', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    ctx.sessionProjections.register(turnBoundaryProjectionDefinition)
     await ctx.plugin(SessionTitleService, CONFIG)
     const generate = vi.fn(async (request: SessionTitleProviderRequest): Promise<SessionTitleProviderResult> => ({
       title: 'Unexpected title',
@@ -349,6 +425,7 @@ describe('SessionTitleService Provider lifecycle', () => {
   it('contains automatic failures but lets explicit refresh reject', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SessionTitleService, CONFIG)
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => undefined)
     const provider: SessionTitleProvider = {

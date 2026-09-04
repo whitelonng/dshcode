@@ -1,9 +1,3 @@
-/* Geometry mirrors CodeBlock and TerminalBlock (12px radius, code-block
-   surface + banner row, markdown code-block font) so a search card reads as one
-   family with them. The deliberate divergence they share: the result rows keep
-   `white-space: pre` and scroll horizontally, because folding a long match line
-   or path destroys the alignment a reader scans by. */
-
 .block {
   --dsl-search-radius: 12px;
   --dsl-search-line-height: 22px;
@@ -15,8 +9,6 @@
   border-radius: var(--dsl-search-radius);
 }
 
-/* The banner: result summary on the left, the copy control holding its
-   intrinsic width on the right. */
 .header {
   display: flex;
   align-items: center;

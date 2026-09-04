@@ -6,7 +6,7 @@ English | [中文](2026-08-04-task-surface.zh.md)
 
 ## Problem
 
-Some tasks are awkward to finish through alternating prose messages. Comparing several options, reordering a plan, reviewing a table, or filling a small set of related fields all work better as one structured interaction. Today an agent can describe such an interaction, but it cannot ask the Web client to render one without adding a permanent product component or generating executable Client Plugin code.
+Some tasks are awkward to finish through alternating prose messages. Comparing several options, reordering a plan, reviewing a table, or filling a small set of related fields all work better as one structured interaction. An agent can describe such an interaction, but it cannot ask the Web client to render one without adding a permanent product component or generating executable Client Plugin code.
 
 Those two workarounds put ownership in the wrong place. Product-specific components require a new trigger and release for every task shape. Generated code has far more authority and lifecycle cost than a one-turn form needs. It also makes the presentation, rather than the user's conclusion, the durable artifact.
 
@@ -81,7 +81,7 @@ Limits are schema-backed configuration on the Task Surface service. The initial 
 
 `show_task_surface` accepts `{ model: TaskSurfaceModelV1 }`. The Host parses and normalizes the complete model, rejects the call when that Session already has an open Task Surface, mints `surfaceId`, and returns canonical `{ surfaceId, model }` with the normalized model. `presentationMeta` persists `value.model`, so the projector and executor cannot disagree about normalization. The Native result names the Surface and explains that an ordinary message bypasses it when the client cannot render the panel. The tool then calls `exec.concludeTurn()` so the agent does not continue past the requested human checkpoint.
 
-The tool definition omits `isConcurrencySafe`. Under the existing tool-registry contract, omission classifies every call as an exclusive ordering barrier; no new `ToolDefinition` field is introduced. The tool is composed only in Web profiles that mount both the Host service and Web renderer. Version 1 supports `native` and `both` tool modes; a `code`-only profile does not advertise it because Code Mode dispatch is nested and cannot carry its presentation metadata to the outer result.
+The tool definition omits `isConcurrencySafe`. Under the existing tool-registry contract, omission classifies every call as an exclusive ordering barrier; no new `ToolDefinition` field is introduced. The tool is composed only in Web profiles that mount both the Host service and Web renderer. Version 1 supports `native` and `both` tool modes; a `ptc`-only profile does not advertise it because PTC mode dispatch is nested and cannot carry its presentation metadata to the outer result.
 
 The browser-safe domain package imports the type-only `Branded` primitive from `@deepseek-ai/dsh-brand` and owns all three Task Surface IDs. The canonical value is execution-local under the [canonical tool output contract](../../implemented/architecture/2026-07-20-canonical-tool-output-contract.md). Replay therefore uses `output.presentationMeta(args, value)` to persist this tagged payload with `tool/result.meta`:
 
@@ -142,7 +142,7 @@ type SubmitTaskSurfaceResult =
 type GetActiveTaskSurfaceResult =
   | {
       active: true
-      callId: CallId
+      callId: ToolCallId
       surfaceId: TaskSurfaceId
       model: TaskSurfaceModelV1
       pending: TaskSurfacePendingSubmission | null
@@ -166,7 +166,7 @@ The Host resolves the exact successful `show_task_surface` occurrence, revalidat
 interface TaskSurfaceCorrelation {
   version: 1
   submissionId: TaskSurfaceSubmissionId
-  callId: CallId
+  callId: ToolCallId
   surfaceId: TaskSurfaceId
   values: Record<string, JsonValue>
 }
@@ -210,7 +210,7 @@ The Session log is the authority. A small `taskSurface` unit in the existing [Se
 
 ```ts ignore-check
 interface TaskSurfaceProjection {
-  active: { callId: CallId; surfaceId: TaskSurfaceId } | null
+  active: { callId: ToolCallId; surfaceId: TaskSurfaceId } | null
 }
 ```
 
@@ -260,7 +260,7 @@ The implementation depends on the existing message log, canonical tool output, t
 
 ## Acceptance criteria
 
-- A real model in `native` or `both` mode can call one stable `show_task_surface` schema, the call ends its turn, and a capable Web client renders the same normalized model live and after replay; `code`-only mode does not advertise it.
+- A real model in `native` or `both` mode can call one stable `show_task_surface` schema, the call ends its turn, and a capable Web client renders the same normalized model live and after replay; `ptc`-only mode does not advertise it.
 - The static `TaskSurfaceDock` is the only editor and remains actionable for an active result outside the loaded history window; the keyed toolview remains a read-only transcript summary and replay. A composer takeover hides the still-mounted Dock, preserves its draft, and reveals the same owner after release.
 - Submitting produces exactly one visible user message per `submissionId`, starts the next turn through normal queue admission, and retains exact branded occurrence correlation while keeping `source.kind: 'user'`; dismissing records one log event and starts no turn.
 - The queued client row retains the correlated message source. `getActive` exposes `queued` or `claiming` across same-process reconnect; commit closes the projection, while explicit discard clears pending state and leaves the Surface open. Queue-row disappearance alone changes no UI state. Edit and steer are rejected, and remove succeeds only before claim.
@@ -274,7 +274,7 @@ The implementation depends on the existing message log, canonical tool output, t
 
 ## Risks
 
-The first component set may be either too small for useful tasks or broad enough to become a weak application framework. Usage evidence should decide additions; v1 has no expression language or network behavior.
+The first component set may be either too small for useful tasks or broad enough to become a weak application framework. Usage evidence should decide additions; the initial set has no expression language or network behavior.
 
 The Task Surface Markdown policy gives up inline images, media, and automatic link previews. Ordinary links remain useful, but only an explicit user activation may navigate or start a request.
 

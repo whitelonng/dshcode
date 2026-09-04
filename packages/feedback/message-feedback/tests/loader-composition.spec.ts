@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
@@ -97,7 +97,7 @@ describe('message feedback through a real Loader composition', () => {
       ifVersion: null,
     })
     if (!put.ok) throw new Error(`expected put success, got ${put.error.code}`)
-    const durable = await first.sessionPersistence.readFrom(session.id, 0)
+    const durable = await first.sessionPersistence.readFrom(session.id, SessionLogOffset(0))
     expect(durable.events.some(event =>
       event.type === 'assistant/message'
       && event.data.message.id === fixture.assistantMessageIds[0])).toBe(true)

@@ -24,7 +24,7 @@ Status: implemented
 
 #### Windows 池
 
-`dsh-win-ci`：公司内部 Windows CI 服务器（一台 96 核 / 580 GB 机器）上 32 个常驻运行器实例（计划任务 `GH-Runner-01`…`GH-Runner-32`）。标签：`[self-hosted, dsh-win-ci, windows]`。镜像必须预装 Node 24、pnpm、Git（Git Bash 在 `PATH` 上，即 `C:\Program Files\Git\bin`——`bash` 工具按名称 spawn `bash`）、PowerShell 7，并为符号链接支持启用开发人员模式。切换前先看 `serial / windows (self-hosted standby)` 最近一次运行：绿色热备验证该池能端到端执行 `check:ci:windows-complete`。
+`dsh-win-ci`：公司内部 Windows CI 服务器（一台 96 核 / 580 GB 机器）上 32 个常驻运行器实例（计划任务 `GH-Runner-01`…`GH-Runner-32`）。标签：`[self-hosted, dsh-win-ci, windows]`。镜像必须预装 Node 24、pnpm、Git（Git Bash 在 `PATH` 上，即 `C:\Program Files\Git\bin`——`bash` 工具按名称 spawn `bash`）、PowerShell 7，并为符号链接支持启用开发人员模式。工作区与 pnpm store 必须都位于 ReFS 卷（`F:`）上：Windows 安装步骤在 ReFS 上传递 `--package-import-method=clone`，这需要该卷布局以及系统 corepack pnpm 携带的 `@reflink/reflink` 原生模块（见 [Windows ReFS store note](2026-08-30-windows-refs-store-block-clone-install.zh.md)）；没有此布局的重建运行器会在 Windows 构建门禁阶段以 TS6231 失败。切换前先看 `serial / windows (self-hosted standby)` 最近一次运行：绿色热备验证该池能端到端执行 `check:ci:windows-complete`。
 
 ### 切换步骤（任何具备写权限的协作者，约 1 分钟，无需合并）
 

@@ -18,9 +18,9 @@ Status: implemented
 
 `SurfaceManager.nodes` 是由事件序号组成的 `readonly number[]`；公共 `SurfaceNode` 形状、node 链接和 seq-to-node map 均已移除。内部替换 generation 信号保留。session-query 使用的完整 `foldSurface()` 读取会返回相同的数字数组表示和替换元数据，而无需让增量 manager 保留历史。工具配对 balance 和压缩（compaction）使用事件序号与 surface 位置；由 compact 拥有的每个切点的 balance cache 不依赖 node 链接。
 
-请求头只使用规范的完整快照。初始与恢复锚点即使没有变化也仍是完整快照；实例内变化会追加另一个完整 `request/header`，reason 为 `change`。delta 事件、codec 类型、diff/apply 辅助函数，以及仅供 codec 使用的 `fallback` reason 均已移除。请求重建选择最新快照。
+请求头只使用规范的完整快照。初始与恢复锚点即使没有变化也仍是完整快照；实例内变化会追加另一个完整 `request/header`，reason 为 `change`；未变的信封显式开启消息序列或跟随 surface 替换时，会追加 reason 为 `series` 的完整快照。普通的仅追加后续 Turn、同一模型消息序列内的后续 Step 与重试沿用最新快照。delta 事件、codec 类型、diff/apply 辅助函数，以及仅供 codec 使用的 `fallback` reason 均已移除。请求重建选择最新快照。
 
-`SESSION_FORMAT_VERSION` 仍固定为 `0`，因此 seed、追加和持久化加载验证会显式拒绝旧 v0 `request/header-delta` 事件，以及携带已删除 `fallback` reason 的完整快照。不存在兼容性 fold 或迁移。JSONL 与 SQLite 测试固定了这一失败即报错的边界；ACP（Agent Client Protocol）快照 harness 则把合法的会话中途变更表示为固定的完整请求头和完整可读提示词。
+`SESSION_FORMAT_VERSION` 仍固定为 `0`，因此 seed、追加和持久化加载验证会显式拒绝旧 v0 `request/header-delta` 事件，以及携带已删除 `fallback` reason 的完整快照。不存在兼容性 fold 或迁移。JSONL 测试固定了这一失败即报错的边界；ACP（Agent Client Protocol）快照 harness 则把合法的会话中途变更表示为固定的完整请求头和完整可读提示词。
 
 ## 曾考虑的替代方案
 
@@ -28,7 +28,7 @@ Status: implemented
 
 ## 验证
 
-单元测试覆盖并锁定有序 surface 的追加/替换行为、工具配对、压缩、完整请求头 fold/记录、请求重建和开发不变量。Seed 验证以及 JSONL、SQLite 加载测试会在回放前拒绝旧事件。无密钥 ACP 套件按新的表示覆盖记录、刷新、回放、变更后请求头的固定，以及沙箱模式切换 fixture（测试前置数据）。
+单元测试覆盖并锁定有序 surface 的追加/替换行为、工具配对、压缩、完整请求头 fold/记录、请求重建和开发不变量。Seed 验证以及 JSONL 加载测试会在回放前拒绝旧事件。无密钥 ACP 套件按新的表示覆盖记录、刷新、回放、变更后请求头的固定，以及沙箱模式切换 fixture（测试前置数据）。
 
 ## 后果
 

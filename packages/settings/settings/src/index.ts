@@ -8,6 +8,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import type z from '@deepseek-ai/schemastery'
+import { deepEqualJson, deepFreeze } from '@deepseek-ai/dsh-util-values'
 import { redactSecrets } from './redact.ts'
 import type { RedactedSecret } from './redact.ts'
 import type { SettingsNamespace, SettingsUpdateSource } from './types.ts'
@@ -17,13 +18,24 @@ export type { RedactedSecret, RedactedValue } from './redact.ts'
 export type { SettingsNamespace, SettingsUpdateSource } from './types.ts'
 
 const NAMESPACE_PATTERN = /^[a-z][a-z0-9-]*$/
+type LowercaseLetter = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm'
+  | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z'
+type DecimalDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+type NamespaceCharacter = LowercaseLetter | DecimalDigit | '-'
+type ValidNamespaceTail<Value extends string> = Value extends ''
+  ? true
+  : Value extends `${NamespaceCharacter}${infer Rest}`
+    ? ValidNamespaceTail<Rest>
+    : false
+type SettingsNamespaceInput<Value extends string> = Value extends SettingsNamespace
+  ? Value
+  : string extends Value
+    ? string
+    : Value extends `${LowercaseLetter}${infer Rest}`
+      ? ValidNamespaceTail<Rest> extends true ? Value : never
+      : never
 
-/**
- * Brand a raw string as a {@link SettingsNamespace}.
- * @param value - candidate namespace; lowercase kebab-case, as in plugin short names.
- * @returns the branded namespace.
- */
-export function settingsNamespace(value: string): SettingsNamespace {
+function parseSettingsNamespace(value: string): SettingsNamespace {
   if (!NAMESPACE_PATTERN.test(value)) {
     throw new TypeError(`settings namespace "${value}" must match ${String(NAMESPACE_PATTERN)}`)
   }
@@ -132,28 +144,6 @@ declare module '@deepseek-ai/cordis' {
   interface Context {
     settings: SettingsProvider
   }
-}
-
-/**
- * Deep equality over JSON-compatible data (objects, arrays, primitives) — the
- * Service Definition's single change-detection predicate, exported so the invariant
- * companion checks exactly the implementation's relation.
- * @param a - one JSON-compatible value.
- * @param b - the other JSON-compatible value.
- * @returns whether the two values are structurally equal.
- */
-export function deepEqualJson(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
-    return a.every((entry, index) => deepEqualJson(entry, b[index]))
-  }
-  const left = a as Record<string, unknown>
-  const right = b as Record<string, unknown>
-  const keys = Object.keys(left)
-  if (keys.length !== Object.keys(right).length) return false
-  return keys.every(key => key in right && deepEqualJson(left[key], right[key]))
 }
 
 /**
@@ -304,13 +294,6 @@ function mergeLayers(under: unknown, over: unknown): unknown {
   return merged
 }
 
-/** Recursively freeze one resolved value so handed-out snapshots stay immutable. */
-function deepFreeze<T>(value: T): T {
-  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return value
-  for (const entry of Object.values(value)) deepFreeze(entry)
-  return Object.freeze(value)
-}
-
 /** One registered watcher and its serialized invocation chain. */
 interface SettingsWatcher {
   callback: (next: never, prev: never) => void | Promise<void>
@@ -431,29 +414,35 @@ export abstract class SettingsProvider extends Service {
    * @param schema - schemastery schema resolving this namespace's value.
    * @param options - composition `base` layer and effect timing.
    * @returns the owner scope for reads, observation, and updates.
+   * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
    */
-  register<T>(ns: SettingsNamespace, schema: z<T>, options?: SettingsRegisterOptions<T>): SettingsScope<T> {
-    if (this.registrations.has(ns)) {
-      throw new Error(`settings namespace "${ns}" is already registered`)
+  register<const Namespace extends string, T>(
+    ns: Namespace & SettingsNamespaceInput<Namespace>,
+    schema: z<T>,
+    options?: SettingsRegisterOptions<T>,
+  ): SettingsScope<T> {
+    const parsedNs = parseSettingsNamespace(ns)
+    if (this.registrations.has(parsedNs)) {
+      throw new Error(`settings namespace "${parsedNs}" is already registered`)
     }
     const registration: SettingsRegistration = {
-      ns,
+      ns: parsedNs,
       schema: schema as z<unknown>,
       base: options?.base,
       applies: options?.applies ?? 'live',
       ...options?.validate === undefined
         ? {}
         : { validate: options.validate as (value: unknown) => void },
-      resolved: deepFreeze(this.resolve(schema, options?.base, this.section(ns), options?.validate)),
+      resolved: deepFreeze(this.resolve(schema, options?.base, this.section(parsedNs), options?.validate)),
       revision: 0,
       watchers: new Set(),
     }
     this.ctx.effect(() => {
-      this.registrations.set(ns, registration)
+      this.registrations.set(parsedNs, registration)
       // TODO(settings-registration-quiescence): Deactivate every watcher and await
       // its tail on disposal so callbacks cannot outlive the registrant fiber.
-      return () => this.registrations.delete(ns)
-    }, `settings.register(${JSON.stringify(String(ns))})`)
+      return () => this.registrations.delete(parsedNs)
+    }, `settings.register(${JSON.stringify(String(parsedNs))})`)
     return {
       get: () => registration.resolved as T,
       watch: (callback) => {
@@ -464,9 +453,46 @@ export abstract class SettingsProvider extends Service {
           registration.watchers.delete(watcher)
         }
       },
-      update: patch => this.update(ns, patch),
-      replace: section => this.replace(ns, section),
+      update: patch => this.update(parsedNs, patch),
+      replace: section => this.replace(parsedNs, section),
     }
+  }
+
+  /**
+   * Attach one optional-settings consumer to this provider. The consumer
+   * registers its composition entry as the base layer while this provider is
+   * present, then falls back to that entry if the provider detaches.
+   * @param owner - consumer context whose unload suppresses fallback work.
+   * @param ns - consumer-owned settings namespace.
+   * @param schema - schema resolving the namespace.
+   * @param entry - composition entry used as the base and fallback value.
+   * @param hooks - source sink, change notification, and optional validation.
+   * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
+   */
+  installSection<const Namespace extends string, T>(
+    owner: Context,
+    ns: Namespace & SettingsNamespaceInput<Namespace>,
+    schema: z<T>,
+    entry: T,
+    hooks: SettingsSectionHooks<T>,
+  ): void {
+    const scope = this.register<Namespace, T>(ns, schema, {
+      base: entry,
+      ...hooks.validate === undefined ? {} : { validate: hooks.validate },
+    })
+    hooks.setSource(() => scope.get())
+    this.ctx.effect(() => () => {
+      // Losing the provider leaves the consumer running; unloading the
+      // consumer does not, so only the former needs fallback work.
+      if (isUnloading(owner)) return
+      hooks.setSource(() => entry)
+      hooks.onChange()
+    })
+    hooks.onChange()
+    scope.watch(() => {
+      if (isUnloading(owner)) return
+      hooks.onChange()
+    })
   }
 
   /**
@@ -515,9 +541,10 @@ export abstract class SettingsProvider extends Service {
    * Read one registered namespace's resolved value.
    * @param ns - the namespace to read.
    * @returns the resolved value, or `undefined` while unregistered.
+   * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
    */
-  get(ns: SettingsNamespace): unknown {
-    return this.registrations.get(ns)?.resolved
+  get<const Namespace extends string>(ns: Namespace & SettingsNamespaceInput<Namespace>): unknown {
+    return this.registrations.get(parseSettingsNamespace(ns))?.resolved
   }
 
   /**
@@ -530,9 +557,14 @@ export abstract class SettingsProvider extends Service {
    * @param patch - plain-object patch over the user section.
    * @param expectedRevision - the descriptor `revision` the caller read; a
    *   namespace that moved past it rejects with {@link SettingsConflictError}.
+   * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
    */
-  async update(ns: SettingsNamespace, patch: object, expectedRevision?: number): Promise<void> {
-    return this.write(ns, patch, 'merge', expectedRevision)
+  async update<const Namespace extends string>(
+    ns: Namespace & SettingsNamespaceInput<Namespace>,
+    patch: object,
+    expectedRevision?: number,
+  ): Promise<void> {
+    return this.write(parseSettingsNamespace(ns), patch, 'merge', expectedRevision)
   }
 
   /**
@@ -544,9 +576,14 @@ export abstract class SettingsProvider extends Service {
    * @param section - the complete next user section.
    * @param expectedRevision - the descriptor `revision` the caller read; a
    *   namespace that moved past it rejects with {@link SettingsConflictError}.
+   * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
    */
-  async replace(ns: SettingsNamespace, section: object, expectedRevision?: number): Promise<void> {
-    return this.write(ns, section, 'replace', expectedRevision)
+  async replace<const Namespace extends string>(
+    ns: Namespace & SettingsNamespaceInput<Namespace>,
+    section: object,
+    expectedRevision?: number,
+  ): Promise<void> {
+    return this.write(parseSettingsNamespace(ns), section, 'replace', expectedRevision)
   }
 
   /**
@@ -560,18 +597,24 @@ export abstract class SettingsProvider extends Service {
    * @param ops - ordered path edits; later ops observe earlier ones.
    * @param expectedRevision - the descriptor `revision` the caller read; a
    *   namespace that moved past it rejects with {@link SettingsConflictError}.
+   * @throws {TypeError} when `ns` is not a lowercase hyphenated identifier.
    */
-  async mutate(ns: SettingsNamespace, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void> {
-    if (!Array.isArray(ops)) throw new TypeError(`settings mutate for "${ns}" must be an array of path ops`)
+  async mutate<const Namespace extends string>(
+    ns: Namespace & SettingsNamespaceInput<Namespace>,
+    ops: readonly SettingsPathOp[],
+    expectedRevision?: number,
+  ): Promise<void> {
+    const parsedNs = parseSettingsNamespace(ns)
+    if (!Array.isArray(ops)) throw new TypeError(`settings mutate for "${parsedNs}" must be an array of path ops`)
     for (const op of ops) {
       if (!isPlainObject(op) || (op['op'] !== 'set' && op['op'] !== 'unset')) {
-        throw new TypeError(`settings mutate for "${ns}" ops must be {op:'set'|'unset', path}`)
+        throw new TypeError(`settings mutate for "${parsedNs}" ops must be {op:'set'|'unset', path}`)
       }
       if (!Array.isArray(op['path']) || (op['path'] as unknown[]).some(part => typeof part !== 'string')) {
-        throw new TypeError(`settings mutate for "${ns}" op paths must be arrays of strings`)
+        throw new TypeError(`settings mutate for "${parsedNs}" op paths must be arrays of strings`)
       }
     }
-    return this.write(ns, ops, 'mutate', expectedRevision)
+    return this.write(parsedNs, ops, 'mutate', expectedRevision)
   }
 
   /** Validate a write, then queue it on the namespace's serialized write chain. */
@@ -825,7 +868,7 @@ function isUnloading(ctx: Context): boolean {
   return state === FIBER_UNLOADING || state === FIBER_DISPOSED
 }
 
-/** Hooks a consumer hands to {@link installSettingsSection}. */
+/** Hooks a consumer hands to {@link SettingsProvider.installSection}. */
 export interface SettingsSectionHooks<T> {
   /**
    * Receive the active configuration source: the resolved settings scope
@@ -845,55 +888,6 @@ export interface SettingsSectionHooks<T> {
    * @param value - the resolved section, schema-valid by construction.
    */
   validate?: (value: T) => void
-}
-
-/**
- * Install the canonical optional-settings consumer wiring: while a settings
- * service exists, register `ns` with the consumer's composition entry as the
- * `base` layer and point the source thunk at the resolved scope; when the
- * service goes away (disposal, provider reload), fall back to the entry so
- * the consumer keeps working exactly as composed. The registration rides the
- * scoped fiber, so no settings service ever mounted means none of this runs.
- * @param ctx - consumer plugin context owning the wiring.
- * @param ns - the consumer-owned settings namespace.
- * @param schema - schema resolving the namespace (typically the plugin Config).
- * @param entry - the consumer's composition entry config, used as `base`.
- * @param hooks - source sink and change notification.
- */
-export function installSettingsSection<T>(
-  ctx: Context,
-  ns: SettingsNamespace,
-  schema: z<T>,
-  entry: T,
-  hooks: SettingsSectionHooks<T>,
-): void {
-  ctx.inject(['settings'], (sctx) => {
-    const scope = sctx.settings.register(ns, schema, {
-      base: entry,
-      ...hooks.validate === undefined ? {} : { validate: hooks.validate },
-    })
-    hooks.setSource(() => scope.get())
-    sctx.effect(() => () => {
-      // This disposer runs for two different reasons. A settings provider
-      // detaching leaves the consumer running, so it must fall back to its
-      // composition entry and re-judge what it derived. The consumer's own
-      // unload runs it too — and there `onChange` would re-register routes
-      // and touch resources the teardown is releasing, so the fallback is
-      // pointless and the notification actively harmful.
-      if (isUnloading(ctx)) return
-      hooks.setSource(() => entry)
-      hooks.onChange()
-    })
-    hooks.onChange()
-    scope.watch(() => {
-      // A stored change landing while the consumer unloads reaches the watcher
-      // before the registration is released, and `onChange` is exactly as
-      // harmful here as in the disposer above: it re-registers routes against
-      // a fiber whose resources are being let go.
-      if (isUnloading(ctx)) return
-      hooks.onChange()
-    })
-  })
 }
 
 export default SettingsProvider

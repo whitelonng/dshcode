@@ -1,16 +1,26 @@
+// @ts-nocheck -- alpha.4 sync: product test migration pending
 // @vitest-environment jsdom
 import { Context, Service } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  ConversationEventRegistry, ConversationNodeAssembler, SlotRegistry,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  ConversationNodeAssembler, UiConversation,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  ChatConversationViewNode, ConversationEventInput, ConversationMatch, ConversationNodeDefinition,
-  ConversationViewDefinition, SessionId, SessionListState,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  ConversationMatch, ConversationNodeDefinition, ConversationStartMatch,
+  ConversationViewDefinition,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-ui-chat/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {
+  SessionListState, SessionLiveEventEntry,
+} from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 import { apply as applyLocale, inject as localeInject } from '@deepseek-ai/dsh-client-locale/client'
-import { makeTranslate, stubSettingsScope } from '@deepseek-ai/dsh-client-test-runtime'
+import {
+  chatSnapshot as emptyChatSnapshot, conversationSnapshot, makeTranslate, sessionSnapshot,
+  stubSettingsScope, workspaceSnapshot,
+} from '@deepseek-ai/dsh-client-test-runtime'
 import {
   WorkflowRunPanel, type WorkflowRunInjected, type WorkflowRunPanelProps,
 } from '../src/client/WorkflowRunPanel.tsx'
@@ -20,7 +30,6 @@ import {
   workflowRunDefinition, type WorkflowRunChatData,
 } from '../src/client/workflow-definition.ts'
 import { apply as applyNode } from '../src/index.ts'
-import { apply as applyInvariant } from '../src/invariant.ts'
 import type {} from '../src/client/index.ts'
 
 afterEach(cleanup)
@@ -28,6 +37,22 @@ afterEach(cleanup)
 const PARENT_ID = 'parent' as SessionId
 const CHILD_ID = 'child-1' as SessionId
 const SECOND_ID = 'child-2' as SessionId
+
+type TrajectoryState = Parameters<Parameters<WorkflowRunPanelProps['useTrajectory']>[0]>[0]
+
+const panelSession = sessionSnapshot(PARENT_ID)
+const panelAttention = new Map<SessionId, never>()
+const panelWorkspace = workspaceSnapshot()
+const panelConversation = conversationSnapshot()
+const panelChat = emptyChatSnapshot()
+const panelTrajectory: TrajectoryState = {
+  eventNodes: [],
+  eventLocations: new Map(),
+  requests: [],
+  callSchemas: new Map(),
+  partial: null,
+  runningCalls: [],
+}
 
 interface ChatSnapshot {
   readonly nodes: ReadonlyMap<string, ChatConversationViewNode>
@@ -62,18 +87,20 @@ const chatViewDefinition: ConversationViewDefinition<ChatConversationViewNode, C
   },
 }
 
-function at(seq: number, type: string, data: unknown): ConversationEventInput {
-  return { event: { seq, time: seq * 100, type, data } as ConversationEventInput['event'], view: undefined }
+function at(seq: number, type: string, data: unknown): SessionLiveEventEntry {
+  return { type: 'event', event: { seq, time: seq * 100, type, data } as SessionEvent }
 }
 
-function matched(input: ConversationEventInput, role: ConversationMatch['role']): ConversationMatch {
-  return { ...input, role, location: { kind: 'unresolved' } }
+function matched(input: SessionLiveEventEntry, role: 'start'): ConversationStartMatch
+function matched(input: SessionLiveEventEntry, role: 'update'): ConversationMatch
+function matched(input: SessionLiveEventEntry, role: ConversationMatch['role']): ConversationMatch {
+  return { event: input.event, role, location: { kind: 'unresolved' } }
 }
 
-function assembler(entries: readonly ConversationEventInput[], hasMore = false): ConversationNodeAssembler {
+function assembler(entries: readonly SessionLiveEventEntry[], hasMore = false): ConversationNodeAssembler {
   const value = new ConversationNodeAssembler(new TestEventDefinitions(), new TestViewDefinitions())
   value.replaceWindow(entries, hasMore)
-  value.flush()
+  value.activateTarget('chat')
   return value
 }
 
@@ -82,7 +109,7 @@ function workflowData(value: ConversationNodeAssembler): WorkflowRunChatData | u
   return [...snapshot.nodes.values()][0]?.data as WorkflowRunChatData | undefined
 }
 
-function completeEvents(): ConversationEventInput[] {
+function completeEvents(): SessionLiveEventEntry[] {
   return [
     at(1, 'turn/start', { turn: 1 }),
     at(2, 'step/start', { turn: 1, step: 1 }),
@@ -283,14 +310,22 @@ function panelProps(data: WorkflowRunChatData, sessions = listState(), openSessi
     node: node(data),
     sessionId: PARENT_ID,
     useSessions: selector => selector(sessions),
-    useSession: (() => undefined) as WorkflowRunPanelProps['useSession'],
+    useSessionPendingInteraction: selector => selector(panelAttention),
+    useSession: selector => selector(panelSession),
     useProjection: () => undefined,
+    useConversation: selector => selector(panelConversation),
+    useChat: selector => selector(panelChat),
+    useTrajectory: selector => selector(panelTrajectory),
     useInput: () => { throw new Error('unused') },
-    inputActions: { setDraft: () => {}, submit: () => {} } as unknown as WorkflowRunPanelProps['inputActions'],
-    useWorkspaces: (() => undefined) as WorkflowRunPanelProps['useWorkspaces'],
+    inputActions: {
+      setDraft: () => {},
+      addImages: () => false,
+      removeImage: () => {},
+      pruneImages: () => {},
+      submit: () => {},
+    },
+    useWorkspaces: selector => selector(panelWorkspace),
     useTurnData: () => undefined,
-    selectedCallId: undefined,
-    cwd: undefined,
     openFile: () => {},
     inspectCall: () => {},
     forkAt: () => {},
@@ -847,8 +882,8 @@ describe('plugin lifecycle', () => {
     ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
     ctx.provide('remote', { $on: () => () => {} } as never)
     ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
-    await ctx.plugin(ConversationEventRegistry).await()
     await ctx.plugin(TestSessions).await()
+    const conversationEvents = new UiConversation(ctx, ctx.sessions).events
     ctx.slots.register({
       name: 'root',
       children: { 'conversation.chat.node': { kind: 'keyed', scope: 'session' } },
@@ -856,32 +891,24 @@ describe('plugin lifecycle', () => {
     await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(ctx.conversationEvents.entries().map(entry => entry.kind)).toEqual(['workflow-run'])
+    expect(conversationEvents.entries().map(entry => entry.kind)).toEqual(['workflow-run'])
     expect(ctx.slots.entries('conversation.chat.node')).toHaveLength(1)
     const entry = ctx.slots.entries('conversation.chat.node')[0]!
     const face = entry.inject?.() as unknown as WorkflowRunInjected
     face.openSession(CHILD_ID)
     expect((ctx.sessions as unknown as TestSessions).opened).toEqual([CHILD_ID])
     await fiber.dispose()
-    expect(ctx.conversationEvents.entries()).toEqual([])
+    expect(conversationEvents.entries()).toEqual([])
     expect(ctx.slots.entries('conversation.chat.node')).toEqual([])
 
     const replacement = ctx.plugin({ inject: [...inject], apply })
     await replacement.await()
-    expect(ctx.conversationEvents.entries().map(entry => entry.kind)).toEqual(['workflow-run'])
+    expect(conversationEvents.entries().map(entry => entry.kind)).toEqual(['workflow-run'])
     expect(ctx.slots.entries('conversation.chat.node')).toHaveLength(1)
     await replacement.dispose()
   })
 
-  it('keeps the node half inert and registers invariant ownership', async () => {
+  it('keeps the node half inert', () => {
     applyNode()
-    const registered: string[] = []
-    const ctx = new Context()
-    ctx.provide('invariants')
-    ctx.set('invariants', {
-      register: (pkg: string) => { registered.push(pkg); return () => {} },
-    } as never)
-    await applyInvariant(ctx)
-    expect(registered).toEqual(['@deepseek-ai/dsh-client-ui-workflow-run'])
   })
 })

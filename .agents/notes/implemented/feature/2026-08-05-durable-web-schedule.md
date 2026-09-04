@@ -12,7 +12,7 @@ Busy Agents, long waits, wall-clock changes, cold Sessions, forks, persistence f
 
 ## Decision
 
-The [`examples/web-schedule`](../../../../examples/web-schedule/README.md) overlay explicitly loads `@deepseek-ai/dsh-time-context` and `@deepseek-ai/dsh-schedule`; the default Web tree remains unchanged. Schedule observes only root Agents published after the plugin loads and installs its three tools plus one disposable owner in that Agent scope. Cold history reads, already-published roots, child Agents, and other hosts do not activate it.
+The [Schedule guide](../../../../docs/user/guide/schedule.md) uses an overlay that explicitly loads `@deepseek-ai/dsh-time-context` and `@deepseek-ai/dsh-schedule`, and enables the Web bundle's otherwise-disabled `ui-schedule` row. The default Web startup graph remains inactive for Schedule. Schedule observes only root Agents published after the plugin loads and installs its three tools plus one disposable owner in that Agent scope. Cold history reads, already-published roots, child Agents, and other hosts do not activate the runtime.
 
 The user-visible boundary is `session-local`: the original Session runs an on-time reminder only while live, does no external notification while cold, and processes an overdue reminder after it becomes live again. Due work waits until the Agent is fully idle, then enters the ordinary next-turn queue through `followup()`; it never steers the current turn and has no independent Web receipt ([conversational delivery](../simplification/2026-08-09-conversational-schedule-delivery.md)).
 
@@ -22,11 +22,13 @@ The user-visible boundary is `session-local`: the original Session runs an on-ti
 | Due while busy | Active create remains in the fold | Owner waits for idle maintenance, queues one follow-up, then appends dispatch | A later ordinary conversation turn |
 | Several Every records are overdue | Each active record retains its earliest unaccepted anchor-aligned target | One decision selects each record's latest occurrence and advances it past now | One ordinary follow-up containing one occurrence per record |
 | Process stopped or Session cold | Active create remains persisted | No timer or background scan; resume rebuilds the owner | Future target waits; overdue target is attempted |
-| Fork | Parent events remain in the inherited prefix | Child fold starts at `seedLength` | Parent work does not become active in the child |
+| Fork | Parent events remain in the inherited prefix | Child fold starts at the exact `inheritedEventCount` | Parent work does not become active in the child |
 
 ### Session-log authority and tools
 
-The version-1 `schedule/change` stream is the only durable Schedule authority. A create record owns a Session-local, non-reused branded id, the trimmed prompt, its rule discriminator, and UTC target. Delete and one-shot dispatch are terminal transitions. Every dispatch stores its id and decision time so the fold advances that record directly past missed occurrences. The strict decoder and pure fold reject unknown versions, extra fields, reused ids, mismatched dispatch shapes, and transitions against inactive records. A normal Session folds its complete stream; a fork folds only events at or after `SessionHeader.seedLength`.
+The version-1 `schedule/change` stream is the only durable Schedule authority. A create record owns a Session-local, non-reused branded id, the trimmed prompt, its rule discriminator, and UTC target. Delete and one-shot dispatch are terminal transitions. Every dispatch stores its id and decision time so the fold advances that record directly past missed occurrences. The strict decoder and pure fold reject unknown versions, extra fields, reused ids, mismatched dispatch shapes, and transitions against inactive records. A normal Session folds its complete stream; a fork folds only events at or after the `inheritedEventCount` passed into projection initialization.
+
+When `ctx.sessionProjections` exists, Schedule registers a strict unit that uses the same transition and publishes the complete active `ScheduleRecord[]`; the shared [projection state decision](../architecture/2026-08-19-session-projection-state-and-client-views.md) owns its initialization and restore contract. Corrupt durable input fails the existing read path rather than yielding a partial array. The browser-safe record vocabulary is exposed through the type-only `@deepseek-ai/dsh-schedule/client` subpath.
 
 The current rule union accepts a non-empty prompt and exactly one selector. `after_seconds` is a positive safe-integer delay whose record is `{ id, kind: 'after', prompt, afterSeconds, scheduledAt }`. `at` is either strict RFC 3339 with `Z` or a numeric offset, or structured `{ date, time, time_zone }` with an explicit zone; its record is `{ id, kind: 'at', prompt, scheduledAt }`. `every_seconds` is a safe integer of at least 300 whose `{ id, kind: 'every', prompt, everySeconds, scheduledAt }` record stays aligned to its creation-plus-interval sequence. One-shot dispatch stores only the id; Every dispatch stores `id + acceptedAt`. Tool values derive `scheduled` or `overdue` and include `deliveryMode: 'session-local'`.
 
@@ -56,6 +58,10 @@ The accepted path clears pending persistence and claims the true idle phase. It 
 
 Dispatch records queue admission, not model completion or user receipt. Framing or synchronous enqueue failure appends no dispatch. An append failure faults that owner because the message may already be queued. Agent or plugin disposal cancels timers, stops new work, unwinds tool registrations, and awaits in-flight work without deleting durable records. A crash after follow-up admission but before durable dispatch can repeat the reminder after recovery; the design makes no exactly-once promise.
 
+### Read-only Web catalog
+
+The Schedule overlay enables the otherwise-disabled [`dsh-client-ui-schedule`](../../../../packages/client/ui-schedule/README.md) client together with the Host service. The complete active projection also feeds [`dsh-client-ui-workspace`](../../../../packages/client/ui-workspace/README.md). This note owns that opt-in read-only presentation boundary: the projection is current active state, not a dispatch or delivery receipt, so ordinary Assistant turns remain the delivery presentation. The catalog is a fixed `document.body` portal whose left edge follows the trigger when space permits and shifts left to retain a 16px viewport margin near the right edge. `useAnchoredPosition` owns measurement and resize, captured-scroll, panel-resize, and cleanup behavior; Schedule supplies the trigger and portal refs, bottom placement, a 5px gap, and the existing inside/outside dismissal boundary without adding a general popover abstraction.
+
 ## Alternatives considered
 
 **Use `ctx.jobs`.** Jobs own process-local work, outcomes, and notifications rather than Session-log state and conversation follow-ups.
@@ -74,7 +80,7 @@ Dispatch records queue admission, not model completion or user receipt. Framing 
 
 ## Verification
 
-Package tests pin strict replay, one-shot and Every transitions, creation-anchor arithmetic, latest-only catch-up, multi-record batching, fork suffixes, id reuse, offset and local-calendar profiles, IANA validation, daylight-saving gaps and overlaps, time bounds, timer segmentation, wall-clock movement, overdue admission, fixed framing, enqueue and append failures, barrier recovery, registration rollback, and quiescent disposal at per-file 100% coverage. A property test compares Every calculation and replay across varied intervals and skipped spans. A production JSONL restart test proves one overdue reminder dispatches through the real Agent lifecycle and does not redispatch after another restart. Host/client tests pin browser-zone sampling and prompt-bound validation. Keyless assembled Web scenarios cover browser-local At and an overdue two-record Every batch through ordinary assistant follow-ups with no receipt UI.
+Package tests pin strict replay, one-shot and Every transitions, creation-anchor arithmetic, latest-only catch-up, multi-record batching, fork suffixes, id reuse, offset and local-calendar profiles, IANA validation, daylight-saving gaps and overlaps, time bounds, timer segmentation, wall-clock movement, overdue admission, fixed framing, enqueue and append failures, barrier recovery, projection registration and restoration, registration rollback, and quiescent disposal at per-file 100% coverage. A property test compares Every calculation and replay across varied intervals and skipped spans. A production JSONL restart test proves one overdue reminder dispatches through the real Agent lifecycle and does not redispatch after another restart. Focused client suites own catalog and sidebar behavior, including the body portal, spacious left alignment, portal-inside pointer handling, outside dismissal, Escape, live empty, and timer cleanup. The shared primitive suite owns the positioning hook's resize, captured-scroll, panel-resize, and cleanup lifecycle. Keyless assembled Web scenarios retain ordinary After/At/Every delivery evidence plus one 900×900 Schedule-catalog smoke for overlay reachability, fixed portal placement, right-edge clamping, width and overflow, ordinary/search alarms, narrow dark layout, a light-theme browser screenshot, and one live empty update.
 
 ## Consequences
 
@@ -82,5 +88,6 @@ Package tests pin strict replay, one-shot and Every transitions, creation-anchor
 - Cold Sessions do no work and send no external notification; reopening one may deliver overdue work.
 - Absolute input is deterministic without persistent Session-zone state or a dependency from Schedule to time-context.
 - Users see normal conversation output; dispatch never overstates model success or acknowledgement.
+- Opt-in Web users can inspect the complete active set and recognize cache-known active Sessions in ordinary or search rows without creating a second durable state, runtime signal, or delivery meaning.
 - Each live root adds only fold-derived timers, an optional idle wait, and one in-flight operation.
 - Fixed-rate recurrence is bounded by a five-minute minimum, latest-only catch-up, and one batched occurrence per overdue record; calendar recurrence remains outside this product boundary.

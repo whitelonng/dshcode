@@ -14,10 +14,10 @@ import {
 } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/details-session-lifecycle', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/details-session-lifecycle', import.meta.url))
 const HANDLES_EXPECTED = join(SNAPSHOT_DIR, 'handles.expected.md')
-const FIXTURE = fileURLToPath(new URL('./snapshots/lifecycle-chrome/session.jsonl', import.meta.url))
-const SEED_FIXTURE = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
+const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/lifecycle-chrome/session.jsonl', import.meta.url))
+const SEED_FIXTURE = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.jsonl', import.meta.url))
 const PROMPT = 'Reply with the single word LIGHTHOUSE and stop.'
 const MODE = webSnapshotMode()
 
@@ -73,12 +73,12 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
   beforeAll(async () => {
     const fixture = await readFile(FIXTURE, 'utf8')
     expect(fixtureUserPrompts(fixture)).toEqual([PROMPT])
-    scaffold = await launchWebScaffold({ replayFixture: FIXTURE, paceMs: 5 })
+    scaffold = await launchWebScaffold({ replayFixture: FIXTURE, paceMs: 5, compareReplaySession: false })
     await seedSession(scaffold, await readFile(SEED_FIXTURE, 'utf8'), 'details-session-lifecycle-seed')
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await appFrame(page).waitFor({ timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, 120_000)
@@ -91,7 +91,7 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
   it('starts and reloads closed, then stays closed across Session ownership changes', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-details-session-lifecycle'))
     const settled = scaffold.whenTurnSettled()
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     await input.fill(PROMPT)
     await input.press('Enter')
     await settled

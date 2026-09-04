@@ -1,31 +1,36 @@
-# DeepSeek Harness Runtime Wheel
+# deepseek-harness-runtime-bin
 
-English | [中文](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk-runtime/README.zh.md)
+English | [中文](README.zh.md)
 
-Runtime carrier package for the Python SDK (dist `deepseek-harness-runtime-bin`, module `deepseek_harness_runtime`): it locates the bundled runtime binaries the `deepseek-harness-sdk` client spawns, and ships the default configuration behind zero-config runs.
+Platform runtime wheel for the DeepSeek Harness Python SDK. It packages the normal `dsh` CLI and its closed Node dependency tree into a native executable, so SDK use requires no system Node.js. This package publishes wheels only.
 
-## Runtime carriers
+## Installed commands and artifacts
 
-Two carriers coexist under `src/deepseek_harness_runtime/runtime/`, both injected by the repo's `scripts/build-exe-for-python-sdk.ts` build and both gitignored:
+The wheel installs a `dsh` console command and the `deepseek_harness_runtime` Python module. `dsh` forwards its arguments to the bundled executable and requires a non-empty `DSH_HOME`; it never falls back to `~/.dsh`.
 
-- **exe (production)** — a single-file Node executable `dsh-jsonrpc-agent-pkg-<platform>-<arch>` (platform: `linux`/`macos`; arch: `x64`/`arm64`) with a target-native ripgrep `-rg` sidecar. macOS builds also ship the native `-spawn-helper` sibling that `node-pty` uses there. No Node installation is needed on the target machine. This is the only carrier that ships in wheel distributions; this package does not publish sdists.
-- **node (dev-only)** — the full deploy closure under `runtime/node/` (`package.json` + `node_modules/`), executed as `node runtime/node/node_modules/@deepseek-ai/dsh-sdk-jsonrpc-demo/lib/packaged-bin.js` on a system Node >= 22.19. It is the current checkout's source build, meant for repo-local development and verification only; it is never selected automatically and is excluded from distributions.
+Production executables are named `deepseek-harness-sdk-runtime-<platform>-<arch>` under the module's `runtime/` directory; Windows uses the `.exe` suffix. Linux and macOS wheels include a target-native `-rg` sidecar, Windows includes `-rg.exe`, and macOS also includes `-spawn-helper` for `node-pty`. Published targets are Linux x64, Linux arm64, macOS arm64, and Windows x64. The wheel tag and payload must match exactly; no Windows arm64 wheel is published.
 
-Both carriers hold the same content, defined once: the [package.json](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk-runtime/package.json) at this package's root is the deploy root of the single-exe pipeline — a pure dependency manifest (no code of its own) whose dependency closure IS both the plugin set compiled into the exe and the tree materialized into `runtime/node/`. Adding a plugin to the distribution means adding one dependency line there and rebuilding.
+Repository builds also materialize a dev-only `runtime/node/` carrier. It runs `node runtime/node/node_modules/@deepseek-ai/dsh/lib/bin.js` on system Node 22.19 or newer. It is never selected automatically and is excluded from wheels and sdists.
 
-The bundled plugin set includes `@deepseek-ai/dsh-mcp-client`, so an external Cordis config can connect to stdio or Streamable HTTP MCP servers and expose their tools to the model. The wheel does not bundle MCP server programs or credentials: a stdio config supplies its executable and arguments, while a Streamable HTTP config supplies its URL and headers. The bridge supports MCP tools; MCP Resources and Prompts remain unsupported.
+Both carriers execute the same `dsh` grammar and shipped profiles, including the standalone `sdk-minimal` tree and the full `web` profile with its frontend assets. The private `dsh-python-runtime-closure` manifest defines the packaged dependency closure; there is no Python-specific Node application or checked-in default `cordis.yml`.
 
-A missing exe raises `FileNotFoundError` naming both acquisition routes: build via `scripts/build-exe-for-python-sdk.ts` in a deepseek-harness checkout, or install the matching platform runtime wheel produced by the `build-exe-for-python-sdk` CI workflow. A missing dev-only node carrier names its sole route, the build script. The workflow retains wheels rather than standalone executable archives. Acquisition strategy is deliberately separate from the lookup interface, so an on-demand download can replace it later without touching callers.
+## Python module API
 
-Each wheel contains exactly one runtime executable and its matching ripgrep `-rg` sidecar. The macOS wheel also contains its matching native spawn helper; any missing sidecar makes that installation incomplete and is a hard startup error, even for a selected Cordis composition that does not use filesystem-search or PTY tools. Linux wheels contain no spawn helper because `node-pty` uses the staged `pty.node` addon directly. The fixed tags are `py3-none-manylinux_2_28_x86_64`, `py3-none-manylinux_2_28_aarch64`, and `py3-none-macosx_14_0_arm64`; the macOS tag conservatively matches the bundled Node 24 executable's macOS 13.5 deployment target. This package's `platforms.json` owns the fixed tag and executable-name pairs used by both the repository release builder and the isolated build hook. The build hook rejects `py3-none-any`, absent or multiple runtime executables, missing or extra sidecars, non-executable files, and unsupported platform tags. The repository root `package.json` supplies the shared version for this package and the SDK, and a `python-v<repository-version>` release tag must match it.
+- `bundled_package_dir() -> Path` returns the installed module-data root and verifies its release metadata.
+- `bundled_runtime_path() -> Path` returns the current platform executable and verifies required sidecars.
+- `resolve_bundled_launch_args(mode=None) -> tuple[str, ...]` returns the executable argv by default. Explicit `mode="node"` or `DSH_RUNTIME_MODE=node` selects the repo-only Node carrier.
+- `main()` implements the installed `dsh` console command and rejects an absent or blank `DSH_HOME` before replacing the Python process.
 
-## Resolution API
+Unsupported platforms and missing executables or sidecars raise `FileNotFoundError` with the build and installation routes. Unknown runtime modes raise `ValueError`.
 
-- `resolve_bundled_launch_args(mode=None) -> tuple[str, ...]` — the argv tuple that launches the bundled runtime: `(exe_path,)` in exe mode, `(node_path, bin_js_path)` in node mode. Mode selection: explicit argument > `DSH_RUNTIME_MODE` env var (`exe` | `node`) > automatic. Automatic resolution finds the production exe ONLY — the dev-only node carrier must be opted into explicitly so a production deployment can never silently ride on a source build.
-- `bundled_runtime_path() -> Path` — the platform exe path (exe carrier only); it validates the required sibling `-rg` sidecar on every platform and the `-spawn-helper` sidecar on macOS. The node carrier has no single-path equivalent and launches via the argv tuple above.
-- `bundled_default_config_path() -> Path` — the checked-in default config (see below).
-- `bundled_package_dir() -> Path` — the installed package data root.
+## Packaged profile resolution
 
-## Zero-config design
+`dsh` initializes shipped profiles under the explicit home, composes their bundle patches, and loads bundled plugins from the executable's virtual filesystem. Because operating-system symlinks cannot enter that filesystem, packaged launches maintain small real ESM proxy packages under `$DSH_HOME/profiles/node_modules`. Each proxy mirrors explicit runtime exports, records the original package identity, and re-exports the virtual module URL. Built-in rows and external plugin peers therefore share one Cordis/module instance. Native shared libraries and Windows ConPTY addons are packaged with native addons, while ripgrep and the macOS PTY helper remain executable sidecars.
 
-The runtime binary always demands an explicit config (`$DSH_CORDIS_CONFIG`, or a config path as an argv positional argument) and exits loudly without one — that hard semantic is part of the runtime's design and this package does not soften it. The bin (`dsh-jsonrpc-agent`) boots only the plugins the config lists; the serving interface (the stdio JSON-RPC server) is itself one of its entries (`@deepseek-ai/dsh-sdk-jsonrpc-server`), and without it the booted agent has no channel to the outside. This package checks in `runtime/cordis.yml` with the JSON-RPC serving entry, agent core, a preloaded DeepSeek adapter, JSONL persistence, the explicitly composed semantic checkpoint policy, local bash, and a local filesystem provider for bounded workspace-instruction loading. The persistence backend owns durable storage while the separate policy selects request-, tool-dispatch-, and completed-step checkpoints. The adapter reads `DEEPSEEK_API_KEY` and `DEEPSEEK_BASE_URL`, while persistence, bash, and the filesystem provider use `DSH_SESSION_ROOT` and `DSH_CWD` with manual-run fallbacks. When the caller uses no explicit config channel, the `deepseek_harness` client injects that file's path via `DSH_CORDIS_CONFIG` (injection conditions: [sdk README](https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.md)). Zero-config is thus an explicit, visible parameter pass in the wrapper, not a hidden fallback in the runtime.
+External profile management uses `dsh plugin --profile <name> ...`. That command requires `pnpm` on `PATH`; ordinary SDK/profile execution does not.
+
+## Build and distribution
+
+From the repository root, `pnpm exec tsx scripts/build-exe-for-python-sdk.ts` verifies the closure, builds packages, deploys a symlink-free tree, packages the selected target, and syncs the executable and sidecars into this module. `scripts/build-python-release.py` stages release-shaped wheels at the root repository version and pins `deepseek-harness-sdk` to the exact runtime version.
+
+The installed-wheel smoke creates a clean virtual environment outside the checkout, proves distribution and executable provenance, then exercises default and customized SDK profiles, external plugins, MCP, native tools, direct JSON-RPC, committed snapshots, and the real provider on trusted runs. See the [Python contributor workflow](../development.md) and [installed-wheel testing decision](../../.agents/notes/implemented/testing/2026-08-23-installed-python-wheel-black-box-ci.md).

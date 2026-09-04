@@ -12,7 +12,7 @@ That lifecycle is not required to run or develop DeepSeek Harness from a source 
 
 ## Decision
 
-The repository supports source execution through its root `pnpm` scripts. The `dsh` entry in `package.json` launches `apps/cli/src/bin.ts` directly through `node --import tsx/esm`; artifact generation is the separate `pnpm run build` operation defined by the [source-launch/build separation decision](2026-08-12-separate-source-launch-from-build.md). The package script forwards arguments and inherits the caller's environment, including `NODE_USE_ENV_PROXY=1` when a supporting Node version must honor `HTTP_PROXY` and `HTTPS_PROXY`. Users select Web with `pnpm dsh web` and headless execution with `pnpm dsh --profile headless "task"`. The independent ACP example remains available through `pnpm run demo:acp`.
+The repository supports source execution through its root `pnpm` scripts. The `dsh` entry in `package.json` launches `apps/cli/src/bin.ts` directly through `node --import tsx/esm`; artifact generation is the separate `pnpm run build` operation defined by the [source-launch/build separation decision](2026-08-12-separate-source-launch-from-build.md). The package script forwards arguments and inherits the caller's environment, including `NODE_USE_ENV_PROXY=1` when a supporting Node version must honor `HTTP_PROXY` and `HTTPS_PROXY`. Users select Web with `pnpm dsh web`, headless execution with `pnpm dsh --profile headless "task"`, and ACP automation with `pnpm dsh --profile acp`.
 
 The repository does not distribute a source installer, an installer test suite, or skills that assume a managed `current` symlink and timestamped staging worktrees. Users own source checkout placement, Git updates, and any launcher they create outside the repository.
 

@@ -9,7 +9,6 @@ import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
@@ -18,7 +17,7 @@ import {
 } from './scaffold.ts'
 import { ZH_BROWSER_LOCALE, connectFreshWorkspaceZh, saveFailureShot } from './support.ts'
 
-const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/onboarding-deepseek-config', import.meta.url))
+const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/onboarding-deepseek-config', import.meta.url))
 const WELCOME_EXPECTED = join(SNAPSHOT_DIR, 'welcome.expected.md')
 const MISSING_EXPECTED = join(SNAPSHOT_DIR, 'missing.expected.md')
 const MODELS_EXPECTED = join(SNAPSHOT_DIR, 'models.expected.md')
@@ -38,7 +37,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
     page = await browser.newPage({ viewport: { width: 1440, height: 960 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
     page.on('console', message => browserConsole.push(message.text()))
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
   }, 120_000)
 
@@ -118,7 +117,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
 
     // An old acknowledgement means materially revised copy: welcome returns,
     // while the already-configured provider step remains complete.
-    await scaffold.ctx.settings.mutate(settingsNamespace(WELCOME_NOTICE_SETTINGS_NAMESPACE), [{
+    await scaffold.ctx.settings.mutate(WELCOME_NOTICE_SETTINGS_NAMESPACE, [{
       op: 'set', path: [WELCOME_NOTICE_ACK_FIELD], value: 'previous-copy-version',
     }])
     const thirdReloadWarnings = tripwire.warnings.length
@@ -141,7 +140,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
     // Regression pin for the reload flash: both steps are satisfied, yet each
     // must load private facts before deciding not to show. Dialog chrome lives
     // inside each visible branch, so the deciding window paints and blocks
-    // nothing. Holding settings.describe widens that window from loopback
+    // nothing. Holding settings/describe widens that window from loopback
     // RTT scale to a deterministic hundreds of milliseconds, removing all
     // timing dependence from the sampler assertions below.
     //
@@ -162,7 +161,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
         if (document.getElementById('root')?.inert === true) sightings.push('inert')
       }, 8)
     })
-    // EVERY settings.describe issued before the release is held — not just
+    // EVERY settings/describe issued before the release is held — not just
     // the first — so the pin cannot silently collapse back to loopback
     // timing if a second boot-time consumer of the join ever appears.
     let released = false
@@ -171,7 +170,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
       released = true
       for (const resolve of heldRoutes.splice(0)) resolve()
     }
-    await page.route('**/api/settings.describe', async (route) => {
+    await page.route('**/api/settings/describe', async (route) => {
       if (!released) await new Promise<void>((resolve) => { heldRoutes.push(resolve) })
       await route.continue()
     })
@@ -182,7 +181,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
     await page.waitForTimeout(600)
     releaseDescribe()
     await page.waitForTimeout(400)
-    await page.unroute('**/api/settings.describe')
+    await page.unroute('**/api/settings/describe')
     acknowledgeReloadConnectionLoss(tripwire, warningsBefore)
     expect(await page.evaluate(() =>
       (window as unknown as { __takeoverSightings: string[] }).__takeoverSightings)).toEqual([])
@@ -234,7 +233,7 @@ describe.skipIf(MODE === 'record')('web e2e: first-run DeepSeek credential setup
     // trigger — on the page; the scaffold boots without one.
     await connectFreshWorkspaceZh(page, scaffold.workspaceCwd, 'model-fallback-e2e')
 
-    const modelTrigger = page.getByRole('button', { name: '选择模型', exact: true })
+    const modelTrigger = page.getByRole('button', { name: /^选择模型/ })
     await modelTrigger.waitFor({ timeout: 10_000 })
     await modelTrigger.click()
     await page.getByRole('menuitem', { name: /模型/ }).click()

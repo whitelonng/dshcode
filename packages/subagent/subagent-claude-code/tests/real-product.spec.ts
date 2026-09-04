@@ -21,6 +21,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import type {
   SubprocessHandle,
   SubprocessOutcome,
@@ -191,6 +192,7 @@ interface RealRuntime {
 async function realRuntime(): Promise<RealRuntime> {
   const ctx = new Context()
   contexts.push(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(LocalSubprocessRuntime)
   const handles: SubprocessHandle[] = []
@@ -251,7 +253,7 @@ async function expectQuiescent(
 
 function expectedFailure(
   stage: 'query-run' | 'process',
-  category: 'error_during_execution' | 'process-exit',
+  category: 'product-error' | 'process',
   outcome: SubprocessOutcome,
 ): string {
   const fields = [
@@ -268,8 +270,8 @@ function expectedObservedFailure(outcome: SubprocessOutcome): string {
   return observedSdkMessages.some(message =>
     message.type === 'result'
     && message.subtype === 'error_during_execution')
-    ? expectedFailure('query-run', 'error_during_execution', outcome)
-    : expectedFailure('process', 'process-exit', outcome)
+    ? expectedFailure('query-run', 'product-error', outcome)
+    : expectedFailure('process', 'process', outcome)
 }
 
 function startRequest(
@@ -284,23 +286,23 @@ function startRequest(
   })
 }
 
-describe('real Claude Agent SDK 0.3.220 and its distributed Claude Code 2.1.220 fixture', {
+describe('real Claude Agent SDK 0.3.241 and its distributed Claude Code 2.1.241 fixture', {
   timeout: 60_000,
 }, () => {
   it('inherits host settings and sends the exact task and fake key to local Messages', async () => {
-    const sentinel = 'REAL_CLAUDE_CODE_SENTINEL_2_1_220'
+    const sentinel = 'REAL_CLAUDE_CODE_SENTINEL_2_1_237'
     const task = 'Return the fixture sentinel exactly.'
     const { harness, fixture } = await realHarness({
       kind: 'complete',
       text: sentinel,
     })
-    expect(sdkPackage.version).toBe('0.3.220')
-    expect(sdkPackage.claudeCodeVersion).toBe('2.1.220')
-    expect(sdkPackage.optionalDependencies[platformPackage]).toBe('0.3.220')
+    expect(sdkPackage.version).toBe('0.3.241')
+    expect(sdkPackage.claudeCodeVersion).toBe('2.1.241')
+    expect(sdkPackage.optionalDependencies[platformPackage]).toBe('0.3.241')
     const version = await execFileAsync(claudeBin, ['--version'], {
       env: { ...process.env, ...harness.env },
     })
-    expect(version.stdout.trim()).toBe('2.1.220 (Claude Code)')
+    expect(version.stdout.trim()).toBe('2.1.241 (Claude Code)')
 
     const run = await startRequest(harness, task)
     await expect(run.result).resolves.toEqual({
@@ -313,7 +315,7 @@ describe('real Claude Agent SDK 0.3.220 and its distributed Claude Code 2.1.220 
       (message): message is SDKSystemMessage =>
         message.type === 'system' && message.subtype === 'init',
     )
-    expect(initMessage?.claude_code_version).toBe('2.1.220')
+    expect(initMessage?.claude_code_version).toBe('2.1.241')
     const spawnedExecutable = harness.spawnSpecs[0]?.argv[0]
     expect(spawnedExecutable).toBeDefined()
     expect(process.platform === 'win32'
@@ -368,7 +370,7 @@ describe('real Claude Agent SDK 0.3.220 and its distributed Claude Code 2.1.220 
       stopReason: 'error',
     })
     expect(result.diagnostic).toContain(
-      'product: Claude Code; stage: query-run; category: error_max_turns',
+      'product: Claude Code; stage: query-run; category: limit',
     )
     expect(readFileSync(target, 'utf8')).toBe('real-sdk-max-turns')
     expect(result.diagnostic).not.toContain(target)
@@ -387,12 +389,14 @@ describe('real Claude Agent SDK 0.3.220 and its distributed Claude Code 2.1.220 
     const { ctx, handles, spawnSpecs } = await realRuntime()
     const safeFiber = await ctx.plugin(claudeCode, {
       providerName: 'claude-safe',
+      model: 'claude-safe-model',
       env: safeInstance.env,
       permissionMode: 'dontAsk',
       disposeGraceMs: 3_000,
     })
     const bypassFiber = await ctx.plugin(claudeCode, {
       providerName: 'claude-bypass',
+      model: 'claude-bypass-model',
       env: bypassInstance.env,
       permissionMode: 'bypassPermissions',
       disposeGraceMs: 3_000,
@@ -440,6 +444,8 @@ describe('real Claude Agent SDK 0.3.220 and its distributed Claude Code 2.1.220 
     await Promise.all([safeRun.dispose(), bypassRun.dispose()])
     expect(safeInstance.fixture.requests).toHaveLength(1)
     expect(bypassInstance.fixture.requests).toHaveLength(1)
+    expect(safeInstance.fixture.requests[0]?.body.model).toBe('claude-safe-model')
+    expect(bypassInstance.fixture.requests[0]?.body.model).toBe('claude-bypass-model')
     expect(safeInstance.fixture.requests[0]?.body.messages)
       .not.toEqual(bypassInstance.fixture.requests[0]?.body.messages)
     expect(spawnSpecs.map(spec => spec.env?.CLAUDE_CONFIG_DIR).sort())
@@ -541,7 +547,7 @@ describe('real Claude Agent SDK 0.3.220 and its distributed Claude Code 2.1.220 
     })
     expect(fixture.requests).toHaveLength(2)
     expect(JSON.stringify(fixture.requests[1]?.body.messages))
-      .toContain('ExitPlanMode exists but is not enabled in this context')
+      .toContain('ExitPlanMode is disabled for this session')
     await run.dispose()
     await expectQuiescent(harness.handles)
   })

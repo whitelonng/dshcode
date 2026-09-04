@@ -9,8 +9,11 @@
  * covers everything the card shows.
  */
 
-import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
-import type { SettingsScope, SettingsScopeSnapshot, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// Type-only: pulls the ctx.remote merge into this program.
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   CardForm, numberField, textField,
   type CardActions, type CardFieldState, type CardShell,
@@ -44,7 +47,7 @@ interface CredentialState {
   ref: string
   /** Whether any layer supplies a value for it. */
   configured: boolean
-  /** Whether `credentials.set` can affect it; false disables the control. */
+  /** Whether `credentials/set` can affect it; false disables the control. */
   writable: boolean
 }
 
@@ -78,11 +81,12 @@ export class WebSearchCardController {
 
   /**
    * @param scope - the bound settings scope for the `web-search-deepseek` namespace.
-   * @param api - wire face used for the credential the section references.
+   * @param ctx - the card plugin's context, whose `remote.credentials` namespace
+   * answers for the credential the section references.
    */
   constructor(
     private readonly scope: SettingsScope<WebSearchSettings>,
-    private readonly api: Pick<IApiClient, 'credentials'>,
+    private readonly ctx: ClientContext,
   ) {
     this.form = new CardForm(
       scope,
@@ -121,16 +125,9 @@ export class WebSearchCardController {
       this.credential = { ref, configured: false, writable: true }
       this.store.set(this.projection())
     }
-    let response: Awaited<ReturnType<IApiClient['credentials']['describe']>>
-    try {
-      response = await this.api.credentials.describe({ refs: [ref] })
-    } catch (_credentialReadFailure) {
-      // The card stays usable without this: the key control simply reports the
-      // last state it knew, and a write still reaches the Host.
-      return
-    }
-    if (!response.result.ok || ref !== refOf(this.scope.getSnapshot())) return
-    const view = response.result.value.credentials[ref]
+    const response = await this.ctx.remote.credentials.describe([ref])
+    if (!response.ok || ref !== refOf(this.scope.getSnapshot())) return
+    const view = response.value[ref]
     const next: CredentialState = {
       ref,
       configured: view?.configured ?? false,
@@ -170,12 +167,9 @@ export class WebSearchCardController {
    * @returns whether the Host reports a configured credential afterwards.
    */
   private async writeKey(value: string): Promise<boolean> {
-    try {
-      await this.api.credentials.set({ ref: refOf(this.scope.getSnapshot()), value })
-    } catch (_credentialWriteFailure) {
-      // Refusals surface through the re-read below: the Host is the only
-      // authority on whether the key now exists.
-    }
+    // Refusals surface through the re-read below: the Host is the only
+    // authority on whether the key now exists.
+    await this.ctx.remote.credentials.set(refOf(this.scope.getSnapshot()), value)
     await this.readCredential()
     return this.credential.configured
   }

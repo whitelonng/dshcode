@@ -1,13 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { ChunkRowEvent } from '@deepseek-ai/dsh-api-session-controller/types'
 import type {
-  AssistantBlock, AssistantMessageNode, ConversationLocation, ConversationMatch,
-  ConversationNodeContext, ConversationNodeDefinition, PartialAssistant, RequestView,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import {
-  displayFailureMessage, emptyAssistantBlock, isTokenDelta, toAssistantBlock,
-  toAssistantBlocks,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  AssistantBlock, AssistantMessageNode, ConversationLocation,
+  ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
+  PartialAssistant, RequestView,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { trajectoryNode } from './trajectory-definition-common.ts'
+import {
+  displayFailure, emptyAssistantBlock, isTokenDelta, toAssistantBlock, toAssistantBlocks,
+} from './trajectory-event-projection.ts'
 
 /* jscpd:ignore-start -- Target-owned Definitions intentionally keep their event
  * state machines independent; see ../../../../../.agents/notes/implemented/
@@ -22,6 +23,7 @@ interface UsageValue {
 
 interface RetryValue {
   readonly message: string
+  readonly code?: string
   readonly retry: number
   readonly maxRetries?: number
   readonly delayMs: number
@@ -35,6 +37,7 @@ interface AssistantState {
   readonly started: boolean
   readonly sawChunk: boolean
   readonly blocks: readonly (AssistantBlock | undefined)[]
+  readonly visibleBlocks: number
   readonly firstVisibleSeq: number | undefined
   readonly firstVisibleTime: number | undefined
   readonly firstTokenTime: number | undefined
@@ -42,6 +45,12 @@ interface AssistantState {
   readonly usage: UsageValue | undefined
   readonly retry: RetryValue | undefined
   readonly stepEnd: ConversationMatch | undefined
+}
+
+function isChunkRunEvent(event: ConversationMatch['event']): event is ChunkRowEvent {
+  return event.type === 'chunkrow/text-chunks'
+    || event.type === 'chunkrow/reasoning-chunks'
+    || event.type === 'chunkrow/tool-call-chunks'
 }
 
 function initialState(
@@ -59,6 +68,7 @@ function initialState(
     started,
     sawChunk: false,
     blocks: [],
+    visibleBlocks: 0,
     firstVisibleSeq: undefined,
     firstVisibleTime: undefined,
     firstTokenTime: undefined,
@@ -73,12 +83,16 @@ function compactBlocks(blocks: readonly (AssistantBlock | undefined)[]): Assista
   return blocks.filter((block): block is AssistantBlock => block !== undefined)
 }
 
-function hasVisibleContent(blocks: readonly AssistantBlock[]): boolean {
-  return blocks.some((block) => {
-    if (block.kind === 'tool-call') return false
-    if (block.kind === 'text' || block.kind === 'reasoning') return block.text.trim() !== ''
-    return true
-  })
+function blockIsVisible(block: AssistantBlock | undefined): boolean {
+  if (block === undefined || block.kind === 'tool-call') return false
+  if (block.kind === 'text' || block.kind === 'reasoning') return block.text.trim() !== ''
+  return true
+}
+
+function countVisibleBlocks(blocks: readonly AssistantBlock[]): number {
+  let count = 0
+  for (const block of blocks) if (blockIsVisible(block)) count++
+  return count
 }
 
 function hasInterruptionEvidence(blocks: readonly AssistantBlock[]): boolean {
@@ -111,12 +125,18 @@ function updateChunk(state: AssistantState, match: ConversationMatch): Assistant
     return { ...state, sawChunk: true, usage: addUsage(state.usage, chunk.usage) }
   }
   const blocks = [...state.blocks]
+  let changedIndex = -1
+  let previousVisible = false
   switch (chunk.type) {
     case 'block-start':
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(blocks[chunk.index])
       blocks[chunk.index] = emptyAssistantBlock(chunk.blockType)
       break
     case 'text-delta': {
       const previous = blocks[chunk.index]
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(previous)
       blocks[chunk.index] = {
         kind: 'text',
         text: (previous?.kind === 'text' ? previous.text : '') + chunk.text,
@@ -125,6 +145,8 @@ function updateChunk(state: AssistantState, match: ConversationMatch): Assistant
     }
     case 'reasoning-delta': {
       const previous = blocks[chunk.index]
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(previous)
       blocks[chunk.index] = {
         kind: 'reasoning',
         text: (previous?.kind === 'reasoning' ? previous.text : '') + chunk.text,
@@ -133,6 +155,8 @@ function updateChunk(state: AssistantState, match: ConversationMatch): Assistant
     }
     case 'tool-call-delta': {
       const previous = blocks[chunk.index]
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(previous)
       const base = previous?.kind === 'tool-call'
         ? previous
         : { kind: 'tool-call' as const, callId: '', name: '', argsRaw: '' }
@@ -145,22 +169,109 @@ function updateChunk(state: AssistantState, match: ConversationMatch): Assistant
       break
     }
     case 'block-end':
+      changedIndex = chunk.index
+      previousVisible = blockIsVisible(blocks[chunk.index])
       blocks[chunk.index] = toAssistantBlock(chunk.block)
       break
     default:
       return { ...state, sawChunk: true }
   }
-  const visible = hasVisibleContent(compactBlocks(blocks))
+  const visibleBlocks = state.visibleBlocks
+    - Number(previousVisible)
+    + Number(blockIsVisible(blocks[changedIndex]))
   return {
     ...state,
     sawChunk: true,
     blocks,
-    ...(visible && state.firstVisibleSeq === undefined
+    visibleBlocks,
+    ...(visibleBlocks > 0 && state.firstVisibleSeq === undefined
       ? { firstVisibleSeq: match.event.seq, firstVisibleTime: match.event.time }
       : {}),
     ...(isTokenDelta(chunk) && state.firstTokenTime === undefined
       ? { firstTokenTime: match.event.time }
       : {}),
+  }
+}
+
+interface ChunkRunBoundaries {
+  readonly firstTokenTime: number | undefined
+  readonly firstVisible: { readonly seq: number; readonly time: number } | undefined
+}
+
+function chunkRunBoundaries(
+  event: ChunkRowEvent,
+  needsToken: boolean,
+  needsVisible: boolean,
+  visibleFromStart: boolean,
+): ChunkRunBoundaries {
+  const fragments = event.type === 'chunkrow/tool-call-chunks' ? event.data.args : event.data.texts
+  const nameStartsToken = event.type === 'chunkrow/tool-call-chunks'
+    && Object.hasOwn(event.data, 'name')
+  let firstTokenTime: number | undefined
+  let firstVisible: ChunkRunBoundaries['firstVisible']
+  let time = event.time
+  for (let index = 0; index < fragments.length; index++) {
+    const fragment = fragments[index] as string
+    if (needsToken && firstTokenTime === undefined && (nameStartsToken || fragment !== '')) {
+      firstTokenTime = time
+    }
+    if (needsVisible && firstVisible === undefined
+      && (visibleFromStart
+        || (event.type !== 'chunkrow/tool-call-chunks' && fragment.trim() !== ''))) {
+      firstVisible = { seq: event.seq + index, time }
+    }
+    if ((!needsToken || firstTokenTime !== undefined)
+      && (!needsVisible || firstVisible !== undefined)) break
+    time += event.data.dt[index] ?? 0
+  }
+  return { firstTokenTime, firstVisible }
+}
+
+function updateChunkRun(state: AssistantState, event: ChunkRowEvent): AssistantState {
+  const blocks = [...state.blocks]
+  const previous = blocks[event.data.index]
+  const previousVisible = blockIsVisible(previous)
+  let visibleFromStart = state.visibleBlocks - Number(previousVisible) > 0
+  if (event.type === 'chunkrow/text-chunks') {
+    const text = previous?.kind === 'text' ? previous.text : ''
+    visibleFromStart ||= text.trim() !== ''
+    blocks[event.data.index] = { kind: 'text', text: text + event.data.texts.join('') }
+  } else if (event.type === 'chunkrow/reasoning-chunks') {
+    const text = previous?.kind === 'reasoning' ? previous.text : ''
+    visibleFromStart ||= text.trim() !== ''
+    blocks[event.data.index] = { kind: 'reasoning', text: text + event.data.texts.join('') }
+  } else {
+    const base = previous?.kind === 'tool-call'
+      ? previous
+      : { kind: 'tool-call' as const, callId: '', name: '', argsRaw: '' }
+    blocks[event.data.index] = {
+      kind: 'tool-call',
+      callId: base.callId || String(event.data.id),
+      name: Object.hasOwn(event.data, 'name') ? event.data.name as string : base.name,
+      argsRaw: base.argsRaw + event.data.args.join(''),
+    }
+  }
+  const boundaries = chunkRunBoundaries(
+    event,
+    state.firstTokenTime === undefined,
+    state.firstVisibleSeq === undefined,
+    visibleFromStart,
+  )
+  const visibleBlocks = state.visibleBlocks
+    - Number(previousVisible)
+    + Number(blockIsVisible(blocks[event.data.index]))
+  return {
+    ...state,
+    sawChunk: true,
+    blocks,
+    visibleBlocks,
+    ...(boundaries.firstVisible === undefined ? {} : {
+      firstVisibleSeq: boundaries.firstVisible.seq,
+      firstVisibleTime: boundaries.firstVisible.time,
+    }),
+    ...(boundaries.firstTokenTime === undefined ? {} : {
+      firstTokenTime: boundaries.firstTokenTime,
+    }),
   }
 }
 
@@ -179,15 +290,28 @@ function closedBoundary(
 function fallbackState(context: ConversationNodeContext<AssistantState>): AssistantState | undefined {
   let state: AssistantState | undefined
   for (const match of context.matches) {
+    if (isChunkRunEvent(match.event)) {
+      state ??= initialState(
+        match.event.data.turn,
+        match.event.data.step,
+        match.event.seq,
+        match.event.time,
+        false,
+      )
+      state = updateChunkRun(state, match.event)
+      continue
+    }
     const event = match.event
     if (event.type === 'assistant/chunk') {
       state ??= initialState(event.data.turn, event.data.step, event.seq, event.time, false)
       state = updateChunk(state, match)
     } else if (event.type === 'assistant/message') {
       state ??= initialState(event.data.turn, event.data.step, event.seq, event.time, false)
+      const blocks = toAssistantBlocks(event.data.message.content)
       state = {
         ...state,
-        blocks: toAssistantBlocks(event.data.message.content),
+        blocks,
+        visibleBlocks: countVisibleBlocks(blocks),
         final: match,
         usage: state.usage ?? event.data.usage,
       }
@@ -227,8 +351,9 @@ function finalNode(
     }
   }
   const boundary = closedBoundary(context)
+  if (boundary === undefined) return undefined
   const blocks = compactBlocks(state.blocks)
-  if (boundary === undefined || !hasInterruptionEvidence(blocks)) return undefined
+  if (!hasInterruptionEvidence(blocks)) return undefined
   return {
     kind: 'assistant',
     seq: boundary.seq - 0.9,
@@ -261,6 +386,7 @@ function assistantRequest(
       ? {}
       : {
         error: state.retry.message,
+        ...(state.retry.code === undefined ? {} : { errorCode: state.retry.code }),
         retry: state.retry.retry,
         ...(state.retry.maxRetries === undefined ? {} : { maxRetries: state.retry.maxRetries }),
         retryDelayMs: state.retry.delayMs,
@@ -289,6 +415,9 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
       || event.type === 'step/end') {
       return { id: `${event.data.turn}:${event.data.step}`, role: 'update' }
     }
+    if (isChunkRunEvent(event)) {
+      return { id: `${event.data.turn}:${event.data.step}`, role: 'update' }
+    }
     return null
   },
   start: (_context, match) => {
@@ -304,11 +433,14 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
     )
   },
   update: (context, match) => {
+    if (isChunkRunEvent(match.event)) return updateChunkRun(context.state, match.event)
     if (match.event.type === 'assistant/chunk') return updateChunk(context.state, match)
     if (match.event.type === 'assistant/message') {
+      const blocks = toAssistantBlocks(match.event.data.message.content)
       return {
         ...context.state,
-        blocks: toAssistantBlocks(match.event.data.message.content),
+        blocks,
+        visibleBlocks: countVisibleBlocks(blocks),
         final: match,
         usage: context.state.usage ?? match.event.data.usage,
       }
@@ -316,6 +448,7 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
     if (match.event.type === 'step/end') return { ...context.state, stepEnd: match }
     if (match.event.type !== 'llm/retry') return context.state
     const data = match.event.data
+    const failure = displayFailure(data.failure)
     return {
       ...initialState(
         context.state.turn,
@@ -327,7 +460,8 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
       firstTokenTime: context.state.firstTokenTime,
       usage: context.state.usage,
       retry: {
-        message: displayFailureMessage(data.failure),
+        message: failure.message,
+        ...(failure.code === undefined ? {} : { code: failure.code }),
         retry: data.retry,
         ...(data.mode === 'normal' ? { maxRetries: data.maxRetries } : {}),
         delayMs: data.delayMs,
@@ -336,6 +470,7 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
   },
   publication: (match) => {
     if (match.event.type === 'step/start') return 'none'
+    if (isChunkRunEvent(match.event)) return 'animation-frame'
     if (match.event.type !== 'assistant/chunk') return 'immediate'
     const type = match.event.data.chunk.type
     return type === 'usage' || type === 'finish' ? 'none' : 'animation-frame'
@@ -364,6 +499,7 @@ interface TurnEndState {
   readonly seq: number
   readonly time: number
   readonly error?: string
+  readonly errorCode?: string
 }
 
 const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
@@ -377,11 +513,15 @@ const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
       throw new Error('trajectory-turn-end start requires turn/end')
     }
     const reason = match.event.data.reason
+    const failure = reason.kind === 'error' ? displayFailure(reason.error) : undefined
     return {
       turn: match.event.data.turn,
       seq: match.event.seq,
       time: match.event.time,
-      ...(reason.kind === 'error' ? { error: displayFailureMessage(reason.error) } : {}),
+      ...(failure === undefined ? {} : {
+        error: failure.message,
+        ...(failure.code === undefined ? {} : { errorCode: failure.code }),
+      }),
     }
   },
   update: context => context.state,
@@ -392,6 +532,7 @@ const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
       turn: context.state.turn,
       time: context.state.time,
       ...(context.state.error === undefined ? {} : { error: context.state.error }),
+      ...(context.state.errorCode === undefined ? {} : { errorCode: context.state.errorCode }),
     }),
 }
 /* jscpd:ignore-end */
@@ -402,6 +543,6 @@ const trajectoryTurnEndDefinition: ConversationNodeDefinition<TurnEndState> = {
  * @param ctx - Plugin context receiving the Definitions.
  */
 export function registerTrajectoryAssistantDefinition(ctx: Context): void {
-  ctx.conversationEvents.register(trajectoryAssistantDefinition)
-  ctx.conversationEvents.register(trajectoryTurnEndDefinition)
+  ctx.uiConversation.events.register(trajectoryAssistantDefinition)
+  ctx.uiConversation.events.register(trajectoryTurnEndDefinition)
 }

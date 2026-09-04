@@ -1,13 +1,63 @@
+---
+description: "Browser-side schema and draft editing layer for settings editors: rehydrates the settings.describe schemastery envelope, resolves schema nodes by settings path, and edits drafts immutably with path-level override semantics."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-schema-form
 
 English | [中文](README.zh.md)
 
-Schema/draft model layer for settings editors. The wire's `settings.describe` carries each namespace's serialized schemastery schema (`schema.toJSON()` ref envelope); `rehydrateSchema` turns it back into a live validator with `new Schema(json)` — the same schema object that validates a section on the host validates drafts in the browser, so client-side validation never drifts from the Service Definition's. Editors render their own controls (the Models page hand-writes its card around the fields it probes here); this package owns no React and no rendering.
+## Summary
 
-## Contract
+The schema/draft model layer for settings editors. `rehydrateSchema` turns the wire's `settings.describe` envelope back into a live schemastery validator, so the schema that validates a section on the Host validates the browser draft with zero drift. `nodeAtPath` resolves the schema node addressed by a configurable-provider directory `settingsPath`, and `setPath`/`deletePath`/`hasPath` edit a draft immutably with presence-based override semantics. `validateDraft` runs the rehydrated validator and returns the failure message, letting pages reject invalid drafts before writing. The package owns no React and no rendering: editors build their own controls over these helpers.
 
-The unit of editing is a **draft user section**: a plain object edited immutably (`setPath` materializes intermediates, `deletePath` is the per-field reset — dropping the key falls the resolved value back to the composition base and schema defaults). A field's presence in the draft marks it **overridden** (`hasPath`) — presence semantics, not value comparison, exactly mirroring the settings seam's layering. `nodeAtPath` resolves the schema node addressed by a configurable-provider directory `settingsPath` (object properties by name, dict entries through `inner`), so an editor can probe which fields a provider's profile carries (and their `meta.role`) before deciding what to render; an unresolvable path returns `undefined` so the caller degrades loudly instead of rendering a wrong subtree. `validateDraft(schema, draft)` runs the rehydrated validator and returns its failure message, letting pages reject an invalid draft before writing.
+## Table of Contents
 
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Import the helpers from the package root and drive them from an editor component's controller.
+
+### When to choose it
+
+Choose this package when a settings surface must edit a namespace it does not fully own: the configurable-provider Models page probes provider profiles through `nodeAtPath` before deciding what to render. Skip it for a namespace the editor knows completely, where a hand-written typed form over the settings scope is simpler.
+
+### Minimal configuration
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+[`src/model.ts`](src/model.ts) holds the full API: `rehydrateSchema` revives the `schema.toJSON()` ref envelope with `new Schema(json)`; the draft helpers materialize intermediates on `setPath`, drop keys on `deletePath`, and treat field presence as override state. The settings seam's layering gives presence semantics their meaning: an absent key falls back to the composition base and schema defaults.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+- [Web client architecture](../../../docs/subsystems/web-client.md)
+- [Settings seam](../../../packages/settings/settings/README.md)
+- [Web config-plane Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md)
+- [Adding a package](../../../docs/cookbook/adding-a-package.md)
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 None, as this package backs browser configuration editors; nothing here reaches a model request.
@@ -18,6 +68,20 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
 - **Rehydration executes the served envelope** — `rehydrateSchema` reconstructs a live schemastery validator, and schemastery revives serialized callbacks through `new Function`, so the schema envelope is executable content rather than inert data. This is safe only for an envelope from the same trusted host that serves the page; the protocol provides no inert cross-trust representation.
 - **Validation is draft-level, not per-field** — `validateDraft` reports schemastery's first failure message, including its `$.path`; it does not map errors onto individual controls.
 - **No generic renderer** — consumers build feature-specific forms over these helpers. The [Web config-plane Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md) records that trade-off.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published: a pure schema/draft helper library owns no cross-plugin mutable relation; its model specs assert the invariants directly.

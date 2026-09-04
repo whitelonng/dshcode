@@ -1,52 +1,124 @@
+---
+description: "The model-facing pwsh tool for users and maintainers choosing, configuring, or debugging one-shot PowerShell execution, background jobs, and sandbox escalation on Windows."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-tool-pwsh
 
 English | [中文](README.zh.md)
 
-The model-facing `pwsh` tool registered over the `ctx.shell` executor seam. Intended for Windows compositions where a PowerShell executor (e.g. `@deepseek-ai/dsh-pwsh-local`) backs `ctx.shell`; the tool contract is PowerShell-dialect: native `C:\...` paths and `$env:NAME` variables. Behavior mirrors `dsh-tool-bash` call-for-call — foreground and `run_in_background` execution through the generic job runtime, the managed `DSH_*` environment through the shared `shell-env` registry, the sandbox denial rendering with the same-turn `sandbox_permissions` escalation surface, and the bash marker/truncation rendering story (a clean exit produces no marker).
+## Summary
 
-Requires a loaded executor implementation and the `shell-env` plugin; the tool stays pending until both exist (`inject: ['tools', 'bash', 'systemPrompt', 'bashEnv']`).
+`dsh-tool-pwsh` gives the agent a `pwsh` tool that runs PowerShell commands through the mounted shell executor — the Windows counterpart of `dsh-tool-bash`, mirroring it call-for-call. Each call runs in a fresh pwsh process, so no state survives; `run_in_background` turns long-running commands into background jobs. Commands are PowerShell-dialect: native `C:\...` paths and `$env:NAME` variables, with no dialect translation. Every call runs with the managed `DSH_*` environment, and under a sandboxing executor the tool teaches and enforces the Windows-specific language-mode and named-pipe contracts. Mount it with a PowerShell executor such as `dsh-pwsh-local` and the `dsh-shell-env` plugin.
 
-The package root exposes only the Cordis plugin contract (`name`, `inject`, `Config`, `apply`); result rendering (`src/render.ts`) and background-job adaptation (`src/background.ts`) mirror the bash tool's structure and stay reachable through the package's `./src/*` export.
+## Table of Contents
 
-The plugin also contributes the `tool:pwsh` prompt section (order 105): non-zero exits are reported as `[exit code: N]` markers, and Windows interruption settles as exit 1 without a signal marker.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-## Tools
+-----
 
-### `pwsh`
+<a id="use-this-package"></a>
+## Use this package
 
-| Arg | Type | Notes |
+Load this plugin in any composition where the agent should run PowerShell commands — typically a Windows composition whose `ctx.shell` is backed by a PowerShell executor. It registers the `pwsh` tool once the executor provider and the `dsh-shell-env` registry are mounted.
+
+### When to choose it
+
+Choose the pwsh tool when commands must be written in PowerShell — native paths and `$env:` variables — or when the deployment is Windows-native. Choose `dsh-tool-bash` when the command set is bash-dialect; there is no translation between the two. When work needs cross-call state (cwd, variables), the persistent counterpart [`dsh-tool-pwsh-persistent`](../tool-pwsh-persistent/README.md) keeps one owner-scoped shell alive.
+
+### Minimal configuration
+
+The common path is a PowerShell executor provider, the environment registry, and this tool.
+
+```yaml
+- name: '@deepseek-ai/dsh-pwsh-local'
+- name: '@deepseek-ai/dsh-shell-env'
+- name: '@deepseek-ai/dsh-tool-pwsh'
+```
+
+The single config field toggles background support.
+
+| Field | Default | Meaning |
 |---|---|---|
-| `command` | string (required) | Run via `pwsh -Command`. No state persists between calls — use `workdir`, not `cd`. |
-| `description` | string (required) | One-line, active-voice summary of the command (5-10 words), for UI/log display only — no effect on execution. |
-| `timeoutMs` | number | Timeout override in milliseconds. The executor applies its configured default and cap. |
-| `workdir` | string | Working directory for this call. Defaults to the calling agent's session cwd (`session.header.cwd`) so each session runs in its own workspace; a relative `workdir` is resolved against that same identity. |
-| `run_in_background` | boolean | Return a job id immediately; no timeout applies. |
-| `sandbox_permissions` | string enum | Advertised only when a sandboxing executor is mounted (`ctx.shell.sandboxMode` defined). The wider sandbox mode for a one-shot retry of a command the sandbox just denied — the narrowest wider mode that suffices, requiring `justification` and user approval through `ctx.approval` BEFORE execution. A non-widening or unapprovable request fails closed without running anything. |
-| `justification` | string | Required with `sandbox_permissions`: one sentence for the user explaining why this exact command needs the wider access. |
+| `enableRunInBackground` | `true` | Expose `run_in_background`; when `false`, forced background calls are rejected |
 
-`command`, `workdir`, and `timeoutMs` are resolved against the executor's config defaults via `ctx.shell.resolve()` before execution. The workdir default is applied in the tool layer from the calling agent's `session.header.cwd` BEFORE `resolve()` — the per-session cwd must come from `exec.agent`, since N sessions share one executor; only when no session cwd is available does the executor fall back to its own config / `process.cwd()`.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-pwsh) is the exhaustive source for every accepted field and its JSDoc; the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-pwsh) carries the full argument schema.
 
-### Managed shell environment
+### Running a command
 
-Every foreground and background model pwsh call receives a freshly collected trusted `DSH_*` environment through the shared [`dsh-shell-env`](../shell-env/) registry: `DSH_HOME` (the absolute Harness home), `DSH_SHELL=1`, the agent's `DSH_SESSION_ID`, and `DSH_SESSION_JSONL` when the active persistence backend locates one. Plugins contributing `DSH_*` facts to `ctx.shellEnv` apply to pwsh calls exactly as they do to bash calls. The snapshot passes through the dedicated `ShellExecRequest.dshEnv` channel; `process.env` is never modified. The description teaches the generic `$env:DSH_*` convention rather than naming persistence-specific variables.
+The tool executes `pwsh -Command <command>` and returns the combined output. Commands run in a fresh pwsh process every call, so state never persists — pass `workdir` instead of `cd`. Paths use native Windows form and environment variables are read with `$env:NAME`. A non-zero exit is reported as `[exit code: N]`; on Windows a force-killed command settles as `[exit code: 1]` without a signal marker, so the agent treats a bare exit 1 after an interruption as a termination, not a command failure. Background runs, output truncation, and the `description`/`timeoutMs`/`workdir` arguments behave exactly as in `dsh-tool-bash`.
 
-Result text contains stdout, an optional `[stderr]` section, then applicable truncation, sandbox-denial (with the same-turn escalation hint when the composition advertises escalation), timeout, signal, and exit markers. A clean exit (0, no signal) produces no marker; an empty body renders as `(no output)`. Truncation links a safe complete spill file or reports it unavailable. Timeout is reported independently of final exit status; nonzero exit remains a model-interpreted result rather than `isError`. Windows reports forced termination as exit 1 without a signal, so `[killed by signal: …]` is POSIX-only there. Only infrastructure failures — spawn errors and aborts (`tool call aborted`) — produce `isError`.
+### Windows-specific sandbox behavior
 
-The canonical success is `{ kind: 'foreground', ...ShellRunResult }` for a completed foreground process (with the executor's `sandbox` facts — `mode`/`denied`, optional `enforcement`/`runnerFailed` — projected when present) or `{ kind: 'background', jobId }` for a published task. The renderer preserves exactly `started background job <id>` for background acks; programmatic consumers use the typed fields without parsing the rendered text.
+Under a sandboxing executor, denied commands report `[sandbox: file access denied under <mode> mode]`, and the same one-shot escalation path applies: retry the exact command once with `sandbox_permissions` plus a `justification` through user approval. The tool also teaches two Windows-restricted-token contracts in its description: read-only pwsh runs in ConstrainedLanguage (`.NET` static calls, `Add-Type`, COM, and reflection fail with "only core types" errors), and in both confined modes programs cannot open named pipes, so a command that captures another program's output through piped stdio fails with EPERM — escalate the exact command once or restructure it to avoid capturing output.
 
-When `run_in_background` is true, this plugin preflights `ctx.jobs.start()` before spawning, registers the calling agent as owner, and adapts the returned `ShellProcess` handle into generic cancel/done/incremental-output hooks. The job runtime owns ids, cross-session isolation, completion notices, waiting, and disposal cleanup; this plugin only maps pwsh exit facts into job output and outcome detail. `enableRunInBackground: false` removes the parameter and rejects a forced background call at execution time.
+### What can go wrong
 
-## UI presentation
+A composition with no PowerShell executor never activates the tool, and the injected services (`tools`, `shell`, `systemPrompt`, `shellEnv`) must all exist. Background calls without the job runtime fail with `background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs`, and `sandbox_permissions` without a sandboxing executor fails with `sandbox_permissions is not available in this composition (no sandboxing executor to escalate)`.
 
-The tool owns its `presentCall`/`presentResult` render intent. A foreground call is a `terminal` card carrying command, description, and optional cwd; a `run_in_background` call is a `generic` card with the raw command, mirroring the bash tool's background presentation. A completed foreground result is a `terminal` card too: the exit marker becomes the card's exit-status pill (`exitCode`/`signal`), and the marker-free body is the card's output — exactly the bash tool's terminal-card story, via the shared exit-status parse from `@deepseek-ai/dsh-shell`. Background acks and execution errors stay `generic` cards with the rendered output in a `console` fence. These presenters are pure and replay-safe.
+-----
 
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design decisions behind the tool and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design philosophy
+
+- **A deliberate twin of `dsh-tool-bash`.** Foreground and background execution, the managed environment, the sandbox escalation surface, and the marker/truncation rendering mirror the bash tool call-for-call, so consumers of one accept the other's wire shape ([pwsh tool and executor Agent Note](../../../.agents/notes/implemented/feature/2026-08-01-pwsh-tool-and-executor.md)).
+- **PowerShell-dialect contract.** The tool contract is PowerShell: native paths and `$env:` variables, executed via `pwsh -Command` with no intermediate shell.
+- **Windows sandbox facts taught in the description.** The ConstrainedLanguage and named-pipe contracts are Windows-restricted-token behavior; the gate for teaching them is "any confining executor is mounted", which is safe because every shipped pairing is win32-only.
+- **Non-zero exits are reported, not errored.** Only infrastructure failures (spawn errors, aborts) surface as tool errors, matching the bash story.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry: tool registration, prompt section, arg validation, escalation, request assembly |
+| [`src/background.ts`](src/background.ts) | Map a settled background process onto generic job outcome vocabulary |
+| [`src/render.ts`](src/render.ts) | Model-facing result text: streams, markers, truncation notices (bash twin) |
+| — | No runtime invariant companion is published; this package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam. |
+
+### Rendering and exit markers
+
+The renderer shares the bash tool's structure and the `parseExitStatus` marker contract from `dsh-shell`: a clean exit (0, no signal) produces no marker; the UI card consumes the exit marker as its exit-status pill. Windows forced termination settles as exit 1 without a signal, so `[killed by signal: …]` is POSIX-only there. The `tool:pwsh` prompt section (first-party order 1010) teaches the exit-marker convention and the Windows exit-1-after-interruption reading.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the shell family to the executor seam and the design notes behind the Windows behavior.
+
+- [shell package map](../README.md) — the bash capability family and its roles.
+- [Bash executor subsystem](../../../docs/subsystems/shell.md) — request/spec vocabulary, results, and background processes.
+- [shell-env](../shell-env/README.md) — the managed `DSH_*` environment every call receives.
+- [tool-jobs](../../jobs/tool-jobs/README.md) — `job_output`, `job_list`, and `job_kill` controls for background runs.
+- [pwsh tool and executor Agent Note](../../../.agents/notes/implemented/feature/2026-08-01-pwsh-tool-and-executor.md) — why the tool mirrors the bash tool and how the Windows sandbox gates its description.
+- [Windows ACL restricted-token sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-08-08-windows-acl-restricted-token-sandbox.md) — the language-mode and named-pipe contracts.
+- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-pwsh) — the exact `pwsh` argument schema.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-pwsh) — every accepted config field and its source declaration.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### System prompt
 
 #### What the model sees
 
-Every request in this plugin's registration scope contains the pwsh guidance below. Scoped tool restrictions can hide the schema without removing this independently registered section.
+Every request in this plugin's registration scope contains the pwsh guidance below at first-party order 1010. Scoped tool restrictions can hide the schema without removing this independently registered section.
 
 ##### Pwsh guidance
 
@@ -80,7 +152,7 @@ Prefix-stable while visibility and the tool definition are unchanged. A restrict
 
 #### What the model sees
 
-The renderer emits the data-dependent stdout tail, then optional `[stderr]` and the stderr tail. Conditional lines are exactly `[output truncated; full output: <path>]`, `[sandbox: file access denied under <mode> mode]` plus the escalation hint `[sandbox: escalation available — …]` (only when the composition advertises escalation), `[timed out after <timeoutMs>ms]`, `[killed by signal: <signal>]`, and `[exit code: <exitCode>]` (nonzero exits only); an empty body renders as `(no output)`.
+The renderer emits the data-dependent stdout tail, then optional `[stderr]` and the stderr tail. Conditional lines are exactly `[output truncated; full output: <path-or-(unavailable)>]`, `[sandbox: file access denied under <mode> mode]` plus the escalation hint `[sandbox: escalation available — …]` (only when the composition advertises escalation), `[timed out after <timeoutMs>ms]`, `[killed by signal: <signal>]`, and `[exit code: <exitCode>]` (nonzero exits only); an empty body renders as `(no output)`.
 
 #### Token effect
 
@@ -108,7 +180,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 #### What the model sees
 
-Validation and infrastructure failures are normalized as `Error: <message>`. This package's stable messages are `invalid command: expected a non-empty string`, `invalid description: expected a non-empty string`, `invalid timeoutMs: expected a positive number, got <value>`, `invalid escalation: sandbox_permissions requires a justification`, `invalid escalation: justification is only valid together with sandbox_permissions`, `invalid justification: expected a non-empty sentence`, `sandbox_permissions is not available in this composition (no sandboxing executor to escalate)`, the shared escalation failures (not strictly wider / no approval service / no agent to route / no approval channel / user rejected / was cancelled), `run_in_background is disabled for this deployment (enableRunInBackground: false)`, `background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs`, and `tool call aborted`.
+Validation and infrastructure failures are normalized as `Error: <message>`. This package's stable messages are `invalid command: expected a non-empty string`, `invalid description: expected a non-empty string`, `invalid timeoutMs: expected a positive number, got <value>`, the escalation pairing failures, `sandbox_permissions is not available in this composition (no sandboxing executor to escalate)`, the shared escalation failures (not strictly wider / no approval service / no agent to route / no approval channel / user rejected / was cancelled), `run_in_background is disabled for this deployment (enableRunInBackground: false)`, `background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs`, and `tool call aborted`.
 
 #### Token effect
 
@@ -120,7 +192,22 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the tool is a poor fit or needs special care. They are current package constraints, not a task backlog.
+
 - **Language mode and named-pipe capture under the Windows sandbox** — under the [Windows ACL sandbox](../../sandbox/sandbox-windows-acl/README.md), read-only pwsh starts in ConstrainedLanguage because its temp write denial makes PowerShell's AppLocker probe fail closed: `Add-Type`, non-core .NET statics (`[System.IO.*]::`, `[math]::`), COM objects, and reflection fail with "only core types" errors, and the mode cannot be lifted from inside. Workspace-write's private temp lets the probe complete, so it stays in FullLanguage unless host policy says otherwise. Both confined modes deny named-pipe opens, so a piped-stdio spawn inside a confined command fails with EPERM. The tool description teaches both contracts to the model; the backend README owns the full limitations.
-- **No persistent shell** — every call starts a fresh `pwsh -Command`; the persistent-shell counterpart is [`@deepseek-ai/dsh-tool-pwsh-persistent`](../tool-pwsh-persistent/README.md), which keeps one owner-scoped pwsh alive across calls on Windows (ConPTY) and POSIX hosts with pwsh.
+- **No persistent shell** — every call starts a fresh `pwsh -Command`; the persistent-shell counterpart is [`@deepseek-ai/dsh-tool-pwsh-persistent`](../tool-pwsh-persistent/README.md), which keeps one owner-scoped pwsh alive across calls.
 - **PowerShell-dialect contract** — the model must write PowerShell (native paths, `$env:` variables), not bash; there is no dialect translation.
 - **Session-cwd identity is not canonicalized** — the workdir base is the session header cwd as-is, unlike the bash tool's sandbox-root-canonicalized identity. Under a confining executor the policy's workspace root IS canonicalized (by the shared policy service), so the workdir and the confinement root can diverge when the raw session cwd differs from its canonical form — a parity gap deferred to the shared shell-tool base extraction.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

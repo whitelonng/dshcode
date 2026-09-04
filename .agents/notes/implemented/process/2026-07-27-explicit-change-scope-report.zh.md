@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-[pre-push 工作流](../../../skills/dsh-pre-push-checks/SKILL.md)需要取得相对于实际基准的 diff，但按 `origin/<current-branch>` 构造引用存在两类问题：对于第一次推送前跟踪 `origin/master`、尚无同名远端分支的新 worktree 分支，该引用无法解析；对于 PR（Pull Request）以另一功能分支为基准的堆叠分支，该引用会错误描述基准。[代码评审](../../../skills/dsh-code-review/SKILL.md)与[文档审计](../../../skills/dsh-doc-standards/SKILL.md)工作流同样需要判断当前基准。
+[pre-push 工作流](../../../skills/dsh-pre-push-checks/SKILL.md)需要取得相对于实际基准的 diff，但按 `origin/<current-branch>` 构造引用存在两类问题：对于第一次推送前跟踪 `origin/master`、尚无同名远端分支的新 worktree 分支，该引用无法解析；对于 PR（Pull Request）以另一功能分支为基准的堆叠分支，该引用会错误描述基准。[代码评审](../../../skills/dsh-code-review/SKILL.md)与[文档审计](../../../skills/dsh-doc/SKILL.md)工作流同样需要判断当前基准。
 
 错误的范围可能遗漏受影响的路径，从而削弱证据选择。三点范围产生的已提交 diff 也完全无法说明 Git 中彼此独立的已暂存、未暂存与未跟踪层。
 

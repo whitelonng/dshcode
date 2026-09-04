@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { RequestView } from '@deepseek-ai/dsh-client-runtime/client'
+import type { RequestView } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   TrajectoryContribution, TrajectoryConversationViewNode, TrajectoryRequestHeaderState,
 } from '../src/client/trajectory-contract.ts'
 import { TrajectorySnapshotBuilder } from '../src/client/trajectory-snapshot-builder.ts'
+
+const EMPTY_LOCATION_DATA_SOURCE = { getSnapshot: () => undefined, subscribe: () => () => {} }
+const EMPTY_LOCATION_DATA = { get: () => undefined, source: () => EMPTY_LOCATION_DATA_SOURCE }
 
 function assistantRequest(startSeq: number, step: number): Extract<RequestView, { purpose: 'assistant' }> {
   return {
@@ -30,7 +33,7 @@ function contribution(
 }
 
 function stepLocation(turn: number, step: number): TrajectoryRequestHeaderState['location'] {
-  const data = { get: () => undefined }
+  const data = EMPTY_LOCATION_DATA
   const stepLocation = {
     turn,
     step,
@@ -109,6 +112,65 @@ describe('TrajectorySnapshotBuilder', () => {
       : undefined)).toEqual(['initial', undefined])
   })
 
+  it('retains a same-step prompt change when a later series header supplies the latest snapshot', () => {
+    const initial = {
+      config: { provider: 'test', model: 'test' },
+      system: 'initial prompt',
+      tools: [],
+    }
+    const changed = { ...initial, system: 'changed prompt' }
+    const nodes: TrajectoryConversationViewNode[] = [
+      contribution('header:initial', 2, {
+        kind: 'request-header',
+        header: {
+          seq: 2,
+          time: 2,
+          prompt: initial,
+          change: { seq: 2, time: 2, kind: 'initial' },
+          location: { kind: 'session' },
+        },
+      }),
+      contribution('assistant:1', 3, {
+        kind: 'assistant',
+        partial: null,
+        request: assistantRequest(3, 1),
+      }),
+      contribution('header:change', 5, {
+        kind: 'request-header',
+        header: {
+          seq: 5,
+          time: 5,
+          prompt: changed,
+          change: { seq: 5, time: 5, kind: 'system', previous: initial },
+          location: stepLocation(1, 2),
+        },
+      }),
+      contribution('header:series', 6, {
+        kind: 'request-header',
+        header: {
+          seq: 6,
+          time: 6,
+          prompt: changed,
+          location: stepLocation(1, 2),
+        },
+      }),
+      contribution('assistant:2', 7, {
+        kind: 'assistant',
+        partial: null,
+        request: assistantRequest(7, 2),
+      }),
+    ]
+
+    const snapshot = new TrajectorySnapshotBuilder().replace({ nodes })
+
+    expect(snapshot.requests.map(request => request.purpose === 'assistant'
+      ? request.prompt?.system
+      : undefined)).toEqual(['initial prompt', 'changed prompt'])
+    expect(snapshot.requests.map(request => request.purpose === 'assistant'
+      ? request.promptChange?.seq
+      : undefined)).toEqual([2, 5])
+  })
+
   it('indexes exact step headers and the active tool schema without backward scans', () => {
     const basePrompt = {
       config: { provider: 'test', model: 'base' },
@@ -160,7 +222,6 @@ describe('TrajectorySnapshotBuilder', () => {
           turn: 1,
           step: 2,
           time: 7,
-          callView: null,
           subCalls: [],
         },
       }),
@@ -186,6 +247,7 @@ describe('TrajectorySnapshotBuilder', () => {
         turn: 1,
         time: 5,
         error: 'turn failed',
+        errorCode: 'AUTH',
       }),
       contribution('compact:10', 10, {
         kind: 'compaction',
@@ -203,7 +265,9 @@ describe('TrajectorySnapshotBuilder', () => {
 
     expect(snapshot.requests).toMatchObject([
       { purpose: 'assistant', step: 1, status: 'complete' },
-      { purpose: 'assistant', step: 2, status: 'error', error: 'turn failed' },
+      {
+        purpose: 'assistant', step: 2, status: 'error', error: 'turn failed', errorCode: 'AUTH',
+      },
       { purpose: 'compaction', startSeq: 10, status: 'error', completedAt: 16 },
       { purpose: 'compaction', startSeq: 12, status: 'error', completedAt: 14 },
     ])

@@ -160,6 +160,78 @@ describe('SessionPreparations inspection', () => {
   })
 })
 
+describe('SessionPreparations borrowing', () => {
+  it('returns a detached lease when loading invalidates its own entry', async () => {
+    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const id = SessionId('borrow-invalidated-load')
+    const source = prepared(id)
+
+    const lease = await preparations.borrow(id, () => {
+      preparations.invalidate(id)
+      return Promise.resolve(source)
+    })
+
+    expect(lease.source).toBe(source)
+    expect(preparations.has(id)).toBe(false)
+    expect(() => { lease[Symbol.dispose]() }).not.toThrow()
+  })
+
+  it('releases pins after cancellation while loading and after readiness', async () => {
+    const preparations = new SessionPreparations<PreparedSource, string>(1)
+    const loadingId = SessionId('borrow-cancelled-loading')
+    const loading = Promise.withResolvers<PreparedSource>()
+    const loadingAbort = new AbortController()
+    const pending = preparations.borrow(loadingId, () => loading.promise, loadingAbort.signal)
+    loadingAbort.abort(new Error('cancelled while loading'))
+    await expect(pending).rejects.toThrow('cancelled while loading')
+    loading.resolve(prepared(loadingId))
+    await loading.promise
+    await Promise.resolve()
+
+    const readyId = SessionId('borrow-cancelled-ready')
+    const ready = prepared(readyId)
+    await preparations.inspect(readyId, () => Promise.resolve(ready))
+    const readyAbort = new AbortController()
+    readyAbort.abort(new Error('cancelled while ready'))
+    await expect(preparations.borrow(readyId, () => Promise.resolve(ready), readyAbort.signal))
+      .rejects.toThrow('cancelled while ready')
+
+    await preparations.inspect(SessionId('borrow-eviction'), () => Promise.resolve(prepared('borrow-eviction')))
+    expect(preparations.has(loadingId)).toBe(false)
+  })
+
+  it('makes borrowed lease disposal idempotent across ready, invalidated, and reserved entries', async () => {
+    const preparations = new SessionPreparations<PreparedSource, string>(3)
+
+    const ready = prepared('borrow-ready-release')
+    const readyLease = await preparations.borrow(ready.session.id, () => Promise.resolve(ready))
+    readyLease[Symbol.dispose]()
+    readyLease[Symbol.dispose]()
+
+    const invalidated = prepared('borrow-invalidated-release')
+    const invalidatedLease = await preparations.borrow(
+      invalidated.session.id,
+      () => Promise.resolve(invalidated),
+    )
+    preparations.invalidate(invalidated.session.id)
+    invalidatedLease[Symbol.dispose]()
+
+    const reserved = prepared('borrow-reserved-release')
+    const reservation = await preparations.reserve(
+      reserved.session.id,
+      () => Promise.resolve(reserved),
+      committed,
+    )
+    expect(reservation).toBeDefined()
+    const reservedLease = await preparations.borrow(
+      reserved.session.id,
+      () => Promise.resolve(prepared('unused')),
+    )
+    reservedLease[Symbol.dispose]()
+    preparations.release(reservation!, false)
+  })
+})
+
 describe('SessionPreparations reservation', () => {
   it('waits for an existing reservation, republishes the exact Session, and attaches once', async () => {
     const preparations = new SessionPreparations<PreparedSource, string>(2)

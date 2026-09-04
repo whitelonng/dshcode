@@ -38,6 +38,30 @@ export function recordKeyFor(providerId: string): CredentialKey {
 }
 
 /**
+ * The JSON image of one grant payload: plain objects lose their
+ * explicitly-undefined members and array entries JSON cannot hold become
+ * null, exactly as `JSON.stringify` would render them. pi-ai credentials
+ * idiomatically carry optional members as explicit `undefined` (a github.com
+ * Copilot grant holds `enterpriseUrl: undefined`), which the credential
+ * store's strict validator refuses as unrepresentable. Everything else —
+ * non-finite numbers and foreign prototypes included — passes through
+ * untouched, so a genuinely unstorable value still fails loud at the store.
+ * @param value - the value to render.
+ * @returns the value's JSON image.
+ */
+function jsonImage(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(entry => entry === undefined ? null : jsonImage(entry))
+  if (typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+    const image: Record<string, unknown> = {}
+    for (const [key, member] of Object.entries(value)) {
+      if (member !== undefined) image[key] = jsonImage(member)
+    }
+    return image
+  }
+  return value
+}
+
+/**
  * Translate a stored record into the credential pi-ai expects.
  *
  * An `api-key` record is structural on both sides, so it is rebuilt field by
@@ -72,7 +96,7 @@ function toRecord(credential: Credential): CredentialRecord {
       ...credential.env === undefined ? {} : { env: { ...credential.env } },
     }
   }
-  return { kind: 'grant', payload: credential }
+  return { kind: 'grant', payload: jsonImage(credential) }
 }
 
 /**

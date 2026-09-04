@@ -32,7 +32,7 @@ Status: implemented
 
 ### Persona 作为 order-0 section
 
-`dsh-system-prompt` 拥有 order 为 `-100` 的 `harness:identity` 和 order 为 0 的配置 `deployment:persona`，因此两者在循环被替换时仍然存活。提示词渲染只有一条路径 `renderPrompt(assembly)`，已路由请求 header 因此会记录准确的提示词，稍后由 `ctx.tokenMeter` 为压缩（compaction）压力回放。agent 作用域的 `deployment:persona` 遮蔽全局默认值，允许 subagent 提供方在发布前安装 persona。约定的 order 区间为：identity `-100`、persona `0`、工具指导 `100–199`。
+`dsh-system-prompt` 拥有 first-party order 为 `-1000` 的 `harness:identity` 和 order 为 0 的配置 `deployment:persona`，因此两者在循环被替换时仍然存活。提示词渲染只有一条路径 `renderPrompt(assembly)`，已路由请求 header 因此会记录准确的提示词，稍后由 `ctx.tokenMeter` 为压缩（compaction）压力回放。agent 作用域的 `deployment:persona` 遮蔽全局默认值，允许 subagent 提供方在发布前安装 persona。[first-party 顺序分配](2026-08-25-sparse-first-party-prompt-section-orders.zh.md)规定身份、策略、工具指导、生成协议和最终输出义务的稀疏具名位置。
 
 ### 工具指导归属
 

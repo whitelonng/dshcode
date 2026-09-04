@@ -10,9 +10,9 @@
 
 本文介绍 DeepSeek Harness 整体架构，它是 **DeepSeek Code** 的底层基座。微内核设计讨论中确立了核心设计准则：**一切皆插件**。内核刻意做得极精简，仅包含少量抽象服务，外加一个实体循环插件 `dsh-agent-loop`。所有产品功能均基于本文定义的扩展接口开发为独立插件，无需改动主循环逻辑。
 
-> Dependency rule: extension plugins depend on interfaces, never on `dsh-agent-loop` (the loop is swappable); the sanctioned exception is the composition bundle `dsh-agent-spine-demo`, whose job is assembling the concrete spine.
+> Dependency rule: extension plugins depend on interfaces, never on `dsh-agent-loop` (the loop is swappable); composition bundles such as `dsh-base` and `dsh-sdk-minimal` may assemble the concrete loop.
 
-依赖约束规范：各类扩展插件仅依赖抽象接口，严禁直接依赖 `dsh-agent-loop`（该主循环支持替换实现）；唯一允许的特例是组合包 `dsh-agent-spine-demo`，它的职责是组装整套实体主干。
+依赖约束规范：各类扩展插件仅依赖抽象接口，严禁直接依赖 `dsh-agent-loop`（该主循环支持替换实现）；`dsh-base` 与 `dsh-sdk-minimal` 等组合包可以组装具体循环。
 
 > This document covers **behavior**; type definitions live in [subsystems/](../subsystems/core.md), the per-event/service reference lives in the generated regions of [subsystems/](../subsystems/core.md), and package contracts in the package READMEs state each package's required configuration and behavior ([map](../../packages/README.md)).
 

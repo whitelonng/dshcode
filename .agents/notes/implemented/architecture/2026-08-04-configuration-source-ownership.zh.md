@@ -41,7 +41,7 @@ inherited process environment      (read-only, wins)
 
 继承环境优先，因为 `DEEPSEEK_API_KEY=… dsh`、CI 机密与容器 `-e` 是运维必须能按次施加、且无需改动机器状态的那一种覆盖；而它无法从进程内部修改，就必须*可见地*只读。配置本应只携带*引用*——解析哪个名字——该名字本身遵循上面的非机密顺序。
 
-**harness 被启动于其中的项目默认可信，且不做询问。** 一个 checkout 可以携带自己的 endpoint、自己的普通变量和自己的密钥；密钥排在受管存储之下，因此通过 Models 页存下的密钥绝不会被 checkout 中恰好带有的那一个顶掉。`LaunchEnvironmentSnapshot.getFrom(name, sources)` 仍然只搜索调用方点名的层，省略某层仍是拒绝而不是降级——该机制是为「某一层必须不可达」的那些决策准备的，而项目层今天不在其列。
+**harness 被启动于其中的项目默认可信，且不做询问。** 一个 checkout 可以携带自己的 endpoint、自己的普通变量和自己的密钥；密钥排在受管存储之下，因此通过 Models 页存下的密钥绝不会被 checkout 中恰好带有的那一个顶掉。`LaunchEnvironmentSnapshot.getFrom(name, sources)` 仍然只搜索调用方点名的层，省略某层仍是拒绝而不是降级——该机制供要求某一层不可达的决策使用；本决策包含项目层。
 
 **信任不延伸到改变 harness 本身。** `loadLayeredEnv` 会在加载时、且在物化任何内容之前，拒绝任何设置了下列变量的 `.env`：决定进程如何启动的（`PATH`、`SHELL`、`NODE_OPTIONS`、`LD_PRELOAD`）、决定由哪个环境程序处理一项操作的（`EDITOR`、`PAGER`、`BROWSER`）、决定运行时在执行被要求运行的程序之前先执行哪些代码的（`BASH_ENV`、`PERL5OPT`、`PYTHONSTARTUP`、`RUBYOPT`、`JAVA_TOOL_OPTIONS`、Git 的钩子命令）、决定模型可见指令从哪里加载的（整个 `DSH_*` 命名空间、`HOME`、`XDG_*`），以及决定网络如何访问以及如何建立信任的（proxy 与 CA 变量）。匹配不区分大小写，因此 `https_proxy` 不是绕过手段。
 

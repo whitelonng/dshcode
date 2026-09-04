@@ -1,21 +1,79 @@
+---
+description: "Attachment presentation for the conversation UI: draft-image rail, document drop target, history-image gallery, and original-image lightbox; for users and maintainers of the Web attachment experience."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-ui-attachment
 
 English | [中文](README.zh.md)
 
-Dynamic attachment presentation plugin for the conversation UI. It waits for the conversation package's `conversation.input.attachments` and `conversation.message.images` declarations through `ctx.slots.inject`, then registers the composer draft-image rail, document drop target, chat-history image gallery, and original-image lightbox. The conversation slot owner supplies attachment data, image loading, callbacks, and its namespace translator; presentation components remain pure props and are not exported from the package entry.
+## Summary
 
-## Attachment rail
+This package renders everything the conversation UI shows about attachments: pending draft images under the composer, a full-viewport drop invitation, durable images in Chat and Trajectory, and a lightbox for the original image. It is a pure presentation layer — attachment data, image loading, and callbacks come from the conversation package through declared slots. Choose it for the DeepSeek Chat-style image experience; non-image files have no surface here.
 
-`AttachmentRail` renders pending draft images as fixed 64px thumbnails (16px radius) in one horizontally scrolling row whose scrollbar stays hidden. Overflow is announced by circular edge arrows instead: each pages one viewport (minus one card of context, floored at 200px) with smooth scrolling (instant under `prefers-reduced-motion: reduce`), and arrow visibility is recomputed from scroll geometry on scroll, item-count changes, and rail size changes (a ResizeObserver on the rail element, so sidebar and panel resizes count, not only window resizes). The rail scrolls horizontally only: a non-passive listener consumes every wheel tick with a vertical component — nothing scrolls the conversation behind the composer — converting a pure vertical wheel to a horizontal step (LINE/PAGE deltas normalized to pixels, per-tick travel clamped to 60px) and keeping a diagonal pan's horizontal intent, while purely horizontal pans stay native. A newly added item is revealed at the rail's end; removal keeps the scroll position, and a rail that mounts over an already-populated draft keeps its start position. Each thumbnail opens its original through `onOpen` on a single click, and its remove control sits inside the card's top-right corner, hidden until the card is hovered or the control keyboard-focused; coarse-pointer (touch) surfaces show it permanently because they have no hover. The owner decides mounting and renders the rail only while items exist.
+## Table of Contents
 
-## Message images and the lightbox
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-`MessageImage` renders one durable history image, loading a session-authorized URL through the owner's `ImageLoader`; a failed load renders an explicit retry control, and a settled load answers a single click by opening `ImageLightbox` (clicks during loading are ignored). Sizing follows DeepSeek Chat: a message's lone image (`variant="single"`) renders at 240px on its longer edge with the displayed aspect ratio clamped to [0.25, 4] — the overflow is cropped by `object-fit: cover`, anchored to the top of very tall images and the left of very wide ones — and never upscales past its natural size; an image among several (`variant="tile"`) is a fixed 64px square. `ImageGallery` wraps a message's images in one aligned wrapping flex group (`end` for user messages, `start` for assistant messages), picks the variant from the image count, and renders nothing for an empty list. `ImageLightbox` is a document-level modal preview over the shared dialog mask (`--dsw-alias-bg-mask-1` + `--dsw-mask-blur`, painted on its own layer so the blur never touches the previewed image) that closes on Escape, a mask press, or its close control, and restores focus to its opener on unmount.
+-----
 
-## Drop overlay
+<a id="use-this-package"></a>
+## Use this package
 
-`DropOverlay` is the full-viewport invitation shown while a file drag is over the page: illustration, title, and a limits line while drops are accepted (`disabled` swaps the blocked illustration and hides the limits line). The layer is pointer-inert — the owner's document-level drag listeners keep the enter/leave count and decide accept/reject; the overlay only shows state. It portals to the body like the lightbox.
+Mount this plugin alongside [`ui-conversation`](../ui-conversation/README.md); it waits for the conversation package's slot declarations and registers its surfaces into them. Users then see the draft-image rail with per-image remove and click-to-open, the drop overlay with its limits line, message images sized by count, and the Escape/mask/close lightbox.
 
+### Draft images
+
+A draft image shows as a fixed 64px thumbnail in one horizontally scrolling row; edge arrows page the rail when overflow hides items, and the scrollbar stays hidden. A newly added item is revealed at the rail's end, removal keeps the scroll position, and a single click opens the original through the owner's `onOpen`.
+
+### Message images and the lightbox
+
+A message's lone image renders at 240px on its longer edge (aspect clamped to [0.25, 4], never upscaled); images among several render as fixed 64px squares. A loaded image opens the document-level lightbox on click; a failed load shows a retry control instead. The lightbox closes on Escape, a mask press, or its close control, and restores focus to its opener.
+
+### Drop overlay
+
+While a file drag is over the page, the full-viewport overlay announces the drop: illustration, title, and a limits line when drops are accepted. The overlay only shows state — the owner's document-level listeners decide accept or reject.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+The plugin waits for `conversation.input.attachments`, `conversation.message.images`, and `conversation.trajectory.images` through `ctx.slots.inject`. It then registers the composer rail, document drop target, shared history gallery for Chat and Trajectory, and original-image lightbox. The presentation components are pure props: the conversation slot owner supplies attachment data, image loading, callbacks, and the locale translator; the package entry exports no components.
+
+| File | Role |
+|---|---|
+| [`src/client/ComposerAttachments.tsx`](src/client/ComposerAttachments.tsx) | Draft-image rail + drop overlay assembly |
+| [`src/AttachmentRail.tsx`](src/AttachmentRail.tsx) | Scrolling thumbnail rail, wheel translation, edge arrows |
+| [`src/client/MessageImages.tsx`](src/client/MessageImages.tsx) | Per-message gallery + lightbox assembly |
+| [`src/MessageImage.tsx`](src/MessageImage.tsx) | Single image sizing, load/retry, click-to-open; local submission-echo previews render their object URL directly |
+| [`src/ImageLightbox.tsx`](src/ImageLightbox.tsx) | Document-level modal preview over the shared mask |
+| [`src/DropOverlay.tsx`](src/DropOverlay.tsx) | Pointer-inert drag invitation portal |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the attachment surface is not enough. They move from the slots this package fills to the conversation shell that owns the input flow.
+
+- [ui-conversation](../ui-conversation/README.md) — declares the attachment slots and owns the composer and image intake.
+- [Web client architecture](../../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md) — how browser plugin rows load and register slots.
+- [Client package map](../README.md) — adjacent browser UI packages.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 None, as the plugin only renders attachment state supplied by the conversation UI and contributes no model-visible input.
@@ -26,6 +84,23 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **Images only** — non-image files have no rail card or history renderer yet; DeepSeek Chat-style file cards and upload-progress states wait until the composer accepts non-image attachments.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define the current attachment surface. They are package constraints, not a general image-viewer comparison or a task backlog.
+
+- **Images only** — non-image files have no rail card or history renderer yet; DeepSeek Chat-style file cards and upload progress wait until the composer accepts non-image attachments.
 - **No zoom or download in the lightbox** — the preview renders the original at fit-to-viewport size only.
 - **The lightbox does not trap focus** — it sets `aria-modal` and restores focus on close, but Tab can reach the page behind it.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published. The package contributes only effect-owned slot entries; the slot registry owns their lifecycle and validates their declarations.

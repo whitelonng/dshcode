@@ -28,7 +28,7 @@ A committed stub is never rewritten and never re-enters a later compaction regio
 
 ### The state checkpoint
 
-One mutable working-memory document (at most one; zero before the first pass), positioned after all stubs and before the retained tail. Each pass rewrites it from the previous state plus this pass's staled content — O(previous + new), under the merge-don't-restate rule already in the summarization prompt — covering decisions, current state, constraints, and next steps. It carries its own footer and a size cap at the scale of today's summary.
+One mutable working-memory document (at most one; zero before the first pass), positioned after all stubs and before the retained tail. Each pass rewrites it from the previous state plus this pass's staled content — O(previous + new), under the merge-don't-restate rule already in the summarization prompt — covering decisions, current state, constraints, and next steps. It carries its own footer and a size cap at the scale of the existing summary.
 
 An inflation guard bounds the whole pass: if the post-compaction size is not strictly below the pre-compaction size, nothing commits and the turn proceeds; the attempt defers until more stale history accumulates. The guard compares one metric on both sides — provider-reported usage from the request path, falling back to the character estimator on both sides.
 
@@ -46,11 +46,11 @@ A new package `@deepseek-ai/dsh-tool-recall` (consumer-only, over the `dsh-sessi
 - `history_read(checkpoint, offset?)` — renders the shadowed span of any checkpoint in the log, including superseded ones, as `User:`/`Assistant:`/`Tool result:` transcript, paginated by a configured budget with a continuation cursor.
 - `history_search(query, checkpoint?, limit?)` — case-insensitive literal scan over every shadowed span; returns snippets with checkpoint ids and coverage metadata (`scanned`/`matched`/`truncated`). The zero-match hint notes the scan is literal and points at direct `history_read` of a plausible checkpoint.
 
-Both read `exec.agent.session.events` (the tool-todo access pattern; non-agent callers rejected), render only surface-type message events, and return ordinary `tool/result`s — recalled bytes land at the context tail, logged, so reconstructability holds with no special casing. There is no new storage and no sidecar index: the session log stores the content, `compaction/summary.shadowedRange` and `shadowedSeqs` identify what each checkpoint replaced, and the tools read both. The tool schemas and the package's one system-prompt section are static strings; checkpoint ids reach the model only through footers. The transcript renderer moves from `compaction-basic` into `dsh-session`, shared by summarizer and tools.
+Both read `exec.agent.session.snapshotEvents()` (the tool-todo access pattern; non-agent callers rejected), render only surface-type message events, and return ordinary `tool/result`s — recalled bytes land at the context tail, logged, so reconstructability holds with no special casing. There is no new storage and no sidecar index: the session log stores the content, `compaction/summary.shadowedRange` and `shadowedSeqs` identify what each checkpoint replaced, and the tools read both. The tool schemas and the package's one system-prompt section are static strings; checkpoint ids reach the model only through footers. The transcript renderer moves from `compaction-basic` into `dsh-session`, shared by summarizer and tools.
 
 ### Cache and cost
 
-The request prefix after a pass is `[system][stubs…][state][tail]`. Frozen stubs are byte-stable across passes, so the miss begins at the token replacing the previous state checkpoint and stays O(new chunks + state + tail) — against position zero today. Recall output lands at the tail, leaving the prefix untouched. Per-pass summarize input is roughly twice today's plus an m·S background term, bounded by a `chunkTokens` floor (a small multiple of the state cap) and a validated `stubTokens`/`chunkTokens` ratio ceiling; a shared-prefix input layout (preamble, then the byte-identical pass-start state, slice content in the tail) lets sibling calls earn cached-rate rereads.
+The request prefix after a pass is `[system][stubs…][state][tail]`. Frozen stubs are byte-stable across passes, so the miss begins at the token replacing the previous state checkpoint and stays O(new chunks + state + tail) — instead of the baseline's position-zero miss. Recall output lands at the tail, leaving the prefix untouched. Per-pass summarize input is roughly twice the baseline input plus an m·S background term, bounded by a `chunkTokens` floor (a small multiple of the state cap) and a validated `stubTokens`/`chunkTokens` ratio ceiling; a shared-prefix input layout (preamble, then the byte-identical pass-start state, slice content in the tail) lets sibling calls earn cached-rate rereads.
 
 ### Packaging
 
@@ -78,7 +78,7 @@ Deferred until observation calls for them:
 
 ## Alternatives considered
 
-- **Staged delivery** (ship recall tools alone over today's backend; gate the checkpoint split on observed recall usage) — rejected: untrained models under-use any new tool, so the gate would measure training absence rather than design value, while the training side needs the complete mechanism to build environments against; the pre-release window is when persisted-format changes are cheapest; and the cache economics are first-party knowledge, not a hypothesis awaiting telemetry. The implementation still lands as stacked PRs with the recall tools first — construction order, not a decision gate.
+- **Staged delivery** (ship recall tools alone over the existing backend; gate the checkpoint split on observed recall usage) — rejected: untrained models under-use any new tool, so the gate would measure training absence rather than design value, while the training side needs the complete mechanism to build environments against; the pre-release window is when persisted-format changes are cheapest; and the cache economics are first-party knowledge, not a hypothesis awaiting telemetry. The mechanism still introduces the recall tools before the checkpoint split; that is construction order, not a decision gate.
 - **All-frozen full-size summaries, no state checkpoint** — rejected: unbounded permanent-prefix growth, self-accelerating toward thrashing, with nothing left to re-prioritize.
 - **Pure stubs, no state checkpoint** — rejected: presumes the model knows what it is missing; fails on unknown unknowns.
 - **LLM aging/consolidation of frozen chunks** — rejected as a routine mechanism: summary-of-summary loss and frozen-prefix churn; the code-only rollup is its surviving form, deferred.
@@ -102,9 +102,9 @@ Deferred until observation calls for them:
 
 ## Risks
 
-- **Recall is a learned behavior**: untrained models will under-use it, and the bench report exists to track the gap while training closes it. Until then the state checkpoint keeps the floor at today's summary quality.
+- **Recall is a learned behavior**: untrained models will under-use it, and the bench report exists to track the gap while training closes it. Until then the state checkpoint keeps the floor at the existing summary quality.
 - **Unknown unknowns remain**: a detail absent from summaries and keywords draws no recall. Recall converts "unreachable even when suspected" into "reachable when suspected".
 - **The stub directory occupies attention**: dozens of stable index cards per request may dilute focus; the bench measurement in the acceptance criteria tracks it against `compaction-basic`.
-- **Cost**: per-pass summarize input is roughly twice today's; short sessions sit near today's cost and quality, and the design pays off with session length.
+- **Cost**: per-pass summarize input is roughly twice the baseline input; short sessions sit near the baseline cost and quality, and the design pays off with session length.
 - **State drift and division-of-labor leakage** are observable through the handoff probe and stub review; their counters are specified follow-ups.
 - **Two backends** are a maintenance burden; the seam contract and the shared recall consumer bound it, and the bench comparison decides the default over time.

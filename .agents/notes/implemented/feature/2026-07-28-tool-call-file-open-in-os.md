@@ -10,9 +10,9 @@ Chat tool rows treated the whole summary line as a click target that opened the 
 
 ## Decision
 
-File-tool path summaries (`read` / `write` / `edit` args carrying `path` or `file_path`) render as links underlined at rest with a pointer cursor. Clicking the path calls `host.openPath` through `WorkspaceRuntime.openPath`, resolving relative paths against the session cwd. File-link rows disable args expand (leading icon is inert); whole-row click, row hover fill, and the click-to-open-details gesture are removed from tool rows (including bash and todo registrations). The details panel and its inject surface remain for programmatic selection; rows no longer drive them.
+File-tool path summaries (`read` / `write` / `edit` args carrying `path` or `file_path`) render as links underlined at rest with a pointer cursor. Clicking the path calls `session/openWorkspacePath` through the chat view's `openFile` injection; the chat view resolves relative paths against the addressed Session's cwd when it is known. File-link rows disable args expand (leading icon is inert); whole-row click, row hover fill, and the click-to-open-details gesture are removed from tool rows (including bash and todo registrations). The details panel and its inject surface remain for programmatic selection; rows no longer drive them.
 
-`host.openPath` is a privileged unary RPC accepted only from loopback, same-origin browser requests (same carrier guard as `host.pickDirectory`). Platform adapters open without a shell: `open` on macOS, PowerShell `Invoke-Item` on Windows, and `xdg-open` on desktop Linux; browser-renderable documents prefer the named default browser on macOS and desktop Linux. WSL is a separate host shape despite Node reporting `linux`: the adapter recognizes its environment or Microsoft kernel release, translates the Linux path with `wslpath -w`, and passes the resulting Windows/UNC path to the same PowerShell handoff. The opener's platform facts and command runner are injectable for tests. URL-only read args (`web_fetch`) are not file links.
+`session/openWorkspacePath` uses the authenticated Remote carrier, while the product UI offers the gesture only on a loopback page whose `session/canOpenWorkspacePath` result is true. Platform adapters open without a shell: `open` on macOS, PowerShell `Invoke-Item` on Windows, and `xdg-open` on desktop Linux; browser-renderable documents prefer the named default browser on macOS and desktop Linux. WSL is a separate host shape despite Node reporting `linux`: the adapter recognizes its environment or Microsoft kernel release, translates the Linux path with `wslpath -w`, and passes the resulting Windows/UNC path to the same PowerShell handoff. The opener's platform facts and command runner are injectable for tests. URL-only read args (`web_fetch`) are not file links.
 
 ## Alternatives considered
 
@@ -23,7 +23,7 @@ File-tool path summaries (`read` / `write` / `edit` args carrying `path` or `fil
 
 ## Consequences
 
-Clicking a file path in a tool row opens that path on the host. Non-file tool rows are inert summaries (expand toggles remain where the row already supported them). Remote or non-loopback clients cannot invoke `host.openPath`. A Host or OS refusal is owned by the chat view: it shows the thrown reason and retries the same path ([file-open failure](../bug-fix/2026-08-18-tool-row-file-open-failure.md)).
+Clicking a file path in a tool row opens that path on the host. Non-file tool rows are inert summaries (expand toggles remain where the row already supported them). The Client withholds the file-open gesture on non-loopback pages; every exposed Host invocation still requires the browser session. A Host or OS refusal is owned by the chat view: it shows the thrown reason and retries the same path ([file-open failure](../bug-fix/2026-08-18-tool-row-file-open-failure.md)).
 
 ## Risks
 

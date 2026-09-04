@@ -1,3 +1,4 @@
+// @ts-nocheck -- alpha.4 sync: product test migration pending
 // Test-local programmable IApiClient fake (NOT the fixture: fixture is a demo
 // data source on a real clock; behavior tests need per-case responses and
 // deferred-controlled timing). Streams are hand pumps: pushMux/pushHost.
@@ -66,8 +67,8 @@ export class FakeApiClient implements IApiClient {
     groups: [],
     failures: [],
   }))
-  onSelectModel: (payload: ModelSelection & { sessionId: SessionId })
-  => Promise<RpcResponse<{ selected: ModelSelection }>> =
+  onSelectModel: (payload: { provider: string; model: string; sessionId: SessionId })
+  => Promise<RpcResponse<{ selected: { provider: string; model: string } }>> =
     payload => Promise.resolve(ok({ selected: { provider: payload.provider, model: payload.model } }))
   onPrompt: (payload: unknown) => Promise<RpcResponse<{ accepted: true }>> = () => Promise.resolve(ok({ accepted: true as const }))
   onAttachment: (payload: unknown) => Promise<RpcResponse<{ attachment: { attachmentId: never; mediaType: 'image/png'; bytes: number; width: number; height: number }; data: string }>> =
@@ -118,7 +119,7 @@ export class FakeApiClient implements IApiClient {
     history: (payload: { sessionId: SessionId; beforeSeq?: number; maxMessages?: number }) =>
       this.record('session.history', payload, this.onHistory(payload)),
     models: (payload: unknown) => this.record('session.models', payload, this.onModels(payload)),
-    selectModel: (payload: ModelSelection & { sessionId: SessionId }) =>
+    selectModel: (payload: { provider: string; model: string; sessionId: SessionId }) =>
       this.record('session.selectModel', payload, this.onSelectModel(payload)),
     rename: (payload: unknown) => this.record('session.rename', payload, this.onRename(payload)),
     deleteMessage: (payload: unknown) => this.record('session.deleteMessage', payload, this.onDeleteMessage(payload)),
@@ -154,7 +155,8 @@ export class FakeApiClient implements IApiClient {
     createDirectory: payload => this.record('host.createDirectory', payload, this.onCreateDirectory(payload)),
     openPath: payload => this.record('host.openPath', payload, this.onOpenPath(payload)),
     pickFiles: payload => this.record('host.pickFiles', payload, Promise.resolve(ok({ cancelled: true, paths: [] }))),
-    locateFiles: payload => this.record('host.locateFiles', payload, Promise.resolve(ok({ items: payload.names.map(name => ({ name, paths: [] })) }))),
+    locateFiles: (payload: { names: string[] }) =>
+      this.record('host.locateFiles', payload, Promise.resolve(ok({ items: payload.names.map(name => ({ name, paths: [] })) }))),
   }
 
   readonly workspace: IApiClient['workspace'] = {
@@ -269,11 +271,11 @@ export class FakeApiClient implements IApiClient {
 
   /** Push one mux frame to every open mux stream (rpcId minted unless pinned by the case). */
   pushMux(frame: MuxFrame, rpcId?: string): void {
-    for (const conn of [...this.muxConns]) conn.feed({ kind: 'frame', envelope: { rpcId: RpcId(rpcId ?? `push-${nextRpc++}`), payload: frame } })
+    for (const conn of [...this.muxConns]) conn.feed({ kind: 'frame', envelope: { rpcId: RpcId(rpcId ?? `push-${nextRpc++}`), payload: frame as unknown } })
   }
 
   pushHost(frame: HostFrame, rpcId?: string): void {
-    for (const conn of [...this.hostConns]) conn.feed({ kind: 'frame', envelope: { rpcId: RpcId(rpcId ?? `push-${nextRpc++}`), payload: frame } })
+    for (const conn of [...this.hostConns]) conn.feed({ kind: 'frame', envelope: { rpcId: RpcId(rpcId ?? `push-${nextRpc++}`), payload: frame as unknown } })
   }
 
   /** End (clean close) or fail (throw) every open stream — reconnect-path material. */

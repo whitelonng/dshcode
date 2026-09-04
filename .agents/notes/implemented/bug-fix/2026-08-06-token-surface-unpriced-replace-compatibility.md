@@ -26,7 +26,7 @@ Both projections share the one fold, so neither gains state fields nor bumps its
 
 ## Consequences
 
-An unpriced replacement holds the total still instead of shrinking it, so the compacted-away span stays counted: `contextBreakdown.messageTokens` retains the overcount, and `contextPressure.projectedTokens` overestimates occupancy only until the next usage sample re-anchors it, because that figure tracks movement since the sample rather than the absolute level. The error direction is safe — overestimating occupancy at worst invites an earlier compaction.
+An unpriced replacement holds the total still instead of shrinking it, so the compacted-away span stays counted: `contextBreakdown.messageTokens` retains the overcount, and `contextPressure.projectedTokens` overestimates occupancy only until the next usage sample re-anchors it, because that figure tracks movement since the sample rather than the absolute level. Overestimating occupancy can only trigger an earlier compaction.
 
 The loud failure survives where it still means something: a range-mismatched adjacent claim is a current producer bug and still throws.
 

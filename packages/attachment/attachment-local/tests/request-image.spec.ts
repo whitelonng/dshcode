@@ -5,7 +5,7 @@ import { Context } from '@deepseek-ai/cordis'
 import sharp from 'sharp'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CompressionLimiter } from '../src/compression-limiter.ts'
-import LocalAttachmentStore, { requestImageDimensions } from '../src/index.ts'
+import LocalAttachmentStore from '../src/index.ts'
 
 const homes: string[] = []
 
@@ -42,34 +42,6 @@ afterEach(async () => {
   await Promise.all(homes.splice(0).map(home => rm(home, { recursive: true, force: true })))
 })
 
-describe('request image dimensions', () => {
-  it.each([
-    [4096, 4096, 800, 800],
-    [4096, 2048, 1130, 565],
-    [3840, 2160, 1066, 600],
-    [320, 240, 320, 240],
-  ])('projects %sx%s under 640,000 pixels as %sx%s', (width, height, expectedWidth, expectedHeight) => {
-    const projected = requestImageDimensions(width, height, 640_000)
-    expect(projected).toEqual({
-      width: expectedWidth,
-      height: expectedHeight,
-    })
-    expect(projected.width * projected.height).toBeLessThanOrEqual(640_000)
-  })
-
-  it('projects a portrait within the same total-pixel budget', () => {
-    const projected = requestImageDimensions(2160, 3840, 640_000)
-
-    expect(projected).toEqual({ width: 600, height: 1066 })
-    expect(projected.width * projected.height).toBeLessThanOrEqual(640_000)
-  })
-
-  it('rounds a portrait inward when integer aspect rounding crosses the pixel cap', () => {
-    expect(requestImageDimensions(2, 4, 5)).toEqual({ width: 1, height: 2 })
-  })
-
-})
-
 describe('local request-image cache', () => {
   it('passes through an in-budget attachment and composes ordered request reads', async () => {
     const attachments = await store()
@@ -97,12 +69,15 @@ describe('local request-image cache', () => {
       .rejects.toThrow('Image request maxBytes must be a positive integer')
   })
 
-  it('refuses a one-pixel request that cannot meet the encoded-byte budget', async () => {
+  it('keeps the smallest ladder output when the encoded-byte target is unreachable', async () => {
     const attachments = await store()
     const attachment = await attachments.saveImage({ data: await image(1, 1), mediaType: 'image/png' })
 
-    await expect(attachments.readImageRequest(attachment, { maxPixels: 1, maxBytes: 1 }))
-      .rejects.toMatchObject({ code: 'IMAGE_TOO_LARGE' })
+    const request = await attachments.readImageRequest(attachment, { maxPixels: 1, maxBytes: 1 })
+
+    expect(request.mediaType).toBe('image/jpeg')
+    expect(request.bytes).toBeGreaterThan(1)
+    expect(request).toMatchObject({ width: 1, height: 1 })
   })
 
   it('regenerates invalid, oversized, incompatible, or mismatched cached variants', async () => {
@@ -171,7 +146,7 @@ describe('local request-image cache', () => {
     expect(low.width * low.height).toBeLessThanOrEqual(512 * 512 + low.width)
   })
 
-  it('classifies opaque PNG pixels and preserves alpha while enforcing the request budget', async () => {
+  it('routes opaque pixels to JPEG and preserves alpha on the WebP ladder', async () => {
     const attachments = await store()
     const side = 256
     const photoPixels = new Uint8Array(side * side * 3)
@@ -204,8 +179,9 @@ describe('local request-image cache', () => {
     const alphaRequest = await attachments.readImageRequest(alpha, { maxPixels: 128 * 128, maxBytes: 4_096 })
 
     expect(photoRequest.mediaType).toBe('image/jpeg')
-    expect(alphaRequest.bytes).toBeLessThanOrEqual(4_096)
-    expect(alphaRequest.width).toBeLessThan(128)
+    expect(alphaRequest.mediaType).toBe('image/webp')
+    expect(alphaRequest.bytes).toBeGreaterThan(4_096)
+    expect(alphaRequest).toMatchObject({ width: 128, height: 128 })
     await expect(sharp(alphaRequest.data).metadata()).resolves.toMatchObject({ hasAlpha: true, depth: 'uchar', space: 'srgb' })
   })
 

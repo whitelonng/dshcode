@@ -6,7 +6,7 @@ English | [中文](2026-07-30-web-browser-snapshot-ci-gate.zh.md)
 
 ## Problem
 
-The [keyless web browser e2e lane](2026-07-24-web-gui-browser-e2e-lane.md) runs only under the local `pnpm run test:web` command, and PR CI does not compare `apps/web/tests/snapshots/**/*.expected.md`. A PR that changes user-visible web output can therefore remain green when its expected outputs are not refreshed; when any later branch explicitly runs `DSH_SNAPSHOT=refresh`, it backfills the earlier change and produces a diff unrelated to that branch. Ordinary local runs already default to read-only replay, so the gap is mandatory enforcement at the PR level, not a ban on writes in refresh mode.
+The [keyless web browser e2e lane](2026-07-24-web-gui-browser-e2e-lane.md) runs only under the local `pnpm run test:web` command, and PR CI does not compare Web expectations under `snapshots/web/` or `apps/web/tests/expected/`. A PR that changes user-visible web output can therefore remain green when its expected outputs are not refreshed; when any later branch explicitly runs `DSH_SNAPSHOT=refresh`, it backfills the earlier change and produces a diff unrelated to that branch. Ordinary local runs already default to read-only replay, so the gap is mandatory enforcement at the PR level, not a ban on writes in refresh mode.
 
 ## Decision
 

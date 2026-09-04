@@ -199,7 +199,7 @@ Exa 搜索将提供方扁平 `results[]` 的每一项映射为 `WebSearchSource`
 
 ## Fetch 请求与结果 schema
 
-`web_fetch` 的实现是一个匿名公开 HTTP(S) fetch 提供方 `http`。它从具体 URL 获取字节，应用下述基本传输卫生措施（仅 http/https、拒绝 URL 中的凭证、字节/时间上限、跨源重定向阻断），解码文本内容，并仅返回最小的模型可用结果：最终 URL、状态码、正文和截断标志。它不携带浏览器 cookie、编辑器凭证、git 凭证、内部认证令牌，也不隐式访问私有服务。（完整的 SSRF/私有网络阻断推迟——见[推迟工作](#deferred-work)。）
+`web_fetch` 的实现是一个匿名公开 HTTP(S) fetch 提供方 `http`。它从具体 URL 获取字节，解析并固定公开目的地址，应用下述传输卫生措施，解码文本内容，并仅返回最小的模型可用结果：最终 URL、状态码、正文和截断标志。它不携带浏览器 cookie、编辑器凭证、git 凭证、内部认证令牌，也不隐式访问私有服务。
 
 seam 请求比 OpenCode 的面向模型工具更小：
 
@@ -235,12 +235,14 @@ export type WebFetchBody =
 fetch 提供方的资源控制：
 
 - 仅接受 `http:` 和 `https:` URL；拒绝 URL 中的凭证。
+- 字面 IP 地址或 hostname 一次解析得到的完整结果只能包含全球可达的单播 IPv4 或 IPv6 目的地址。IPv6 解析还会发现当前 DNS64 前缀，并拒绝转换到非公开 IPv4 的 NAT64 地址。loopback、私有、link-local、运营商级 NAT、多播、保留、过渡、转换和映射到私有 IPv4 的 IPv6 地址都会被拒绝。
+- 请求通过 Undici lookup 回调保留这一组已验证地址，不会再次解析 hostname。原 hostname 仍作为 HTTP Host 与 TLS SNI 值，而 DNS rebinding 无法在验证后替换连接目的地址。
 - 强制执行最大 URL 长度、响应字节上限、解码正文字符上限、超时和重定向跳数上限。
 - Abort 信号传播到网络获取和高开销解码。
-- 仅自动跟随同源重定向；跨源重定向以 `WEB_REDIRECT_BLOCKED` 失败，要求一次新的工具调用，从而触发新的提供方/权限决策。（Claude Code 的 WebFetch 使用同样的模型——它不自动跟随跨主机重定向，而是将重定向目标返回给模型以发起新调用。）
+- 仅自动跟随同源重定向；每个跟随的跳转都会重新解析公开地址，并把自己的连接固定到解析结果。跨源重定向以 `WEB_REDIRECT_BLOCKED` 失败，要求一次新的工具调用和新的公开地址校验。（Claude Code 的 WebFetch 使用同样的模型——它不自动跟随跨主机重定向，而是将重定向目标返回给模型以发起新调用。）
 - 请求携带显式的产品 User-Agent，而非静默伪装浏览器。
 
-SSRF/私有网络防护（阻断私有、回环、链路本地、多播及其他非公开目的地，通过先 DNS 解析再验证 IP 来防御 rebinding，并在重定向的每一跳重新验证）**推迟**——见[推迟工作](#deferred-work)。在其落地之前，`web_fetch` 是一个 SSRF 原语，不得在能触达敏感内部网络目标的部署中启用。
+只要 DNS 完整解析结果中存在任一非公开地址，提供方就会拒绝整个结果，而不是静默过滤不安全成员。该 fail-closed 规则可防止连接的地址族选择或回退触及未满足公开网络策略的地址。
 
 ## 工具消费方行为
 
@@ -252,7 +254,7 @@ SSRF/私有网络防护（阻断私有、回环、链路本地、多播及其他
 
 提供方可用性变化影响执行结果和诊断信息，而非面向模型的 schema 是否存在。如果产品完全不需要 web 工具，在配置中禁用 `dsh-tool-web` 或单个 web 工具即可；如果需要 web 工具但后端配置有误，模型在执行时看到结构化的工具错误。
 
-提示词引导解释了语义分工——`web_search` 用于发现和获取当前信息，`web_fetch` 用于模型需要特定 URL 内容的场景——提示词和工具结果告诉模型用 Markdown 链接引用相关 URL。
+提示词引导解释了语义分工——`web_search` 用于发现和获取当前信息，`web_fetch` 用于模型需要特定 URL 内容的场景——提示词和工具结果告诉模型用 Markdown 链接引用相关 URL。每个成功结果都会把提供方控制的文本标记为外部不可信数据。抓取转换会移除主动内容与隐藏 HTML 内容；无法安全转换时返回固定省略标记，而非原始 HTML。
 
 面向模型的输出以文本为先，因为工具结果是 `ContentBlock[]`，但 seam 的产出保持结构化，以便 UI 展示和未来的适配器无需解析渲染后的文本。
 
@@ -308,6 +310,18 @@ SSRF/私有网络防护（阻断私有、回环、链路本地、多播及其他
 
 在 seam 层面否决。`prompt` 将 fetch 变成 LLM 摘要，并将公开 web 获取耦合到模型提供方。harness seam 应当确定性地获取和解码；`dsh-tool-web` 日后可以将摘要作为展示模式提供，而无需让 `ctx.web` 依赖 `ctx.llm`。
 
+### 验证 DNS 后调用普通 fetch
+
+否决，因为普通 fetch 在打开连接时会再次解析 hostname。攻击者可以在验证时返回公开地址，在第二次解析时返回私有地址。把已验证解析结果通过连接的 lookup 回调传入，可以在保留基于 hostname 的 HTTP 与 TLS 行为的同时关闭这一 rebinding 时间窗口。
+
+### 只阻断看起来像私网的 hostname 字符串，不固定解析地址
+
+否决，因为 hostname 语法无法确定连接目的地址：任意看似公开的名称都可能解析到 loopback、私有网段或云 metadata 地址。地址分类必须在解析后执行，连接回退可使用的每个地址都必须通过校验。
+
+### 在公开抓取前要求逐次审批
+
+已交付的 preset 不采用这一方案。公开地址校验会阻断 SSRF 目的地址，而逐次确认会打断普通浏览，却不能可靠控制公开数据出站：模型可以通过已挂载的 shell 工具访问同一公开网络。要求专门确认步骤的部署可以添加 `tools/pre-execute` 策略或禁用 `web_fetch`。
+
 ## 后果
 
 **搜索 schema 刻意精简。** Exa 和 Perplexity 都暴露了有用的提供方特有控制；只有当某个控制能以提供方无关的方式定义、且工具注册和提供方执行都能诚实遵守时，才会添加。
@@ -318,7 +332,7 @@ SSRF/私有网络防护（阻断私有、回环、链路本地、多播及其他
 
 **提供方状态可能在启动后变化。** 一个工具可能在步骤开始时组装的请求中可见，但在执行前失去其提供方。执行路径重新解析并以结构化错误失败。
 
-**Fetch 是网络边界，不仅仅是只读工具。** `web_fetch` 能触达敏感网络目标或通过 URL 外泄数据。仅交付基本传输卫生措施（仅 http/https、拒绝凭证、字节/时间上限、跨源重定向阻断）；SSRF/私有网络阻断推迟（见[推迟工作](#deferred-work)），因此在其落地之前，`web_fetch` 不得在能触达内部目标的环境中启用。
+**Fetch 是网络边界，不仅仅是只读工具。** 公开地址校验与连接固定可防止 `web_fetch` 触达非公开目的地址，但模型仍可通过公开 URL 泄露数据，抓取文本也仍是不受信任的模型输入。已交付的 `cordis`、`code` 与 `standard` preset 会在所有 sandbox 和审批模式下暴露 `web_fetch`，无需逐次确认。
 
 **大量 web 内容可能损害上下文质量。** 提供方强制执行字节/字符上限并报告 `truncated`；`tool-web` 格式化有界的模型输出，附带清晰的继续或后续引导。
 
@@ -326,13 +340,10 @@ SSRF/私有网络防护（阻断私有、回环、链路本地、多播及其他
 
 ## 推迟工作
 
-- `web_fetch` 的 SSRF/私有网络防护：阻断私有、回环、链路本地、多播及其他非公开目的地，使 `web_fetch` 不再是 SSRF 原语。正确实现不仅仅是 URL 字符串检查——需要先 DNS 解析再连接到已验证的 IP（防御 DNS rebinding/TOCTOU）、跨重定向的每跳重新验证，以及 IPv6 边缘处理（私有范围、IPv4 映射地址）。所调研的参考实现均未做 IP 级阻断（OpenCode 做前缀检查后直接 fetch；Claude Code 依赖集中式主机名黑名单加「私有 URL 会失败」的提示词），因此没有可复制的实现，且这是 harness 唯一的 SSRF 防线——值得一次专门的设计/spike。在其落地之前，`web_fetch` 只能在无法触达敏感内部目标的部署中启用。
 - `pdf` `WebFetchBody` 类别：`http` 提供方将可文本提取的 PDF 解码（尽力而为、有上限、`truncated`）为 `{ kind: 'pdf'; content; pageCount? }` 分支，`tool-web` 渲染它。这是 fetch 而非 `web_extract`——PDF 获取是具体的 HTTP 200 加确定性的本地解码，不是提供方侧对非 HTTP 资源的提取。添加它是跨 `dsh-web`（声明分支）、提供方（解码 + 将「二进制拒绝」收窄为「拒绝二进制，但可文本提取的 PDF 除外」；需要 OCR 的扫描/图片 PDF 不在范围内）和 `tool-web`（渲染）的协调变更。封闭的 `WebFetchBody` 联合类型使消费方在新分支被处理之前编译失败。
 - 提供方支撑的提取作为独立的 `web_extract` 能力，而非静默扩展 `web_fetch`。
-- 权限策略集成：权限系统现已存在（[沙箱与审批](../feature/2026-07-06-sandbox.zh.md)、[web 权限预设](../feature/2026-07-23-web-permission-and-approval.zh.md)），但只捆绑了沙箱模式与审批策略；web 权限策略仍未集成。
 - `query` 和 `maxResults` 之外的提供方无关搜索控制，待 Exa 和 Perplexity 都能诚实遵守时再添加。
 
 ## 开放问题
 
 - 产品应用包是否应在启动时探测 web 配置（当 web 被显式配置时将 `WEB_PROVIDER_CONFIGURED_MISSING`、`WEB_PROVIDER_CONFIGURED_UNAVAILABLE` 和 `WEB_PROVIDER_AMBIGUOUS` 视为致命错误），还是将配置错误留到首次执行时浮出？
-- 在已交付的权限系统（[沙箱与审批](../feature/2026-07-06-sandbox.zh.md)、[web 权限预设](../feature/2026-07-23-web-permission-and-approval.zh.md)）中，公开 web 访问的权限策略应放在哪里：`tools/execute` 上的专用 web 权限插件、提供方配置，还是两者兼有？

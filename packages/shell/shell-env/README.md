@@ -1,25 +1,39 @@
+---
+description: "The managed DSH_* shell environment for users and maintainers choosing, configuring, or extending the environment every model shell call runs with."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-shell-env
 
 English | [中文](README.zh.md)
 
-The tool-independent shell environment plugin: owns the `ctx.shellEnv` registry of trusted, per-execution `DSH_*` variables that the model-facing shell tools (`dsh-tool-bash`, `dsh-tool-pwsh`) collect into every shell call's environment. Built-in shell facts (`DSH_HOME`, `DSH_SHELL=1`, `DSH_SESSION_ID`) are owned by the registry itself; other plugins register additional enumerable facts with effect-scoped disposal, and duplicate ownership or undeclared runtime keys fail loudly.
+## Summary
 
-The package root exports the Cordis plugin contract (`name`, `inject`, `Config`, `apply`) plus the `ShellEnvRegistry` service class and its contributor types; consumers use `ctx.shellEnv` after loading this plugin.
+`dsh-shell-env` provides the trusted `DSH_*` environment that every model shell call — bash or pwsh — runs with: built-in facts such as `DSH_HOME`, `DSH_SHELL=1`, and the agent's `DSH_SESSION_ID`, plus `DSH_SESSION_JSONL` when the active persistence backend locates a JSONL artifact. Plugin authors can register their own facts with declared keys, collected per execution and disposed with their plugin; duplicate ownership or undeclared runtime keys fail loudly instead of silently overwriting. The registry changes nothing else the model sees — the shell tools own their own schemas and prompts. Choose it in any composition that mounts a model shell tool; configuration only picks the Harness home directory.
 
-## Config
+## Table of Contents
 
-```yaml
-- id: shell-env
-  name: '@deepseek-ai/dsh-shell-env'
-  config:
-    dshHome: C:\Users\me\.dsh   # default: $DSH_HOME, then ~/.dsh
-```
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-## Managed environment
+-----
 
-Every foreground and background model shell call receives a newly collected trusted `DSH_*` environment. `DSH_HOME` is the absolute Harness home resolved by [`@deepseek-ai/dsh-home-paths`](../../util/home-paths/README.md) (`dshHome` config, then ambient `$DSH_HOME`, then `~/.dsh`) and `DSH_SHELL=1` identifies the managed child. Agent calls additionally receive `DSH_SESSION_ID=agent.session.header.id`; when the active persistence seam locates a JSONL artifact they also receive `DSH_SESSION_JSONL=<absolute target path>`. The JSONL path is a location hint: it may not exist before the first flush or contain the current buffered turn, and it is not an authorization credential.
+<a id="use-this-package"></a>
+## Use this package
 
-`ctx.shellEnv` owns collection. Other plugins can register an effect-scoped contributor with a stable name, declared keys/descriptions, and `resolve(execution: ToolExecution)`; duplicate ownership and undeclared runtime keys fail loudly, while `list()` enumerates declarations without executing providers. Harness built-ins reserve `DSH_HOME`, `DSH_SHELL`, and `DSH_SESSION_ID`; this plugin's persistence translator owns `DSH_SESSION_JSONL` by reading the backend-neutral `sessionPersistence.locate()` seam.
+Load this plugin in any composition that mounts a model shell tool (`dsh-tool-bash` or `dsh-tool-pwsh`): each foreground or background shell call then runs with a freshly collected managed environment instead of whatever `DSH_*` values the process inherited.
+
+### What every shell call receives
+
+Every call receives `DSH_HOME` (the absolute Harness home), `DSH_SHELL=1`, and, for agent calls, `DSH_SESSION_ID` (the calling session's id). When the active persistence backend locates a JSONL artifact for the session, calls also receive `DSH_SESSION_JSONL` with its absolute target path — a location hint, not a guarantee: the file may not exist before the first flush and may not contain the current buffered turn, and the value is not an authorization credential.
+
+### Adding your own environment facts
+
+Other plugins contribute facts by registering a contributor with a stable name, the complete set of `DSH_*` keys it may return, a description per key, and a resolver that computes values for one execution:
 
 ```ts
 import type { Context } from '@deepseek-ai/cordis'
@@ -36,16 +50,92 @@ export function apply(ctx: Context): void {
 }
 ```
 
-The overlay is computed from the current `ToolExecution` and passed through the dedicated `ShellExecRequest.dshEnv` channel. The local executors remove all inherited `DSH_*` before merging that snapshot, so nested harnesses and concurrent parent/child agents cannot leak stale identities. `process.env` is never modified. The shell tools' descriptions teach the generic `$DSH_*` convention rather than naming persistence-specific variables or adding a permanent system-prompt section.
+Contributors must declare every key they return; returning an undeclared or non-string value fails the call. Registration is disposed with the registering plugin, so hot-reloading a plugin removes its facts.
 
+### Choosing the Harness home
+
+The single config field picks the home directory exposed as `DSH_HOME`; the default resolution order is the `dshHome` config, then ambient `$DSH_HOME`, then `~/.dsh`.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `dshHome` | `$DSH_HOME`, then `~/.dsh` | Absolute Harness home exposed as `DSH_HOME` |
+
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-shell-env) is the exhaustive source for every accepted field and its JSDoc.
+
+### What can go wrong
+
+Two contributors declaring the same key, or a contributor claiming a reserved built-in (`DSH_HOME`, `DSH_SHELL`, `DSH_SESSION_ID`), fails plugin load loudly. A `DSH_*` key must be all-caps with underscores (for example `DSH_REGION`), and a missing description fails registration.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design decisions behind the registry and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design philosophy
+
+- **Trusted namespace, rebuilt per call.** The environment is a Harness-owned `DSH_*` namespace: the shell executor discards inherited `DSH_*` values and merges the registry's current snapshot for each execution, so nested harnesses and concurrent parent/child agents cannot leak stale identities, and `process.env` is never modified.
+- **Declared ownership, loud conflicts.** Contributors declare their keys up front so duplicate ownership is detected before the first command; resolvers may only return declared keys.
+- **Built-ins stay here.** `DSH_HOME`, `DSH_SHELL`, and `DSH_SESSION_ID` are reserved for the registry; `DSH_SESSION_JSONL` is contributed by this plugin's own persistence translator, which reads the backend-neutral `sessionPersistence.locate()` seam.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Plugin entry, `ShellEnvRegistry` service, built-in facts and the persistence contributor |
+| — | No runtime invariant companion is published; the environment registry validates ownership and collected values at each registration/collection; it publishes no independent snapshot that a companion could cross-check. |
+
+### Collection
+
+`collect(execution)` starts from the built-ins, adds the session id when the execution carries an agent, then merges each registered contributor's resolved values sorted by contributor name. The result is a frozen, key-sorted snapshot passed through `ShellExecRequest.dshEnv`. `list()` enumerates declarations without running resolvers, so it cannot reflect execution-dependent values.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the shell family to the executor seam and the generated catalogs.
+
+- [shell package map](../README.md) — the bash capability family and its roles.
+- [Bash executor subsystem](../../../docs/subsystems/shell.md) — the `ctx.shell` seam the tools execute through.
+- [tool-bash](../tool-bash/README.md) — the bash tool that consumes this environment.
+- [tool-pwsh](../tool-pwsh/README.md) — the pwsh tool that consumes this environment.
+- [home paths package](../../util/home-paths/README.md) — how `DSH_HOME` is resolved.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-shell-env) — every accepted config field and its source declaration.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-Indirectly, through the shell tools (`dsh-tool-bash`, `dsh-tool-pwsh`), which collect this registry's managed `DSH_*` snapshot into every shell-tool call.
+Indirectly, through the shell tools (`dsh-tool-bash`, `dsh-tool-pwsh`), which expose this registry's managed `DSH_*` facts in every shell-tool call.
 
 #### KV Cache effect
 
-No direct invalidation; the named consumers own any request-prefix changes.
+The managed environment never enters the request prefix, so it does not invalidate provider cache reuse; the shell tools' definitions and the current request envelope own any prefix change.
 
 ## Known Limitations and Deferred Work
 
-- **`list()` enumerates contributor-declared variables only** — registry-owned built-ins (`DSH_HOME`, `DSH_SHELL`, `DSH_SESSION_ID`) are not included, so diagnostics, prompt, or UI code must not treat `list()` as an exhaustive environment catalog.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when the registry is a poor fit or needs care. They are current package constraints, not a task backlog.
+
+- **`list()` enumerates plugin-contributed variables only** — registry-owned built-ins (`DSH_HOME`, `DSH_SHELL`, `DSH_SESSION_ID`) are not included, so diagnostics, prompt, or UI code must not treat `list()` as an exhaustive environment catalog.
+- **`DSH_SESSION_JSONL` is a location hint, not a guarantee** — the file may not exist before the first flush and may not contain the current buffered turn, and the value is not an authorization credential.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

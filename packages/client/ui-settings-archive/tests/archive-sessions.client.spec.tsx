@@ -121,7 +121,7 @@ describe('ArchiveSessionsSection', () => {
     const { remove } = mount()
     await screen.findByText('归档对话')
     act(() => { screen.getAllByText('彻底删除')[0]!.click() })
-    remove.mockRejectedValueOnce(new ArchiveActionError('session-active', 'still active'))
+    remove.mockRejectedValueOnce(new ArchiveActionError('workspace/session-active', 'still active'))
     await screen.findByText('确认删除')
     act(() => { screen.getByText('确认删除').click() })
     expect(await screen.findByText('删除失败：该会话仍在打开中。请先关闭该会话，再回来彻底删除。')).toBeTruthy()

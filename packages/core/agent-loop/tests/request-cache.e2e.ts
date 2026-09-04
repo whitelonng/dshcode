@@ -8,6 +8,7 @@ import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
 
 /**
@@ -41,6 +42,7 @@ async function loopHarness(): Promise<Context> {
   const created = new Context()
   await created.plugin(LlmRuntime)
   await created.plugin(SessionStore)
+  await created.plugin(SessionProjectionRegistry)
   await created.plugin(SystemPrompt, { persona: SYSTEM })
   await created.plugin(ToolRuntime)
   await created.plugin(AgentRegistry)
@@ -80,7 +82,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('log-derived request cache hits (
     agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Thanks. Repeat that value one more time.' }], source: { kind: 'user' } }))
     await waitForIdle(ctx, agent)
 
-    const usages = [...agent.session.events]
+    const usages = agent.session.snapshotEvents()
       .filter(e => e.type === 'assistant/message')
       .map(e => e.data.usage)
     expect(usages.length).toBeGreaterThanOrEqual(3) // 2 steps in turn 1 + ≥1 in turn 2

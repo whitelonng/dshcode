@@ -20,9 +20,9 @@ Status: implemented
 
 ## 决策
 
-**读取配置与写入配置同样属于特权操作。**`settings.describe` 与 `credentials.describe` 加入仅限回环的集合，因此在真正的认证层出现之前，整个配置面都保持同源。模型目录（`llm.providers`、`llm.models`）刻意不在其中：它携带的是提供方 id、显示名与模型列表——没有端点、没有密钥状态——而 LAN 客户端的模型选择器正需要它。这条边界由一台真实 HTTP 服务器来断言，而不是手工拼装的请求，因为真正决定它的，是浏览器实际发出的那个 `Host` 头。
+**读取配置与写入配置同样属于特权操作。**`settings.describe`、`credentials.describe`、模型目录及其他所有 Host 操作都要求同一个浏览器会话。配置面仍独立于认证对 secret 脱敏。这条边界由真实 HTTP 服务器而非手工请求来断言，证明伪造 loopback `Host` 值绝不建立身份。
 
-**这个面恰好服务于已注册模型提供方所指向的那些 namespace。**`ctx.llm.listConfigurableProviders()` 就是允许列表，于是产品边界是被执行的，而不是从今天的插件集合里推断出来的；将来的 namespace 只有加入该目录才会变得可在 Web 上配置。未注册的 namespace 与未暴露的 namespace 得到完全相同的答复（`settings-not-exposed`），因此探测无法枚举注册表。
+**这个面恰好服务于已注册模型提供方所指向的那些 namespace。**`ctx.llm.listConfigurableProviders()` 就是允许列表，于是产品边界是被执行的，而不是从已安装的插件集合里推断出来的；将来的 namespace 只有加入该目录才会变得可在 Web 上配置。未注册的 namespace 与未暴露的 namespace 得到完全相同的答复（`settings-not-exposed`），因此探测无法枚举注册表。
 
 **持有局部视图的调用方，点名它真正要改的字段。**`SettingsProvider.mutate(ns, ops)` 会把 `set`/`unset` 路径 op 施加在写入排到队首那一刻的分节上。客户端通过对比自己打开时的快照与草稿来构造 op，因此它只提及自己看得见的字段：两侧都没有的机密不会产生任何 op，它的留存是构造使然，而非小心使然。`replace` 仍是那个刻意的整体重置。
 

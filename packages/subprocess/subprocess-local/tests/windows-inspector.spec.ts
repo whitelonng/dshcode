@@ -16,10 +16,12 @@ function fakeInternals() {
   const entries: ProcessEntry[] = []
   const states = new Map<number, WindowsProcessState>()
   const kills: Array<[number, boolean]> = []
+  const counts = { enumerations: 0, stateReads: 0 }
   return {
+    counts,
     internals: {
-      snapshot: () => [...entries],
-      processState: pid => states.get(pid),
+      snapshot: () => { counts.enumerations += 1; return [...entries] },
+      processState: (pid) => { counts.stateReads += 1; return states.get(pid) },
       taskkill: (pid: number, force: boolean) => { kills.push([pid, force]) },
     } satisfies WindowsProcessInspectorInternals,
     add(entry: ProcessEntry, started?: string, active = true): void {
@@ -29,6 +31,29 @@ function fakeInternals() {
     kills,
   }
 }
+
+describe('WindowsProcessInspector table enumeration', () => {
+  it('enumerates the process table only for questions that need it', () => {
+    const fake = fakeInternals()
+    fake.add({ pid: 10, parentPid: 0 }, 't10')
+    fake.add({ pid: 11, parentPid: 10 }, 't11')
+    const inspector = new WindowsProcessInspector(fake.internals)
+
+    // Liveness is a per-handle question on Windows, so a snapshot asked only
+    // for liveness must not pay a Toolhelp32 walk. The terminal's Windows
+    // teardown polls exactly this way, every 25 ms.
+    const observed = inspector.snapshot()
+    expect(observed.alive({ pid: 11, started: 't11' })).toBe(true)
+    expect(fake.counts.enumerations).toBe(0)
+
+    expect(observed.tree(10)).toHaveLength(2)
+    expect(fake.counts.enumerations).toBe(1)
+
+    // A second tree question reuses the same observation.
+    observed.tree(10)
+    expect(fake.counts.enumerations).toBe(1)
+  })
+})
 
 describe('windowsProcessTree', () => {
   it('walks a table children-first with readable identities only', () => {
@@ -65,8 +90,8 @@ describe('WindowsProcessInspector (injected internals)', () => {
     const fake = fakeInternals()
     const inspector = new WindowsProcessInspector(fake.internals)
     expect(inspector.foregroundPgid(77)).toBe(77)
-    expect(inspector.isStdinWaiting(77)).toBe(false)
-    expect(inspector.processSession(77)).toEqual([])
+    expect(inspector.isStdinWaiting(77, 10)).toBe(false)
+    expect(inspector.snapshot().session(77)).toEqual([])
   })
 
   it('delegates tree walks and identity checks to the internals', () => {
@@ -74,7 +99,7 @@ describe('WindowsProcessInspector (injected internals)', () => {
     fake.add({ pid: 10, parentPid: 0 }, 't10')
     fake.add({ pid: 11, parentPid: 10 }, 't11')
     const inspector = new WindowsProcessInspector(fake.internals)
-    expect(inspector.processTree(10)).toEqual([
+    expect(inspector.snapshot().tree(10)).toEqual([
       { pid: 11, started: 't11' },
       { pid: 10, started: 't10' },
     ])
@@ -130,10 +155,10 @@ const win32 = process.platform === 'win32' ? describe : describe.skip
 win32('WindowsProcessInspector over the real koffi bindings', () => {
   it('walks the live process table from the test runner itself', () => {
     const inspector = createWindowsProcessInspector()
-    const tree = inspector.processTree(process.pid)
+    const tree = inspector.snapshot().tree(process.pid)
     const self = tree.find(member => member.pid === process.pid)
     expect(self).toBeDefined()
-    expect(inspector.isAlive(self!)).toBe(true)
+    expect(inspector.snapshot().alive(self!)).toBe(true)
     expect(inspector.foregroundPgid(process.pid)).toBe(process.pid)
   })
 

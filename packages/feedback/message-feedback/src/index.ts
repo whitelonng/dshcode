@@ -7,6 +7,7 @@ import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import s from '@deepseek-ai/schemastery'
+import { SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { deriveEventMessage, isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionInspection } from '@deepseek-ai/dsh-session-persistence'
@@ -333,9 +334,15 @@ export class MessageFeedbackService extends TypertRemoteService {
           `message-feedback: no durability listener participated for live session '${inspection.meta.id}'`,
         )
       }
-      return await this.ctx.sessionPersistence.readFrom(inspection.meta.id, 0)
+      return await this.ctx.sessionPersistence.readFrom(
+        inspection.meta.id,
+        SessionLogOffset(0),
+      )
     }
-    return await this.ctx.sessionPersistence.readFrom(inspection.meta.id, 0)
+    return await this.ctx.sessionPersistence.readFrom(
+      inspection.meta.id,
+      SessionLogOffset(0),
+    )
   }
 
   /** Validate optional-note semantics and the configured complete UTF-8 byte bound. */

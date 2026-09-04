@@ -138,14 +138,18 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
               style="display: contents;"
             >
               <span
-                class="fallbackBrandName"
+                class="localBuildBrand"
               >
-                DSH Local Build
-              </span>
-              <span
-                class="buildRevision"
-              >
-                abc1234
+                <span
+                  class="localBuildTitle"
+                >
+                  DSH Local Build
+                </span>
+                <span
+                  class="buildVersion"
+                >
+                  1.2.3-rc.4-abc1234-dirty
+                </span>
               </span>
             </div>
           </span>
@@ -264,14 +268,18 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
               style="display: contents;"
             >
               <span
-                class="fallbackBrandName"
+                class="localBuildBrand"
               >
-                DSH Local Build
-              </span>
-              <span
-                class="buildRevision"
-              >
-                abc1234
+                <span
+                  class="localBuildTitle"
+                >
+                  DSH 本地构建
+                </span>
+                <span
+                  class="buildVersion"
+                >
+                  1.2.3-rc.4-abc1234-dirty
+                </span>
               </span>
             </div>
           </span>

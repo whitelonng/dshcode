@@ -20,7 +20,9 @@
 
 import type { Context, LoggerService } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import { z as zod } from 'zod'
+import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import type { ShellExecutor, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 
@@ -28,7 +30,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 export const name = 'tmux-context'
 
 /** The agent registry that owns pre-step processing. */
-export const inject = ['agents']
+export const inject = ['agents', 'sessionProjections']
 
 /** Per-turn tmux-location scheduling. Invalid values fail plugin load. */
 export interface Config {
@@ -178,21 +180,6 @@ function renderReading(location: TmuxLocation, turn: number): string {
  * schedule survives compaction and resumed processes without process-local
  * cache state.
  */
-function latestInjectedState(agent: Agent): { state: string; time: number } | undefined {
-  for (const event of [...agent.session.events].reverse()) {
-    if (event.type === 'user/message'
-      && event.data.source.kind === 'plugin'
-      && event.data.source.plugin === name) {
-      const [block] = event.data.content
-      if (block?.type !== 'text') return undefined
-      const newline = block.text.indexOf('\n')
-      const state = newline === -1 ? '' : block.text.slice(newline + 1)
-      return { state, time: event.time }
-    }
-  }
-  return undefined
-}
-
 /** Reject refresh intervals that cannot represent an exact elapsed-millisecond threshold. */
 function validateRefreshInterval(refreshIntervalMs: number | undefined): void {
   if (refreshIntervalMs !== undefined && (
@@ -205,15 +192,46 @@ function validateRefreshInterval(refreshIntervalMs: number | undefined): void {
   }
 }
 
+const tmuxContextStateSchema = zod.object({
+  state: zod.string(),
+  time: zod.number(),
+}).nullable()
+
+type TmuxContextState = zod.infer<typeof tmuxContextStateSchema>
+
 /**
  * Register a prepended pre-step listener for the lifetime of `ctx`.
  * @param ctx - plugin context; the listener is disposed with it.
  * @param config - durable refresh scheduling configuration.
  * @throws when the refresh interval is invalid.
  */
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** The stable state block of this plugin's latest durable injection, or null. */
+    tmuxContext: TmuxContextState
+  }
+}
+
 export function apply(ctx: Context, config: Config): void {
   const refreshIntervalMs = config.refreshIntervalMs
   validateRefreshInterval(refreshIntervalMs)
+
+  ctx.sessionProjections.register({
+    key: 'tmuxContext',
+    stateVersion: 1,
+    stateSchema: tmuxContextStateSchema,
+    init: () => null,
+    apply: (state, event) => {
+      if (event.type !== 'user/message'
+        || event.data.source.kind !== 'plugin'
+        || event.data.source.plugin !== name) return state
+      const [block] = event.data.content
+      if (block?.type !== 'text') return state
+      const newline = block.text.indexOf('\n')
+      const stableState = newline === -1 ? '' : block.text.slice(newline + 1)
+      return { state: stableState, time: event.time }
+    },
+  })
 
   ctx.on('agent/pre-step', async (
     { agent, turn, step, signal },
@@ -223,18 +241,18 @@ export function apply(ctx: Context, config: Config): void {
     if (decision.kind === 'reject' || signal.aborted || step !== 1) return decision
     const bash = ctx.get('shell')
     if (bash === undefined) return decision
-    const previous = latestInjectedState(agent)
-    if (refreshIntervalMs !== undefined && refreshIntervalMs > 0 && previous !== undefined) {
+    const previous = ctx.sessionProjections.stateOf(agent.session, 'tmuxContext') as TmuxContextState
+    if (refreshIntervalMs !== undefined && refreshIntervalMs > 0 && previous !== null) {
       const now = Date.now()
       if (now >= previous.time && now - previous.time < refreshIntervalMs) return decision
     }
     const location = await queryTmuxLocation(bash, ctx.logger, process.pid, signal)
     if (location === undefined) return decision
     const state = renderState(location)
-    if (previous !== undefined && previous.state === state) return decision
+    if (previous !== null && previous.state === state) return decision
     const text = renderReading(location, turn)
     return {
-      kind: 'enter',
+      ...decision,
       messages: [
         createUserMessage({
           content: [{ type: 'text', text }],

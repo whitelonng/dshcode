@@ -1,20 +1,130 @@
-# `@deepseek-ai/dsh-web-app`
+---
+description: "The browser GUI for dsh: interactive chat, model and settings management, and session history, for users running the dsh web surface."
+kind: "package-bundle"
+---
+
+# @deepseek-ai/dsh-web-app
 
 English | [中文](README.zh.md)
 
-The dsh browser-surface bundle. [`cordis.patch.yml`](cordis.patch.yml) rides over [`dsh-base`](../base/README.md): it sets the coding persona, inserts the Web host rows (webserver, API gateway, workspace, projection cache, storage) and the browser plugin roster, the always-on client-plugin reload chain ([`dsh-client-hmr`](../../client/hmr/README.md), idle until a rebuild watcher rewrites client bundles), and mounts this package's `web-runtime` glue plugin (config `{printUrl, surfaceContext, trustedHosts}`). That plugin resolves the built frontend dist through `@deepseek-ai/dsh-web-frontend`'s exports, samples bind-dependent LAN trust once, provides it as `webRuntime` to the browser-trust fence and client roster, mounts the [`frontend-static`](../../host/frontend-static/README.md) fallback owner, registers the harness-source and web-surface prompt sections plus the bash-visible `DSH_WEB_URL` runtime variable when `surfaceContext` is true, and prints the `dsh web:` URL line when `printUrl` is true, after its Loader tree settles so a sibling failure cannot announce a dead app. This bundle also owns the app command line: the ordinary `web-startup` provider ([`src/startup.ts`](src/startup.ts)) injects `ctx.cmdlineArgs` ([`dsh-cmdline`](../../boot/cmdline/README.md)), parses `--host`, `--port`, repeatable `--trusted-host`, and the app's `--help`, then provides `webStartup`. It rejects `--host 0.0.0.0` before publishing that service because the CLI intentionally does not support all-interfaces binding yet. Flag-configured rows inject the service and read it directly from lazy config, so nothing binds a port before argument resolution and `dsh --profile web --help` starts no server. [`dsh-headless`](../headless/README.md) is a sibling surface over the same base and does not mount this bundle.
+## Summary
 
-The shipped `web` profile layers only the in-box base and this bundle; [dsh-genui](https://github.com/omdsh-dev/dsh-genui), [dsh-annotation](https://github.com/omdsh-dev/dsh-annotation), and the [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) aggregate ship as optional community products, off by default. This bundle's manifest declares the aggregate's nine entry packages plus the whale-song skin package as direct dependencies at the same pinned version so the profile module fallback can resolve their entry rows from a profile directory once a profile enables them; it also mounts the loopback-only [`plugin-control`](../../host/plugin-control/README.md) Host row whose deployment catalog can persist enablement for GenUI, Annotation, and all nine dsh-web-ui rows as one product. The browser Plugins settings surface is a single merged list tab: user plugins on top (install box, saved enablement switches, update/uninstall) and the built-in Loader entries collapsed below with switch-only enablement, served by the [`plugin-installer`](../../host/plugin-installer/README.md) and [`plugin-inventory`](../../host/plugin-inventory/README.md) gateways; changes take effect after DSH restarts.
+Run `dsh --profile web` and the interface opens in your default browser, ready for interactive chat with the agent. You get the conversation view, model and settings management, and session history, backed by the same model access, tools, and safety defaults as every other surface. The command prints a tokenized startup URL; the browser exchanges that token for a signed session cookie and redirects to the clean root URL. You can change the port, suppress the browser handoff, and allow extra hosts from the command line; binding all network interfaces is intentionally not supported. Choose it for interactive work in the browser; `dsh-headless` is the one-shot command-line sibling.
 
-The upstream skin center reads a `skins/` directory beside its own location, which no bundled deployment provides; the repo patches `@linxin666/dsh-client-ui-skin-center` (`patchedDependencies`) to also walk ancestor directories, to always insert the active skin's row into the managed patch section (the published aggregate wires no skin rows), and to reconcile the running Loader tree live after an apply — required because packaged Electron cannot provide Cordis HMR and the desktop does not watch patch files. `scripts/link-community-skins.mjs` (postinstall) plus the desktop packaging stage assemble the installed skin packages into that tree, so all seven skin-center cards (including whale-song) work in source and packaged deployments.
+## Table of Contents
 
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="use-this-package"></a>
+## Use this package
+
+Start the GUI, open your browser, and start talking to the agent. The flags fine-tune the invocation.
+
+### Starting the Web GUI
+
+```sh
+dsh --profile web
+dsh --profile web --no-open --port 8080
+```
+
+After startup you see a `dsh web:` line whose root URL carries a fresh process token. Unless `--no-open` or an SSH session suppresses it, the default browser opens that URL, receives a signed cookie, and redirects to the clean root page. You know it worked when the page loads and you can chat with the agent. Two failures to expect: if the frontend is not built, startup stops with a build hint (`pnpm run build` in a checkout); if the browser cannot be opened, a credential-free diagnostic prints to stderr while the server keeps running — open the printed startup URL yourself.
+
+### Configuration
+
+Most users never set these; the command-line flags feed the four settings below — `--host`, `--port`, and `--trusted-host` come from the invocation, and `--no-open` turns the browser handoff off for that invocation:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `openBrowser` | `true` | Open the default browser after startup; SSH launches suppress it |
+| `printUrl` | `true` | Print the `dsh web:` URL line at startup |
+| `surfaceContext` | `true` | Give the agent GUI-orientation context and expose `DSH_WEB_URL` to its shell commands |
+| `trustedHosts` | `[]` | Extra hosts allowed to reach the GUI from the network |
+
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-web-app) is the exhaustive source for every accepted field and its JSDoc.
+
+### LAN access and trusted hosts
+
+By default the GUI accepts connections from this machine only. A deployment that binds all network interfaces also allows browsers from the LAN, and the printed URL then includes a LAN address; `--trusted-host` adds extra hosts in either case. Host and Origin checks control reachability, while the token exchange authenticates every Host API method and WebSocket stream. The LAN addresses are sampled once at startup, so a network change later is not picked up — restart the GUI to re-advertise.
+
+### Running over SSH
+
+When you launch `dsh --profile web` over SSH, the URL line still prints but the browser is not opened for you: the SSH client or editor owns the local forwarding address. Open the forwarded URL on your machine yourself; the printed URL names the remote host's loopback endpoint.
+
+### Per-session agent setup
+
+Each browser session composes its own agent from the shipped presets (the `standard` preset by default), instead of sharing one process-wide tool set. You can change the default preset or add your own presets under `$DSH_HOME/.agent-presets`.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+The bundle is one patch plus one runtime glue plugin. The storage stack and projection cache come from `dsh-base`; the web overlay's workspace and message-feedback rows consume that shared `storageDomain` service. The patch restates the surface-specific values the base deliberately omits, inserts the web-only host rows and browser roster, then moves the agent plane behind presets. The glue plugin owns dist serving, trust sampling, prompt sections, the bash variable, and the readiness announcements.
+
+### Patch semantics
+
+A patch replaces the targeted row's whole `config`, so each web row restates every key it owns: the persona, the `DSH_TOOLS_MODE` PTC mode opt-in, and the `session-query-sqlite` values on the base rows, then `insert` adds the web host rows, transport, and browser roster. The per-agent tool rows the base mounts process-wide are disabled here and the preset roster takes over; the reasoning for each host-plane versus preset-plane decision is inline in the patch.
+
+### Readiness
+
+The URL line and browser handoff are readiness signals: supervisors RPC as soon as they observe the line, and a browser requests the page as soon as it opens, so both run only after the Loader tree settles and Connection authentication is available — or immediately in a hand-built tree without a Loader. A tree disposed mid-boot announces nothing.
+
+### LAN trust sampling
+
+`resolveLanTrust` samples the network once at boot: a loopback bind (`127.0.0.1`) derives no LAN addresses, while an all-interfaces bind adds every non-internal IPv4 literal. The derived literals plus the explicit `--trusted-host` authorities form the `/api` browser-trust fence, and the printed LAN URL always matches that fence.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | The `web-app` glue plugin: dist resolution, LAN trust sampling, prompt sections, bash variable, URL line, browser handoff |
+| [`src/startup.ts`](src/startup.ts) | The `web-startup` provider: `--host`, `--port`, `--trusted-host`, `--no-open`, `--help` |
+| [`cordis.patch.yml`](cordis.patch.yml) | The web patch: restated base values, web host rows, browser roster, agent plane behind presets |
+| — | No runtime invariant companion is published; every contribution (frontend-static child plugin, prompt section, bashEnv registration) is registry-disposed with the fiber, and each owning registry's package carries that relation's invariant; the package holds no mutable state of its own to audit. |
+| [`tests/web-app.spec.ts`](tests/web-app.spec.ts) | Dist resolution, fallback seat, prompt sections, readiness |
+| [`tests/startup.spec.ts`](tests/startup.spec.ts) | Command-line parsing over a real Loader tree |
+| [`tests/trusted-hosts.spec.ts`](tests/trusted-hosts.spec.ts) | LAN-trust sampling |
+| [`tests/browser-open.spec.ts`](tests/browser-open.spec.ts) | Default-browser handoff after the page is reachable |
+
+### Invariant ownership
+
+No invariant companion is published because every contribution — the frontend-static child plugin, the prompt sections, and the bash variable registration — is registry-disposed with the fiber, and each owning registry package carries that relation's invariant.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when you want to go deeper into the shared core, the browser reload pipeline, or the built frontend.
+
+- [Bundle package map](../README.md) — the surfaces built on the same core.
+- [dsh-base](../base/README.md) — the shared core the GUI runs on.
+- [dsh-client-hmr](../../client/hmr/README.md) — how client-plugin changes reload during development.
+- [frontend-static](../../host/frontend-static/README.md) — how the built frontend is served.
+- [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-web-app) — every accepted config field and its source declaration.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 ### Harness-source and Web-surface context
 
 #### What the model sees
 
-When `surfaceContext` is true, the `harness:source` section identifies the on-disk Harness implementation without claiming it is the working directory, and the `app:web-surface` global section (order −98) orients the model to the GUI: the canonical local URL, the "this page" referent, the update contract (the reload receiver is always on; no-refresh reloads additionally need the `pnpm run dev:web` watcher), and the instruction not to start replacement servers. `DSH_WEB_URL` additionally appears in the managed bash environment with its description, resolved per invocation from the live server. When it is false, neither section nor the variable is registered.
+When `surfaceContext` is true, the `harness:source` section identifies the on-disk Harness implementation without claiming it is the working directory, and the `app:web-surface` global section (first-party order −800) orients the model to the GUI: the canonical local URL, the "this page" referent, the update contract (the reload receiver is always on; no-refresh reloads additionally need the `pnpm run dev:web` watcher), and the instruction not to start replacement servers. `DSH_WEB_URL` additionally appears in the managed bash environment with its description, resolved per invocation from the live server. When it is false, neither section nor the variable is registered.
 
 #### Token effect
 
@@ -24,22 +134,26 @@ One source line and one prompt paragraph per session plus two managed-environmen
 
 The prompt section sits near the system prompt's head and is stable for the life of the process (the port is a boot fact), so it does not invalidate the cache across turns.
 
-### Optional community plugins
-
-#### What the model sees
-
-With the community switches enabled, dsh-genui adds its `dsh-ui` output instructions and the `render_ui` and validation tools; dsh-annotation adds model-visible annotation text only when the user sends annotations; dsh-web-ui includes the SSH tool and prompt contribution alongside its browser panels, task board, Git graph, live statistics, remote Web UI, settings, and skins. The upstream packages own their detailed prompts, tools, persistence, remote-access controls, and security behavior. In particular, SSH host configuration and credentials remain host data, SSH routes are loopback-only, and remote Web access requires the plugin's pairing flow.
-
-#### Token effect
-
-GenUI and SSH add their fixed instructions and tool schemas while enabled; Annotation adds text only to requests that carry a user annotation. Browser-only panels add no model tokens.
-
-#### KV Cache effect
-
-The GenUI and SSH prompt/tool contributions are stable within a process. A Plugin switch can change the next process's request prefix and tool list, which starts a new provider cache prefix after restart.
-
 ## Known Limitations and Deferred Work
 
-- **The frontend dist must be built** — `require.resolve` of the dist fails loud at activation with a build hint; there is no source-serving fallback.
-- **`lanAddresses` is a boot-time snapshot** — interface changes after boot are not re-advertised; the printed LAN URL always matches the configured trust fence.
-- **Community switches require restart** — external plugins are not assumed to release every route, tool, or browser registration safely during live teardown, so Settings persists the desired profile state without mutating the running tree.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits tell you what to expect in unusual setups — a source checkout, SSH sessions, or strict networks. They are current package constraints, not a general browser comparison or a task backlog.
+
+- **The frontend must be built** — a source checkout needs `pnpm run build` first; startup stops with a build hint when the dist is missing, and there is no source-serving fallback.
+- **LAN addresses are sampled once at startup** — interface changes after boot are not re-advertised; the printed LAN URL always matches what was sampled.
+- **Only the handoff start is observable** — the GUI reports that the browser was asked to open, not that it actually opened; a later browser exit is never reported, and the printed URL is your manual fallback.
+- **SSH sessions keep the URL but skip the browser handoff** — the printed URL names the remote host's loopback endpoint; the SSH client or editor must expose and open the local forwarded address.
+- **`BROWSER` overrides only come from the environment** — a discovered `.env` cannot set `BROWSER`; only an inherited value can choose the executable for the automatic handoff.
+- **Binding all network interfaces is not supported** — `--host 0.0.0.0` is rejected at startup for safety; use the default loopback host.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

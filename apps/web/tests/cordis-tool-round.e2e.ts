@@ -18,10 +18,10 @@ import {
   captureStableAria, compareOrRefreshGolden, fixtureUserPrompts,
   launchWebScaffold, recordFixture, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, expandOwningTurnProcess, newEnglishPage, saveFailureShot } from './support.ts'
 
-const FIXTURE = fileURLToPath(new URL('./snapshots/cordis-tool-round/session.jsonl', import.meta.url))
-const UI_EXPECTED = fileURLToPath(new URL('./snapshots/cordis-tool-round/ui.expected.md', import.meta.url))
+const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/cordis-tool-round/session.jsonl', import.meta.url))
+const UI_EXPECTED = fileURLToPath(new URL('../../../snapshots/web/cordis-tool-round/ui.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
 const CORDIS_TOOLS = ['cordis_inspect_self', 'cordis_define', 'cordis_run', 'cordis_stop'] as const
 const PACKAGE_CODE = 'return { name: "snapshot-noop", apply(ctx) {} }'
@@ -69,17 +69,29 @@ describe('web e2e: Cordis tools use their owned cards', () => {
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
   const sessionEvents: SessionEvent[] = []
+  const modelFrames: string[] = []
+  const modelChanges: string[] = []
 
   beforeAll(async () => {
     scaffold = await launchWebScaffold({
       cordisTools: true,
+      compareReplaySession: true,
       ...(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: 15 }),
     })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
+    scaffold.ctx.sessionProjections.onChanged((_session, key, value, seq) => {
+      if (key === 'modelSelection') modelChanges.push(`${String(seq)}:${JSON.stringify(value)}`)
+    })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
+    page.on('websocket', (socket) => {
+      socket.on('framereceived', (frame) => {
+        const payload = String(frame.payload)
+        if (payload.includes('modelSelection')) modelFrames.push(payload)
+      })
+    })
     tripwire = watchConsole(page)
-    await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
   }, 120_000)
@@ -94,7 +106,7 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     if (MODE !== 'record') {
       expect(fixtureUserPrompts(await readFile(FIXTURE, 'utf8'))).toEqual([PROMPT, STOP_PROMPT])
     }
-    const input = page.locator('textarea').first()
+    const input = page.locator('[data-composer-input]').first()
     await input.waitFor({ timeout: 10_000 })
     const runTurnSettled = scaffold.whenTurnSettled()
     await input.fill(PROMPT)
@@ -122,6 +134,16 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     await input.fill(STOP_PROMPT)
     await input.press('Enter')
     await stopTurnSettled
+    await expect.poll(() => {
+      const stop = sessionEvents.find(
+        (event): event is Extract<SessionEvent, { type: 'tool/call' }> =>
+          event.type === 'tool/call' && event.data.name === 'cordis_stop',
+      )
+      return stop !== undefined && sessionEvents.some(
+        event => event.type === 'tool/result'
+          && String(event.data.message.source.callId) === String(stop.data.callId),
+      )
+    }, { timeout: 15_000 }).toBe(true)
     if (MODE === 'record') {
       assertCompleteCordisLifecycle(sessionEvents)
       await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: 15_000 })
@@ -140,6 +162,7 @@ describe('web e2e: Cordis tools use their owned cards', () => {
       .toBeGreaterThanOrEqual(1)
 
     const inspectRow = page.locator('[data-tool="cordis_inspect_self"]').filter({ hasText: 'Inspect' }).first()
+    await expandOwningTurnProcess(page, inspectRow)
     await inspectRow.waitFor({ timeout: 10_000 })
 
     // cordis_define does NOT go through the generic row: ui-cordis registers a
@@ -147,6 +170,7 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     // title here is the CARD's ("Cordis Plugin"), and the expanded body is the
     // card's own two code sections rather than a generic args dump.
     const defineRow = page.locator('[data-tool="cordis_define"]').filter({ hasText: 'Cordis Plugin' }).first()
+    await expandOwningTurnProcess(page, defineRow)
     await defineRow.waitFor({ timeout: 10_000 })
     // The whole summary row is the expand toggle (unified tool-row interaction).
     await defineRow.locator('[aria-expanded]').first().click()
@@ -155,10 +179,12 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     await expect.poll(() => defineRow.textContent()).toContain(PACKAGE_CODE)
 
     const runRow = page.locator('[data-tool="cordis_run"]').filter({ hasText: 'Run Cordis Plugin' }).first()
+    await expandOwningTurnProcess(page, runRow)
     await runRow.waitFor({ timeout: 10_000 })
     await expect.poll(() => runRow.textContent()).toContain('snap-')
 
     const stopRow = page.locator('[data-tool="cordis_stop"]').filter({ hasText: 'Stop Cordis Plugin' }).first()
+    await expandOwningTurnProcess(page, stopRow)
     await stopRow.waitFor({ timeout: 10_000 })
     await expect.poll(() => stopRow.textContent()).toContain('snap-')
     await expect(stopRow.getAttribute('data-state')).resolves.toBe('ok')
@@ -168,6 +194,13 @@ describe('web e2e: Cordis tools use their owned cards', () => {
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cordis-aria'))
+    console.log('MODEL_TRACE', { modelChanges, frameCount: modelFrames.length, modelFrames })
+    // Final Assistant text precedes turn/end. Three footers prove every turn
+    // reached the render state covered by the ARIA golden.
+    await expect.poll(
+      () => page.getByRole('button', { name: 'Branch into a new conversation', exact: true }).count(),
+      { timeout: 15_000 },
+    ).toBe(3)
     await page.locator('[data-conversation-scroll]').evaluate((host) => { host.scrollTop = host.scrollHeight })
     await expect.poll(
       async () => page.getByRole('button', { name: 'Back to bottom', exact: true }).count(),

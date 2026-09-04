@@ -180,8 +180,9 @@ export interface RestrictingSidSet {
  * `AU:(AD)` + `AU:(OI)(CI)(IO)(M)` ACEs) is closed in both — documented in
  * README. INTERACTIVE/LOCAL are absent from BOTH lists too — the host's
  * Public tree grants write to INTERACTIVE, so removing it closes that
- * escape. S-1-2-1 (console logon) is intentionally absent: see win32-abi.ts
- * for the verified failure modes. FAILS CLOSED: any failure throws — never
+ * escape. S-1-2-1 (console logon) is intentionally absent: the package
+ * README's "Console isolation is unavailable" entry records the verified
+ * failure modes. FAILS CLOSED: any failure throws — never
  * spawn unrestricted.
  * @param api - the binding table.
  * @param currentToken - the process token to restrict.

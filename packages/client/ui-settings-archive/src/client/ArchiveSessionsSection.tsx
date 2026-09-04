@@ -98,10 +98,10 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
   }
 
   // A live session cannot be permanently deleted: map the Host's
-  // `session-active` rejection to copy that names the remedy; every other
-  // failure interpolates the raw reason.
+  // `workspace/session-active` rejection to copy that names the remedy; every
+  // other failure interpolates the raw reason.
   const failureMessage = (kind: 'restore' | 'delete', reason: unknown): string => {
-    if (kind === 'delete' && reason instanceof ArchiveActionError && reason.code === 'session-active') {
+    if (kind === 'delete' && reason instanceof ArchiveActionError && reason.code === 'workspace/session-active') {
       return t('deleteFailedActive')
     }
     return t(kind === 'restore' ? 'restoreFailed' : 'deleteFailed', {
@@ -271,6 +271,7 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
         <Modal
           title={t('deleteConfirmTitle')}
           open
+          closeLabel={t('close')}
           onClose={() => { setPending(undefined) }}
         >
           <p className={css.confirmBody}>{t('deleteConfirmBody')}</p>
@@ -293,6 +294,7 @@ export function ArchiveSessionsSection(props: ArchiveSessionsSectionProps) {
         <Modal
           title={t('deleteConfirmTitle')}
           open
+          closeLabel={t('close')}
           onClose={() => { setBulkTarget(undefined) }}
         >
           <p className={css.confirmBody}>{t('bulkDeleteConfirmBody', { count: String(bulkTarget.count) })}</p>

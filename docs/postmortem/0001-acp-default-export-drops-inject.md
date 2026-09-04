@@ -10,7 +10,7 @@ Two integration mistakes broke ACP despite full unit coverage: a default export 
 
 ## Summary
 
-The ACP server (`examples/acp-agent`, `@deepseek-ai/dsh-acp`) crashed the instant a real editor (Zed) connected: the first `session/new` request returned `Internal error: cannot get property "agents" without inject`, and `session/load` returned the same for `sessionPersistence`. The bridge was completely non-functional in production despite 178 green unit tests and 100% line coverage. Two independent bugs were hiding behind the same error string, and the test suite missed both for the same reason: every test mounted the plugin through a path that did not exercise how it actually loads or how its services actually resolve.
+The ACP server (`dsh --profile acp`, `@deepseek-ai/dsh-acp`) crashed the instant a real editor (Zed) connected: the first `session/new` request returned `Internal error: cannot get property "agents" without inject`, and `session/load` returned the same for `sessionPersistence`. The bridge was completely non-functional in production despite 178 green unit tests and 100% line coverage. Two independent bugs were hiding behind the same error string, and the test suite missed both for the same reason: every test mounted the plugin through a path that did not exercise how it actually loads or how its services actually resolve.
 
 ## Impact
 
@@ -101,7 +101,7 @@ Both bugs share one root process gap: **no test exercised the plugin through its
 
 - **Removed `export default apply`** (`packages/acp/acp/src/index.ts`) — the Bug #1 fix.
 - **`AgentLoop.resume` reads `this.ctx.get('sessionPersistence')`** (`packages/core/agent-loop/src/index.ts`) — the Bug #2 fix, with a comment explaining the shadow-walk trap.
-- **No-key `session/new` e2e over real stdio** (`examples/acp-agent/tests/acp.e2e.ts`): boots the example as a subprocess through the real Loader and asserts `session/new` resolves. This fails loudly on Bug #1 with no API key. Verified it fails when `export default apply` is restored.
+- **No-key `session/new` e2e over real stdio** (`apps/cli/tests/profiles/acp/tests/acp.e2e.ts`): boots the profile as a subprocess through the real Loader and asserts `session/new` resolves. This fails loudly on Bug #1 with no API key. Verified it fails when `export default apply` is restored.
 - **`TSX_TSCONFIG_PATH` in the e2e spawn**: the subprocess runs from a temp cwd, where tsx cannot find the repo-root tsconfig `paths` map by searching upward — so dsh-* imports silently fell back to built `lib/`. Pointing tsx at the repo tsconfig makes resolution cwd-independent and ensures the test runs *source*, not a possibly-stale build.
 - **[docs/testing.md](../testing.md) rule**: "test the real entry path", line coverage is not behavior coverage — codifies the lesson for every future plugin.
 

@@ -41,7 +41,7 @@ CC 桥接的 `ask` 结果是一条真正的权限路径，而非终态桥接决�
 
 ### 添加上下文不是否决——先 delegate，再 prepend
 
-仅附加 `additionalContext`（没有 block/deny）的钩子并不是桥接可以独自返回的决策：在 waterfall（瀑布式事件）监听器中不调用 `next()` 就返回 `enter`，会短路其后的每个 `agent/pre-step` / `tools/post-execute` 监听器，使注册在桥接之后的策略/沙箱插件看不到该提示词。因此，每个桥接都会先通过 `next()` 委托，再将自身上下文加入下游 enter 决策。桥接会保留所有下游消息；下游 pre-step reject 会丢弃整个已领取批次，因为步骤从未打开。工具后决策仍保留独立的有序 `additionalContexts` 语义，包括 Code Mode 通过外层 `run_code` 结果延迟上下文。只有钩子本身真正返回 `deny`/`block` 才会短路。测试断言：仅上下文钩子之后，较晚的监听器仍能 reject 提示词，且保留的提示词和工具后上下文仍彼此分离。
+仅附加 `additionalContext`（没有 block/deny）的钩子并不是桥接可以独自返回的决策：在 waterfall（瀑布式事件）监听器中不调用 `next()` 就返回 `enter`，会短路其后的每个 `agent/pre-step` / `tools/post-execute` 监听器，使注册在桥接之后的策略/沙箱插件看不到该提示词。因此，每个桥接都会先通过 `next()` 委托，再将自身上下文加入下游 enter 决策。桥接会保留所有下游消息；下游 pre-step reject 会丢弃整个已领取批次，因为步骤从未打开。工具后决策仍保留独立的有序 `additionalContexts` 语义，包括 PTC mode 通过外层 `run_code` 结果延迟上下文。只有钩子本身真正返回 `deny`/`block` 才会短路。测试断言：仅上下文钩子之后，较晚的监听器仍能 reject 提示词，且保留的提示词和工具后上下文仍彼此分离。
 
 ### CLAUDE_PROJECT_DIR 默认为会话工作区
 

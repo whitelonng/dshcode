@@ -1,9 +1,3 @@
-// Shared close timing for pointer-dismissed popups (HoverCard, hover-closing
-// Menu). Both float free of their anchor, so the pointer has to cross ground
-// that belongs to neither on its way in; closing on the first pointerleave
-// makes the popup unreachable. The grace turns that transit into a cancelable
-// pending close.
-
 import { useCallback, useEffect, useRef } from 'react'
 
 /**

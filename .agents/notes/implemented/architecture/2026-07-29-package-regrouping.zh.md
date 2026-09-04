@@ -21,15 +21,15 @@ Status: implemented
 
 | 组 | 成员（目录名） | 来源 |
 |---|---|---|
-| `session/` | session-persistence、session-persistence-jsonl、session-persistence-sqlite、session-checkpoint-policy、session-projection、session-projection-cache、session-title、session-title-llm、session-title-first-prompt-llm、session-title-all-prompts-llm、session-telemetry、session-telemetry-otel | `session-persistence/` + `session-projection/` + `session-title/` + `telemetry/` |
+| `session/` | session-persistence、session-persistence-jsonl、session-checkpoint-policy、session-projection、session-projection-cache、session-title、session-title-llm、session-title-first-prompt-llm、session-title-all-prompts-llm、session-telemetry、session-telemetry-otel | `session-persistence/` + `session-projection/` + `session-title/` + `telemetry/` |
 | `interaction/` | user-questions、user-approval、permission-presets、tool-ask-user、commands、tui | `ui/` |
 | `boot/` | app-boot | `ui/` |
 | `guard/` | repeat-tool-reminder、timeout-policy | `guard/` + `timeout/` |
 | `extensions/` | tool-cordis | `cordis/` |
 
-- **`session/`** 是持久会话数据平面：持久化 seam 连同其各后端与检查点策略、从该日志折叠（fold）出全量值并对外提供的投影、基于日志的标题，以及 OTel 上报。标题折叠本身就是读取侧的承重构件（`session-query` 对 `dsh-session-title` 声明对等依赖），所以标题属于数据平面，而非某个「派生服务」附属区。用这个朴素的名字是有意为之（名字要像人起的）；旁边的 `core/session` 包仍是常驻内存的实时服务，本组则是围绕它的持久家族。`session-query/` 保持独立成组：这个读取／工具面自带模型工具和 SQLite FTS 后端，其消费不依赖持久化内部实现。
+- **`session/`** 是持久会话数据平面：持久化 seam 连同其 JSONL provider 与检查点策略、从该日志折叠（fold）出全量值并对外提供的投影、基于日志的标题，以及 OTel 上报。标题折叠本身就是读取侧的承重构件（`session-query` 对 `dsh-session-title` 声明对等依赖），所以标题属于数据平面，而非某个「派生服务」附属区。用这个朴素的名字是有意为之（名字要像人起的）；旁边的 `core/session` 包仍是常驻内存的实时服务，本组则是围绕它的持久家族。`session-query/` 保持独立成组：这个读取／工具面自带模型工具和 SQLite FTS 后端，其消费不依赖持久化内部实现。
 - **`interaction/`** 是人机协作平面加上应答它的终端通道：提问／批准 seam、权限预设、面向模型的 `ask_user_question` 工具、人类命令注册表（`plan-mode` 与 `command-goal` 已经把 `commands` 和各交互 seam 放在一起消费），以及 `tui`——这个交互通道是该平面功能最丰富的提供方与消费方（对 `commands` 与 `user-questions` 均有对等依赖边），而一个单包 `tui/` 组会把一个顶层名字花在一个插件上。
-- **`boot/`** 是角色完备的单包组：不归属任何通道也不归属任何组装的共享 bin boot 胶水（被 `apps/cli` 与 `examples/` 各演示 bin 消费）。
+- **`boot/`** 是角色完备的单包组：不归属任何通道也不归属任何组装的共享 boot 胶水（被 `apps/cli` 与仅限测试的 Loader driver 消费）。
 - **`guard/`** 保留其文档记载的角色（循环卫生守卫），并新纳入强制执行工具调用超时的包；那个与 `util/timeout` 撞名的单包组 `timeout/` 随之解散。
 - **`extensions/`** 把 `cordis/` 遮蔽掉的角色说了出来：它是供 agent（智能体）在自身当前运行时中检查和挂载插件的工具集，也是未来自我修改类包的落点。
 

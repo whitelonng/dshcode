@@ -1,0 +1,8 @@
+version: 1
+scenario: text-turn
+profile: headless
+composition: default
+recording: live
+header:
+  class: default
+  pin: true

@@ -38,7 +38,7 @@ sdk-wheel:
     - pnpm install --frozen-lockfile
     - pnpm run verify-runtime-closure
     - pnpm exec tsx scripts/build-exe-for-python-sdk.ts --targets="$PKG_TARGET"
-    - EXE="$PWD/dist-exe/dsh-jsonrpc-agent-pkg-$PLATFORM"
+    - EXE="$PWD/dist-exe/deepseek-harness-sdk-runtime-$PLATFORM"
     - test -x "$EXE"
     - uv run --python 3.10 --group test --project python/sdk python scripts/smoke-python-runtime.py --scenario all --exe "$EXE"
     - python scripts/build-python-release.py --package runtime --tag "$CI_COMMIT_TAG" --platform "$PLATFORM" --runtime-exe "$EXE" --output-dir "release/$PLATFORM"
@@ -97,6 +97,43 @@ runtime-macos-arm64:
     - job: sdk-wheel
       artifacts: true
 
+runtime-windows-x64:
+  stage: build
+  tags: [windows-x64]
+  variables:
+    PKG_TARGET: node24-win-x64
+    PLATFORM: win-x64
+  needs:
+    - job: sdk-wheel
+      artifacts: true
+  before_script:
+    - python -m venv .ci-python
+    - $env:DSH_VERSION = (& .ci-python\Scripts\python.exe -c 'import json; print(json.load(open("package.json"))["version"])')
+    - $env:DSH_WHEEL_VERSION = (& .ci-python\Scripts\python.exe -c 'import runpy; release = runpy.run_path("scripts/build-python-release.py"); print(release["pep440_version"](release["repository_version"]()))')
+    - if ($env:CI_COMMIT_TAG -ne "python-v$env:DSH_VERSION") { throw "Tag $env:CI_COMMIT_TAG does not match package.json version $env:DSH_VERSION" }
+    - .ci-python\Scripts\python.exe -m pip install uv==0.11.23
+    - $env:Path = (Join-Path $PWD ".ci-python\Scripts") + [IO.Path]::PathSeparator + $env:Path
+  script:
+    - corepack enable
+    - pnpm install --frozen-lockfile
+    - pnpm run verify-runtime-closure
+    - pnpm exec tsx scripts/build-exe-for-python-sdk.ts --targets=$env:PKG_TARGET
+    - $exe = Join-Path $PWD "dist-exe\deepseek-harness-sdk-runtime-win-x64.exe"
+    - if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Runtime executable is missing at $exe" }
+    - uv run --python 3.10 --group test --project python/sdk python scripts/smoke-python-runtime.py --scenario all --exe $exe
+    - .ci-python\Scripts\python.exe scripts/build-python-release.py --package runtime --tag $env:CI_COMMIT_TAG --platform $env:PLATFORM --runtime-exe $exe --output-dir "release/$env:PLATFORM"
+    - python -m venv .wheel-smoke
+    - .wheel-smoke\Scripts\python.exe -m pip install "release/sdk/deepseek_harness_sdk-$env:DSH_WHEEL_VERSION-py3-none-any.whl" "release/win-x64/deepseek_harness_runtime_bin-$env:DSH_WHEEL_VERSION-py3-none-win_amd64.whl"
+    - Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+    - Remove-Item Env:DSH_RUNTIME_MODE -ErrorAction SilentlyContinue
+    - $blackbox = Join-Path $env:TEMP "dsh-sdk-blackbox-$([guid]::NewGuid())"
+    - New-Item -ItemType Directory -Path $blackbox | Out-Null
+    - Push-Location $blackbox
+    - try { & "$env:CI_PROJECT_DIR\.wheel-smoke\Scripts\python.exe" "$env:CI_PROJECT_DIR\scripts\smoke-python-runtime.py" --scenario all --installed-wheel } finally { Pop-Location }
+  artifacts:
+    paths: [release/win-x64/*.whl]
+    expire_in: 1 week
+
 publish-python:
   stage: publish
   tags: [linux-x64]
@@ -110,6 +147,8 @@ publish-python:
       artifacts: true
     - job: runtime-macos-arm64
       artifacts: true
+    - job: runtime-windows-x64
+      artifacts: true
   before_script:
     - python3 -m venv .ci-python
     - . .ci-python/bin/activate
@@ -118,11 +157,12 @@ publish-python:
     - test "$CI_COMMIT_TAG" = "python-v$DSH_VERSION" || { echo "Tag $CI_COMMIT_TAG does not match package.json version $DSH_VERSION"; exit 1; }
     - python -m pip install twine==6.2.0
   script:
-    - test "$(find release -name '*.whl' | wc -l | tr -d ' ')" = 4
+    - test "$(find release -name '*.whl' | wc -l | tr -d ' ')" = 5
     - test -f "release/sdk/deepseek_harness_sdk-${DSH_WHEEL_VERSION}-py3-none-any.whl"
     - test -f "release/linux-x64/deepseek_harness_runtime_bin-${DSH_WHEEL_VERSION}-py3-none-manylinux_2_28_x86_64.whl"
     - test -f "release/linux-arm64/deepseek_harness_runtime_bin-${DSH_WHEEL_VERSION}-py3-none-manylinux_2_28_aarch64.whl"
     - test -f "release/macos-arm64/deepseek_harness_runtime_bin-${DSH_WHEEL_VERSION}-py3-none-macosx_14_0_arm64.whl"
+    - test -f "release/win-x64/deepseek_harness_runtime_bin-${DSH_WHEEL_VERSION}-py3-none-win_amd64.whl"
     - python -m twine check release/*/*.whl
     - export TWINE_USERNAME=gitlab-ci-token
     - export TWINE_PASSWORD="$CI_JOB_TOKEN"

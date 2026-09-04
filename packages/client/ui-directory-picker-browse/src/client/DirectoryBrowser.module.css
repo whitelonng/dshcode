@@ -1,9 +1,3 @@
-/* Directory-browser dialog (figma 813-23126 family). The shared Modal renders
- * headless here — mask, card, Escape only — and this module owns the figma
- * frame: 680×500 card (viewport-clamped; upsized from the figma 600×420),
- * header (title + crumbs, l3 separator),
- * the one-or-two-column Miller content, and the bordered footer. */
-
 /* Doubled class beats Modal's own .dialog regardless of stylesheet order. */
 /* Short viewports clamp the card: header/footer are flex-none and the
  * columns scroll, so shrinking the height keeps Open/Cancel reachable
@@ -35,7 +29,7 @@
   gap: 8px;
   flex: none;
   padding: 16px 14px 8px 24px;
-  border-bottom: 1px solid var(--dsw-alias-border-l3);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
 
 .title {
@@ -221,7 +215,7 @@
 
 .divider {
   flex: none;
-  width: 1px;
+  width: 0.5px;
   background: var(--dsw-alias-border-l3);
 }
 
@@ -329,7 +323,7 @@
   gap: 8px;
   flex: none;
   padding: 16px 24px;
-  border-top: 1px solid var(--dsw-alias-border-l3);
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
 }
 
 /* Show-hidden toggle: a subtle fixed-label text button left of the gap;
@@ -406,7 +400,7 @@
   width: 100%;
   height: 44px;
   padding: 7px 14px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l4);
   border-radius: 22px;
   outline: none;
   background: transparent;

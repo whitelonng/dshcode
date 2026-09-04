@@ -32,7 +32,7 @@ Status: implemented
 
 这道门确实挡住了一样东西，本 note 如实写出，因为这个决策必须在准确版本下也站得住：不在名单上的已注册命名空间，其 resolved、`base` 与 `user` 值根本不会抵达浏览器。插件清单页不能替代它——`PluginInventoryEntry` 携带的是 `entryId`、`moduleName`、`enabled` 与 `fiberPhase`，它那一行「configuration」渲染的是启用／停用标签，从不是任何已存值。
 
-这道门不是的，是它所处位置暗示的那种边界。每个 `settings.*` 方法都在 `PRIVILEGED_METHODS` 里（`packages/client/connection`），非回环或跨源请求在到达这段代码之前就以 403 被拒；`role('secret')` 字段在每种响应的每一层都被结构性剥离；而这个面所编辑的文档，本就是用户自己的 `settings.yaml`，同一个设置页还提供了打开它的入口。它没有挡住的写入，恰恰是有分量的那些：`permission`（能放宽审批预设）与 `agent-presets`（决定一个会话挂载什么）本来就已被服务。
+这道门不是的，是它所处位置暗示的那种安全边界。Connection 在到达这段代码前认证每个 Host API 请求；`role('secret')` 字段在每种响应的每一层都被结构性剥离；而这个面所编辑的文档，本就是用户自己的 `settings.yaml`，同一个设置页还提供了打开它的入口。它没有挡住的写入，恰恰是有分量的那些：`permission`（能放宽审批预设）与 `agent-presets`（决定一个会话挂载什么）本来就已被服务。
 
 因此本次改动在本仓库实际新增的暴露面是一个命名空间：`agent-default-model`——它的两个字段指明一个提供方与一个模型，且没有任何浏览器半侧渲染它。将来若某个命名空间的值确实不该跨越协议，由 `role('secret')` 逐字段作答：比整命名空间开关更精细，而且已经在执行。
 
@@ -52,7 +52,7 @@ Status: implemented
 
 ## Consequences
 
-在本仓库之外分发的插件无需改动这里即可从设置页配置：它在 Host 上注册自己的命名空间、在浏览器里把卡片注册在该键上，由分区把两者配对。卡片现在按卡片注册顺序出现，而不再依赖手工指定的 `order`。对本包注册的这几张卡它是稳定的——它们从同一个 generator 安装；对**跨插件**的卡片它并不稳定：包与包之间的 apply 顺序是无约束的（`packages/client/AGENTS.md`），因此多个外部卡片仍可能在不同次启动之间重排。要为它们定序，需要一个 section 可排序的显式键，而 keyed 注册今天并不携带。
+在本仓库之外分发的插件无需改动这里即可从设置页配置：它在 Host 上注册自己的命名空间、在浏览器里把卡片注册在该键上，由分区把两者配对。卡片现在按卡片注册顺序出现，而不再依赖手工指定的 `order`。对本包注册的这几张卡它是稳定的——它们从同一个 generator 安装；对**跨插件**的卡片它并不稳定：包与包之间的 apply 顺序是无约束的（`packages/client/AGENTS.md`），因此多个外部卡片仍可能在不同次启动之间重排。要为它们定序，需要一个 section 可排序的显式键，而 keyed 注册并不携带。
 
 以下延后，且都大于本次改动：脱敏器对只能经由 union、intersection 或 transform 抵达的 `role('secret')` 原样返回（其自身的 `TODO(settings-wire-redaction)`），而 `schema.toJSON()` 会携带 secret 的默认值。该缺口早于本次改动，但服务每一个已注册命名空间，把它的影响面从本仓库内经审计的 schema 扩大到任意第三方 schema，因此协议应当拒绝服务它无法证明可安全脱敏的命名空间。同样延后的还有：对本次头号能力的组装态测试——用 overlay 挂载一个 fixture 插件（Host 半注册命名空间、`dsh.client` 半注册卡片）并在端到端断言。当前覆盖分别证明了两个半侧；已发卡片输出未变这一点，证明不了新路径。
 

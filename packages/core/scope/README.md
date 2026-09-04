@@ -1,37 +1,114 @@
-# dsh-scope
+---
+description: "The scoped-registration library for plugin authors and maintainers building registries or event surfaces that isolate contributions per agent or per group."
+kind: "package-library"
+---
+
+# @deepseek-ai/dsh-scope
 
 English | [中文](README.zh.md)
 
-Scoped registration primitive. `createScope(ctx, key)` creates a tagged Cordis context whose backing fiber owns every registration made through it. `scopeOf(ctx)` reads the tag, and `scopeTarget(base, key)` routes scoped events to listeners with the same key while leaving unscoped listeners global. Keys form an optional parent chain (`bindScopeParent`): registration views inherit DOWN it — a child scope sees its ancestors' layers, nearest shadowing farthest — and event admission extends UP it — a listener tagged with an ancestor receives a descendant key's events, never the reverse. The agent loop creates one scope per live agent and an agent preset's standing mount is a parent scope over its agents, but the mechanism is key-agnostic so lower-level packages can use it without depending on either.
+## Summary
 
-## Public API
+The dependency-free `dsh-scope` library gives registrations a per-agent home. Mint a tagged context with `createScope(ctx, key)` and everything registered through it is visible in one scope, unwinding when that scope disposes; read a context's scope tag with `scopeOf(ctx)`; and route scope-filtered events with `scopeTarget(base, key)` to listeners with the same key while leaving untagged listeners global. Keys can form a parent chain: a child scope sees its ancestors' layers (nearest shadows farthest), and a listener tagged with an ancestor receives descendant events — never the reverse. It is key-agnostic: the agent loop uses one scope per live agent and an agent preset's standing mount is a parent scope over its agents, but lower-level packages can use it without depending on either. Choose it when you build a registry or event surface that must isolate contributions per agent or per group.
 
-- `createScope(ctx: Context, key: ScopeKey, options?): Scope` Mint a scope under `ctx`'s fiber. Usable synchronously (effect collection is uid-gated; service resolution falls through to the minting plugin's dependency surface). The typed, same-process key is trusted; an inactive minting context still fails through Cordis (`INACTIVE_EFFECT`). `options.parent` binds the enclosing scope via `bindScopeParent` before the scope is usable; the binding stays internal.
-- `bindScopeParent(key, parent): ScopeParentBinding` / `scopeParentOf(key)` / `scopeChainOf(key)` The parent relation behind both chain directions. Binding is once: a key that already has a parent throws, and only the returned binding's `rebind(parent)` may re-link it — the blank-session recompose operation, valid only while nothing produced under the old parent is retained (the holder's contract — this relation cannot see what a session logged). Both the bind and every rebind reject a link closing a cycle. `scopeChainOf` returns `[key, parent, …]` nearest-first.
-- `Scope.ctx` The tagged context: registrations through it are scope-visible AND scope-lifetime. Derived contexts (an `extend`, a fiber mounted under it) inherit the tag; nested scopes shadow (nearest tag wins).
-- `Scope.rawDispose` The EXACT Cordis disposer for the backing fiber — a composite (generator) effect yields THIS function to nest the scope's teardown at that yield position (Cordis dedupes nested effects by function identity; yielding a wrapper leaves the scope disposing as a concurrent sibling).
-- `Scope.dispose(): Promise<void>` Idempotent, shared quiescence boundary for every registration made through the scope. Racing/repeat calls await the same teardown, including when `rawDispose` invoked the underlying single-shot Cordis disposer first.
-- `scopeOf(ctx: Context): ScopeKey | undefined` The tag a context (or any context derived from it) carries; `undefined` = context-global.
-- `scopeTarget(base: T, key: ScopeKey | undefined): Scoped<T>` Build the opaque dispatch `thisArg` for a scope-filtered event. It composes `base`'s existing `Context.filter` with the scope predicate (untagged listener ⇒ admitted; tagged ⇒ admitted iff its tag is the key or an ancestor of it; `key === undefined` ⇒ untagged only). The carrier contains routing state only; the real subject is carried by the event arguments. `{ global: true }` listeners bypass filtering (Cordis semantics).
-- `Scoped<T>` The compile-time opaque carrier brand: scope-filtered events demand it as their `this` type, so dispatching with a bare subject is a compile error. The type parameter records the subject type but does not expose its properties.
-- `isScopeCarrier(value)` / `carrierKeyOf(value)` Runtime carrier marks, used by the dev invariants to assert every scope-filtered dispatch carries a carrier keyed to the subject its arguments name.
-- `ScopeLayer` Aggregate contract for one registry's complete global or exact-scope contribution; `isEmpty()` controls scoped-layer reclamation.
-- `ScopedLayers<L>` Own one eager global layer and lazy exact-scope layers. `peek()` never creates and stays chain-blind (a scope's OWN contributions — restrictions, guards — must not silently pick up an ancestor's), `chainLayers()` returns existing overlays farthest-ancestor-first, `merge()` materializes insertion-ordered named shadows along the chain, and `effect()` derives visibility and ownership from the same context while returning the exact Cordis disposer.
-- `NamedEntries<V>` Insertion-ordered named storage with caller-owned duplicate diagnostics, lookup, and live iteration within one nonempty table generation; draining the table detaches existing iterators from later insertions, and `insert()` returns an idempotent exact-entry undo.
-- `AnonymousEntries<V>` Insertion-ordered anonymous storage whose unique internal keys keep equal values as independent registrations; it uses the same drained-generation iterator boundary, and `append()` returns an idempotent exact-entry undo.
+## Table of Contents
 
-The optional `@deepseek-ai/dsh-scope/invariant` companion owns that runtime assertion. It uses the generated `scoped-events.generated.ts` resolver map to require a carrier for every declared scoped event and, when the payload exposes its routing subject, require identity with the carrier key. The Program-backed generator derives the map from event declarations and real `scopeTarget(base, key)` calls.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-## Design contract
+-----
 
-The registration context determines both visibility and ownership, preventing a registration from being visible in one scope but disposed with another. Scopes route trusted same-process plugins; they are not sandboxes or authority boundaries. See the [agent-scope Agent Note](../../../.agents/notes/implemented/architecture/2026-07-08-agent-scope-contexts.md#security-and-authority-are-non-goals) for rationale and security non-goals.
+<a id="use-this-package"></a>
+## Use this package
 
-Scope-aware services define a concrete `ScopeLayer` that aggregates their heterogeneous tables and domain helpers. `ScopedLayers.effect()` accepts one synchronous action returning one synchronous undo, installs that undo before optional notification, and reclaims an exact-scope layer only when the complete aggregate is empty. `notify` defaults to `true`; the supplied callback owns whether observer failures throw or are contained. `EntryValues` remains internal, the storage classes are imported from the package root rather than a `/store` subpath, and the shared storage does not define registry-specific filtering or iteration policy. See the [shared scoped-layer storage Agent Note](../../../.agents/notes/implemented/architecture/2026-07-12-scoped-layers-store.md).
+Plugin authors use `dsh-scope` to give one agent (or one group) its own registration world. The registries in the core group build on it — a tool registered through `agent.ctx` is visible only to that agent — and the same primitive serves any custom registry or scope-filtered event.
 
-Handing out a scoped context hands out the minting plugin's service-resolution API (resolution walks the minting fiber's dependency chain, not the holder's) — mint it from the plugin whose dependencies the scoped registrations need to resolve.
+### Mint a scope
+
+`createScope(ctx, key)` creates a scope under `ctx`'s fiber: its `ctx` carries the scope tag, and everything registered through it is both scope-visible and scope-lifetime. `dispose()` unwinds every registration through the scope; `rawDispose` is the exact Cordis disposer for nesting the teardown in an ordered composite effect.
+
+```text
+const scope = createScope(ctx, agent)
+scope.ctx.on('agent/status', ({ agent, status }) => track(agent, status))
+// later:
+await scope.dispose()   // unwinds every registration made through scope.ctx
+```
+
+### Route scoped events
+
+`scopeTarget(base, key)` builds the opaque carrier a scope-filtered event dispatches with. Untagged listeners stay global; a listener tagged with `key` receives events for that key and its descendants. The carrier carries routing state only — the real subject travels in the event arguments.
+
+### Build a scoped registry layer
+
+Registry authors use `ScopedLayers`, `NamedEntries`, and `AnonymousEntries` to hold one eager global layer plus lazily created exact-scope layers: reads never create layers, `merge()` materializes insertion-ordered named shadows along the scope chain, and `effect()` derives visibility and ownership from the same context. A scoped layer is reclaimed only when its whole aggregate is empty.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the package realizes the behavior above; the observable contract is covered in [Use this package](#use-this-package).
+
+### Design concept
+
+The registration context determines both visibility and ownership: a registration made through a scoped context is visible in that scope and disposed with it, preventing a contribution from being visible in one scope but torn down with another. The primitive routes trusted same-process plugins; it is not a sandbox or an authority boundary. Handing out a scoped context also hands out the minting plugin's service-resolution API (resolution walks the minting fiber's dependency chain), so a scope is minted from the plugin whose dependencies the scoped registrations need.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | `createScope`, `scopeOf`, `scopeTarget`, `bindScopeParent`/`scopeParentOf`/`scopeChainOf`, carrier marks |
+| [`src/store.ts`](src/store.ts) | `ScopedLayers`, `NamedEntries`, `AnonymousEntries`, `ScopeLayer` |
+| [`src/invariant.ts`](src/invariant.ts) | Invariant companion over the generated scoped-event map |
+| [`src/scoped-events.generated.ts`](src/scoped-events.generated.ts) | Generated resolver map of declared scoped events |
+
+### The parent chain
+
+One relation powers both directions: registration views inherit DOWN the chain (a child scope sees its ancestors' layers), while event admission extends UP it (a listener tagged with an ancestor receives events dispatched to a descendant key). Binding is once — a key that already has a parent throws, and only the returned binding may re-link it — and every link rejects a cycle. `scopeChainOf` returns `[key, parent, …]` nearest-first.
+
+### Event filtering
+
+`scopeTarget` composes the base's existing `Context.filter` with the scope predicate: an untagged listener is admitted; a tagged listener is admitted iff its tag is the dispatch key or an ancestor of it; `key === undefined` admits untagged listeners only. `{ global: true }` listeners bypass filtering. The `Scoped<T>` brand demands the carrier as the `this` type of a scope-filtered event, so dispatching with a bare subject is a compile error.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+The package-level contract is enough for most consumers; read these when you need the surrounding domain and the design rationale.
+
+- [Scoped registration subsystem](../../../docs/subsystems/scope.md) — the identity, carrier, and layer types.
+- [Agent-scope contexts Agent Note](../../../.agents/notes/implemented/architecture/2026-07-08-agent-scope-contexts.md) — the security non-goals and context design.
+- [Scoped-layers store Agent Note](../../../.agents/notes/implemented/architecture/2026-07-12-scoped-layers-store.md) — the registry-layer decision.
+- [Agent-scope runtime design Agent Note](../../../.agents/notes/implemented/architecture/2026-07-12-agent-scope-runtime-design.md) — how the loop builds per-agent scopes.
+- [Core group map](../README.md) — how the core packages compose.
+
+-----
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+These limits define when the primitive needs special care. They are current package constraints, not a task backlog.
+
 - **Only scope-aware APIs isolate state** — registries must file by `scopeOf()` and events must dispatch through `scopeTarget()`; an arbitrary Cordis service remains context-global merely because it is called through a scoped context.
-- **A context carries one nearest scope key** — the hierarchy lives in the key-level parent relation, not in context tags; nested scope CONTEXTS still shadow to a single tag, and multi-membership policy sets remain unsupported.
+- **A context carries one nearest scope key** — the hierarchy lives in the key-level parent relation, not in context tags; nested scope contexts still shadow to a single tag, and multi-membership policy sets remain unsupported.
 - **Service reachability comes from the scope minter** — handing out `Scope.ctx` also hands out the minting plugin's injected services, so a broader minter cannot later be narrowed by the holder.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

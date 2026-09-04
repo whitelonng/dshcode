@@ -45,7 +45,7 @@ A provider exposes `start(request) → Promise<SubagentRun>`. Fulfillment publis
 
 ### Two kinds of optional capability, discovered two ways
 
-- **Start-time features** (`outputSchema`, `depthLimit`, `toolFilter`, `persona`) ride on a static `provider.capabilities` descriptor. The service checks every requested one BEFORE delegating and **rejects loud** (`SubagentError('UNSUPPORTED_CAPABILITY')`) if the provider lacks it — never accepted-then-ignored. They must be checked before a run exists, which is why they cannot be runtime methods.
+- **Start-time features** (`agentOptions`, `outputSchema`, `depthLimit`, `toolFilter`, `persona`) ride on a static `provider.capabilities` descriptor. The service checks every requested one BEFORE delegating and **rejects loud** (`SubagentError('UNSUPPORTED_CAPABILITY')`) if the provider lacks it — never accepted-then-ignored. They must be checked before a run exists, which is why they cannot be runtime methods.
 - **Continuable creation** is the optional `SubagentProvider.prepareContinuable` method; presence is the capability and TypeScript narrowing is the discovery mechanism, so no separate flag can drift from the implementation. The continuation manager owns later delivery and cold resume directly through `AgentHandle`, while one-shot `SubagentRun` has no steering or resume operation, as refined by [continuable subagents](2026-07-28-continuable-subagent-conversations.md).
 
 ### Fork vs. fresh are separate backends, not a flag
@@ -60,9 +60,9 @@ Each in-process subagent runs in its **own `Session`** (own id, `parentSession` 
 
 `dsh-tool-subagent` passes its execution signal to `start()`, awaits the child result, and disposes the run before reporting. Non-completed outcomes become error results rather than successful partial output; they present the optional safe diagnostic owned by the [non-interactive permissions decision](2026-08-15-product-subagent-noninteractive-permissions.md) separately from partial assistant text. Independent result and disposal rejections remain independently observable.
 
-### Provider selection is config, not model-facing
+### Transport provider selection is config, not model-facing
 
-`dsh-tool-subagent` binds to exactly one provider name (`Config.provider`); the model sees only `{ description, prompt }`. To expose more than one transport, load the tool plugin more than once, each bound to a different provider and a distinct `toolName` (the tool registry rejects a duplicate name). The *service* holds the multi-provider registry; the *tool* picks one — the schema carries no provider/type parameter.
+`dsh-tool-subagent` binds to exactly one subagent transport provider name (`Config.provider`). To expose more than one transport, load the tool plugin more than once, each bound to a different provider and a distinct `toolName` (the tool registry rejects a duplicate name). The *service* holds the multi-provider registry; the *tool* picks one — its schema carries no subagent transport/type parameter. A later opt-in adds child LLM provider/model fields without changing this transport decision; see [model-selected subagent routes](2026-08-18-model-selected-subagent-routes.md).
 
 ## Testing
 

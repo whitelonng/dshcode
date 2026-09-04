@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -62,7 +62,7 @@ async function tempPng(): Promise<string> {
 function callDescribe(ctx: Context, image: string) {
   return ctx.tools.execute({
     signal: new AbortController().signal,
-    callId: CallId('settings-vision-call'),
+    callId: ToolCallId('settings-vision-call'),
     name: 'describe_image',
     arguments: { image },
   })

@@ -4,7 +4,7 @@
  * listener is the only writer; the section component reads via
  * props.useStore and writes through the injected callbacks.
  */
-import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { NotificationPermissionState } from './notification-sink.ts'
 
 /** Store state mirrored from the preference scope and the service. */

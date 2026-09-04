@@ -15,6 +15,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import { SandboxProvider, SandboxUnavailableError } from '@deepseek-ai/dsh-sandbox'
 import type { ConfinedArgv, RunnerFailureRule, SandboxExecutionPolicy, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { resolvePwshPath } from '@deepseek-ai/dsh-pwsh-local'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { SandboxPolicyService } from '@deepseek-ai/dsh-sandbox-policy'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import { SandboxPwshExecutor } from '../src/index.ts'
@@ -64,6 +65,7 @@ async function setup(
     }
   }
   const ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(FakeSandboxProvider)
   await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: spillDir })
   await ctx.plugin(subprocess)

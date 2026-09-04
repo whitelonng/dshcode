@@ -23,18 +23,19 @@
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
+import { brandString } from '@deepseek-ai/dsh-brand'
 import type {
   Agent,
   AgentHandle,
   AgentOptions,
-  AgentSetupCommit,
   CreateAgentOptions,
 } from '@deepseek-ai/dsh-agent'
-import { boundContextSummary, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId, boundContextSummary, contentHasImage, createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { SessionLogOffset } from '@deepseek-ai/dsh-session'
+import type { SessionEvent, SessionId, SessionLogOffset as SessionLogOffsetType } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
+import type { SessionObservation, SessionQueryEngine } from '@deepseek-ai/dsh-session-query'
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
 import { foldSubagentDescriptor, snapshotSubagentDescriptor } from './descriptor.ts'
 import type { SubagentDescriptorData } from './descriptor.ts'
@@ -52,30 +53,21 @@ import { seedDescriptorTurn } from './descriptor-seed.ts'
 import type { ContinuableCreateRequest, ContinuableCreateSpec, SubagentResult, SubagentStartRequest } from './types.ts'
 import type { ActivationObserver, ActivationTerminal } from './lifecycle.ts'
 import { SubagentError } from './error.ts'
-import type SubagentActivationSetupRegistry from './activation-setup-registry.ts'
+import { isAdjacentAgentSendMessageTool } from './internal.ts'
 
-/** Attribution for a model coordinator's follow-up to one of its children. */
-export interface CoordinatorMessageSource {
-  readonly kind: 'coordinator'
+/** Durable attribution for one model-authored message between adjacent Agents. */
+export interface AgentMessageSource {
+  readonly kind: 'agent-message'
   /** A message another agent addressed to this one (`relay` context form). */
   readonly form: 'relay'
-  /** Session id of the agent whose tool call produced the follow-up. */
-  readonly senderSessionId: SessionId
-}
-
-/** Durable attribution for a continuable child's explicit parent report. */
-export interface SubagentReportMessageSource {
-  readonly kind: 'subagent-report'
-  /** A message another agent addressed to this one (`relay` context form). */
-  readonly form: 'relay'
-  /** Session id of the reporting child. */
+  /** Session id of the Agent whose tool call produced the message. */
   readonly senderSessionId: SessionId
 }
 
 /**
  * Durable attribution for the runtime's own account of a continuable child
  * settling. Deliberately a different kind from
- * {@link SubagentReportMessageSource}: a report is content the child chose,
+ * {@link AgentMessageSource}: an Agent message is content the sender chose,
  * while this message is the manager stating what became of the child, and a
  * transcript that merged them would credit the child with words it never wrote.
  */
@@ -91,21 +83,9 @@ export interface SubagentSettledMessageSource {
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    coordinator: CoordinatorMessageSource
-    'subagent-report': SubagentReportMessageSource
+    'agent-message': AgentMessageSource
     'subagent-settled': SubagentSettledMessageSource
   }
-}
-
-/** Deployment scheduling policy for accepted child reports. */
-export type SubagentReportDelivery = 'quiet' | 'next-step'
-
-/** Options for one continuable child's report to its direct parent. */
-export interface SubagentReportOptions {
-  /** Already-resolved parent scheduling policy. */
-  readonly delivery: SubagentReportDelivery
-  /** Caller cancellation, owning authorization and admission until acceptance. */
-  readonly signal: AbortSignal
 }
 
 /** What a caller asks for when starting a continuable background child. */
@@ -146,13 +126,16 @@ export type SubagentInterruptAuthority =
   | { readonly kind: 'user'; readonly parentSessionId: SessionId }
   | { readonly kind: 'ancestor'; readonly agent: Agent }
 
-/** Options for following up with one continuable child. */
-export interface SubagentFollowupOptions {
-  /** Durable attribution retained on the delivered message; it grants no authority. */
-  readonly source: MessageSource
+/** Options for one model-authored message between adjacent Agents. */
+export interface SubagentSendMessageOptions {
   /** Caller cancellation, owning the operation only until inbox acceptance. */
   readonly signal: AbortSignal
 }
+
+/** Inputs shared by model steering and the human Queue adapter. */
+type ChildDeliveryOptions =
+  | { readonly delivery: 'steer'; readonly signal: AbortSignal }
+  | { readonly delivery: 'queue'; readonly source: MessageSource; readonly signal: AbortSignal }
 
 /**
  * The residency state of one continuable child, derived from Agent quiescence
@@ -231,7 +214,7 @@ interface Activation {
   disposal: Promise<void> | undefined
   /**
    * Accepted waking message ids this manager has not yet seen leave the inbox.
-   * `Agent.status` is still `idle` in the window between `followup()` and the
+   * `Agent.status` is still `idle` in the window between a waking send and the
    * microtask that admits it, so settlement must not treat that gap as quiet.
    */
   readonly accepted: Set<MessageId>
@@ -258,6 +241,8 @@ interface MaterializeInputs {
   create?: {
     seed: readonly SessionEvent[]
     meta: NonNullable<CreateAgentOptions['meta']>
+    /** Exact parent-log prefix length inside {@link seed}. */
+    inheritedEventCount: SessionLogOffsetType
     /** Policy captured at the delegation boundary: the parent's sandbox override plus the approval pin. */
     delegatedPolicies: DelegatedPolicyOverrides
   }
@@ -285,6 +270,42 @@ interface Materialization {
  */
 function disposalOf(activation: Activation): Promise<void> | undefined {
   return activation.disposal
+}
+
+/** Build durable attribution for one adjacent-Agent message. */
+function agentMessageSource(sender: Agent): AgentMessageSource {
+  return {
+    kind: 'agent-message',
+    form: 'relay',
+    senderSessionId: sender.id,
+  }
+}
+
+/** Build the model-visible and durable representation of one adjacent-Agent message. */
+function agentMessage(sender: Agent, content: ContentBlock[]) {
+  return createUserMessage({
+    content: [
+      { type: 'text' as const, text: `Agent ${sender.id} sent a message:` },
+      ...content,
+    ],
+    source: agentMessageSource(sender),
+  })
+}
+
+/** Append adjacent-Agent return guidance to a continuable child's initial task. */
+function continuableInitialPrompt(parentId: SessionId, prompt: ContentBlock[]): ContentBlock[] {
+  const encodedParentId = JSON.stringify(parentId)
+  return [
+    ...prompt,
+    {
+      type: 'text',
+      text: `Your parent agent id is ${encodedParentId}. Before you finish, send your result to that agent with `
+        + `send_message({ agent_id: ${encodedParentId}, message: "<self-contained result>" }). The parent shares `
+        + 'your workspace but does not automatically receive your transcript, tool output, or reasoning. Send '
+        + 'earlier messages as well when a finding changes what the parent should do next; sending a message '
+        + 'does not end your turn.',
+    },
+  ]
 }
 
 /**
@@ -372,7 +393,6 @@ export class SubagentContinuationManager {
   constructor(
     private readonly ctx: Context,
     private readonly host: ContinuationHost,
-    private readonly setupRegistry: SubagentActivationSetupRegistry,
   ) {
     // Ordinary Cordis owner effects unwind in reverse registration order, which
     // cannot express the dynamic child graph. Register the private scope's
@@ -412,19 +432,22 @@ export class SubagentContinuationManager {
     this.assertAdmitting(parent)
     const persistence = this.requirePersistence()
     assertSubagentMaxDepth(request.maxDepth)
-    const childId = spec.childId ?? SessionId(randomUUID())
+    const childId = spec.childId ?? brandString<SessionId>(randomUUID())
     this.assertChildIdAvailable(childId)
     const childDepth = resolveChildDepth(parent, request.maxDepth)
     // Snapshot before any await: invalid descriptor JSON rejects the call
     // before a child exists, and the detached value is what reaches the log.
-    const agentProvider = request.agentOptions?.provider ?? parent.options.provider
-    const agentModel = request.agentOptions?.model ?? parent.options.model
+    const agentOptions = resolveChildAgentOptions(parent, request.agentOptions, childDepth)
+    const agentProvider = agentOptions.provider
+    const agentModel = agentOptions.model
+    const agentReasoningEffort = agentOptions.reasoningEffort
     const descriptor = snapshotSubagentDescriptor({
       mode: 'continuable',
       provider: spec.provider,
       label: spec.label,
       ...agentProvider !== undefined ? { agentProvider } : {},
       ...agentModel !== undefined ? { agentModel } : {},
+      ...agentReasoningEffort !== undefined ? { agentReasoningEffort } : {},
       ...request.persona !== undefined ? { persona: request.persona } : {},
       ...request.toolFilter !== undefined ? { toolFilter: request.toolFilter } : {},
     })
@@ -440,7 +463,7 @@ export class SubagentContinuationManager {
     spec.signal.throwIfAborted()
     this.assertAdmitting(parent)
 
-    const lineageSeedLength = prepared.seed?.length ?? 0
+    const inheritedEventCount = SessionLogOffset(prepared.seed?.length ?? 0)
     const seed = seedDescriptorTurn(childId, prepared.seed, descriptor)
     const messageId = await this.locks.run(childId, async () => {
       spec.signal.throwIfAborted()
@@ -459,17 +482,23 @@ export class SubagentContinuationManager {
         childId,
         provider: spec.provider,
         parent,
-        create: { seed, meta: childSessionMeta(parent, childDepth, lineageSeedLength), delegatedPolicies },
-        agentOptions: resolveChildAgentOptions(parent, request.agentOptions, childDepth),
+        create: {
+          seed,
+          meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined),
+          inheritedEventCount,
+          delegatedPolicies,
+        },
+        agentOptions,
         composition: { persona: request.persona, toolFilter: request.toolFilter },
         signal: spec.signal,
       })
       return this.submitMaterialized(
         activation,
-        request.prompt,
-        { kind: 'user' },
+        isAdjacentAgentSendMessageTool(this.ctx.get('tools')?.get('send_message', activation.handle.agent))
+          ? continuableInitialPrompt(parent.id, request.prompt)
+          : request.prompt,
+        { source: { kind: 'user' }, signal: spec.signal, delivery: 'queue' },
         parent,
-        spec.signal,
       )
     })
     return { childId, messageId }
@@ -483,27 +512,75 @@ export class SubagentContinuationManager {
   }
 
   /**
-   * Deliver one later message to a known continuable child as its next FIFO
-   * turn. Routing depends only on Activation residency: a `running` Activation
-   * enqueues, a `waiting` one wakes the same Agent, and an absent one
-   * cold-resumes a new Activation from the persisted Session. The Agent inbox
-   * is the only queue, so every accepted message has one observable order.
-   *
-   * The caller signal owns lookup, materialization, and admission only until
-   * inbox acceptance; afterwards the accepted turn cannot be cancelled through
-   * this service.
-   * @param parent - the exact live direct parent authorizing this delivery.
-   * @param childId - the durable child session id.
-   * @param content - the user-role content to deliver.
-   * @param options - the message source fields and caller cancellation.
+   * Deliver one model-authored message to a direct continuable child or to the
+   * sender's direct parent. Both directions use Steer: a running target admits
+   * the message at its nearest step boundary, while an idle target starts a
+   * turn. A missing direct child cold-resumes through the ordinary continuation
+   * lifecycle. The caller signal owns the operation only until inbox acceptance.
+   * @param sender - exact live Agent authorizing and originating the message.
+   * @param targetId - durable direct-parent or direct-child session id.
+   * @param content - model-authored content to deliver.
+   * @param options - caller cancellation before acceptance.
    * @returns the accepted message's inbox id.
-   * @throws when parent authority, availability, or admission rejects the delivery.
+   * @throws when adjacency, availability, or admission rejects delivery.
    */
-  async followup(
+  async sendMessage(
+    sender: Agent,
+    targetId: SessionId,
+    content: ContentBlock[],
+    options: SubagentSendMessageOptions,
+  ): Promise<MessageId> {
+    if (this.ctx.agents.get(sender.id) !== sender) {
+      throw new SubagentError(
+        'message delivery requires the exact live sender agent',
+        'UNAUTHORIZED',
+      )
+    }
+    this.assertAdmitting(sender)
+    const senderActivation = this.activations.get(sender.id)
+    if (senderActivation !== undefined
+      && senderActivation.handle.agent === sender
+      && senderActivation.parentSession === targetId) {
+      options.signal.throwIfAborted()
+      return this.sendToParent(senderActivation, sender, content)
+    }
+    if (sender.session.header.parentSession === targetId) {
+      throw new SubagentError(
+        `agent "${sender.id}" is not a resident continuable child and cannot send to parent "${targetId}"`,
+        'UNAUTHORIZED',
+      )
+    }
+    return this.deliverToChild(sender, targetId, content, {
+      signal: options.signal,
+      delivery: 'steer',
+    })
+  }
+
+  /**
+   * Queue one human-authored prompt as a distinct direct-child turn.
+   * @param parent - exact live direct parent authorizing delivery.
+   * @param childId - durable direct-child session id.
+   * @param content - human-authored content to deliver.
+   * @param source - durable host-protocol provenance.
+   * @param signal - caller cancellation before inbox acceptance.
+   * @returns the accepted message's inbox id.
+   */
+  async queuePrompt(
     parent: Agent,
     childId: SessionId,
     content: ContentBlock[],
-    options: SubagentFollowupOptions,
+    source: MessageSource,
+    signal: AbortSignal,
+  ): Promise<MessageId> {
+    return this.deliverToChild(parent, childId, content, { source, signal, delivery: 'queue' })
+  }
+
+  /** Route one parent-originated delivery through residency and cold resume. */
+  private async deliverToChild(
+    parent: Agent,
+    childId: SessionId,
+    content: ContentBlock[],
+    options: ChildDeliveryOptions,
   ): Promise<MessageId> {
     this.assertAdmitting(parent)
     while (true) {
@@ -512,14 +589,27 @@ export class SubagentContinuationManager {
         if (activation === undefined) return this.coldResume(parent, childId, content, options)
         // A delivery that arrives after the disposal transaction began must not
         // reach a handle being torn down; wait for release, then cold-resume.
+        const disposal = activation.disposal
         /* v8 ignore next 3 -- the send-versus-dispose cutoff: reaching this arm needs a
          * delivery to observe the transaction inside the same critical section that opened it,
          * which no test can schedule deterministically. The behavior is covered end-to-end by
          * "cold-resumes a delivery that lost the race with final disposal". */
-        if (activation.disposal !== undefined) {
-          return activation.disposal.then(() => undefined, () => undefined)
+        if (disposal !== undefined) {
+          return disposal.then(() => undefined, () => undefined)
         }
-        return this.submitAdmitted(activation, content, options.source, parent, options.signal)
+        // Text-only delivery stays await-free, so the disposal-cutoff check
+        // above and the submit share one critical window. The image path
+        // awaits a capability read, so it re-checks the cutoff afterwards; a
+        // disposal that began during the read is waited out and retried like
+        // one observed on entry.
+        if (contentHasImage(content)) {
+          await this.assertImageCapable(activation.handle.agent, options.signal)
+          if (activation.disposal !== undefined) {
+            await Promise.allSettled([activation.disposal])
+            return undefined
+          }
+        }
+        return this.submitAdmitted(activation, content, options, parent)
       })
       /* v8 ignore start -- only the lost-cutoff arm above returns undefined, so only that
        * race reaches the retry below, which then cold-resumes a new Activation. */
@@ -593,88 +683,29 @@ export class SubagentContinuationManager {
     )
   }
 
-  /**
-   * Deliver explicitly selected content from one resident continuable child to
-   * its durable direct parent. Sender authorization, parent resolution, and
-   * send acceptance share one no-await span. Reporting neither concludes the
-   * child's turn nor changes its Activation lifetime.
-   * @param child - exact live reporting child; this is the authority credential.
-   * @param content - selected model-facing content.
-   * @param options - scheduling policy and pre-acceptance cancellation.
-   * @returns the stable identity of the message accepted by the parent.
-   * @throws {SubagentError} when the sender is unauthorized, the parent is not
-   *   live, or continuation admission is closing.
-   */
-  // oxlint-disable-next-line typescript/require-await -- keep rejection semantics without yielding during admission
-  async reportFrom(
-    child: Agent,
+  /** Deliver one resident continuable child's message to its live direct parent. */
+  private sendToParent(
+    activation: Activation,
+    sender: Agent,
     content: ContentBlock[],
-    options: SubagentReportOptions,
-  ): Promise<MessageId> {
-    options.signal.throwIfAborted()
-    this.assertAdmitting(child)
-    const activation = this.authorizeReporter(child)
-    const parent = this.resolveReportParent(child)
-    return this.deliverReport(activation, parent, content, options.delivery)
-  }
-
-  /** Authorize only the exact Agent of one resident Activation. */
-  private authorizeReporter(child: Agent): Activation {
-    const activation = this.activations.get(child.id)
-    if (activation === undefined || activation.handle.agent !== child) {
-      throw new SubagentError(
-        `agent "${child.id}" is not a live continuable subagent and cannot report`,
-        'UNAUTHORIZED',
-      )
-    }
-    /* v8 ignore next 6 -- only a synchronous re-entrant disposer can open this
-     * transaction between exact-agent authorization and this no-await cutoff. */
+  ): MessageId {
+    /* v8 ignore next 6 -- only synchronous re-entrant teardown can open this
+     * transaction between exact-agent authorization and this no-await span. */
     if (activation.disposal !== undefined) {
       throw new SubagentError(
-        `subagent "${child.id}" activation is being disposed; the report was not delivered`,
+        `subagent "${sender.id}" activation is being disposed; the message was not delivered`,
         'ACTIVATION_CLOSING',
       )
     }
-    return activation
-  }
-
-  /** Resolve the reporting child's live direct parent from durable lineage. */
-  private resolveReportParent(child: Agent): Agent {
-    const parentId = child.session.header.parentSession
-    /* v8 ignore next -- every continuation-managed child has direct-parent metadata. */
-    const parent = parentId === undefined ? undefined : this.ctx.agents.get(parentId)
+    const parent = this.ctx.agents.get(activation.parentSession)
     if (parent === undefined) {
       throw new SubagentError(
-        'direct parent is not live; report was not delivered',
+        'direct parent is not live; the message was not delivered',
         'PARENT_UNAVAILABLE',
       )
     }
-    return parent
-  }
-
-  /** Deliver one framed report through the selected parent scheduling preset. */
-  private deliverReport(
-    activation: Activation,
-    parent: Agent,
-    content: ContentBlock[],
-    delivery: SubagentReportDelivery,
-  ): MessageId {
-    const message = createUserMessage({
-      content: [
-        { type: 'text' as const, text: `Background subagent ${activation.childId} reported:` },
-        ...content,
-      ],
-      source: {
-        kind: 'subagent-report' as const,
-        form: 'relay' as const,
-        senderSessionId: activation.childId,
-      },
-    })
-    if (delivery === 'next-step') {
-      this.sendWaking(parent, message, () => { this.sendReport(parent, message, delivery) })
-    } else {
-      this.sendReport(parent, message, delivery)
-    }
+    const message = agentMessage(sender, content)
+    this.sendWaking(parent, message, () => { this.sendAgentMessage(parent, message) })
     return message.id
   }
 
@@ -700,18 +731,16 @@ export class SubagentContinuationManager {
     }
   }
 
-  /** Send one report while translating only the parent's own rejection. */
-  private sendReport(
+  /** Send one Agent message while translating only the target's own rejection. */
+  private sendAgentMessage(
     parent: Agent,
     message: ReturnType<typeof createUserMessage>,
-    delivery: SubagentReportDelivery,
   ): void {
     try {
-      if (delivery === 'next-step') parent.steer(message)
-      else parent.inject(message)
+      parent.steer(message)
     } catch (error: unknown) {
       throw new SubagentError(
-        'direct parent is not live; report was not delivered',
+        'direct parent is not live; the message was not delivered',
         'PARENT_UNAVAILABLE',
         { cause: error },
       )
@@ -936,7 +965,7 @@ export class SubagentContinuationManager {
   }
 
   /**
-   * Cold-resume a persisted child: inspect and authorize its Session, fold the
+   * Cold-resume a persisted child: retain and authorize its prepared Session, fold the
    * generic descriptor, create the Activation through `ctx.agents.resume()`,
    * and submit the waiting turn. This never dispatches through a subagent
    * provider — the persisted Session already holds the initial prefix and the
@@ -946,29 +975,30 @@ export class SubagentContinuationManager {
     parent: Agent,
     childId: SessionId,
     content: ContentBlock[],
-    options: SubagentFollowupOptions,
+    options: ChildDeliveryOptions,
   ): Promise<MessageId> {
-    const persistence = this.requirePersistence()
-    let loaded: Awaited<ReturnType<typeof persistence.inspect>>
+    const query = this.requireSessionQuery()
+    let observation: SessionObservation
     try {
-      loaded = await persistence.inspect(childId, options.signal)
+      observation = await query.observeSession(childId, {
+        signal: options.signal,
+      })
     } catch (error: unknown) {
       options.signal.throwIfAborted()
       throw new SubagentError(`subagent "${childId}" is unavailable`, 'NOT_RESUMABLE', { cause: error })
     }
-    options.signal.throwIfAborted()
+    using source = observation
     this.assertAdmitting(parent)
     // Authorize the persisted header before folding: only the durable child's
     // exact live direct parent may continue it.
-    this.authorizeLineage(parent, childId, loaded.meta.parentSession)
+    this.authorizeLineage(parent, childId, source.header.parentSession)
     // Fold only the child's own suffix: a fork seed replays the parent's log,
     // which may carry an ANCESTOR's descriptor when the parent is itself a
     // continuable child.
-    const descriptor = foldSubagentDescriptor(loaded.events.slice(loaded.meta.seedLength ?? 0))
+    const descriptor = foldSubagentDescriptor(source.events.slice(source.inheritedEventCount))
     if (descriptor === undefined || descriptor.mode !== 'continuable') {
       throw new SubagentError(
-        `subagent "${childId}" has no supported continuation state and cannot be resumed; `
-        + 'do not retry send_message with this id',
+        `subagent "${childId}" has no supported continuation state and cannot be resumed; choose a different target`,
         'NOT_RESUMABLE',
       )
     }
@@ -981,6 +1011,9 @@ export class SubagentContinuationManager {
         agentOptions: {
           ...descriptor.agentProvider !== undefined ? { provider: descriptor.agentProvider } : {},
           ...descriptor.agentModel !== undefined ? { model: descriptor.agentModel } : {},
+          ...descriptor.agentReasoningEffort !== undefined
+            ? { reasoningEffort: ReasoningEffortId(descriptor.agentReasoningEffort) }
+            : {},
         },
         composition: { persona: descriptor.persona, toolFilter: descriptor.toolFilter },
         signal: options.signal,
@@ -990,32 +1023,70 @@ export class SubagentContinuationManager {
       if (error instanceof SubagentError) throw error
       throw new SubagentError(`subagent "${childId}" is unavailable`, 'NOT_RESUMABLE', { cause: error })
     }
-    return this.submitMaterialized(activation, content, options.source, parent, options.signal)
+    return await this.submitMaterialized(activation, content, options, parent)
   }
 
   /**
    * Submit to a freshly materialized Activation or roll it back completely.
    * @param activation - the just-published Activation to admit or release.
    * @param content - the initial or resumed message content.
-   * @param source - durable fields naming who supplied the accepted message.
+   * @param options - durable source, scheduling, and pre-acceptance cancellation.
    * @param parent - the live direct parent authorizing admission.
-   * @param signal - caller cancellation owning admission until acceptance.
    * @returns the accepted inbox message id.
    */
   private async submitMaterialized(
     activation: Activation,
     content: ContentBlock[],
-    source: MessageSource,
+    options: ChildDeliveryOptions,
     parent: Agent,
-    signal: AbortSignal,
   ): Promise<MessageId> {
     try {
-      return this.submitAdmitted(activation, content, source, parent, signal)
+      if (contentHasImage(content)) {
+        // The capability read awaits with the activation already published, so
+        // the disposal cutoff is re-checked before the submit; a drain that
+        // began during the read turns into a clean closing rejection.
+        await this.assertImageCapable(activation.handle.agent, options.signal)
+        if (activation.disposal !== undefined) {
+          throw new SubagentError(`subagent "${activation.childId}" is closing`, 'ACTIVATION_CLOSING')
+        }
+      }
+      return this.submitAdmitted(activation, content, options, parent)
     } catch (error: unknown) {
       /* v8 ignore next -- rollback disposal failures must not mask the
        * pre-acceptance signal, drain, or lifecycle failure. */
       await this.dispose(activation).catch(() => undefined)
       throw error
+    }
+  }
+
+  /**
+   * Refuse image content addressed to a child whose model accepts text only.
+   * Callers guard with `contentHasImage`, so text-only delivery never awaits.
+   * The check runs inside the per-child delivery lock, before the message
+   * exists, so a rejection leaves no partial user message. When the child's
+   * route is not fixed by its options (a request-waterfall listener owns it)
+   * or no LLM registry is composed, delivery proceeds and the LLM layer's
+   * text-only projection replaces each image with its stable placeholder.
+   * @param agent - the live or freshly materialized child agent.
+   * @param signal - caller cancellation bounding the model-info read.
+   * @throws {SubagentError} `MODEL_DOES_NOT_SUPPORT_IMAGES` when the child's resolved model declines image input.
+   */
+  private async assertImageCapable(
+    agent: Agent,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const { provider, model } = agent.options
+    if (provider === undefined || model === undefined) return
+    const llm = this.ctx.get('llm')
+    /* v8 ignore next -- a deployment without the LLM registry serves no model
+     * to refuse against; delivery then defers to the text-only projection. */
+    if (llm === undefined) return
+    const info = await llm.resolveModelInfo(provider, model, signal)
+    if (info.inputModalities !== undefined && !info.inputModalities.includes('image')) {
+      throw new SubagentError(
+        `Model "${model}" does not support image input.`,
+        'MODEL_DOES_NOT_SUPPORT_IMAGES',
+      )
     }
   }
 
@@ -1055,7 +1126,7 @@ export class SubagentContinuationManager {
     // `AgentRegistry.enter()` is the authoritative collision boundary for an id
     // some other owner holds — a duplicate would reject there with rollback.
     inputs.signal.throwIfAborted()
-    const setup = (childCtx: Context): AgentSetupCommit => {
+    const setup = (childCtx: Context): void => {
       // Only fresh creation seeds the delegation policy onto the child's own
       // log (after any fork seed, so fresh policy wins stale seed state); a
       // cold resume replays those persisted events instead.
@@ -1063,7 +1134,6 @@ export class SubagentContinuationManager {
         appendDelegatedPolicyOverrides((childCtx.agent as Agent).session, create.delegatedPolicies)
       }
       applyChildComposition(childCtx, parent, inputs.composition)
-      return this.setupRegistry.apply(childCtx)
     }
     const observer = this.host.observeActivation(provider, childId, parent)
     // Agent creation owns rollback before handle transfer. A rejection leaves
@@ -1079,6 +1149,7 @@ export class SubagentContinuationManager {
         sessionId: childId,
         meta: create.meta,
         seed: create.seed,
+        inheritedEventCount: create.inheritedEventCount,
         agentOptions: inputs.agentOptions,
         signal: inputs.signal,
         setup,
@@ -1192,15 +1263,18 @@ export class SubagentContinuationManager {
   private submit(
     activation: Activation,
     content: ContentBlock[],
-    source: MessageSource,
+    options: ChildDeliveryOptions,
     parent: Agent,
   ): MessageId {
     // Parent-originated delivery keeps the parent live through ownership, so
     // establish it before the message can enter the child's inbox.
     this.acquireOwnership(parent, activation.childId)
-    const message = createUserMessage({ content, source })
+    const message = options.delivery === 'steer'
+      ? agentMessage(parent, content)
+      : createUserMessage({ content, source: options.source })
     const accepted = this.admitWaking(activation, message.id, () => {
-      activation.handle.agent.followup(message)
+      if (options.delivery === 'steer') activation.handle.agent.steer(message)
+      else activation.handle.agent.followup(message)
     })
     // Past this point the caller has an id for this child, so its eventual
     // settlement is something the parent is owed an account of.
@@ -1243,11 +1317,10 @@ export class SubagentContinuationManager {
   private submitAdmitted(
     activation: Activation,
     content: ContentBlock[],
-    source: MessageSource,
+    options: ChildDeliveryOptions,
     parent: Agent,
-    signal: AbortSignal,
   ): MessageId {
-    signal.throwIfAborted()
+    options.signal.throwIfAborted()
     this.assertAdmitting(parent)
     /* v8 ignore next 6 -- only a synchronous re-entrant disposer can change
      * this field between the caller's live check and this no-await boundary. */
@@ -1262,7 +1335,7 @@ export class SubagentContinuationManager {
       activation.childId,
       activation.handle.agent.session.header.parentSession,
     )
-    return this.submit(activation, content, source, parent)
+    return this.submit(activation, content, options, parent)
   }
 
   /**
@@ -1539,6 +1612,19 @@ export class SubagentContinuationManager {
     }
     return persistence
   }
+
+  /** Resolve the Session query service used for cold child observations. */
+  private requireSessionQuery(): SessionQueryEngine {
+    const query = this.ctx.get('sessionQuery')
+    if (query === undefined) {
+      throw new SubagentError(
+        'continuable subagents require session query (load @deepseek-ai/dsh-session-query)',
+        'CONTINUATION_UNAVAILABLE',
+      )
+    }
+    return query
+  }
+
 }
 
 export type { SubagentDescriptorData }

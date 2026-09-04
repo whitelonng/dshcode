@@ -18,7 +18,7 @@ describe('Oxlint invocation', () => {
 
   it('uses location-preserving diagnostics in CI', () => {
     expect(resolveOxlintInvocation(['.'], { CI: 'true', DSH_OXLINT_THREADS: '4' })).toEqual({
-      args: ['.', '--format=unix', '--threads=4'],
+      args: ['.', '--format=default', '--threads=4'],
       env: { CI: 'true', DSH_OXLINT_THREADS: '4', GOMAXPROCS: '4' },
     })
   })

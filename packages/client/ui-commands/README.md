@@ -1,31 +1,93 @@
+---
+description: "Client command API for the Web GUI: the / command source, three dispatch kinds, the per-session command directory, and popupSelect registration for business packages; for users and maintainers of slash commands."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-ui-commands
 
 English | [中文](README.zh.md)
 
-Client command API (`ctx.commandUi`): the session-keyed command-directory cache, the `/` command source with `matchSpace`/`matchEnter` decision hooks, three-kind dispatch (`execute` / `popupSelect` / `leadingInput`), and popupSelect registration for business packages. The [web command Agent Note](../../../.agents/notes/implemented/architecture/2026-07-25-web-command-surfaces-and-assembly.md) records the decision.
+## Summary
 
-`src/client/contract.ts` is the fixed business contract: `CommandUiContract.register(name, spec)` and `decorate(name, spec)` are everything a business package consumes; `CommandUiSpec{options, onSelect}` keeps popup data self-contained — the shell component belongs to this package and business packages never see it. A contribution is a client-owned command (a host-name collision fails loud); a decoration adds a bare-invocation popup to an EXISTING host command. The host keeps its catalog row, argument claim (space / argued Enter), and lifecycle logging, and a decorated name with no host row in the session's directory never fires. Command kinds derive per dispatch, never per registration: a host descriptor with `input` is `leadingInput`, a registered `CommandUiSpec` is `popupSelect`, and everything else is `execute`.
+Typing a `/` command in the composer opens the matching surface — a registered popup, a host command's input, or a direct execution — and a command line is never silently downgraded to a plain prompt. Business packages contribute command surfaces through `ctx.commandUi`, registering a popupSelect spec (`/model`, `/permission`) or decorating an existing host command with a picker while the host keeps its catalog row and argument claim. Space and Enter resolve the line against the session's directory: a host descriptor with `input` is `leadingInput`, a registered `CommandUiSpec` is `popupSelect`, and everything else is `execute`.
 
-`CommandDirectory` (`src/client/directory.ts`) is the one wire-derived cache, keyed by session. Ordinary sessions fetch through `command.list({sessionId})`, and the source's scope-birth `warm` hook prewarms the session's entry. Catalog-addressed continuable children resolve an empty command directory locally: `command.list` is Agent-bound, so prewarming it would activate a child merely to view persisted history. Entries are soft-invalidated by the forwarded `commands/change` owner event (old snapshots serve while the repull flies) and by forwarded `agent-preset/selected` for that one session (recomposing an agent registers nothing, so the registry-wide signal never fires for it), hard-invalidated by `connection/reset`, and epoch-guarded so a superseded pull can never overwrite a newer one. `matchSpace` answers synchronously from this cache only; `matchEnter` strong-waits it on the SubmitAttempt signal and rejects on warmup failure — a `/` line is never silently downgraded to a plain prompt.
+## Table of Contents
 
-`matchEnter` also enforces the submission envelope: when the composer submits with image attachments, only a host command declaring `input.images` proceeds (its claim carries `images: true` and its submit forwards the serialized payloads to `command.execute`); every other command route — contribution popup, decorated popup, non-declaring claim, bare detached execute — throws the localized `notice.imagesUnsupported` refusal, which the input machine publishes as one error notice and the composer renders as a transient Toast banner with the draft and images retained. An image-carrying submit whose host handler answers an error result maps to an error outcome so the composer keeps the images; imageless submits keep the plain success mapping because the durable flow node owns the outcome rendering.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-After `command.execute` returns a matched command result, this browser emits local `command/executed(sessionId, name, result)`. Other clients receive the durable command nodes through the Host event stream but never this acknowledgment, so a browser-only side effect can select successful results from the client that submitted the command without treating Session replay as an action request. Listener failures are logged and contained one by one; they cannot change the already-admitted command result or prevent later listeners from running.
+-----
 
-Menu queries fuzzy-match ordered, case-insensitive subsequences of command names. Prefixes rank first; separator boundaries, adjacent characters, and shorter gaps rank the remaining matches, with directory and contribution order breaking ties. This affects discovery only: space and Enter still require an exact command name. Rationale: [Web slash-command fuzzy discovery](../../../.agents/notes/implemented/feature/2026-08-04-web-slash-command-fuzzy-discovery.md).
+<a id="use-this-package"></a>
+## Use this package
 
-`PopupSelectController` (`src/client/popup.ts`) is the headless shell state: `PopupSelectView` self-registers into `conversation.input.overlay` (the SlotMap key is ui-conversation's; this package pulls the declaration in with a type-only import — no runtime edge). The shell is a transient layer holding focus while open; token-segment consumption after onSelect runs both branches through `consumeTokenSegment` (menu-path span CAS, enter-path bare-token equality) against the draft face the wiring layer binds via `bindDraft`.
+Mount this plugin alongside `ui-input-trigger` and `ui-conversation`; the `/` source then appears in the trigger menu, and business packages register their command surfaces through `ctx.commandUi`. Typing `/model` opens the registered popup; a host command with an argument claim opens its input or executes directly.
 
-The `/client` entrypoint exports the plugin body (`apply`/`inject`), `CommandUiRuntime`, the directory and popup classes with their state types, and the fixed contract types; the shell component itself is internal to the overlay registration.
+### Kinds and decorations
 
+A contribution is a client-owned command — a host-name collision fails loud. A decoration adds a bare-invocation popup to an EXISTING host command: the host command keeps its catalog row, its argument claim, and its lifecycle logging, and a decorated name with no host row in the session's directory never fires. Menu queries fuzzy-match ordered, case-insensitive subsequences of command names; prefixes rank first.
+
+### Image-carrying submissions
+
+When the composer submits with image attachments, only a host command declaring `input.images` proceeds; every other command route throws the localized `imagesUnsupported` refusal, which renders as a transient toast while the draft and images stay in place — a command can never consume the text and strand the images.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+`src/client/contract.ts` is the fixed business contract: `CommandUiContract.register(name, spec)` and `decorate(name, spec)` are everything a business package consumes. `CommandDirectory` is the one wire-derived cache, keyed by session: ordinary sessions fetch through `command.list({sessionId})`, entries are soft-invalidated by the forwarded `commands/change` owner event and hard-invalidated by `connection/reset`, and epoch-guarded so a superseded pull can never overwrite a newer one. `matchSpace` answers synchronously from this cache only; `matchEnter` strong-waits it on the SubmitAttempt signal and rejects on warmup failure. After `command.execute` returns a matched result, the browser emits a local `command/executed` acknowledgment; other clients receive the durable command nodes through the Host event stream but never this acknowledgment. `PopupSelectController` is the headless shell state; `PopupSelectView` self-registers into `conversation.input.overlay` with per-session resolution. Decision record: the [web command surfaces note](../../../.agents/notes/implemented/architecture/2026-07-25-web-command-surfaces-and-assembly.md); the [fuzzy discovery note](../../../.agents/notes/implemented/feature/2026-08-04-web-slash-command-fuzzy-discovery.md) covers menu ranking.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the command surface is not enough. They move from the command API to the trigger pipeline and the host command registry.
+
+- [ui-input-trigger](../ui-input-trigger/README.md) — the pipeline the `/` source registers into.
+- [ui-conversation](../ui-conversation/README.md) — declares the input overlay slot and owns the composer.
+- [Web command surfaces and assembly](../../../.agents/notes/implemented/architecture/2026-07-25-web-command-surfaces-and-assembly.md) — the design decision behind the command surfaces.
+- [Web slash-command fuzzy discovery](../../../.agents/notes/implemented/feature/2026-08-04-web-slash-command-fuzzy-discovery.md) — the menu ranking rationale.
+- [Client package map](../README.md) — adjacent browser UI packages.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-Indirectly, through the host `command.execute` RPC this package's dispatch and `claim.submit` paths trigger: a matched command's handler mutates host domain state that other packages project into the next request (the `/plan` handler flips plan mode, whose owning package injects its `plan:policy` system-prompt section), while the command line itself, the detached result, and every menu/notice rendering stay client-side and never enter the session log.
+Indirectly, through the host `command.execute` RPC the dispatch paths trigger: each command handler's host package owns any model-visible effect (the `/plan` handler flips plan mode, whose owning package injects its policy section), while the command line, the detached result, and every menu and notice rendering stay client-side and never enter the session log.
 
 #### KV Cache effect
 
-None directly; this package neither assembles nor sends a provider request. Command handlers it triggers may change what the owning host packages contribute to the next request's system prompt (a section appearing or disappearing replaces earlier request tokens and invalidates the provider prefix from that point), but that effect is owned and documented by each command's host package.
+None directly; this package neither assembles nor sends a provider request. Command handlers it triggers may change what the owning host packages contribute to the next request's system prompt — a section appearing or disappearing replaces earlier request tokens and invalidates the provider prefix from that point — but that effect is owned and documented by each command's host package.
 
 ## Known Limitations and Deferred Work
 
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define the current command surface. They are current package constraints, not a general command-line comparison or a task backlog.
+
 - **Detached-result notices fall back to the console off-session** — the fire-and-forget paths route results to the triggering session's composer via `SessionInput.notify`; after session teardown the console line is the only remaining surface.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published. A browser-side source over the wire command directory — it emits no cordis events and owns no cross-plugin mutable state; dispatch and cache behavior are asserted by this package's specs.

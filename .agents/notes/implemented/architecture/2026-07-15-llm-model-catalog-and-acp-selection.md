@@ -4,7 +4,7 @@ Status: implemented
 
 English | [中文](2026-07-15-llm-model-catalog-and-acp-selection.zh.md)
 
-> The catalog decision remains current. Per-session ACP model selection is superseded by [ACP as an automation-only protocol](../simplification/2026-07-23-acp-automation-only-protocol.md).
+> The catalog and scoped-selection decisions remain current. The temporary removal of ACP selection is superseded by [standard ACP v1 automation controls](../feature/2026-08-22-standard-acp-automation-controls.md), which exposes the catalog through standard session configuration without restoring UI projections.
 
 ## Problem
 
@@ -28,13 +28,13 @@ Catalog membership is advisory. It drives selectors and diagnostics but never ch
 
 ### Per-session selection in the front end
 
-A selection is owned by the front end that offers it (today the TUI `/model` selector), never by `LlmRuntime` or `AgentOptions`: those are deployment-wide or creation-wide objects, and mutating them would couple concurrent sessions. Each opaque choice carries the full provider/model pair, because the same model id may appear under multiple routes.
+A selection is owned by the front end that offers it, never by `LlmRuntime` or `AgentOptions`: those are deployment-wide or creation-wide objects, and mutating them would couple concurrent sessions. Each opaque choice carries the full provider/model pair, because the same model id may appear under multiple routes.
 
-The ACP automation transport is not a catalog consumer. Its deployment config supplies one optional provider/model target for newly created agents, and it advertises no model selector or configuration-option interface.
+The ACP automation transport consumes the advisory catalog through standard session configuration options. Its deployment config still supplies the initial provider/model target; each session owns an opaque provider/model choice and a dependent exact-model reasoning-effort choice. Adapter topology changes publish the complete option state. Catalog absence never invalidates the configured route: the current unlisted route is synthesized into the choices.
 
 ### Prompt/request consistency and durability
 
-`installModelSelection` (in `dsh-agent`) installs scoped `system-prompt/assemble` and `agent/request` listeners for a front-end-owned selection. Prompt assembly snapshots the selected pair once per step, overwrites the assembled `provider` and `model` variables after downstream prompt listeners, and the request listener applies that same snapshot after downstream request listeners. A selection during asynchronous assembly therefore starts on the next step rather than splitting prompt text from routing. Other call-config fields remain untouched.
+`installModelSelection` (in `dsh-agent`) installs scoped `system-prompt/assemble` and `agent/request` listeners for a front-end-owned selection. Ordinary consumers snapshot the selection once per step. ACP associates its admission snapshot with the identified message in the per-session module until inbox claim, then pins that selection for the complete admitted turn, so asynchronous image admission, prompt variables, and every request step remain aligned without changing the durable user source. A concurrent selection starts on the next ACP turn. Other call-config fields remain untouched.
 
 The request header remains the durable source of truth. When a selection is actually used, the existing full `request/header` snapshot records it, and a front end initializes its selection from the folded last request header before falling back to creation options. A selection that is never used by a request is intentionally in-memory only because it never became model-visible state.
 
@@ -53,10 +53,10 @@ The request header remains the durable source of truth. When a selection is actu
 - Any adapter can expose a dynamic model list without leaking provider-library types into the LLM Service Definition.
 - Catalog consumers must treat absence as “not advertised,” never “invalid request.”
 - pi-ai adapters expose their installed provider catalogs; hand-written DeepSeek deployments list known choices explicitly and retain arbitrary model support.
-- Human-facing catalog consumers own their selection interaction. ACP uses its fixed deployment target and does not widen the protocol with model discovery.
+- Each catalog consumer owns its selection interaction. ACP uses standard session configuration options and emits no DSH-specific selector or UI metadata.
 - Request headers remain compatible with the provider-routed session shape; no new JSONL event or format version is required.
 - A catalog read can be asynchronous, and every caller receives detached values.
 
 ## Testing
 
-Unit coverage validates catalog detachment and malformed metadata, pi-ai and DeepSeek catalog projection, provider/model request routing, and prompt-variable alignment; per-agent isolation follows from installing the listeners on the agent-scoped context. ACP transport tests validate fixed provider/model forwarding independently of catalog discovery; the TUI suite covers selector interaction and header-based restoration.
+Unit coverage validates catalog detachment and malformed metadata, pi-ai and DeepSeek catalog projection, provider/model request routing, and prompt-variable alignment; per-agent isolation follows from installing the listeners on the agent-scoped context. ACP tests validate grouped discovery, invalid and concurrent changes, topology updates, header-based restoration, per-turn route pinning, and image-route consistency; human clients test their own selector presentation.

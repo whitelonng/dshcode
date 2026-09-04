@@ -1,16 +1,15 @@
 // @vitest-environment jsdom
-// TerminalBlock: the prompt label's cwd shortening, the running/empty/settled
-// arms, the prompt line's run-state dot, the exit-status pill, the head/tail height cap and its expand control,
-// and the copy control writing the raw output on both the accepted and the
-// refused clipboard paths. writeClipboard's own return contract is pinned here
-// too, since it is the return contract both copy controls in this package share; the
-// resolution of ANSI runs into styles is pinned in ansi.spec.ts, so only its
-// DOM consequence (which runs get a span wrapper) is asserted here.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { DEFAULT_TERMINAL_MAX_LINES, TerminalBlock } from '../src/index.ts'
+import type { ComponentProps } from 'react'
+import { DEFAULT_TERMINAL_MAX_LINES, TerminalBlock as LocalizedTerminalBlock } from '../src/index.ts'
 import { writeClipboard } from '../src/clipboard.ts'
+import { terminalBlockLabels } from './labels.client.ts'
+
+function TerminalBlock(props: Omit<ComponentProps<typeof LocalizedTerminalBlock>, 'labels'>) {
+  return <LocalizedTerminalBlock {...props} labels={terminalBlockLabels} />
+}
 
 const ESC = '\u001b'
 
@@ -20,12 +19,10 @@ beforeEach(() => {
   vi.useRealTimers()
 })
 
-/** The rendered output rows, one string per visible line (CSS-module class prefix). */
 function outputLines(container: HTMLElement): string[] {
   return [...container.querySelectorAll('[class^="_line_"]')].map(row => row.textContent ?? '')
 }
 
-/** The prompt line's run-state dot: its StateDot state plus the hidden text label beside it. */
 function runStateOf(container: HTMLElement): { state: string | null; label: string | undefined } {
   const dot = container.querySelector('[class*="_runState_"][data-state]')
   return {
@@ -34,12 +31,10 @@ function runStateOf(container: HTMLElement): { state: string | null; label: stri
   }
 }
 
-/** The prompt rows as `<label><command>`, one per command line (the visual gap is CSS). */
 function promptRows(container: HTMLElement): string[] {
   return [...container.querySelectorAll('[class^="_promptLine_"]')].map(row => (row.textContent ?? '').trim())
 }
 
-/** `count` numbered output lines, without the terminating newline. */
 function body(count: number): string {
   return Array.from({ length: count }, (_value, index) => `line ${index + 1}`).join('\n')
 }

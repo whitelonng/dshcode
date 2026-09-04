@@ -1,7 +1,3 @@
-// Third-review behaviors: read-modify-write under the writer lock (external
-// edits survive an API write), the contained credentials/reference-updated fan-out (a
-// broken observer never fails a committed write), and the YAML document
-// editor's isolation between entries.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -10,7 +6,6 @@ import { join } from 'node:path'
 import { credentialKey, credentialRef } from '@deepseek-ai/dsh-credentials'
 import { LocalCredentialProvider } from '../src/index.ts'
 
-/** Credential documents are seeded owner-only, exactly as the provider creates them. */
 function writeCredentials(file: string, text: string): Promise<void> {
   return writeFile(file, text, { mode: 0o600 })
 }

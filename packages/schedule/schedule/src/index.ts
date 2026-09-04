@@ -6,6 +6,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+// Type-only: resolves ctx.sessionProjections for the optional projection child.
+import type {} from '@deepseek-ai/dsh-session-projection'
+import { scheduleProjectionDefinition } from './projection.ts'
 import { ScheduleRuntime } from './runtime.ts'
 import { registerScheduleTools } from './tools.ts'
 
@@ -38,6 +41,10 @@ type OwnerCleanup = () => void | Promise<void>
 
 /** Install Schedule only for root agents published after this plugin loads. */
 export function apply(ctx: Context): void {
+  ctx.inject(['sessionProjections'], (projectionCtx) => {
+    projectionCtx.sessionProjections.register(scheduleProjectionDefinition)
+  })
+
   const runtimes = new Map<Agent, OwnerCleanup>()
   let stopping = false
 
@@ -48,7 +55,7 @@ export function apply(ctx: Context): void {
       const cleanup: OwnerCleanup = agent.ctx.effect(() => {
         const disposeTools = registerScheduleTools(ctx, agent.ctx, agent, () => { runtime.requestDrive() })
         const stopStatus = agent.ctx.on('agent/status', ({ status }) => {
-          if (status === 'idle' && agent.session.events.some(event => event.type === 'schedule/change')) {
+          if (status === 'idle' && agent.session.snapshotEvents().some(event => event.type === 'schedule/change')) {
             runtime.requestDrive()
           }
         })

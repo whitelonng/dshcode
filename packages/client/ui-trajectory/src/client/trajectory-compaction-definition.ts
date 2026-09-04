@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {
   ConversationMatch, ConversationNodeDefinition, RequestView,
-} from '@deepseek-ai/dsh-client-runtime/client'
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-compaction/types'
 import { trajectoryNode } from './trajectory-definition-common.ts'
 
@@ -138,6 +138,6 @@ const trajectorySessionEndDefinition: ConversationNodeDefinition<SessionEndState
  * @param ctx - Plugin context receiving the Definitions.
  */
 export function registerTrajectoryCompactionDefinitions(ctx: Context): void {
-  ctx.conversationEvents.register(trajectoryCompactionDefinition)
-  ctx.conversationEvents.register(trajectorySessionEndDefinition)
+  ctx.uiConversation.events.register(trajectoryCompactionDefinition)
+  ctx.uiConversation.events.register(trajectorySessionEndDefinition)
 }

@@ -1,9 +1,3 @@
-/* Geometry mirrors CodeBlock (12px radius, code-block surface + banner rows,
-   markdown code-block font) so a terminal card and a fenced code block read as
-   one family. The one deliberate divergence: output keeps `white-space: pre`
-   and scrolls horizontally, because folding a column-aligned command's output
-   destroys its alignment. */
-
 .block {
   --dsl-terminal-radius: 12px;
   --dsl-terminal-line-height: 22px;
@@ -68,7 +62,7 @@
    divider the IN/OUT card draws between its sections. A running card is
    banner-only, so it draws none. */
 .block:not([data-running]) .header {
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
 /* One row per command line. The prompt column is the only element allowed to

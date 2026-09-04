@@ -14,7 +14,7 @@ Status: implemented
 
 slug 函数与 `gen-cordis-catalog` 的区块锚点 slugger 不同（后者丢弃下划线）：生成器的标题总能通过其显式 `<a id>` 锚点到达，两者无需共享一条规则。中文侧沿用既有语料惯例（`docs/glossary.zh.md`、`docs/cordis-primer.zh.md`）：链接保留英文 fragment，在中文标题前放置显式 `<a id>`，使两个语言侧暴露相同的锚点。
 
-15 条坏 fragment 在同一变更中修复：陈旧 slug 重定向到当前标题，搬迁的无超时约定改链其属主 group README，四份中文文档补上显式锚点。`docs/AGENTS.md` 与 `dsh-doc-standards` skill 不再要求为 Markdown 链接手工 grep 锚点；人工 grep 只对输出从不进入受检 Markdown 的 TypeScript 字符串锚点保留（当下三处全部渲染进受检页面，gate 经由提交的产物覆盖它们）。
+15 条坏 fragment 在同一变更中修复：陈旧 slug 重定向到当前标题，搬迁的无超时约定改链其属主 group README，四份中文文档补上显式锚点。`docs/AGENTS.md` 与 `dsh-doc` skill 不再要求为 Markdown 链接手工 grep 锚点；人工 grep 只对输出从不进入受检 Markdown 的 TypeScript 字符串锚点保留（三处受扫描引用全部渲染进受检页面，因此 gate 经由提交的产物覆盖它们）。
 
 ## 验证
 

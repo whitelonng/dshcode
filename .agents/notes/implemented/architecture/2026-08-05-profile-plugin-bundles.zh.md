@@ -12,7 +12,7 @@ Status: implemented
 
 一切都变成 **profile**：即目录 `$DSH_HOME/profiles/<name>`，其中包含一个 `package.json`（pnpm 管理的树外插件 `dependencies`，加上 profile manifest `dsh.profile` 及其有序的 `bundles` 层列表）和一份用户 `cordis.patch.yml`。**组合包**（bundle）是声明了 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }` 的 npm 包；两种 manifest 分别位于互不相同的 `dsh.profile` / `dsh.bundle` 键下，因此一份 package.json 能说明自己扮演哪种角色。配置树在空的根之上组合：按 `dsh.profile.bundles` 顺序应用每个组合包的 patch，然后是用户层与 `--patch` overlay——启动与 `--dump-config` 共享同一条 `applyEntryPatches` 路径。随后，[应用持有命令行的决策](2026-08-06-app-owned-command-line.zh.md)又把调用期取值从启动器派生的 patch 迁移到了启动服务。
 
-默认 Profile 模板使用的组合包是 `@deepseek-ai/dsh-base`（共享核心配置行）、`@deepseek-ai/dsh-web-app`（浏览器 Host 配置行与 Web 运行时粘合层）和 `@deepseek-ai/dsh-headless`（直接叠加在 base 上且不含 web-app 的一次性 runner）。通用的 `dsh --profile <name>` 把剩余参数交给该 profile 的命令行启动行：Web 持有自己的 flag 家族，headless 则持有任务位置参数。patch overlay 使用启动器持有的 `--patch`。`dsh plugin --profile <name> <args...>` 是一层薄薄的 pnpm 转发器，负责初始化 profile，并依据已安装包的组合包声明调和 `dsh.profile.bundles`；没有组合包声明的包保持为普通依赖。[Headless 作为直接 core 入口](2026-08-09-headless-direct-core-entry-point.zh.md)负责 headless 组合约定。
+默认 Profile 模板为 `web`、`headless`、`sdk` 与 `acp` 使用 `@deepseek-ai/dsh-base` 作为共享核心，并在其上叠加一个模式组合包。[独立 `sdk-minimal` profile](2026-08-24-standalone-sdk-minimal-profile.zh.md)则只列出一个拥有完整显式配置树的组合包。通用的 `dsh --profile <name>` 把剩余参数交给该 profile 的命令行启动行：Web 持有自己的 flag 家族，headless 持有任务位置参数，协议 profile 不接受应用选项。patch overlay 使用启动器持有的 `--patch`。`dsh plugin --profile <name> <args...>` 是一层薄薄的 pnpm 转发器，负责初始化 profile，并依据已安装包的组合包声明调和 `dsh.profile.bundles`；没有组合包声明的包保持为普通依赖。[Headless 作为直接 core 入口](2026-08-09-headless-direct-core-entry-point.zh.md)负责 headless 组合约定。
 
 解析在构造上就是双锚点的：`dsh.profile.bundles` 中的名称先从 dsh 安装目录解析，再从 profile 目录解析——因此内置组合包始终来自与运行中 `dsh` 相同的安装，pnpm 从不管理它们——而 patch 行中的裸插件名称经 profile 目录的 Node 父目录逐级查找，落到受维护的扁平回退目录 `$DSH_HOME/profiles/node_modules`（安装目录的应用与各组合包所依赖的每个包各一个符号链接，每次启动时修复）。
 
@@ -27,7 +27,7 @@ Status: implemented
 
 ## Consequences
 
-- 新的组合表层（TUI、提供方扩展包）以普通 npm 包形式交付，可按 profile 安装；仓库不再需要为每种部署形态各留一行。
+- 新的组合表层（TUI、提供方扩展包）以普通 npm 包形式交付，可按 profile 安装，无需在仓库中为每种部署形态各留一行。
 - `apps/cli` 收缩为 argv 解析、profile 机制的消费方和 pnpm 转发器；`AppCLIEntry` 与各表层专属的启动路径全部移除。
 - 无密钥 web e2e 脚手架以与生产相同的空根形态启动相同的组合包层，包括 profiles 模块回退，因此测试与产品之间的组合漂移会响亮失败。
-- 后端不拒绝磁盘上的任何旧格式（发布前姿态）：`$DSH_HOME/config.yaml` 只是不再被读取。
+- 按发布前姿态，后端不携带旧磁盘配置的兼容行为；`$DSH_HOME/config.yaml` 会被忽略。

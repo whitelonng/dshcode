@@ -29,6 +29,7 @@ function write(path: string, content: string): void {
 function buildFixture(environment: Record<string, string>): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-release-build-'))
   roots.push(root)
+  write(join(root, 'package.json'), `${JSON.stringify({ version: environment.DSH_CLIENT_VERSION ?? '0.0.1' })}\n`)
   write(join(root, 'apps/web/dist/index.html'), '<main></main>')
   write(join(root, 'packages/client/example/lib/client.js'), 'module.exports = {}\n')
   writeClientBuildRecord(root, environment)
@@ -66,6 +67,22 @@ describe('release families', () => {
     ])
   })
 
+  it.each(['0.0.2-alpha.1', '0.0.2-canary.1', '0.0.2-rc.1'])(
+    'accepts the explicit dsh prerelease version %s',
+    (version) => {
+      const root = mkdtempSync(join(tmpdir(), 'dsh-release-prerelease-'))
+      roots.push(root)
+      write(join(root, 'package.json'), '{"version":"0.0.1"}\n')
+
+      const dsh = releaseFamily('dsh')
+      const published = member('packages/core/published', '@deepseek-ai/dsh-published')
+      const plan = planShared(dsh, root, [published], version)
+
+      expect(plan.version).toBe(version)
+      expect(plan.planned[1]?.tag).toBe(`dsh-v${version}`)
+    },
+  )
+
   it('names one tag for the whole dsh family and one per vendored package', () => {
     const dsh = releaseFamily('dsh')
     const vendor = releaseFamily('vendor')
@@ -78,6 +95,18 @@ describe('release families', () => {
     // hyphen would defeat any suffix-stripping.
     expect(vendor.tagPrefixFor({ ...cordis, version: '4.0.0-rc.7' })).toBe('vendor-cordis-v')
     expect(vendor.tagFor({ ...cordis, version: '4.0.0-rc.7' })).toBe('vendor-cordis-v4.0.0-rc.7')
+  })
+
+  it('assigns alpha and canary dist-tags only to dsh releases', () => {
+    const dsh = releaseFamily('dsh')
+    const vendor = releaseFamily('vendor')
+
+    expect(dsh.distTagForVersion('0.0.2-alpha.1')).toBe('alpha')
+    expect(dsh.distTagForVersion('0.0.2-canary.1')).toBe('canary')
+    expect(dsh.distTagForVersion('0.0.2-rc.1')).toBe('next')
+    expect(dsh.distTagForVersion('0.0.2')).toBeUndefined()
+    expect(vendor.distTagForVersion('4.0.1-alpha.1')).toBe('next')
+    expect(vendor.distTagForVersion('4.0.1-canary.1')).toBe('next')
   })
 
   it('rejects a family whose members disagree on the shared version', () => {
@@ -106,11 +135,13 @@ describe('release families', () => {
     vi.stubEnv('DSH_CLIENT_COMMIT_HASH', officialEnvironment.DSH_CLIENT_COMMIT_HASH)
     const official = buildFixture(officialEnvironment)
     const defaultBuild = buildFixture({})
+    const missing = join(defaultBuild, 'missing')
+    write(join(missing, 'package.json'), `${JSON.stringify({ version: officialEnvironment.DSH_CLIENT_VERSION })}\n`)
 
     expect(() => { dsh.verifyBuildArtifacts(official) }).not.toThrow()
     expect(() => { dsh.verifyBuildArtifacts(defaultBuild) }).toThrow(/DSH_CLIENT_TITLE/)
-    expect(() => { dsh.verifyBuildArtifacts(join(defaultBuild, 'missing')) }).toThrow(/record.*missing/)
-    expect(() => { vendor.verifyBuildArtifacts(join(defaultBuild, 'missing')) }).not.toThrow()
+    expect(() => { dsh.verifyBuildArtifacts(missing) }).toThrow(/record.*missing/)
+    expect(() => { vendor.verifyBuildArtifacts(missing) }).not.toThrow()
 
     write(join(official, 'packages/client/example/lib/client.js'), 'module.exports = { changed: true }\n')
     expect(() => { dsh.verifyBuildArtifacts(official) }).toThrow(/artifacts differ/)
@@ -274,6 +305,12 @@ describe('vendored version baseline', () => {
 })
 
 describe('version precedence', () => {
+  it('orders alpha, canary, and release-candidate versions by semver precedence', () => {
+    expect(compareVersions('4.0.1-alpha.1', '4.0.1-canary.1')).toBeLessThan(0)
+    expect(compareVersions('4.0.1-canary.1', '4.0.1-rc.1')).toBeLessThan(0)
+    expect(compareVersions('4.0.1-rc.1', '4.0.1')).toBeLessThan(0)
+  })
+
   it('ranks a release above the prerelease it follows', () => {
     // git --sort=v:refname disagrees, placing 4.0.1-rc.1 above 4.0.1, which is
     // why the newest published version is chosen here rather than by git.

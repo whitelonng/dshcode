@@ -8,7 +8,7 @@
 
 ## 持久标题状态
 
-提供方生成修订时会记录 `SessionTitleProviderId`。`SessionTitleEventData` 列出生成标题时使用的精确人类消息 seq，`SessionTitleSnapshot` 则加入 `foldSessionTitle()` 选出的持久事件封装信息。
+提供方生成修订时会记录 `SessionTitleProviderId`。`SessionTitleEventData` 列出生成标题时使用的精确人类消息 seq，`SessionTitleSnapshot` 则加入 `ctx.sessionTitle.get()` 与 `foldSessionTitle()` 返回的持久事件封装信息。`title` 投影的版本 1 状态与客户端视图都只保留标题字符串或 `null`，因此既有持久化缓存行仍可读取。
 
 ```ts type-equiv
 /** Identifies one session-title provider registration. */
@@ -46,7 +46,7 @@ interface SessionTitleEventData {
   /** Normalized non-empty title text. */
   readonly title: string
   /** Exact human `user/message` seqs used to derive this title; empty for an explicit user rename. */
-  readonly messageSeqs: number[]
+  readonly messageSeqs: SessionSeq[]
   /** Whether the built-in fallback, a registered provider, or the user supplied the title. */
   readonly source: SessionTitleSource
 }
@@ -56,7 +56,7 @@ interface SessionTitleEventData {
 /** Latest folded title plus the title event's durable envelope facts. */
 interface SessionTitleSnapshot extends SessionTitleEventData {
   /** Seq of the latest `session/title` event. */
-  readonly eventSeq: number
+  readonly eventSeq: SessionSeq
   /** Timestamp of the latest `session/title` event. */
   readonly updatedAt: number
 }
@@ -72,7 +72,7 @@ interface SessionTitleLlmRequestEventData {
   /** Registered title-provider identity responsible for the request. */
   readonly titleProvider: SessionTitleProviderId
   /** Exact human `user/message` seqs represented in `messages`. */
-  readonly messageSeqs: number[]
+  readonly messageSeqs: SessionSeq[]
   /** Exact auxiliary LLM route. */
   readonly route: SessionTitleModelProvenance
   /** Exact auxiliary system prompt. */
@@ -92,7 +92,7 @@ interface SessionTitleLlmRequestEventData {
 /** One eligible human text message exposed to title providers. */
 interface SessionTitleUserMessage {
   /** Source `user/message` event seq. */
-  readonly seq: number
+  readonly seq: SessionSeq
   /** Exact concatenated text-block content. */
   readonly text: string
 }
@@ -123,7 +123,7 @@ interface SessionTitleProviderResult {
   /** Proposed title text. */
   readonly title: string
   /** Exact seqs from `request.messages` used by this result. */
-  readonly messageSeqs: readonly number[]
+  readonly messageSeqs: readonly SessionSeq[]
   /** Auxiliary LLM route, when generation used a model. */
   readonly model?: SessionTitleModelProvenance
 }

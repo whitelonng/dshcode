@@ -1,14 +1,4 @@
-/**
- * The `plan` projection unit (session-projection RFC's complete example): a
- * event fold over the session log. `command/run` records named `plan` with
- * recorded input set the candidate target (`off` → false, anything else →
- * true); `command/done` keeps successful candidates and drops failures;
- * `plan/mode` commits and clears a selection. `view` reports pending only while
- * an outstanding selection differs from the logged state.
- * Pending is thereby a pure replay quantity — a cold fold answers it without
- * the service's in-memory intent. Composition without plan-mode has no `plan`
- * key; unloading the fiber removes it (HMR safety).
- */
+/** Plan projection behavior. */
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -124,6 +114,28 @@ describe('plan projection unit', () => {
     expect(bench.values().plan).toEqual({ active: false, pending: true })
   })
 
+  it('freezes the active state across a request/header into activeAtLastHeader', async () => {
+    const bench = await harness(true)
+    commitPlanMode(bench.session, true, 0)
+    expect(bench.values().plan).toEqual({ active: true, pending: false })
+    expect(bench.ctx.sessionProjections.stateOf(bench.session, 'plan')?.activeAtLastHeader).toBeNull()
+    bench.session.append('request/header', {
+      header: { config: { provider: 'test', model: 'test-model' } },
+      reason: 'initial',
+    })
+    expect(bench.values().plan).toEqual({ active: true, pending: false })
+    expect(bench.ctx.sessionProjections.stateOf(bench.session, 'plan')?.activeAtLastHeader).toBe(true)
+    commitPlanMode(bench.session, false, 1)
+    expect(bench.values().plan).toEqual({ active: false, pending: false })
+    expect(bench.ctx.sessionProjections.stateOf(bench.session, 'plan')?.activeAtLastHeader).toBe(true)
+    bench.session.append('request/header', {
+      header: { config: { provider: 'test', model: 'test-model' } },
+      reason: 'change',
+    })
+    expect(bench.values().plan).toEqual({ active: false, pending: false })
+    expect(bench.ctx.sessionProjections.stateOf(bench.session, 'plan')?.activeAtLastHeader).toBe(false)
+  })
+
   it('has no plan key when plan-mode is not composed', async () => {
     const bench = await harness(false)
     expect('plan' in bench.values()).toBe(false)
@@ -143,7 +155,7 @@ describe('plan projection unit', () => {
     // A second registry over the same log (the cold-read shape): no service
     // memory involved, the fold alone answers {active:false, pending:true}.
     const cold = await harness(true)
-    for (const event of bench.session.events) {
+    for (const event of bench.session.snapshotEvents()) {
       if (event.type === 'command/run' || event.type === 'command/done' || event.type === 'plan/mode') {
         cold.session.append(event.type, event.data)
       }

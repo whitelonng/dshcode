@@ -1,41 +1,54 @@
-# `@deepseek-ai/dsh-cmdline`
+---
+description: "App-owned command lines for dsh app bins: your app parses its own flags, --help, and exit behavior from the launcher's remaining arguments."
+kind: "package-library"
+---
+
+# @deepseek-ai/dsh-cmdline
 
 English | [中文](README.zh.md)
 
-The command line a dsh launcher hands to the app it boots. The launcher parses only its own flags (`--profile`, `--patch`, the config dumps) and hands **everything after them** to the tree verbatim, so an app owns its flag family, its `--help` text, and its parse errors instead of the launcher knowing them.
+## Summary
 
-## The launcher values
+`dsh-cmdline` lets your app own its command line: the launcher keeps only its own flags (`--profile`, `--patch`, the config dumps) and passes everything after them to your app verbatim, so your app decides its flags, its `--help` text, and its parse errors. Values you parse from those arguments win over any default written in the config, without writing anything back. Your app also gets a bounded way to ask for process exit, wired to the launcher's shutdown. Use it when you write an app bin that accepts its own flags; it adds no prompt, schema, or model-facing surface of its own.
 
-A launcher calls `provideCmdline(ctx, host)` before any tree entry mounts, which provides:
+## Table of Contents
 
-- `ctx.cmdlineArgs` — the invocation's inner arguments. `get()` is the whole interface, and it returns a snapshot: `dsh --profile tui --resume abc` yields `['--resume', 'abc']`.
-- `ctx.appExit` — a bounded process-exit request, wired to the launcher's shutdown controller.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-An embedding host with no command line provides an empty list; that is the honest answer, not a missing value.
+-----
 
-## Ordinary providers and injected config
+<a id="use-this-package"></a>
+## Use this package
 
-Any app plugin may inject `cmdlineArgs`, parse it, and publish an ordinary app-owned service. `parseCmdline(ctx, program)` is only a commander adapter; the program's own action owns validation and the published service:
+Your app reads the invocation's inner arguments at startup, and any number of its plugins can use them. The common path: a startup plugin reads the arguments, parses them, and publishes the parsed values; other rows configure themselves from those values.
 
-```ts ignore
-export const name = 'web-startup'
-export const inject = ['cmdlineArgs']
+### The launcher values
 
-export function apply(ctx: Context): void {
-  const program = webCommand()
-  program.action(() => ctx.provide('webStartup', webValuesFrom(program)))
-  parseCmdline(ctx, program)
-}
-```
+The launcher makes three things available to your app:
 
-Its Loader row carries no launcher marker or special kind:
+- `ctx.cmdlineArgs` — the inner arguments of your invocation. Reading them returns an immutable snapshot and never consumes or changes them: `dsh --profile tui --resume abc` gives your app `['--resume', 'abc']`.
+- `ctx.appExit` — a way to ask the process to exit once the tree has shut down, wired to the launcher's shutdown controller.
+- `ctx.appReady` — the successful-startup signal, committed only after the Loader tree and launcher-owned setup succeed.
+
+An app launched with no arguments sees an empty list — that is the honest answer, not a missing value.
+
+`exitOnStdinEnd(ctx, label)` binds a successfully started stdio application's EOF to `ctx.appExit(0)`. It never reads or resumes stdin, so a protocol transport receives bytes buffered before it mounts; startup rejection wins over a racing EOF, and the owning fiber removes both pending listeners.
+
+### Parsing your flags
+
+You bring your own commander program: declare your flags and your actions, and the package runs it against the inner arguments. Your action is the only place validation happens, and it publishes whatever your rows need. The plugin's Loader row carries no special marker:
 
 ```yaml
 - id: web-startup
   name: '@deepseek-ai/dsh-web-app/startup'
 ```
 
-Every row configured from those values uses ordinary service injection and direct lazy config access:
+Rows configured from the parsed values inject the published service and read it directly in their config:
 
 ```yaml
 - id: webserver
@@ -46,21 +59,67 @@ Every row configured from those values uses ordinary service injection and direc
     port: !!js ctx.webStartup.port ?? 3080
 ```
 
-`parseCmdline` refuses at load a program in which no command declares an action, routes every command's exit and output through the launcher (commander copies those settings into subcommands only at registration), and parses the immutable arguments; commander runs the invoked command's synchronous action on success. An action rejects an invalid invocation with `program.error(...)` — before publishing, since statements ahead of the rejection have already run. On `--help`, `--version`, a parse error, or that rejection, the helper writes commander's text and requests exit; the provider publishes nothing, so dependent rows never activate.
+The outcomes: `dsh --profile web --port 8080` starts the server on port 8080 even when the config says 3080, because the flag wins. `--help` prints your app's help and exits 0 without starting anything; a rejected value (for example a non-numeric port) prints your error and exits nonzero, and no row that depends on the parsed values ever starts.
 
-### How injection orders config
+### How flags beat config values
 
-Loader defers a row's `!!js` interpolation until that row's declared injections are active, then evaluates against the row's plugin context. The example above can therefore read `ctx.webStartup` directly: Cordis has already populated that injected service before Loader asks for `webserver`'s config. Include trees preserve nested expression nodes until each target row reaches this point. Provider replacement and live patch reload repeat interpolation against the current injected services, so a launch flag cannot be silently reset.
+The value written beside a `!!js` expression is the fallback: the flag wins when present, the written value is used otherwise. Resolution happens once at startup, after your parser ran, so a flag is never silently reset by a later config reload.
 
-### Shared immutable arguments
+### Reading the same arguments from several plugins
 
-`get()` does not consume or mutate argv. Multiple plugins can parse the same snapshot and independently provide services. The launcher does not inspect the composition for a command-line owner; a profile with no reader simply ignores its app arguments.
+Any number of plugins can read the same arguments — reading never consumes them — and each can parse what it needs and publish its own values. The launcher does not decide who owns the command line: an app with no reader ignores its arguments.
 
-An out-of-tree plugin brings its own commander copy, so commander's control-flow errors are detected structurally rather than by class identity; an identity check would rethrow a printed help as a fatal load failure.
+Apps built outside this repository behave the same way: their `--help` prints and exits instead of crashing, even though they carry their own commander copy.
 
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains how the outcomes above are realized and points at the code that realizes them; everything here is developer-facing and not needed to use the package.
+
+### Design notes
+
+- **Launcher facts, not config.** `cmdlineArgs` and `appExit` are provided on the host context before the tree mounts; they are not Loader rows, so no composition owns or overrides them.
+- **Positional split.** The launcher recognizes no app row: the first token after its own flags starts the app's arguments, so the app owns its flag family, its `--help` text, and its parse errors.
+- **Structural error detection.** `isCommanderError` reads commander's error code prefix instead of using `instanceof`, because an out-of-tree plugin brings its own commander copy whose `CommanderError` identity differs; `configureExitAndOutput` walks every subcommand because commander copies exit and output settings only at registration.
+- **Injectable output streams.** `internals` holds the output streams so tests can capture commander's text without touching the process.
+
+### Parsing contract
+
+The parse path is one small family with two owners: `provideCmdline` freezes the host arguments and provides `cmdlineArgs` and `appExit` before any tree entry mounts, and `parseCmdline` runs your commander program against the immutable arguments, routing every command's help, version, and error output through the launcher. A rejected value, `--help`, or `--version` prints commander's text and requests `ctx.appExit` without publishing anything, so dependent rows never activate; Loader defers each row's `!!js` interpolation until its declared injections are active. Per-export contracts live in the code, not this README — see [`src/index.ts`](src/index.ts).
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | `CmdlineArgs`/`AppExit` types, `provideCmdline`, `parseCmdline`, commander exit/output routing |
+| — | No runtime invariant companion is published; `cmdlineArgs` is an immutable launcher fact that any number of ordinary plugins may read. App-owned providers and consumers use normal Cordis service injection, whose missing dependencies are already reported by Loader settlement. |
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the handoff mechanism to the apps that consume it and the decisions behind it.
+
+- [App-owned command-line decision](../../../.agents/notes/implemented/architecture/2026-08-06-app-owned-command-line.md) — why apps own their flag family and how the handoff works.
+- [Command-line seam trim](../../../.agents/notes/implemented/architecture/2026-08-11-cmdline-seam-trim.md) — the seams reduced to existing interfaces.
+- [dsh-app-boot](../app-boot/README.md) — the boot sequence that provides these launcher values.
+- [dsh-web-app bundle](../../bundle/web-app/README.md) — an app that owns the Web flag family through this package.
+- [dsh-headless bundle](../../bundle/headless/README.md) — the one-shot runner that reads its task from the command line.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
-None, as this package resolves the process's own command line before any session exists.
+None, as this package resolves the process command line before any session exists; configured rows own every model-visible consequence.
 
 #### KV Cache effect
 
@@ -68,6 +127,25 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **Launcher flags must precede app arguments.** The split is positional: the first token the launcher does not recognize starts the inner arguments, so `--patch` placed after an app flag belongs to the app. The launcher's parser consumes one `--`, so an app argument that must survive as a literal `--` needs `-- --`.
-- **An app-owned service has no statically declared provider.** Consumer rows name it through ordinary injection; a bundle that omits its provider fails at settlement with pending entries naming the service rather than at load.
-- **A user patch that replaces a row's whole `config` drops its expressions.** A flag beats the value written beside it, not a literal a user wrote in place of the expression; keeping the expression is what keeps the flag winning.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits describe where app-owned command lines are a poor fit or need special care. They are current package constraints, not a task backlog.
+
+- **Launcher flags must precede app arguments** — the split is positional: the first token the launcher does not recognize starts the inner arguments, so `--patch` placed after an app flag belongs to the app. The launcher's parser consumes one `--`, so an app argument that must survive as a literal `--` needs `-- --`.
+- **An app-owned service has no statically declared provider** — consumer rows name it through ordinary injection; a bundle that omits its provider fails at settlement with pending entries naming the service rather than at load.
+- **A user patch that replaces a row's whole `config` drops its expressions** — a flag beats the value written beside it, not a literal a user wrote in place of the expression; keeping the expression is what keeps the flag winning.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+This Dev Note is working context for maintainers: open design questions and directions that are not decided. It is explicitly non-authoritative — shipped behavior, limits, and accepted rationale live in the sections above, the package code, and the linked Agent Notes.
+
+#### Open: parser surface
+
+`parseCmdline` is a commander adapter, not a command-line framework: help, version, and error output follow commander's formatting, and the exit/output routing assumes commander's control-flow model. A different parser would need its own routing and error handling; nothing in the `cmdlineArgs` service contract depends on commander.
+
+</details>

@@ -117,13 +117,13 @@ interface Workspace {
 
 ## 注册表：`ctx.workspaceRegistry`
 
-`WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 规范化路径，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已被拥有时原样返回既有实体；否则创建一条标题为 `title ?? basename(path)` 的记录并前插到持久的注册表顺序中——新记录不得与既有显示标题重复（`WorkspaceNameConflictError`）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[决策](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
+`WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 规范化路径，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已被拥有时原样返回既有实体；否则创建一条标题为 `title ?? basename(path)` 的记录并前插到持久的注册表顺序中（不同规范路径可以共享同一显示标题）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[决策](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
 
 会话的 cwd 在创建时由创建者赋予，而不是由本注册表赋予——API 网关从所选工作区的 `path` 解析新会话的 cwd（回退到显式或默认 cwd），先创建会话使 cwd 落入其不可变的 [`SessionHeader`](persistence.zh.md#sessionheader--metadata-beside-the-log)，再调用 `attachSession`，后者会把已存储的 header cwd 与工作区路径重新校验一遍。首次成功启动时，注册表仅凭已持久化的 header（`id`、`cwd`、`createdAt`——绝不读事件正文）引导历史：把规范 cwd 有效的会话按目录分组为工作区，最新的排在最前；「已初始化」标记最后写入，因此被中断的引导可以安全续跑。引导只发生这一次：没有 cwd 的历史遗留会话保持 Ungrouped，此后创建的会话只能通过 `attachSession` 加入工作区。
 
 ## 消费方
 
-[dsh-host-apiproxy](../../packages/host/apiproxy) 是产品消费方：它经 `ctx.workspaceRegistry` 向 GUI 客户端提供工作区的 CRUD，并执行上文「先建会话再 attach」的流程。[dsh-agent-instructions](../../packages/context/agent-instructions) 尽管名字如此，却**不是**消费方：它在 agent 自己的 cwd 下发现 AGENTS.md 风格的指令文件，从不触碰 `ctx.workspaceRegistry`——两者共用的这个词指的是用户的工作目录，而非本注册表的实体。
+[`dsh-workspace-controller`](../../packages/api/workspace-controller) 经 `ctx.workspaceRegistry` 向 GUI 客户端提供工作区 CRUD，[`dsh-session-controller`](../../packages/api/session-controller) 执行上文「先建会话再 attach」的流程。[dsh-agent-instructions](../../packages/context/agent-instructions) 尽管名字如此，却**不是**消费方：它在 agent 自己的 cwd 下发现 AGENTS.md 风格的指令文件，从不触碰 `ctx.workspaceRegistry`——两者共用的这个词指的是用户的工作目录，而非本注册表的实体。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -149,6 +149,40 @@ abstract capability(): DirectoryPickerCapability
 
 Source: [`packages/host/directory-picker/src/index.ts`](../../packages/host/directory-picker/src/index.ts)
 
+<a id="ctxdirectorypickercontroller--directorypickercontroller"></a>
+
+### `ctx.directoryPickerController` — `DirectoryPickerController`
+
+Host service backing the generated `ctx.remote.directoryPicker` namespace. The seam it exports is abstract and therefore never a Loader entry of its own, so this controller carries the wire verbs: one composed backend serves either the native chooser or the browse primitives, and a verb the composition cannot serve is refused rather than approximated.
+
+```ts cordis-catalog
+/**
+ * Open the host's OS chooser for a Remote caller.
+ * @param signal - caller lifetime; abort terminates the chooser.
+ * @returns the chosen absolute path, or null when the operator cancels.
+ */
+@Remote('pick') async pick(signal: AbortSignal): Promise<string | null>
+
+/**
+ * List one directory level for a Remote caller's in-app browser.
+ * @param path - absolute directory to list; absent lists the home directory.
+ * @param signal - caller lifetime; abort stops the backend's scan instead of
+ *   letting it outlive a disconnected caller.
+ * @returns the level's listing with its ancestry.
+ */
+@Remote('list') async list(path: string | undefined, signal: AbortSignal): Promise<DirectoryListing>
+
+/**
+ * Create one child directory for a Remote caller's in-app browser.
+ * @param path - absolute existing parent directory.
+ * @param name - single non-blank path segment.
+ * @returns the created directory's absolute path.
+ */
+@Remote('createDirectory') async createDirectory(path: string, name: string): Promise<string>
+```
+
+Source: [`packages/api/workspace-controller/src/directory-picker.ts`](../../packages/api/workspace-controller/src/directory-picker.ts)
+
 <a id="ctxfilepicker--filepicker-abstract-seam"></a>
 
 ### `ctx.filePicker` — `FilePicker` (abstract seam)
@@ -164,6 +198,85 @@ abstract capability(): FilePickerCapability
 ```
 
 Source: [`packages/host/file-picker/src/index.ts`](../../packages/host/file-picker/src/index.ts)
+
+<a id="ctxworkspacecontroller--workspacecontroller"></a>
+
+### `ctx.workspaceController` — `WorkspaceController`
+
+Host service backing the generated `ctx.remote.workspace` namespace.
+
+```ts cordis-catalog
+/**
+ * Create or idempotently resolve one Workspace over an existing directory.
+ * @param request - directory path to register.
+ * @returns the Workspace and whether this call created it.
+ */
+@Remote('create') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
+
+/**
+ * Rename one Workspace to a unique non-blank title.
+ * @param request - Workspace identity and proposed title.
+ * @returns the updated Workspace projection.
+ */
+@Remote('rename') rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue>
+
+/**
+ * Remove one Workspace registration while retaining files and Sessions.
+ * @param request - Workspace identity to remove.
+ * @returns deletion confirmation.
+ */
+@Remote('delete') delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue>
+
+/**
+ * Move one Workspace within the registry display order.
+ * @param request - moved Workspace and optional anchor.
+ * @returns the complete resulting Workspace order.
+ */
+@Remote('insertBefore') insertBefore(request: WorkspaceInsertBeforeRequest): Promise<WorkspaceOrderValue>
+
+/**
+ * Move one accounted Session within a Workspace.
+ * @param request - Workspace, Session, and optional anchor identities.
+ * @returns the updated Workspace projection.
+ */
+@Remote('insertSessionBefore') insertSessionBefore(request: WorkspaceInsertSessionBeforeRequest): Promise<WorkspaceValue>
+
+/**
+ * Add one known Session to the registry-global archive set.
+ * @param request - Session identity to archive.
+ * @returns the complete resulting archive set.
+ */
+@Remote('archiveSession') archiveSession(request: WorkspaceArchiveSessionRequest): Promise<WorkspaceArchiveValue>
+
+/**
+ * List the registry-global archive set with best-effort folded titles.
+ * @returns one row per archived Session, in archive-set order.
+ */
+@Remote('listArchived') listArchived(): Promise<WorkspaceListArchivedValue>
+
+/**
+ * Remove one Session from the registry-global archive set.
+ * @param request - Session identity to unarchive.
+ * @returns the complete resulting archive set.
+ */
+@Remote('restoreSession') restoreSession(request: WorkspaceRestoreSessionRequest): Promise<WorkspaceArchiveValue>
+
+/**
+ * Permanently delete one archived Session: log first, then accounting.
+ * @param request - archived Session identity to delete.
+ * @returns the complete resulting archive set.
+ */
+@Remote('deleteSession') deleteSession(request: WorkspaceDeleteSessionRequest): Promise<WorkspaceArchiveValue>
+
+/**
+ * Stream a complete Workspace baseline followed by ordered increments.
+ * @param signal - generation cancellation.
+ * @returns baseline followed by ordered Workspace increments.
+ */
+@Remote({ mode: 'stream' }) follow(signal: AbortSignal): AsyncIterable<WorkspaceFollowFrame>
+```
+
+Source: [`packages/api/workspace-controller/src/index.ts`](../../packages/api/workspace-controller/src/index.ts)
 
 <a id="ctxworkspaceregistry--workspaceregistry"></a>
 

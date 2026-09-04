@@ -28,12 +28,12 @@ describe('gen-tool-catalog collectToolCatalog', () => {
     expect(names).toEqual([
       'ask_user_question', 'bash', 'bash', 'cordis_define', 'cordis_inspect_list',
       'cordis_inspect_query', 'cordis_inspect_self', 'cordis_run', 'cordis_stop',
-      'cordis_undefine', 'create_goal', 'describe_image', 'edit', 'exit_plan_mode',
-      'followup_task', 'get_goal', 'glob', 'grep',
+      'cordis_undefine', 'create_goal', 'describe_image', 'edit', 'exit_plan_mode', 'followup_task', 'get_goal', 'glob', 'grep',
       'interrupt_agent', 'interrupt_agent', 'job_kill', 'job_list', 'job_output',
-      'list_agents', 'list_agents', 'lsp', 'plugin_install', 'plugin_search', 'plugin_status',
-      'plugin_uninstall', 'pwsh', 'pwsh', 'ralph',
-      'read', 'read_image', 'report', 'run_code', 'schedule_create', 'schedule_delete',
+      'list_agents', 'list_agents', 'list_subagent_models', 'lsp',
+      'plugin_install', 'plugin_search', 'plugin_status', 'plugin_uninstall',
+      'pwsh', 'pwsh', 'ralph',
+      'read', 'read_image', 'run_code', 'schedule_create', 'schedule_delete',
       'schedule_list', 'send_message', 'send_message', 'session_event_read', 'session_event_search',
       'session_event_trace', 'session_search', 'session_trace', 'skill', 'spawn_teammate',
       'str_replace_editor', 'subagent', 'team_task_create',
@@ -90,7 +90,7 @@ describe('gen-tool-catalog collectToolCatalog', () => {
     // agents surface this one package as both `subagent` and `subagent_fork`.
     const catalog = await collectToolCatalog()
     const subagent = catalog.find(entry => entry.pkg === '@deepseek-ai/dsh-tool-subagent')
-    expect(subagent?.schemas.map(s => s.name)).toEqual(['subagent'])
+    expect(subagent?.schemas.map(s => s.name)).toEqual(['list_subagent_models', 'subagent'])
     expect(subagent?.note).toMatch(/subagent_fork/)
   })
 })

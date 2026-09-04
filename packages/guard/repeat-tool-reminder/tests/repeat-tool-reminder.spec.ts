@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, CallId  } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId  } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as RepeatToolGuard from '@deepseek-ai/dsh-repeat-tool-reminder'
 import type { Config } from '@deepseek-ai/dsh-repeat-tool-reminder'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
@@ -24,6 +25,8 @@ const testToolSignal = new AbortController().signal
 async function harness(config: Config = {}): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  // AgentLoop declares the registry as a required injection.
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(RepeatToolGuard, config)
   ctx.tools.register(defineContentToolFixture({ name: 'probe', description: 'p', parameters: {}, async execute() { return [{ type: 'text', text: 'ok' }] } }))
@@ -37,7 +40,7 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
 
 /** Every injected-context user message in the agent's log, flattened to joined text + source for terse assertions. */
 function reminders(agent: Agent): { text: string; source: unknown }[] {
-  return [...agent.session.events]
+  return agent.session.snapshotEvents()
     .filter((e): e is SessionEvent<'user/message'> => e.type === 'user/message' && e.data.source.kind !== 'user')
     .map(e => ({
       text: e.data.content.map(block => block.type === 'text' ? block.text : '').join('|'),
@@ -293,7 +296,7 @@ describe('chain semantics', () => {
 
   it('ignores direct executes with no agent (they neither crash nor advance any chain)', async () => {
     const ctx = await harness({ thresholds: [2] })
-    const direct = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('d1'), name: 'probe', arguments: { q: 1 } })
+    const direct = await ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId('d1'), name: 'probe', arguments: { q: 1 } })
     expect(direct.isError).toBe(false)
 
     ctx.llm.registerAdapter(['mock'], new MockAdapter([
@@ -337,7 +340,7 @@ describe('fold onto the downstream decision', () => {
     expect(found[1]!.source).toEqual(guardSource('probe', 2))
     expect(found[2]).toEqual({ text: 'downstream-ctx', source: { kind: 'plugin', plugin: 'test' } })
     // The block's feedback reached the tool result unchanged.
-    const results = [...agent.session.events].filter((e): e is SessionEvent<'tool/result'> => e.type === 'tool/result')
+    const results = agent.session.snapshotEvents().filter((e): e is SessionEvent<'tool/result'> => e.type === 'tool/result')
     expect(results.every(r => r.data.message.content[0].isError)).toBe(true)
     expect(results[1]!.data.message.content[0].content).toEqual([{ type: 'text', text: 'nope' }])
   })
@@ -361,7 +364,7 @@ describe('fold onto the downstream decision', () => {
     const found = reminders(agent)
     expect(found).toHaveLength(1)
     expect(found[0]!.text).toContain('repeating the exact same tool call')
-    const results = [...agent.session.events].filter((e): e is SessionEvent<'tool/result'> => e.type === 'tool/result')
+    const results = agent.session.snapshotEvents().filter((e): e is SessionEvent<'tool/result'> => e.type === 'tool/result')
     expect(results[1]!.data.message.content[0].content).toEqual([{ type: 'text', text: 'replaced' }])
   })
 })
@@ -370,6 +373,7 @@ describe('config validation fails loud', () => {
   async function spine(): Promise<Context> {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
     return ctx
   }

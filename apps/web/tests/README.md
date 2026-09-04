@@ -11,8 +11,8 @@ the deliberate composition divergences from `dsh web` — are documented in
 ## These are Host-face tests
 
 They type-check in the root `tsconfig.host.json`, not in the Client aggregate,
-because they read Host services directly: `ctx.apiProxy`, the Host
-`SessionStore`, `ctx.sessionProjectionCache`. Driving a browser at runtime does
+because they read Host services directly: `ctx.connection`, the Host
+`SessionStore`, and `ctx.sessionProjectionCache`. Driving a browser at runtime does
 not make a file part of the Client program — the two faces merge cordis
 `Context` under the same keys with different services, so one program cannot see
 both. Moving these files into the Client aggregate makes every Host-service
@@ -33,14 +33,11 @@ then surfaces as a missed selector or a stale mirrored value — a loud failure,
 never a silent pass. `scaffold.ts` follows this rule for the welcome-notice
 namespace, acknowledgement field, version, and asserted Chinese copy.
 
-Two kinds of Client import stand. `assembled-boot.ts` drives the shell itself, so
+One kind of Client import stands. `assembled-boot.ts` drives the shell itself, so
 it imports `AppWebEntry` from `@deepseek-ai/dsh-client-web` and the boot-manifest
 type from `@deepseek-ai/dsh-client-modules/client`: booting the real shell is what
-that harness is for, and both packages are already in the Host graph. Separately,
-the chat scenarios import `conversationContextKey` from
-`@deepseek-ai/dsh-client-runtime/client` because `client/runtime` is reachable
-through the unsplit `directory-picker` packages and pulls nothing further in.
-That reachability is incidental, not a guarantee — if it ever leaves the graph,
-mirror the helper like the rest.
+that harness is for, and both packages are already in the Host graph. The chat
+scenarios mirror `conversationContextKey` in `support.ts` instead of importing
+its Client owner.
 
 Nothing mechanically enforces this rule; keep it in review.

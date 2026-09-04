@@ -32,7 +32,7 @@ export interface OxlintInvocation {
  */
 export function resolveOxlintInvocation(args: readonly string[], env: NodeJS.ProcessEnv): OxlintInvocation {
   const resolvedArgs = [...args]
-  if (env.CI === 'true' && !hasOutputFormat(args)) resolvedArgs.push('--format=unix')
+  if (env.CI === 'true' && !hasOutputFormat(args)) resolvedArgs.push('--format=default')
   const raw = env.DSH_OXLINT_THREADS
   if (raw === undefined || raw === '') return { args: resolvedArgs, env: { ...env } }
   const parsed = Number.parseInt(raw, 10)

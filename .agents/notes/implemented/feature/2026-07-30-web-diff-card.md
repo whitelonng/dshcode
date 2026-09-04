@@ -30,7 +30,7 @@ The chat row renders the diff resident under its path-link summary, capped at `C
 
 ## Alternatives considered
 
-**A side-by-side (two-column) diff.** Rejected for now by the owner: it is denser but does not fit the narrow chat row, and the goal was parity with the TUI's single-column unified form. A two-column mode in the details panel is a later props change, not a redesign.
+**A side-by-side (two-column) diff.** Rejected: it is denser but does not fit the narrow chat row, and the selected design matches the TUI's single-column unified form. A two-column details-panel mode remains separable from this card design.
 
 **Git-style line-number gutters.** The `FileDiff` contract carries only `{ path, oldText, newText }` — `structuredPatch`'s hunk start lines are dropped in `diff.ts`, so no line number reaches the client. Rendering a numbered gutter needs a backend contract change (carry `oldStart`/`newStart`) and a matching TUI upgrade to stay consistent; deferred so this change stays a pure Web consumer of the existing contract.
 
@@ -40,7 +40,7 @@ The chat row renders the diff resident under its path-link summary, capped at `C
 
 `DiffBlock` reads only the diff view's fields, so it stays a pure function of what the render intent carries — replay-safe like the presenters that produce the view. A UI without the diff capability still gets the bridge's generic fallback; nothing about the tool's result shape changed. No new runtime dependency: unlike the terminal card's `anser`, a diff needs no parser.
 
-The multi-file arm of `DiffBlock` (one card, several path headers) has no producer today: `write`/`edit` each mutate one file per call, so a real card shows one file with one or more hunks. The arm is built and tested for a future multi-file mutation tool, not for a current consumer.
+The multi-file arm of `DiffBlock` (one card, several path headers) has no shipped producer: `write`/`edit` each mutate one file per call, so a real card shows one file with one or more hunks. The arm is built and tested for a future multi-file mutation tool, not for a current consumer.
 
 ## Testing
 
@@ -48,7 +48,7 @@ The multi-file arm of `DiffBlock` (one card, several path headers) has no produc
 
 `packages/client/ui-tool/tests/diff-card.client.spec.tsx` pins the wiring at every render site: `diffCardModel`'s derivation and each of its null arms, the result hunks replacing the call-time diff, a window-truncated call still rendering from the result, the chat row's diff body, `FileMutationRow`'s resident card and its path link opening cwd-resolved through the host, its registration under both `write` and `edit`, and the panel's Output section.
 
-The fixture (`packages/client/connection/src/client/fixture.ts`) carries three diff turns so a `?fixture` server and the per-package wiring suite exercise all three arms at both render sites: a single-hunk edit (turn 62, keyed `FileMutationRow`), a create/write (turn 63), and a multi-hunk edit (turn 67, the `⋯` gap between two scattered hunks in one file). The built-boot snapshot (`apps/web/tests/built-boot.snapshot.ts`) is a boot-assembly smoke that asserts only that the graph mounts and reaches chat content (`data-sample="bash-global"`); by its own contract it carries no diff-behavior assertions, which the wiring suite owns.
+The fixture (`packages/client/connection/src/client/fixture.ts`) carries three diff turns so a `?fixture` server and the per-package wiring suite exercise all three arms at both render sites: a single-hunk edit (turn 62, keyed `FileMutationRow`), a create/write (turn 63), and a multi-hunk edit (turn 67, the `⋯` gap between two scattered hunks in one file). The built-boot expected-output test (`apps/web/tests/built-boot.expected.e2e.ts`) is a boot-assembly smoke that asserts only that the graph mounts and reaches chat content (`data-sample="bash-global"`); by its own contract it carries no diff-behavior assertions, which the wiring suite owns.
 
 ## Related
 

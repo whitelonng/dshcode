@@ -1,14 +1,49 @@
+---
+description: "Package map for the session retrieval capability family: searching, tracing, and reading live and durable session history, plus the Web session-log export."
+kind: "package-group"
+---
+
 # session-query/ — session retrieval capability family
 
 English | [中文](README.zh.md)
 
-This family provides authorized retrieval over live and durable session logs, independently of compaction.
+## Summary
+
+The `session-query/` group provides retrieval over live and durable session history, independent of compaction: programmatic callers query one unified service for exact logs, filtered lists, relationship traces, and full-text search; a SQLite backend powers the search; the model gets five workspace-authorized tools; and the Web UI gets an `/export` command that downloads a session ZIP. Search results agree with the conversation history the model sees. This page maps the group; each package README owns its per-package contract.
+
+## Table of Contents
+
+- [Packages](#packages)
+- [Related documentation](#related-documentation)
+- [Dev Note](#dev-note)
+
+-----
+
+<a id="packages"></a>
+## Packages
+
+Each package README describes what you can do with its part of the family.
 
 | Package | Role | ctx key |
 |---|---|---|
-| [`session-query/`](session-query/README.md) | Defines trusted reads, relationship queries, and search operations | `ctx.sessionQuery` |
-| [`session-query-sqlite/`](session-query-sqlite/README.md) | Implements session queries with SQLite full-text search | `ctx.sessionQuery` |
-| [`session-log-export/`](session-log-export/README.md) | Adds the Web `/export` command, shared browser download state, and result modal over the Host ZIP endpoint | `ctx.sessionLogDownload` |
-| [`tool-session-query/`](tool-session-query/README.md) | Exposes workspace-authorized session queries to the model | registers on `ctx.tools` |
+| [`session-query/`](session-query/README.md) | Unified session-history query service: exact reads, relationship traces, and filters | `ctx.sessionQuery` |
+| [`session-query-sqlite/`](session-query-sqlite/README.md) | Full-text search across session history backed by a SQLite FTS5 index | registers on `ctx.sessionQuery` |
+| [`session-log-export/`](session-log-export/README.md) | Web `/export` command and browser download of a session ZIP | `ctx.sessionLogDownload` (browser) |
+| [`tool-session-query/`](tool-session-query/README.md) | Model-facing tools to search, trace, and read session history | registers on `ctx.tools` |
 
-The subsystem reference — logical records, bounded reads, traces, filters, result pages — is [docs/subsystems/session-query.md](../../docs/subsystems/session-query.md).
+-----
+
+<a id="related-documentation"></a>
+## Related documentation
+
+Start with the subsystem reference for the shared query vocabulary, then the design records behind tracing, search, and the model-facing tools.
+
+- [Session Query subsystem reference](../../docs/subsystems/session-query.md) — logical records, filters, search pages, lineage, bounded reads, and event relationships.
+- [Session query relationship tracing](../../.agents/notes/implemented/feature/2026-07-13-session-query-tracing.md) — trace semantics and the validation boundary.
+- [SQLite FTS5 session search](../../.agents/notes/implemented/feature/2026-07-10-sqlite-session-query-provider.md) — search semantics, reconciliation, and the tokenizer decision.
+- [Model-facing session query tools](../../.agents/notes/implemented/feature/2026-07-24-model-facing-session-query-tools.md) — workspace authority and the cursor-free result design.
+
+<a id="dev-note"></a>
+## Dev Note
+
+None.

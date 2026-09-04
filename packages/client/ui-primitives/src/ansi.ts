@@ -1,9 +1,5 @@
-// ANSI model behind TerminalBlock: anser splits the SGR runs, this module
-// resolves each run's colors and decorations into a plain style record and
-// folds the runs into per-line span arrays so a height cap can slice whole
-// lines. Sequences anser does not turn into color (OSC, cursor movement,
-// other C0 controls) are removed before parsing so they never reach the DOM
-// as literal characters.
+// Strip control sequences that anser does not consume before resolving SGR
+// runs, so they cannot reach the DOM as literal characters.
 
 import Anser from 'anser'
 import type { CSSProperties } from 'react'

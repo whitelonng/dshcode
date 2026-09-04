@@ -16,7 +16,7 @@ Web 与 headless 共用的组合会使用 `openAt: first-search` 和内存数据
 
 [`WorkspaceBrowser`](../../../../packages/client/ui-workspace/README.zh.md) 有意将元数据搜索与内容搜索保持独立。其默认界面文案为英文；输入框及防御性请求路径会移除 NUL，将查询限制在请求 schema 规定的 500 个 UTF-16 code unit 内且不会拆分 surrogate pair。非空白查询会立即从会话列表中计算不区分大小写的标题和 Workspace 子串匹配，在 250 ms 防抖后发起内容请求，在查询变化时中止前一请求，并忽略陈旧的完成结果。它先按新近程度排列本地匹配，再合并由后端排序且仅匹配内容的结果，按会话 id 去重；无论常规分组模式如何，最终都渲染为扁平列表。每一行显示标题、Workspace，并在存在时显示一行摘要片段。选择某一行只会打开对应会话，并保留查询条件；不会跳转至确切事件。
 
-结果上限是单一协议常量，而非逐连接状态。`SESSION_SEARCH_RESULT_LIMIT` 位于 `dsh-host-apiproxy` 中强制执行它的响应 schema 旁边，`SessionRuntime.searchResultLimit` 则把该常量重新公开给呈现插件。功能包要取用它，必须显式扩展 sessions 域的对外面：`ISessions`（即注入为 `ctx.sessions` 的那个面，也因此是测试运行时的 sessions 替身必须实现的面）在该上限旁声明了搜索动作。连接 handle 不携带它：逐连接字段会暗示该上限随传输层变化或由服务端协商，而 schema 固定的 `max` 恰恰禁止这一点，并且会让同一事实在同一模块内拥有两处归属。
+结果上限是单一协议常量，而非逐连接状态。`SESSION_SEARCH_RESULT_LIMIT` 与请求和结果类型一起位于 `@deepseek-ai/dsh-api-session-controller/types`；Session Controller 强制执行它，`ClientSessions.searchResultLimit` 则把它重新公开给呈现插件。功能包要取用它，必须显式扩展 sessions 域的对外面：`ISessions`（即注入为 `ctx.sessions` 的那个面，也因此是测试运行时的 sessions 替身必须实现的面）在该上限旁声明搜索动作。Connection handle 不携带它：逐连接字段会暗示该上限随传输层变化或由服务端协商，并让同一事实拥有两处归属。
 
 内容匹配沿用 SQLite 后端经过规范化的字面 token／短语语义。共享语义投影会排除推理（reasoning）块，因此 UI 搜索绝不会将模型的私有推理作为命中或 snippet 返回；派生索引的 schema 版本会随之前进，使现有持久化索引重建并移除先前的这些文档。FTS5 运算符只作为数据处理，此搜索界面不提供拼写错误纠正、模糊匹配、前缀匹配或任意子串扩展。特别是，`unicode61` 分词器可能将一段连续中文视作单个 token，因此不保证 `搜索` 之类的较短查询能匹配 `会话搜索功能` 的内部片段。标题与 Workspace 匹配仍采用普通的客户端子串匹配。
 

@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 /** Settings section registration smoke: localized nav row + wire face. */
 
-import { Context, Service } from '@deepseek-ai/cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
+import {
+  WorkspaceCommandError,
+  type ArchivedSessionItem,
+  type IWorkspaces,
+} from '@deepseek-ai/dsh-api-workspace-controller/client'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as applyHostEntry } from '../src/index.ts'
@@ -17,23 +22,22 @@ import type { ArchiveSessionsSectionInjected } from '../src/client/ArchiveSessio
 usePinnedBrowserLanguages('zh-CN')
 afterEach(cleanup)
 
-const LIST = { items: [{ sessionId: 's-archived', title: '归档对话' }] }
+const LIST = {
+  items: [{ sessionId: 's-archived' as ArchivedSessionItem['sessionId'], title: '归档对话' }],
+}
 
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
-  const call = vi.fn<ConnectionHandle['rpc']['call']>()
-    .mockResolvedValue({ ok: true, value: LIST })
-  class ConnectionService extends Service {
-    constructor(serviceCtx: Context) {
-      super(serviceCtx, 'connection')
-      Object.assign(this, { isLoopback: true, rpc: { call } })
-    }
+  const workspaces = {
+    listArchived: vi.fn<IWorkspaces['listArchived']>().mockResolvedValue(LIST.items),
+    restoreSession: vi.fn<IWorkspaces['restoreSession']>().mockResolvedValue(undefined),
+    deleteSession: vi.fn<IWorkspaces['deleteSession']>().mockResolvedValue(undefined),
   }
-  new ConnectionService(ctx)
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, call }
+  ctx.provide('workspaces', workspaces as unknown as IWorkspaces)
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, locale, workspaces }
 }
 
 function declare(slots: SlotRegistry): () => void {
@@ -55,7 +59,7 @@ describe('ui-settings-archive browser plugin', () => {
     applyHostEntry()
   })
 
-  it('registers the localized archived-sessions section without reading the channel eagerly', async () => {
+  it('registers the localized archived-sessions section without calling the service eagerly', async () => {
     const b = await bench()
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
@@ -64,27 +68,54 @@ describe('ui-settings-archive browser plugin', () => {
     expect(entry.component).toBe(ArchiveSessionsSection)
     expect(entry.options).toMatchObject({ id: 'archive', order: 30 })
     expect(resolveSlotLabel(entry.options.label)).toBe('归档会话')
-    expect(b.call).not.toHaveBeenCalled()
+    expect(b.workspaces.listArchived).not.toHaveBeenCalled()
 
     const injected = (entry.inject as unknown as () => ArchiveSessionsSectionInjected)()
     await expect(injected.list()).resolves.toEqual(LIST.items)
-    expect(b.call).toHaveBeenLastCalledWith('/api', 'workspace.listArchived', {})
+    expect(b.workspaces.listArchived).toHaveBeenLastCalledWith()
     await expect(injected.restore('s-archived')).resolves.toBeUndefined()
-    expect(b.call).toHaveBeenLastCalledWith('/api', 'workspace.restoreSession', { sessionId: 's-archived' })
+    expect(b.workspaces.restoreSession).toHaveBeenLastCalledWith('s-archived')
     await expect(injected.remove('s-archived')).resolves.toBeUndefined()
-    expect(b.call).toHaveBeenLastCalledWith('/api', 'workspace.deleteSession', { sessionId: 's-archived' })
+    expect(b.workspaces.deleteSession).toHaveBeenLastCalledWith('s-archived')
 
-    b.call.mockResolvedValueOnce({
-      ok: false,
-      error: { code: 'not-archived', message: 'not archived', details: { sessionId: 's-archived' as never } },
-    })
+    b.workspaces.deleteSession.mockRejectedValueOnce(new WorkspaceCommandError(
+      { code: 'workspace/not-archived', message: 'not archived', details: {} } as RemoteFailure,
+      'session delete',
+    ))
     const failure = injected.remove('s-archived')
-    await expect(failure).rejects.toThrow('workspace workspace.deleteSession failed: not-archived: not archived')
+    await expect(failure).rejects
+      .toThrow('workspace session delete failed: workspace/not-archived: not archived')
     // The rejection carries the structured Host code so the section can map
-    // known failures (session-active) to actionable copy.
-    await expect(failure).rejects.toMatchObject({ name: 'ArchiveActionError', code: 'not-archived' })
-    b.call.mockResolvedValueOnce({ ok: true, value: { items: [{ invalid: true }] } })
+    // known failures (workspace/session-active) to actionable copy.
+    await expect(failure).rejects.toMatchObject({
+      name: 'ArchiveActionError',
+      code: 'workspace/not-archived',
+    })
+    b.workspaces.listArchived.mockResolvedValueOnce([{ invalid: true }] as never)
     await expect(injected.list()).rejects.toThrow('must carry a sessionId')
+    await b.ctx.fiber.dispose()
+  })
+
+  it('converts a rejected restoreSession into the section action error', async () => {
+    const b = await bench()
+    declare(b.slots)
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+
+    const entry = requiredAt(b.slots.entries('settings.section'), 0)
+    const injected = (entry.inject as unknown as () => ArchiveSessionsSectionInjected)()
+    b.workspaces.restoreSession.mockRejectedValueOnce(new WorkspaceCommandError(
+      { code: 'workspace/not-archived', message: 'not archived', details: {} } as RemoteFailure,
+      'session restore',
+    ))
+    const failure = injected.restore('s-archived')
+    await expect(failure).rejects
+      .toThrow('workspace session restore failed: workspace/not-archived: not archived')
+    // The rejection carries the structured Host code so the section can map
+    // known failures (workspace/session-active) to actionable copy.
+    await expect(failure).rejects.toMatchObject({
+      name: 'ArchiveActionError',
+      code: 'workspace/not-archived',
+    })
     await b.ctx.fiber.dispose()
   })
 

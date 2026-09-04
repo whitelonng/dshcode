@@ -32,6 +32,6 @@ The attachment seam exposes its limits plus storage-free `validateImage`, `saveI
 
 ## Consequences
 
-The feature retains the two batch limits and one storage-free validation method required by multi-image prompts, while removing unrelated public fields, lifecycle operations, policy snapshots, and route-assembly branches. Provider/model selection remains composition or profile configuration. Pre-request token pressure may undercount visual input until a provider-aware estimator is designed, while reported usage remains exact.
+The feature retains the two batch limits and one storage-free validation method required by multi-image prompts, while removing unrelated public fields, lifecycle operations, policy snapshots, and route-assembly branches. Provider/model selection remains composition or profile configuration. Pre-request token pressure keeps the structural heuristic only on routes without declared image pricing; the [route-priced estimator](../feature/2026-08-24-route-priced-image-request-pressure.md) supplies the provider-aware figure, and reported usage remains exact.
 
 Reintroducing any removed surface requires a concrete consumer and its failure, lifecycle, replay, and testing contract rather than compatibility with this pre-release shape.

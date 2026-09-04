@@ -1,36 +1,35 @@
+---
+description: "Keyless LLM replay plugin for snapshot tests, for test authors booting the real agent against recorded model transcripts."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-llm-replay
 
 English | [中文](README.zh.md)
 
-A replay LLM plugin for keyless snapshot tests. It yields model streams reconstructed from a recorded **session JSONL** fixture, so a test can boot the real agent against a fixed model transcript with no API key. With `providers` configured it registers a replay-only adapter whose catalog is available to scenarios that exercise model discovery; without `providers` it installs the catch-all `llm/stream` waterfall used by tests that do not need discovery.
+## Summary
 
-Its consumers are the ACP and headless `stream-json` snapshot suites plus the Web browser e2e lane. Loader-driven suites mount this plugin in place of a real LLM adapter; the Web lane installs it directly to retain the teardown consumption handle.
+`dsh-llm-replay` makes snapshot tests run without an API key: it installs a replay LLM adapter that serves model streams reconstructed from a recorded session JSONL fixture, so a test boots the real agent against a fixed transcript. The fixture is a projection of the persisted session log — `assistant/chunk` events group into per-call chunk sequences, and an explicitly marked local compaction call replays as one canonical stream. A `replay.override.json` sidecar covers what a log cannot reconstruct: a throw before any chunk, a cancel/hang, or an injected retry. Live sessions bind to recorded scripts by first-call order, so parent-and-subagent scenarios each get their own script. It is the model source behind the ACP and headless snapshot suites and the Web browser e2e lane.
 
-## How the fixture works
+## Table of Contents
 
-The fixture is a projection of a persisted session log (`<scenario>/session.jsonl`): it keeps the header and every event payload, but omits body `seq`/`time` envelopes (`seq0`/`time0` for packed rows). Replay restores contiguous synthetic envelopes while parsing; one file must contain either projected body rows or complete persisted body rows, never both. Runtime persistence still writes the complete log. The fixture's `assistant/chunk` events carry every `StreamChunk`, so grouping them by `(turn, step)` reconstructs each agent-loop `stream()` call's chunk sequence. A successful compaction summarizer is logged differently: when `compaction/summary` carries `llmStreamCall: true` and its complete `rawOutput`, replay reconstructs a canonical successful stream at that event's position using one `block-start`/`block-end` pair per block, the recorded usage when present, and a terminal `stop`. Exact provider delta partitioning is not part of the durable compaction result. `rawOutput` without the marker does not imply a local LLM call because template and remote summarizers may retain complete output without using this context's adapter.
+- [Use this package](#use-this-package)
+- [Understand the implementation](#understand-the-implementation)
+- [Further Exploration](#further-exploration)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-Recording is therefore "run the real agent once and harvest the `.jsonl`", done by the snapshot harness — this plugin does not record. A fixture may carry its `request/header` content tokenized to `{{system}}`/`{{tools}}` (the harness pins that content in one scenario and scrubs the rest); replay is indifferent — derivation reads only `assistant/chunk` and `compaction/summary` events plus the line-0 session header.
+-----
 
-Two failure modes are not reconstructable from `assistant/chunk` alone — a pure throw before any chunk (e.g. an HTTP 401, where the log holds only a `turn/end {error}` and no chunks) and a cancel/hang (timing, not chunk content). A scenario that needs those supplies an optional sidecar (`<scenario>/replay.override.json`) that either replaces the derived script (a bare `ReplayEntry[]`) or augments it (`{ patches: [{ at, entry }] }`: keep every JSONL-derived call and swap the named 0-based call indexes; `at` equal to the derived length appends the retry attempt after an injected transient throw). Patch indexes must be unique. The override document, each patch and entry, and every chunk discriminant are validated when the file loads. A `hang` entry may name `readyFile`; replay writes that empty marker after its prefix chunks reach the loop and before it waits for cancellation, so an external driver can cancel deterministically without observing a presentation update.
+<a id="use-this-package"></a>
+## Use this package
 
-A scripted string may embed `{{fromRequest:<regex>}}` to fill a value no static sidecar can know — for example a randomly minted goal id the model must echo back into `update_goal`. At stream time every placeholder resolves against the live request: the corpus is every string leaf of the request messages joined by newlines, the pattern's LAST corpus match wins, and its first capture group (or the whole match without one) substitutes in place. A pattern that matches nothing, an invalid pattern, and an unterminated placeholder each fail loud. The last two braces of a consecutive `}` run terminate the placeholder, so a pattern may end with a brace quantifier (`[0-9a-f]{4}`) but cannot contain `}}` followed by further pattern content. Resolution applies to every scripted entry, including ones derived from the recorded JSONL — a recorded fixture whose text legitimately contains the literal marker must be expressed through a sidecar without it.
+This package gives a keyless test a real agent with a fixed model transcript: mount it in place of a real LLM adapter, point it at a recorded fixture, and run the scenario exactly as if the model had produced the recorded output.
 
-## Nested agents: per-session keying
+### Mounting it
 
-A scenario where a parent agent delegates to in-process subagents records more than one log: the parent (`session.jsonl`) plus one per child (`session.1.jsonl`, …). Each agent runs as its own `Session` on the same context, so replay must serve each one its own script.
-
-Replay keys every call by its calling session id (`GenerateOptions.sessionId`, stamped by the agent loop). Live session ids are freshly random each run and never equal the recorded ones, so a live session binds to a recorded script by **first-call order**: scripts are ordered by header `createdAt` (parent first — it streams before it can delegate), and the first live session to make any call claims the first script, the next new session the next, and so on. Each session then advances its own cursor. A call with no `sessionId` is one anonymous session bound to the primary script. More distinct live sessions than recorded scripts fails loud.
-
-## Config
-
-| Key | Type | Default | Notes |
-|---|---|---|---|
-| `file` | string | `$DSH_SNAPSHOT_FILE` | Path to the primary (parent) `session.jsonl` fixture. Required (config or env). |
-| `overrideFile` | string | `$DSH_SNAPSHOT_OVERRIDE` | Optional `ReplayOverrideDoc` sidecar for the primary session: a bare `ReplayEntry[]` replaces its derived script, while `{ patches }` augments it by call index. |
-| `childFiles` | string[] | `$DSH_SNAPSHOT_CHILD_FILES` (path-delimited) | Recorded subagent child-session logs for a nested scenario; empty for a single-session scenario. |
-| `providers` | `ReplayProviderConfig[]` | — | Optional replay-only provider and model catalog. Each provider may set `retryPolicy`, and each model may publish `contextWindow` and an `inputModalities` array containing only `text` and `image`; invalid modalities fail during plugin loading. Configured routes dispatch through the replay adapter and never perform provider I/O. |
-| `paceMs` | number | — (burst) | Optional per-chunk delay in ms so downstream transports (e.g. the web SSE mux observed by a real browser) see genuinely incremental delivery. A realism knob only — tests must not depend on it for correctness. Non-negative integer; abort during a pace wait cancels the stream promptly. |
+With `providers` configured, the plugin registers a replay-only adapter whose catalog is available to scenarios that exercise model discovery; without `providers`, it installs the catch-all `llm/stream` waterfall used by tests that do not need discovery:
 
 ```yaml
 - id: llm-replay
@@ -54,18 +53,78 @@ Replay keys every call by its calling session id (`GenerateOptions.sessionId`, s
   # harness per scenario.
 ```
 
-## Exports
+| Field | Default | Meaning |
+|---|---|---|
+| `file` | `$DSH_SNAPSHOT_FILE` | Path to the primary (parent) `session.jsonl` fixture; required (config or env) |
+| `overrideFile` | `$DSH_SNAPSHOT_OVERRIDE` | Optional `ReplayOverrideDoc` sidecar for the primary session |
+| `childFiles` | `$DSH_SNAPSHOT_CHILD_FILES` | Recorded subagent child-session logs for a nested scenario |
+| `providers` | — | Optional replay-only provider and model catalog; a model may declare `contextWindow`, text/image modalities, and positive `imageRequestTokens` when image-capable; invalid values fail at load and routes never perform provider I/O |
+| `paceMs` | — (burst) | Optional per-chunk delay in ms for genuinely incremental delivery |
 
-- `installLlmReplay(ctx, config)` — install the configured replay adapter or catch-all `llm/stream` listener; returns a `ReplayHandle` (`dispose()` for HMR safety plus `assertConsumed()`, the teardown check that every recorded script bound to a live session and every bound cursor drained — turning a scenario that silently drove fewer model calls than recorded into a crisp diagnostic). Use this in tests to drive replay without the Loader or env vars.
-- `loadSessionScripts(config)` — resolve the ordered `SessionScript[]` (primary + children) for a scenario, ready to bind to live sessions in first-call order.
-- `loadReplayScript(config)` — resolve the `ReplayEntry[]` for the primary session only (validated sidecar replacement/patches if present, else derived from the JSONL; fail-loud if the fixture is missing).
-- `deriveReplayScript(events)` / `parseSessionLog(text)` / `parseSessionHeader(text)` / `resolveScriptedEntry(entry, messages)` — the pure helpers that turn ordinary loop chunks and explicitly marked local compaction outputs in a persisted or projected session log into a script, read its header `id`/`createdAt`, and resolve `{{fromRequest:...}}` placeholders against one live request. A derived assistant group must end in a `finish` chunk; a group without one is the fingerprint of a thrown `stream()` and must instead be expressed via an override sidecar.
-- Types `ReplayEntry` / `ReplayOverrideDoc` / `ReplayOverridePatch` / `SessionScript` / `ReplayConfig` / `ReplayProviderConfig` / `ReplayModelConfig` / `ReplayHandle` / `Config`.
+The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-llm-replay) is the exhaustive source for every accepted field and its JSDoc.
 
-## Plugin export shape
+### How the fixture works
 
-Named `name` / `inject` / `Config` / `apply`, with **no default export**: the cordis Loader's `unwrapExports` does `exports.default ?? exports`, so a stray default would collapse the module to the bare function and drop the `inject` namespace (see [docs/postmortem/0001](../../../docs/postmortem/0001-acp-default-export-drops-inject.md)).
+The fixture is a projection of a persisted session log (`<scenario>/session.jsonl`) produced by running the real agent once — this plugin does not record. It keeps the header and every event payload but omits body `seq`/`time` envelopes (`seq0`/`time0` for packed rows); replay restores contiguous synthetic envelopes while parsing, and one file cannot mix projected and complete body rows. Runtime persistence continues to write complete logs. Replay derives each model call's chunk sequence from `assistant/chunk` events, so a recorded fixture replays the same logical stream the live model produced. A fixture may carry its `request/header` content tokenized to `{{system}}`/`{{tools}}`; replay is indifferent because derivation reads only the chunk and summary events plus the line-0 session header.
 
+### Nested agents
+
+A scenario where a parent agent delegates to in-process subagents records one log per session: the parent (`session.jsonl`) plus one per child (`session.1.jsonl`, …). Live session ids are freshly random each run, so replay binds each live session to a recorded script by first-call order: the first live session to make a model call claims the first script, the next new session the next, and so on, with each session advancing its own cursor. More distinct live sessions than recorded scripts fails loud.
+
+### Failure modes and overrides
+
+When replay serves `deepseek-official` with `ctx.deepseekLlmApiExtensions`, it prepares and accepts those fields after selecting a valid script entry and before yielding the first chunk. This mirrors the live adapter's post-2xx commit point, so durable acceptance watermarks and SDK event notifications behave the same in recording and replay. Replay supplies a synthetic `{ messages: [] }` base body: it proves acceptance side effects, not prepared field bytes.
+
+Two failure modes are not reconstructable from `assistant/chunk` alone — a pure throw before any chunk (for example an HTTP 401, where the log holds only a `turn/end {error}`) and a cancel/hang. A scenario that needs those supplies an optional sidecar (`<scenario>/replay.override.json`) that either replaces the derived script with a bare `ReplayEntry[]` or augments it with `{ patches: [{ at, entry }] }`, which keeps every derived call and swaps the named 0-based call indexes; `at` equal to the derived length appends the retry attempt after an injected transient throw. A `throw` entry accepts DeepSeek request extensions when it has prefix chunks; a zero-chunk throw defaults to pre-2xx non-acceptance and may set `accepted: true` for a post-2xx failure. A `hang` entry may name `readyFile`, which replay writes before waiting for cancellation so an external driver can cancel deterministically.
+
+### What can go wrong
+
+- **The fixture is not fully consumed** — `assertConsumed()` at teardown turns a scenario that silently drove fewer model calls than recorded into a crisp diagnostic; call it when installing replay directly in a test.
+- **An unrecorded session makes a call** — replay fails loud and tells you to re-record the scenario.
+- **A scripted placeholder matches nothing** — `{{fromRequest:<regex>}}` resolution validates the pattern and the request corpus and fails loud on no match, an invalid pattern, or an unterminated placeholder.
+
+-----
+
+<a id="understand-the-implementation"></a>
+## Understand the implementation
+
+<details>
+<summary>Implementation internals — click to expand</summary>
+
+This section explains the design of the replay plugin; the observable behavior is fully covered in [Use this package](#use-this-package).
+
+### Design
+
+Replay is built on one idea: the projected session log is the fixture. `deriveReplayScript` parses the JSONL header (for `id`/`createdAt` ordering facts) and splits `assistant/chunk` events at every `finish` chunk, keyed by `(turn, step)`, so each recorded `stream()` call becomes one `chunks` entry; an assistant group without a `finish` chunk is the fingerprint of a thrown `stream()` and must be expressed through an override sidecar. A `compaction/summary` carrying `llmStreamCall: true` and a complete `rawOutput` replays as one canonical successful stream at that event's position. Scripted strings may embed `{{fromRequest:<regex>}}`; at stream time each placeholder resolves against the live request's string leaves, taking the pattern's last match and its first capture group (or the whole match) in place.
+
+### Source map
+
+| File | Role |
+|---|---|
+| [`src/index.ts`](src/index.ts) | Types, fixture derivation, override validation, placeholder resolution, session binding, `installLlmReplay`, and the plugin export |
+| — | No runtime invariant companion is published; this test-only adapter consumes a fixed replay script; its stream grammar is checked by the LLM companion and fixture derivation tests. |
+
+### Binding and stream flow
+
+`installLlmReplay` loads the ordered scripts, then installs either a routed replay adapter (when `providers` is non-empty) or a catch-all `llm/stream` waterfall listener. Each live `stream()` call is keyed by its calling session id: a new session claims the next unclaimed script (parent first, because it streams before it can delegate), and calls without a `sessionId` share one anonymous session bound to the primary script. The returned `ReplayHandle` carries a disposer for HMR safety and `assertConsumed()`, which throws unless every recorded script bound to a live session and every bound cursor drained.
+
+</details>
+
+-----
+
+<a id="further-exploration"></a>
+## Further Exploration
+
+Read these pages when the package-level contract is not enough. They move from the replay adapter to the harness that records fixtures and the loop that consumes streams.
+
+- [session-snapshot](../session-snapshot/README.md) — the snapshot support that records fixtures and drives replay, record, and refresh modes.
+- [LLM package](../../llm/llm/README.md) — the provider stream contract and adapter registry replay implements.
+- [Testing policy](../../../docs/testing.md) — the keyless snapshot tier and when it is required.
+- [Test-support group map](../README.md) — sibling harnesses and support packages.
+
+-----
+
+<a id="model-experience"></a>
 ## Model Experience
 
 None, as this keyless test adapter sends no request to a provider model; it only replays recorded assistant chunks into the test loop.
@@ -76,5 +135,20 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **First-call-order script binding assumes sequential delegation** — a cut that runs sibling subagents concurrently would bind live sessions to recorded scripts non-deterministically; a stronger keying is deferred until such a scenario exists (`XXX(concurrent-subagents)`).
-- **Only ordinary loop chunks and marked local compaction outputs are derivable** — a pure pre-chunk throw, a cancel/hang, or an unmarked external summarizer call needs the `replay.override.json` sidecar. Replacement and patch forms affect only the primary session; child scripts still derive from their logs.
+<a id="known-limitations-and-deferred-work"></a>
+
+
+These limits define when replay cannot stand in for a live model. They are current package constraints, not a task backlog.
+
+- **First-call-order script binding assumes sequential delegation** — a cut that runs sibling subagents concurrently would bind live sessions to recorded scripts non-deterministically; a stronger keying is deferred until such a scenario exists.
+- **Only ordinary loop chunks and marked local compaction outputs are derivable** — a pure pre-chunk throw, a cancel/hang, or an unmarked external summarizer call needs the `replay.override.json` sidecar; replacement and patch forms affect only the primary session, and child scripts still derive from their logs.
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>

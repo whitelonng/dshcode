@@ -1,17 +1,51 @@
+---
+description: "Browser-host wire layer for the web GUI: Remote RPC, event-stream delivery with reconnect, exact Fetch routes, the /api HTTP bridge, and the browser-trust fence."
+kind: "package-reference"
+---
+
 # @deepseek-ai/dsh-client-connection
 
 English | [中文](README.zh.md)
 
-Wire consumer layer: the client plugin's apply mounts `ctx.connection` (shared api client + current-page loopback state + observable generation-scoped `hostDescription` + single-consumer stream-loop starter); the export face carries the wire contract types, the `AbstractApiClient` abstraction, and the loop's sink/config types. Each successful readiness handshake publishes the exact `host.describe` value before `onConnected`; generation loss and explicit stop clear it, so native-capability consumers never retain a disconnected answer. The browser carrier uses HTTP POST for unary and respond operations and opens one downlink-only WebSocket each for `events.mux` and `events.host`; the in-process carrier satisfies the same two-stream abstraction. The exported `ClientTransportHooks` names the page global `__DSH_TRANSPORT__` that replaces the browser carrier wholesale: the served web app leaves it unset and gets HTTP + WebSocket, while a shell owning a different physical transport (the worker preview's postMessage tunnel) provides `createApiClient` and `fetch` — plus `loadBundle` when it also owns bundle bytes — instead of forking the plugin. The Host half owns the single `/api` route and its Fetch bridge; a registered Typert interceptor claims its Remote endpoints before the API Proxy fallback. Loopback hostname classification stays package-internal: the `/api` Host fence and WebSocket upgrades use it directly, while other client plugins consume the derived `ctx.connection.isLoopback` state. The node half's `/api` route pins the privileged method set (`host.pickDirectory`, `host.openPath`, and the whole configuration plane — `settings.describe`/`openDocument`/`update`/`replace`/`mutate` and `credentials.describe`/`set`/`unset`; reads and native actions included, since describing returns the exposed configuration, opening acts on the Host desktop, and probing an arbitrary reference reports where a credential comes from — and the agent-preset authoring plane, `agentPreset.read`/`copy`/`openDocument`/`remove`, since a composition names the plugins a session runs, so reading one is reconnaissance, and copy/remove/openDocument manage the roster and drive the host desktop (authoring is copy-only, so none of them accepts composition text or a path); `agentPreset.list` and `agentPreset.select` stay out — the roster carries only ids and trust, and choosing a preset grants nothing `session.create`'s own `agentPreset` did not, over a default that already carries bash) to loopback by passing the trust fence with an empty trust list — a declared `trustedHosts` authority reaches every other method, while these stay loopback-local until a real authentication layer exists. The platform carriers and ConnectionController loop are package-internal; apply selects and drives them. The downlink boundary is documented in the [WebSocket downlink carrier Agent Note](../../../.agents/notes/implemented/architecture/2026-08-04-websocket-downlink-carrier.md).
+## Summary
 
-## /api browser-trust fence
+The package carries browser-to-Host Remote calls, exact Fetch responses, and connection generations. The Client plugin mounts `ctx.connection` with current-page loopback state, a generic RPC carrier, the active generation and its Host facts, observable recovery state, an immediate reconnect command, and the registration point for one generation source. A generation becomes visible when its source reports ready; source completion, failure, withdrawal, or an explicit stop clears it before `ConnectionController` applies its retry policy.
 
-The node half guards every entry under `/api` before bridging or upgrading (`src/api-request-trust.ts`). Every request — browser-marked or not — must present a `Host` that is a loopback authority or matches a `trustedHosts` entry: exact on `host:port` entries, any port on port-less entries, both sides compared through WHATWG normalization (DNS-rebinding defense). There is deliberately no shortcut for unmarked HTTP requests: over plain HTTP a browser attaches neither `Origin` nor Fetch-Metadata to image and navigation reads, so an unmarked request may still be a rebound browser read with a readable response, and Host is the one header rebinding cannot forge; a browser WebSocket handshake carries `Origin` and passes the same comparison. Non-browser clients pass the same fence via loopback, deployment-derived LAN IP literals, or a declared authority. When markers are present, an attached `Origin` must equal the Host authority, and an explicit `sec-fetch-site: cross-site` marker is refused. A `trustedHosts` entry that is not a bare, canonical `host[:port]` authority — one WHATWG parsing reads back exactly as written — fails the plugin load loudly: parsing would otherwise quietly authorize the hostname inside `harness.internal/path`, or broaden a dangling-colon or zero-padded port to an any-port grant. HTTP failures answer plain 403 before any RPC dispatch; upgrade failures reject the handshake before any event stream starts. Non-loopback compositions must trust their serving authorities explicitly: the Web runtime derives LAN IP literals from an all-interfaces server config, while `trustedHosts` in cordis.yml and the CLI's `--trusted-host` flag declare named authorities. `dsh web --host 0.0.0.0` is intentionally unsupported until remote access has an authentication layer. The fence is a reachability policy, not authentication; the Web carrier provides no authentication layer. Decision record: [the api browser-trust boundary Agent Note](../../../.agents/notes/implemented/architecture/2026-07-28-api-browser-trust-boundary.md).
+## Table of Contents
 
-## `/api` WebSocket downlinks
+- [Use this package](#use-this-package)
+- [Browser authentication and request trust](#browser-authentication-and-request-trust)
+- [Connection generation](#connection-generation)
+- [Model Experience](#model-experience)
+- [Known Limitations and Deferred Work](#known-limitations-and-deferred-work)
+- [Dev Note](#dev-note)
 
-`/api/events.mux` and `/api/events.host` each accept a WebSocket upgrade and send only the corresponding `ServerRequest` text messages to the browser; the client sends no application data over these sockets. If either socket ends, the current connection generation fails and rebuilds both streams; readiness still requires both sockets to be open and the `host.describe` HTTP call to succeed. Host teardown terminates both sockets, aborts their sources, and waits for source cleanup before returning. Ordinary network GETs to these paths return 426 with no SSE fallback; `toFetchHandler`'s SSE codec serves only the isomorphic in-process carrier.
+-----
 
+<a id="use-this-package"></a>
+## Use this package
+
+The browser uses HTTP POST for Remote unary calls. API Gateway owns the `/api/remote.mux` WebSocket and its logical streams; in-process compositions provide equivalent Remote streams through `connection.rpc.open` without opening a WebSocket. The Host half owns the sole `/api` route, Fetch bridge, browser authentication, Host/Origin checks, and exact `GET`/`HEAD` route registry. Typert Gateway claims generated Remote endpoints, feature packages register non-JSON responses such as Session-log downloads, and unclaimed requests return 404. Loopback hostname classification remains package-internal to the browser-facing Client state.
+
+-----
+
+<a id="browser-authentication-and-request-trust"></a>
+## Browser authentication and request trust
+
+Every Host RPC method and WebSocket stream requires one browser session; there is no method-specific loopback tier. Each process mints a random launch token. `dsh-web-app` prints and opens the ordinary root URL with `?token=...`; `frontend-static` delegates root and index requests to `ctx.connection.authorizeIndex`, which accepts that token only on `GET /`, writes an authority-bound signed cookie, and redirects to clean `/`. A missing, expired, malformed, or wrong-authority cookie returns 401 before RPC dispatch. Static assets remain public. The HTTP carrier accepts no query token outside the root exchange and no Authorization-header token.
+
+The cookie signing secret is the owner-scoped `client-connection/browser-session` grant record in `ctx.credentials`. The local provider persists it in `$DSH_HOME/.credentials.yaml`; `BrowserAuth` loads or creates the record during Connection activation and retains the secret in memory, so request authentication is synchronous. Deleting or replacing the record takes effect on the next Connection activation. Cookies carry an absolute issue/expiry interval, defaulting to 30 days through `cookieMaxAgeDays`, and bind the normalized hostname plus port in both their deterministic name and signed payload. They are host-only, `Path=/`, `HttpOnly`, and `SameSite=Strict`; they deliberately omit `Secure` because the shipped server uses loopback HTTP.
+
+Before authentication, every request still passes `src/api-request-trust.ts`. Its `Host` must be loopback or match a `trustedHosts` entry: exact on `host:port`, any port on port-less entries, both sides WHATWG-normalized. An attached `Origin` must equal that Host and `sec-fetch-site: cross-site` is refused. Malformed configured authorities fail plugin load. These checks defend DNS rebinding and cross-site browser requests; they never establish identity. A failed Host/Origin check returns 403, while a trusted but unauthenticated request returns 401. `dsh web --host 0.0.0.0` remains unsupported. Decision records: [browser request trust](../../../.agents/notes/implemented/architecture/2026-07-28-api-browser-trust-boundary.md) and [browser token authentication](../../../.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.md).
+
+<a id="connection-generation"></a>
+## Connection generation
+
+API Gateway Client registers the internal `$events` logical stream as the sole generation source, independently of whether any `$on` listener exists. The Host attaches all incremental listeners in the API Remotes source factory, then sends one `{ type: 'ready', clientId, host: { home } }` item before events. `ConnectionController` publishes that generation and calls `onConnected` only after the ready item arrives, so baseline acquisition cannot race ahead of incremental observation.
+
+An ended `$events` stream, a Remote stream error, a non-ready opening item, or a malformed event item invalidates the current generation. While the browser reports network availability, the controller publishes `connecting` and retries with 50%–100% jitter under caps of 500ms, 1s, 2s, 4s, 8s, and 10s. It logs each attempt, asks Gateway to replace the physical WebSocket, and reopens `$events`; failure in the 10s tier publishes terminal `disconnected`. `ctx.connection.reconnect()` interrupts active work, resets the sequence, and starts retry 1 immediately. Browser `offline` aborts active work, publishes `disconnected`, and suspends automatic attempts; the next `online` transition resets the sequence and starts at the 500ms tier. A ready item publishes `connected`. The Gateway mux performs one physical connection attempt per request rather than running an independent retry schedule. The [connection recovery decision](../../../.agents/notes/implemented/feature/2026-08-28-web-connection-recovery-control.md) owns the cadence and manual recovery behavior.
+
+<a id="model-experience"></a>
 ## Model Experience
 
 None, as the wire consumer layer moves already-composed messages between browser and host; nothing here reaches a model request.
@@ -22,5 +56,21 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **History resumes an unattached session** — opening history may create the host-side agent and add latency to the first open; there is no persistence-only read path.
+<a id="known-limitations-and-deferred-work"></a>
+
 - **The `/api` bridge buffers each request body in memory** — `maxRequestBodyBytes` (default 300 MiB, sized for the default 200 MiB aggregate image limit after base64 expansion plus envelope headroom) is therefore also the per-request resident bound; a streaming body path would be needed to lower it without shrinking the image limits.
+- **The browser cookie is not marked `Secure`** — loopback HTTP is the shipped transport, so exposing the same authority over plaintext networking can expose the bearer cookie in transit.
+- **There is no logout operation** — clearing the browser cookie ends one browser session; deleting the owner credential record and restarting `dsh` revokes every session.
+
+
+<a id="dev-note"></a>
+### Dev Note
+
+<details>
+<summary>Working context for maintainers — click to expand</summary>
+
+None.
+
+</details>
+
+**Runtime invariant:** No companion is published. Browser-session verification reads the credential record asynchronously at the request that authorizes work, while the credentials companion owns record commit-event lifetime. Stream/reconnect sequencing and rpcId round-trip discipline are exercised directly by behavior specs, and route register/dispose symmetry is audited by the webserver companion.

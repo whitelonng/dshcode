@@ -22,7 +22,7 @@ Enter 继续流程并在最后一题提交整批，Shift+Enter 换行，IME 保�
 
 ## Alternatives considered
 
-**`field-sizing: content`。** 与[聊天输入框的 Safari 恢复方案](../bug-fix/2026-08-13-safari-textarea-soft-wrap-reflow.zh.md)出于同一理由否决：当删除跨过换行阈值后，Safari 会复现陈旧的固有高度。镜像是一个 Safari 能正确计算高度的普通块，而且它已经是本仓库在聊天输入框中运行的技术。
+**`field-sizing: content`。** 与[聊天输入框的 Safari 恢复方案](../../archived/bug-fix/2026-08-13-safari-textarea-soft-wrap-reflow.md)出于同一理由否决：当删除跨过换行阈值后，Safari 会复现陈旧的固有高度。镜像是一个 Safari 能正确计算高度的普通块，而且它是聊天输入框在改用 Lexical 编辑器之前运行的技术。
 
 **在 JS 中逐次按键重算高度**——置 `height: auto`、读 `scrollHeight`、再写回。否决：每次按键要付两次强制布局，并重新引入镜像所避开的那类陈旧几何缺陷，换来的却是镜像本就具备的能力。
 

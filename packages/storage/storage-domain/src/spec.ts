@@ -37,6 +37,14 @@ export interface DomainSpec {
   readonly name: string
   /** Domain format version; a medium stamped with a different version rejects at open. */
   readonly version: number
+  /**
+   * Medium layout for the backend unit: `single` (the default) stores the
+   * whole unit as one document; `per-record` stores each record as its own
+   * document, for units whose records are large, sparse, or individually
+   * disposable — the projection cache — and scopes version bumps per record
+   * (a stale record document is discarded, never migrated).
+   */
+  readonly layout?: 'single' | 'per-record'
   /** Optional global singleton slot. */
   readonly global?: DomainGlobalSpec<unknown>
   /** Table declarations keyed by table name; each name must match `UNIT_NAME_RE`. */
@@ -83,6 +91,14 @@ export function defineDomain<S extends DomainSpec>(spec: S): S {
   if (!Number.isInteger(spec.version) || spec.version < 0) {
     throw new Error(`domain '${spec.name}' version must be a non-negative integer, got ${spec.version}`)
   }
+  if (spec.layout !== undefined) {
+    // Runtime boundary: the union type is compile-time only — a spec built
+    // from config could carry any value, and a bad one must fail loud here.
+    const layout: string = spec.layout
+    if (layout !== 'single' && layout !== 'per-record') {
+      throw new Error(`domain '${spec.name}' layout must be 'single' or 'per-record', got ${layout}`)
+    }
+  }
   for (const table of Object.keys(spec.tables)) {
     if (!UNIT_NAME_RE.test(table)) {
       throw new Error(`domain '${spec.name}' table name '${table}' must match ${UNIT_NAME_RE}`)
@@ -108,5 +124,6 @@ export function descriptorOf(spec: DomainSpec): KvUnitDescriptor {
     version: spec.version,
     tables: Object.keys(spec.tables),
     hasGlobal: spec.global !== undefined,
+    ...spec.layout === undefined ? {} : { layout: spec.layout },
   }
 }
